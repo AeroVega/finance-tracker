@@ -1,2 +1,2 @@
-# finance-tracker
-Second generation finance tracker
+# Finance Tracker
+Second generation personal finance tracker
