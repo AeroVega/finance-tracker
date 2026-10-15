@@ -13,7 +13,7 @@ Status: initial observations from sanitized sample exports. These notes document
 
 ## Shared amount convention
 
-The user has confirmed this convention for the Wells Fargo and SoFi samples:
+The user has confirmed this convention for the Wells Fargo, SoFi, and Fidelity samples:
 
 - Negative amount: money leaves the account.
 - Positive amount: money enters the account.
@@ -83,7 +83,7 @@ The observed table has 18 columns:
 | `Commission` | Commission amount | Optional. |
 | `Fees` | Fee amount | Optional. |
 | `Accrued Interest` | Accrued interest amount | Optional. |
-| `Amount` | Source activity amount | Observed with both positive and negative values. The user has not yet explicitly confirmed Fidelity's sign semantics; validate before applying the bank convention. |
+| `Amount` | Source activity amount | Observed with both positive and negative values. The user has confirmed Fidelity follows the same convention as Wells Fargo and SoFi: negative amounts mean money leaves the account, and positive amounts mean money enters it. |
 | `Settlement Date` | Settlement date | Optional/blank in these samples; preserve separately from `Run Date`. |
 
 ### Fidelity-specific import cautions
@@ -137,6 +137,6 @@ Exact field names and types remain an implementation decision. Avoid inventing m
 
 - Obtain or test original CSV exports when sanitization is unnecessary to validate raw-file mechanics.
 - Inspect samples from any remaining institutions before defining their adapters; Fidelity Accounts History is now documented as the first investment-activity export.
-- Confirm Fidelity's amount-sign semantics, activity/action meanings, and raw CSV layout; confirm other institutions' date, amount, balance, and transaction-ID semantics with additional samples.
+- Confirm Fidelity activity/action meanings and raw CSV layout; confirm other institutions' date, amount, balance, and transaction-ID semantics with additional samples.
 - Define canonical schema and import-batch/audit model before implementing broad categorization logic.
 - Keep sample data sanitized; do not commit account-level transaction data or personally identifying financial details to the repository.
