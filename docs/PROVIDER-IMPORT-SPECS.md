@@ -109,6 +109,8 @@ The observed table has 18 columns:
 - A confident match attaches new source provenance to an existing canonical activity. It must not erase source fields or silently overwrite accepted data. Corrections and lifecycle changes remain auditable.
 - Import summaries must distinguish new records, confident matches, ambiguous/review-needed records, rejected rows, and errors. Coverage dates and latest activity date are separate concepts.
 - Review actions must make the alternatives clear (same activity, separate activities, or correction), record the user's decision, and influence later imports consistently. Provide a recovery path for mistaken decisions.
+- Mark a record/activity `processed` only after successful completion of the import pipeline; this is software workflow state, not financial settlement or proof of human review. Most records should complete automatically without human sign-off.
+- Persist explicit human approvals as auditable review-decision events, including what was approved (such as identity matching or categorization), the outcome, reviewer, timestamp, and relevant rationale/evidence. Reuse identity-match decisions when the same records recur, but scope them carefully: a human approval is useful matching evidence, not a blanket signature for all transactions that look alike. No review event does not mean a record is unprocessed.
 
 See [Data Model and Reconciliation Principles](DATA_MODEL.md) for the full matching order and required synthetic test matrix.
 
