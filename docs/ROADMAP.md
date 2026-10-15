@@ -54,3 +54,24 @@ Any qualifying integration must feed the same normalization and reconciliation p
 10. Continue API research for MVP2.
 
 Prefer a smaller reliable scope over weakening privacy or correctness to meet a date.
+
+## Nominal development schedule
+
+These are planning windows, not immovable deadlines. The target remains a usable, trustworthy MVP1 for **January 1, 2027**. Prioritize financial correctness, privacy, and recoverability over visual polish; if a milestone slips, reduce scope or adjust the schedule rather than weakening safeguards.
+
+| Window | Phase | Intended outcomes |
+| --- | --- | --- |
+| Oct 9–18, 2026 | Requirements and historical baseline | Establish the North Star and constraints; inspect sanitized provider samples; document supported export formats, reporting principles, and the import/reconciliation contract. |
+| Oct 19–Nov 1, 2026 | Data-integration prototype | Finalize the canonical ledger/import-run model; create synthetic fixtures; validate raw CSV mechanics where appropriate; investigate feasible ingestion and storage boundaries. Do not use real financial data until the security architecture is approved. |
+| Nov 2–15, 2026 | Ledger and categorization | Implement normalization, provenance, conservative matching, human-review decisions, deterministic categorization, and core synthetic tests. |
+| Nov 16–29, 2026 | Reporting and historical baseline | Define and implement the first trustworthy cash-flow and wealth reports; migrate only supported annual summary figures from 2023–2026 if feasible, without modifying the archived workbook or inventing missing values. |
+| Nov 30–Dec 20, 2026 | Cutover rehearsal | Exercise imports, overlap handling, reconciliation, exception review, export portability, and backup/restore; test the intended iPhone/iPad workflow. |
+| Dec 21–31, 2026 | Final validation and release preparation | Fix correctness and security issues, verify recovery and deployment, document known limitations, and decide whether the MVP meets its release criteria. |
+| Jan 1, 2027 | Target MVP1 date | Begin using MVP1 only if privacy, correctness, and recovery exit criteria are met; otherwise defer release rather than compromise them. |
+
+### Schedule guardrails
+
+- The dates are nominal and should be re-baselined if discovery reveals a blocking issue, especially around secure private storage and authentication at $0 recurring cost.
+- Evaluate the storage/authentication/security architecture before implementing persistence for real records. This is a gating dependency, not a reason to publish private data to a static site.
+- Keep MVP1 focused on reliable manual imports and explainable reporting. Direct integrations remain MVP2 research and are not required for the January 1 target.
+- Treat UI polish as lower priority than data integrity, privacy, transparent calculations, and tested backup/recovery.
