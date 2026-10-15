@@ -9,9 +9,9 @@ This is a plan, not a guarantee that all proposed capabilities are feasible unde
 - [x] Set North Star, MVP1 file-import path, and $0 recurring-cost constraint.
 - [x] Establish public-repository privacy rules.
 - [x] Record Fidelity export capabilities confirmed by the project owner.
-- [ ] Inspect sanitized sample exports for every supported account type.
-- [ ] Document exact schemas, date formats, signs, identifiers, and activity coverage.
-- [ ] Define canonical ledger and import-run models.
+- [x] Inspect sanitized sample exports for MVP1 account types (Wells Fargo, SoFi, Fidelity).
+- [x] Document observed schemas, date formats, confirmed signs, and available identifiers/activity fields; validate raw CSV mechanics when appropriate.
+- [ ] Finalize canonical ledger and import-run schema (logical concepts and import contract documented).
 - [ ] Evaluate private storage, authentication, backup/recovery, and portability.
 - [ ] Review and document architecture decisions before production implementation.
 
