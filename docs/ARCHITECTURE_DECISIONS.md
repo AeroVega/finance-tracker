@@ -1,7 +1,7 @@
 # Architecture Decisions and Open Questions
 
 **Status:** Baseline; several decisions intentionally remain open  
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-15
 
 ## ADR-001 — File imports for MVP1
 **Status: Accepted.** MVP1 ingests CSV files downloaded by the project owner. MVP2 may add free, authorized direct integrations only after cost, authorization, sustainability, and security are verified. This keeps delivery independent of an unproven API and makes import correctness a first-class capability.
@@ -20,6 +20,9 @@
 
 ## ADR-006 — Deterministic-first categorization
 **Status: Accepted principle.** Use inspectable, editable, reversible rules and route ambiguous records to review. AI is not the default categorizer.
+
+## ADR-007 — Conservative, idempotent overlapping imports
+**Status: Accepted.** MVP1 automatically merges only confidently matched records and routes ambiguous candidates to review. Stable provider transaction/activity IDs are preferred when their semantics are understood and are scoped to provider and account. Without stable IDs, use a conservative composite and require uniqueness plus corroborating evidence. Date, amount, and description alone are not sufficient proof of duplication. Identical file retries must be idempotent; new overlapping exports are reconciled row by row rather than replacing date ranges. Preserve source observations, import provenance, and correction/lifecycle history. Never silently discard legitimate-looking rows or overwrite conflicting accepted data. Review decisions must be auditable and consistently applied on later imports.
 
 ## Open decisions required before production implementation
 1. **Private storage:** Where does the canonical ledger live without becoming public?
