@@ -96,6 +96,22 @@ The observed table has 18 columns:
 - The supplied workbook is sanitized. Validate exact raw CSV encoding, delimiter, quoting, blank-line behavior, footer handling, and numeric/date representations against an original export when appropriate.
 - The workbook contains sensitive-looking account fields even though this sample was sanitized. Never commit exported financial rows or account identifiers to the repository.
 
+## MVP1 overlapping-import policy
+
+**Accepted policy:** Automatically merge confidently matched records and flag ambiguous matches for review. Never silently discard a potentially legitimate transaction/activity.
+
+- An identical, successfully processed file for the same account/import context should be idempotent: no duplicate side effects on retry. Identify content, not merely filename; protect file fingerprints and metadata from leaking sensitive data.
+- A new export with overlapping history must be reconciled row by row. Do not replace the entire date range by default.
+- Prefer a stable provider transaction/activity identifier when its semantics are understood, scoped to provider and account.
+- Without a stable ID, compare a conservative composite: account, currency, signed amount, appropriate date, normalized description, and source action/type where available. Automatic merge is permitted only for a unique candidate with sufficient corroborating evidence and no meaningful conflict.
+- Date + amount + description alone is never sufficient proof of a duplicate. Legitimate repeated transactions may share those values, including within one file.
+- Multiple candidates, conflicting fields, uncertain pending-to-posted transitions, corrections, or weak matches become review items. Preserve both source representations until resolved.
+- A confident match attaches new source provenance to an existing canonical activity. It must not erase source fields or silently overwrite accepted data. Corrections and lifecycle changes remain auditable.
+- Import summaries must distinguish new records, confident matches, ambiguous/review-needed records, rejected rows, and errors. Coverage dates and latest activity date are separate concepts.
+- Review actions must make the alternatives clear (same activity, separate activities, or correction), record the user's decision, and influence later imports consistently. Provide a recovery path for mistaken decisions.
+
+See [Data Model and Reconciliation Principles](DATA_MODEL.md) for the full matching order and required synthetic test matrix.
+
 ## Canonical transaction and source-data handling
 
 The canonical transaction model should be provider-independent and include, at minimum:
