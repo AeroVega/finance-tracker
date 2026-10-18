@@ -21,7 +21,11 @@
 ## ADR-006 — Deterministic-first categorization
 **Status: Accepted principle.** Use inspectable, editable, reversible rules and route ambiguous records to review. AI is not the default categorizer.
 
-## ADR-007 — Google Drive as the private-storage direction
+## ADR-007 — Conservative, idempotent overlapping imports
+**Status: Accepted.** MVP1 automatically merges only confidently matched records and routes ambiguous candidates to review. Stable provider transaction/activity IDs are preferred when their semantics are understood and are scoped to provider and account. Without stable IDs, use a conservative composite and require uniqueness plus corroborating evidence. Date, amount, and description alone are not sufficient proof of duplication. Identical file retries must be idempotent; new overlapping exports are reconciled row by row rather than replacing date ranges. Preserve source observations, import provenance, and correction/lifecycle history. Never silently discard legitimate-looking rows or overwrite conflicting accepted data. Keep successful pipeline completion (`processed`) distinct from financial settlement and from explicit human sign-off. Persist human review decisions as auditable, scoped events and reuse identity-match approvals as evidence on later imports without treating them as universal duplicate signatures.
+
+
+## ADR-008 — Google Drive as the private-storage direction
 **Status: Selected direction; validation required before production use.** Use the owner's own Google Drive as the intended canonical private data store for cross-device access. Continue down this path unless implementation or primary-source verification reveals a concrete blocker that cannot reasonably be worked around. Do not reopen the choice solely because of hypothetical scaling concerns.
 
 ### Rationale
