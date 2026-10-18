@@ -8,13 +8,14 @@ A second-generation personal finance tracker built around trustworthy data, tran
 
 ## Project status
 
-The project is in discovery and foundation. **MVP1 uses user-provided CSV imports.** Free, authorized direct integrations are an MVP2 research goal, not a dependency for the first release. No backend, database, or authentication provider has been selected.
+MVP1 uses user-provided CSV imports. Google Drive is the **selected private-storage direction**, pending verification of OAuth setup, synchronization/recovery behavior, current production terms, and the $0 recurring-cost requirement. No production financial data or secrets belong in this repository. Free, authorized direct financial-institution integrations remain an MVP2 research goal, not a dependency for the first release.
 
 ## Start here
 
 - [Project charter](docs/PROJECT_CHARTER.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture decisions and open questions](docs/ARCHITECTURE_DECISIONS.md)
+- [Private storage architecture](docs/PRIVATE_STORAGE_ARCHITECTURE.md)
 - [Security and privacy requirements](docs/SECURITY.md)
 - [Data-source research](docs/DATA_SOURCES.md)
 - [Data model and reconciliation principles](docs/DATA_MODEL.md)
@@ -26,7 +27,7 @@ The project is in discovery and foundation. **MVP1 uses user-provided CSV import
 2. No real personal financial data or secrets in this public repository.
 3. No stored bank passwords, unauthorized scraping, or reliance on expiring trials.
 4. Manual file imports remain a permanent fallback.
-5. Do not begin production implementation until data access, storage, authentication, and security architecture are documented and reviewed.
+5. Do not enable production financial-data storage until data access, storage, authentication, synchronization, recovery, and security have been implemented and reviewed.
 6. Distinguish verified facts, user-confirmed observations, hypotheses, and open questions.
 
 ## Working approach
