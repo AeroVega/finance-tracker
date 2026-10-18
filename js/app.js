@@ -15,7 +15,7 @@
   function parseCsv(text) {
     const rows = [];
     let row = [], cell = "", quoted = false;
-    text = text.replace(/^\uFEFF/, "");
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
     for (let i = 0; i < text.length; i++) {
       const ch = text[i];
       if (quoted) {
