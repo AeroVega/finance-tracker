@@ -179,7 +179,6 @@ connectButton.addEventListener("click", async () => {
   try {
     const config = getConfig();
     validateConfig(config);
-    await ensureGoogleLibraries();
     const tokenResponse = await requestAccessToken(config.clientId);
     state.accessToken = tokenResponse.access_token;
     state.tokenExpiresAt = Date.now() + Number(tokenResponse.expires_in || 0) * 1000;
@@ -192,12 +191,11 @@ connectButton.addEventListener("click", async () => {
   }
 });
 
-selectFolderButton.addEventListener("click", async () => {
+selectFolderButton.addEventListener("click", () => {
   try {
     getUsableToken();
     const config = getConfig();
     validateConfig(config);
-    await ensureGoogleLibraries();
     openFolderPicker();
   } catch (error) {
     setStatus(folderStatus, error instanceof Error ? error.message : "Could not open Google Picker.", "error");
@@ -245,5 +243,13 @@ runProbeButton.addEventListener("click", async () => {
   }
 });
 
-setStatus(folderStatus, "Enter the Google Cloud configuration, then connect.", "info");
+connectButton.disabled = true;
+setStatus(folderStatus, "Loading Google's authorization and Picker libraries…", "info");
 setStatus(probeStatus, "No Drive read/write check has run.", "info");
+
+ensureGoogleLibraries().then(() => {
+  connectButton.disabled = false;
+  setStatus(folderStatus, "Google services are ready. Enter the Cloud configuration, then connect.", "info");
+}).catch((error) => {
+  setStatus(folderStatus, error instanceof Error ? error.message : "Google services could not load.", "error");
+});
