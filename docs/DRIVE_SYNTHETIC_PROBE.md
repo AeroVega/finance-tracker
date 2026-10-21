@@ -11,7 +11,7 @@
 1. Enable the Google Drive API and Google Picker API in a Google Cloud project.
 2. Create a Web application OAuth client. Add the deployed HTTPS origin to Authorized JavaScript origins. For the current GitHub Pages project site, the expected origin is https://aerovega.github.io; verify the live Pages URL before registering it. Add http://localhost only for local development.
 3. Configure the OAuth consent screen for the Google account that owns the selected folder. Use the drive.file scope. The browser-only token flow requires the owner to be present and to reconnect after token expiry.
-4. Create an API key for the browser probe. Apply website restrictions for the deployed app origin and https://docs.google.com/* (the Picker is rendered there). Apply API restrictions for both Google Picker API and Google Drive API. The project number is used as the Picker App ID.
+4. Create an API key for the browser probe. Under Website restrictions, allow the Pages referrer pattern https://aerovega.github.io/* and https://docs.google.com/* (where Picker is rendered); add the localhost referrer only while testing locally. Under API restrictions, allow both Google Picker API and Google Drive API. The project number is used as the Picker App ID.
 5. Do not place the supplied folder ID, access token, API key, OAuth client secret, or financial data in this public repository. The client ID is a public identifier; the probe asks for it in the page and keeps it only in page memory. No client secret is used.
 
 ## Run the live synthetic check
