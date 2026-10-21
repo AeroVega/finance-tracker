@@ -11,7 +11,7 @@
 1. Enable the Google Drive API and Google Picker API in a Google Cloud project.
 2. Create a Web application OAuth client. Add the deployed HTTPS origin to Authorized JavaScript origins. For the current GitHub Pages project site, the expected origin is https://aerovega.github.io; verify the live Pages URL before registering it. Add http://localhost only for local development.
 3. Configure the OAuth consent screen for the Google account that owns the selected folder. Use the drive.file scope. The browser-only token flow requires the owner to be present and to reconnect after token expiry.
-4. Create an API key for Google Picker. Restrict it to the deployed HTTPS origin and the Picker API. The project number is used as the Picker App ID.
+4. Create an API key for the browser probe. Apply website restrictions for the deployed app origin and https://docs.google.com/* (the Picker is rendered there). Apply API restrictions for both Google Picker API and Google Drive API. The project number is used as the Picker App ID.
 5. Do not place the supplied folder ID, access token, API key, OAuth client secret, or financial data in this public repository. The client ID is a public identifier; the probe asks for it in the page and keeps it only in page memory. No client secret is used.
 
 ## Run the live synthetic check
@@ -36,6 +36,6 @@ These mock Drive responses and verify request order, parent folder selection, ex
 ## Primary Google references
 
 - [Google Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
-- [Google Picker and folder selection](https://developers.google.com/drive/picker/guides/overview)
+- [Google Picker and folder selection](https://developers.google.com/workspace/drive/picker/guides/web-picker)
 - [Google Identity Services for web](https://developers.google.com/identity/oauth2/web/guides/overview)
 - [Create and populate Drive folders](https://developers.google.com/workspace/drive/api/guides/folder)
