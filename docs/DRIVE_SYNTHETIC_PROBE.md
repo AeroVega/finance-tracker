@@ -6,6 +6,10 @@
 
 **Prototype boundary:** This page verifies access to a user-selected folder by creating and reading one temporary invented JSON file. It asks before deleting only that file. It never opens, updates, or deletes the canonical ledger, and it never uploads CSV data.
 
+## Google Cloud setup
+
+See [Google Cloud setup for the Drive probe](GOOGLE_CLOUD_SETUP.md) for step-by-step instructions to create and restrict the required credentials.
+
 ## Before testing
 
 1. Enable the Google Drive API and Google Picker API in a Google Cloud project.
