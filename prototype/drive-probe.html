@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f5f7">
+  <title>Finance Tracker · Drive prototype</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #102018; background: #f5f5f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px 48px; }
+    main { width: min(760px, 100%); margin: 0 auto; }
+    h1 { margin: 4px 0 18px; font-size: clamp(2rem, 7vw, 3.25rem); letter-spacing: -.05em; }
+    h2 { margin: 0 0 12px; font-size: 1.15rem; }
+    p { line-height: 1.55; }
+    .eyebrow { color: #547064; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .panel { margin: 16px 0; padding: 22px; border: 1px solid #e3e6e5; border-radius: 18px; background: #fff; box-shadow: 0 6px 24px #17251d0a; }
+    .notice { border-color: #b8e5d1; background: #effaf5; }
+    label { display: block; margin: 14px 0 6px; font-size: .9rem; font-weight: 650; }
+    input { width: 100%; padding: 12px; border: 1px solid #bec8c3; border-radius: 9px; font: inherit; }
+    small { display: block; margin-top: 5px; color: #56635d; line-height: 1.45; }
+    button { margin: 10px 8px 0 0; padding: 11px 15px; border: 1px solid #1e5d4b; border-radius: 10px; color: #fff; background: #1e5d4b; font: inherit; font-weight: 650; cursor: pointer; }
+    button.secondary { color: #1e5d4b; background: #fff; }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    .status { min-height: 1.6em; margin: 12px 0 0; color: #35453d; }
+    .status[data-kind="success"] { color: #087b55; }
+    .status[data-kind="warning"] { color: #805700; }
+    .status[data-kind="error"] { color: #a12c2c; }
+    .fine-print { font-size: .86rem; color: #56635d; }
+    a { color: #155d91; }
+    @media (max-width: 520px) { body { padding: 16px 12px 36px; } .panel { padding: 18px; } button { width: 100%; margin-right: 0; } }
+  </style>
+  <script async src="https://accounts.google.com/gsi/client"></script>
+  <script async src="https://apis.google.com/js/api.js"></script>
+  <script type="module" src="drive-probe.mjs"></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Finance Tracker · Prototype only</p>
+    <h1>Google Drive connection check</h1>
+    <section class="panel notice">
+      <strong>Synthetic-data check only.</strong>
+      <p>This page creates one temporary invented JSON file in the folder you select, reads it back, and asks before deleting it. It does not read or update your ledger and it never uploads a CSV.</p>
+      <p class="fine-print">The access token and configuration values stay in this browser tab. The token is not saved between sessions. Keep the Drive folder restricted to your account.</p>
+    </section>
+    <section class="panel">
+      <h2>Google Cloud setup</h2>
+      <p class="fine-print">Enable the Drive API and Google Picker API. Use a web OAuth client for the app's HTTPS origin, and restrict the API key to that origin and the Picker API. This page never asks for a client secret.</p>
+      <label for="oauth-client-id">Google OAuth web client ID</label>
+      <input id="oauth-client-id" autocomplete="off" spellcheck="false">
+      <label for="picker-api-key">Restricted Google API key for Picker</label>
+      <input id="picker-api-key" autocomplete="off" spellcheck="false">
+      <label for="cloud-project-number">Google Cloud project number (Picker App ID)</label>
+      <input id="cloud-project-number" inputmode="numeric" autocomplete="off" spellcheck="false">
+      <button id="connect-google" type="button">Connect Google Drive</button>
+      <p id="folder-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="panel">
+      <h2>Select the private folder</h2>
+      <p class="fine-print">Choose the existing Finance Tracker folder from Drive. The folder URL alone does not grant API access; Google will ask you to authorize this app.</p>
+      <button id="select-folder" class="secondary" type="button" disabled>Choose Drive folder</button>
+      <p id="probe-status" class="status" role="status" aria-live="polite"></p>
+      <button id="run-probe" type="button" disabled>Run synthetic read/write check</button>
+    </section>
+    <p class="fine-print">The selected folder ID is held only in page memory and is not included in the public source. This prototype uses Google's narrow drive.file permission.</p>
+  </main>
+</body>
+</html>
