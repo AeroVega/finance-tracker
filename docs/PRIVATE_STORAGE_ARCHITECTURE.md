@@ -17,10 +17,11 @@ This is an architectural direction, not a claim that every OAuth, scope, billing
 - **User-confirmed (2026-10-21):** Use the owner's existing Google Drive folder as the private home for the canonical ledger. Parse selected CSVs locally; store the normalized ledger and import provenance in Drive; do not retain original CSV files there. Short-lived access tokens and interactive reauthorization are acceptable.
 - **User-confirmed (baseline):** The public repository must not contain personal financial data; recurring production cost must remain $0; CSV import remains a permanent fallback; cross-device access is required.
 - **Selected direction:** Keep the dashboard as public static content and call Drive from the browser after explicit user authorization. The Drive folder will hold the ledger rather than a collection of archived source CSVs.
-- **Proposed least-privilege prototype:** Evaluate the `drive.file` scope with Google Picker folder selection. Keep the supplied folder ID out of public source. Confirm that folder selection permits the required operations before enabling ledger writes.
+- **Verified prototype result (user-confirmed 2026-10-24):** The deployed synthetic probe succeeded with the `drive.file` scope and Google Picker folder selection. It created invented JSON in the selected private folder, read back an exact match, and deleted the temporary file after user confirmation. The owner repeated the test successfully after rotating the restricted API key. This validates only the probe's create/read-back/confirmed-delete path; it does not authorize production ledger writes.
 - **Verified from repository constraints:** GitHub Pages content and this public repository must be treated as public; browser-local storage alone does not synchronize devices.
 - **Hypothesis pending verification:** Google Drive API plus browser OAuth can meet the required production workflow with no recurring cost and acceptable recovery guarantees.
-- **Open:** exact OAuth and Picker configuration, authorized site origin, selected-folder access under `drive.file`, conflict handling, backup/restore, and current production billing/terms.
+- **Verified for the prototype (user-confirmed 2026-10-24):** the configured OAuth/Picker flow and selected-folder create/read-back/delete operations worked from the deployed GitHub Pages origin.
+- **Open:** token expiry, reauthorization and revocation behavior; cross-device synchronization; stale-write/conflict handling; interrupted-write and corruption recovery; backup/restore; production publishing/verification requirements; and current production billing/terms.
 
 ## Intended data flow
 
@@ -90,10 +91,10 @@ Do not implement elaborate quota optimization before there is measured evidence 
 ## Validation checklist before production
 
 - [ ] Confirm OAuth app configuration, consent-screen status, allowed origins, and production publishing requirements.
-- [ ] Confirm the selected scope is least-privilege and supports the intended folder/file operations.
+- [x] Prototype check: confirm `drive.file` plus Picker permits create/read-back and user-confirmed deletion in the selected folder (user-confirmed live test, 2026-10-24). This does not yet validate production ledger operations.
 - [ ] Confirm access-token lifetime, reauthorization, sign-out, and revocation behavior.
 - [ ] Confirm no client secret or privileged credential ships in the frontend.
-- [ ] Run the separate synthetic Drive probe in the user-selected folder: create a temporary invented JSON file, read back and compare it, then ask before deleting only that test file. Do not read or modify the ledger during this probe.
+- [x] Run the separate synthetic Drive probe in the user-selected folder: temporary invented JSON was created, observed in the folder, read back with exact match, and deleted after explicit confirmation. The owner repeated the test successfully after rotating the API key (user-confirmed 2026-10-24). No ledger or CSV was accessed.
 - [ ] Demonstrate create/read/update/export on synthetic data from iPhone and iPad.
 - [ ] Test two-device stale writes, simultaneous edits, retries, interrupted uploads, deletion, and corruption recovery.
 - [ ] Define and test backup/restore outside the normal read/write path.
