@@ -8,7 +8,9 @@ A second-generation personal finance tracker built around trustworthy data, tran
 
 ## Project status
 
-MVP1 uses user-provided CSV imports. Google Drive is the **selected private-storage direction**, pending verification of OAuth setup, synchronization/recovery behavior, current production terms, and the $0 recurring-cost requirement. No production financial data or secrets belong in this repository. Free, authorized direct financial-institution integrations remain an MVP2 research goal, not a dependency for the first release.
+MVP1 uses user-provided CSV imports. Google Drive is the **selected private-storage direction**. The deployed synthetic Drive probe has passed a user-confirmed create/read-back/confirmed-delete test, including a successful repeat after API-key rotation; this validates the prototype path only, not production ledger storage.
+
+**Current phase:** data-integration prototype. **Next milestone:** finalize the canonical ledger/import-run contract and create deliberately synthetic fixtures for Wells Fargo, SoFi, and Fidelity before implementing tested parsers. Production Drive writes remain blocked on synchronization/conflict handling, backup/restore, authorization/revocation, and confirmation of sustainable $0 production terms. No production financial data or secrets belong in this public repository. Free, authorized direct institution integrations remain an MVP2 research goal, not a dependency for MVP1.
 
 ## Start here
 
