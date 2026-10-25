@@ -29,6 +29,25 @@ See [Google Cloud setup for the Drive probe](GOOGLE_CLOUD_SETUP.md) for step-by-
 
 A PASS confirms the tested account can create, read, and (after explicit confirmation) delete an app-created file in the selected folder. It does not establish conflict safety, backup recovery, production ledger correctness, or cross-device synchronization.
 
+## Live validation record
+
+**User-confirmed live test (2026-10-24, user's local date): PASS.** The owner ran the deployed page from an iPhone using the configured Google Cloud project and the intended private Drive folder, `finance-tracker-database`.
+
+- OAuth authorization succeeded with the owner's account configured as a test user.
+- Google Picker selected the intended folder.
+- The probe created a uniquely named JSON file containing only invented data (one synthetic transaction, amount USD 1.23).
+- The owner observed the file in the selected folder.
+- The probe read the JSON back and reported an exact match.
+- The page asked before deleting the temporary file; the owner approved deletion.
+- The page reported that the temporary synthetic file was deleted.
+- After the owner rotated the browser API key, updated their private note, and deleted the old key, the owner reran the test and confirmed it passed again.
+
+No real ledger or CSV was accessed. No credentials, tokens, folder IDs, or personal financial data are recorded here. This is user-confirmed live evidence, not an independently captured API trace.
+
+**What this validates:** the tested account/configuration can select the folder and complete the probe's create/read-back/confirmed-delete path.
+
+**What remains unverified:** cross-session reconnection, token expiry and revocation, iPhone/iPad cross-device synchronization, stale-write/conflict handling, interrupted-write recovery, backup/restore, production ledger correctness, and ongoing cost/terms. Do not treat this test as approval to store real financial records.
+
 ## Offline checks
 
 Run the dependency-free synthetic tests with:
