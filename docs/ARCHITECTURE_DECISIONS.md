@@ -1,7 +1,15 @@
 # Architecture Decisions and Open Questions
 
 **Status:** Baseline with Google Drive selected as the storage direction; implementation details remain subject to validation  
-**Last updated:** 2026-10-17
+**Last updated:** 2026-10-24
+
+## Current development status and next milestone
+
+**Current phase:** data-integration prototype. Discovery and initial provider-format research are documented; the Drive synthetic probe has passed its user-confirmed live create/read-back/confirmed-delete check. That probe does not authorize real ledger storage.
+
+**Next milestone (M1): canonical import contract and synthetic fixtures.** Before implementing parsers, define the normalized activity and account fields, source provenance, import-run outcomes, review decisions, coverage/freshness semantics, signed amounts, and conservative duplicate/correction behavior. Then create fully invented fixtures for representative Wells Fargo, SoFi, and Fidelity CSV shapes and acceptance tests for repeat imports, overlapping history, malformed rows, ambiguous matches, and retries.
+
+**Production storage remains a separate gate:** validate token expiry/revocation, safe cross-device writes and stale-revision conflicts, interrupted-write recovery, backup/restore, and sustainable $0 production terms. Until those gates pass, use synthetic data only and do not enable production Drive ledger writes.
 
 ## ADR-001 — File imports for MVP1
 **Status: Accepted.** MVP1 ingests CSV files downloaded by the project owner. MVP2 may add free, authorized direct integrations only after cost, authorization, sustainability, and security are verified. This keeps delivery independent of an unproven API and makes import correctness a first-class capability.
