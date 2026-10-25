@@ -6,7 +6,7 @@ This guide creates the three values needed by the synthetic Drive probe: a web O
 
 Use a Google account that owns or can access the private Drive folder. Keep this project for the Finance Tracker prototype. Do not put the folder ID, credentials, access tokens, or financial records in this public repository.
 
-The probe is currently in draft PR #9 and is not deployed. Before a live check, confirm the actual GitHub Pages URL in the repository's **Settings → Pages**. The expected project-site URL is `https://aerovega.github.io/finance-tracker/`; its web origin is `https://aerovega.github.io`.
+The probe is published at `https://aerovega.github.io/finance-tracker/prototype/drive-probe.html` when the GitHub Pages deployment from `main` is current. Confirm **Settings → Pages** and the latest Actions deployment before relying on that URL. The web origin is `https://aerovega.github.io`.
 
 ## 1. Create a Cloud project
 
@@ -87,7 +87,11 @@ After the probe is served from the authorized site:
 
 If deletion is declined or fails, remove only the clearly named `finance-tracker-drive-probe-…json` test file from the selected folder.
 
-PR #9 is still a draft and Pages does not deploy this branch. A live test must wait until the probe is served from the authorized HTTPS origin, or be run locally with localhost added to the OAuth origin and API-key website restrictions.
+## Recorded live test result
+
+**User-confirmed PASS (2026-10-24, user's local date):** The probe was run from the deployed GitHub Pages site on an iPad. The owner authorized with the configured test-user account, selected the intended private folder `finance-tracker-database`, observed the invented JSON file in that folder, saw the exact read-back PASS, and approved deletion. The page reported the temporary file was deleted. The owner then rotated the restricted API key, removed the old key, updated their private note, and reran the probe successfully.
+
+This establishes the tested create/read-back/confirmed-delete path only. It does not validate cross-device synchronization, conflict safety, recovery, or production ledger storage. No real financial data was used. Do not add credentials or folder IDs to this repository.
 
 ## Cost note
 
