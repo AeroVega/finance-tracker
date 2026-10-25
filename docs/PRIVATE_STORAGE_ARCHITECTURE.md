@@ -14,11 +14,13 @@ This is an architectural direction, not a claim that every OAuth, scope, billing
 
 ## Status labels
 
-- **User-confirmed:** the public repository must not contain personal financial data; recurring production cost must remain $0; CSV import remains a permanent fallback; cross-device access is required; the owner accepts reauthentication when needed.
-- **Selected direction:** Google Drive is the intended canonical private store unless a concrete blocker appears.
+- **User-confirmed (2026-10-21):** Use the owner's existing Google Drive folder as the private home for the canonical ledger. Parse selected CSVs locally; store the normalized ledger and import provenance in Drive; do not retain original CSV files there. Short-lived access tokens and interactive reauthorization are acceptable.
+- **User-confirmed (baseline):** The public repository must not contain personal financial data; recurring production cost must remain $0; CSV import remains a permanent fallback; cross-device access is required.
+- **Selected direction:** Keep the dashboard as public static content and call Drive from the browser after explicit user authorization. The Drive folder will hold the ledger rather than a collection of archived source CSVs.
+- **Proposed least-privilege prototype:** Evaluate the `drive.file` scope with Google Picker folder selection. Keep the supplied folder ID out of public source. Confirm that folder selection permits the required operations before enabling ledger writes.
 - **Verified from repository constraints:** GitHub Pages content and this public repository must be treated as public; browser-local storage alone does not synchronize devices.
 - **Hypothesis pending verification:** Google Drive API plus browser OAuth can meet the required production workflow with no recurring cost and acceptable recovery guarantees.
-- **Open:** exact OAuth setup, minimum scope, folder strategy, conflict handling, backup/restore implementation, and current production billing/terms.
+- **Open:** exact OAuth and Picker configuration, authorized site origin, selected-folder access under `drive.file`, conflict handling, backup/restore, and current production billing/terms.
 
 ## Intended data flow
 
@@ -43,16 +45,15 @@ No raw CSV or ledger data should be sent to unrelated services. Avoid analytics/
 - Make sign-out and access revocation understandable, and fail closed when authorization is absent.
 - Test on iPhone and iPad using synthetic records before connecting real financial data.
 
-## Data layout — proposed, not finalized
+## Data layout — working proposal
 
-Use a small number of versioned, machine-readable files in a clearly identifiable Finance Tracker folder. Possible logical components:
-- a manifest containing schema version and references to the current data files;
-- canonical accounts and transaction/activity records;
-- import-run metadata and source provenance;
-- categorization rules and user review decisions;
-- backup/export snapshots.
+The synthetic Drive probe is isolated from the canonical ledger. The production persistence proposal, pending architecture review, is:
+- Keep a versioned JSON ledger in the user's selected Drive folder. Include normalized activities, source provenance, import-run summaries, and schema version.
+- Retain the original CSV only in the browser's selected-file flow; do not upload or archive CSVs in Drive.
+- Keep any recovery snapshots as ledger snapshots, not source-file archives. Final snapshot cadence and retention remain open.
+- Do not include the user's folder ID or OAuth configuration in the public repository.
 
-This is a proposal only. File granularity and manifest layout should be chosen after the vertical slice and conflict model are understood. Do not use one giant file by default if that makes safe writes and recovery harder; do not split into many tiny files without a demonstrated need.
+This keeps the parser and financial calculations independent of the storage provider while making the ledger portable.
 
 ## Consistency and failure handling
 
@@ -92,6 +93,7 @@ Do not implement elaborate quota optimization before there is measured evidence 
 - [ ] Confirm the selected scope is least-privilege and supports the intended folder/file operations.
 - [ ] Confirm access-token lifetime, reauthorization, sign-out, and revocation behavior.
 - [ ] Confirm no client secret or privileged credential ships in the frontend.
+- [ ] Run the separate synthetic Drive probe in the user-selected folder: create a temporary invented JSON file, read back and compare it, then ask before deleting only that test file. Do not read or modify the ledger during this probe.
 - [ ] Demonstrate create/read/update/export on synthetic data from iPhone and iPad.
 - [ ] Test two-device stale writes, simultaneous edits, retries, interrupted uploads, deletion, and corruption recovery.
 - [ ] Define and test backup/restore outside the normal read/write path.
