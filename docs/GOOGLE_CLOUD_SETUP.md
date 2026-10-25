@@ -89,7 +89,7 @@ If deletion is declined or fails, remove only the clearly named `finance-tracker
 
 ## Recorded live test result
 
-**User-confirmed PASS (2026-10-24, user's local date):** The probe was run from the deployed GitHub Pages site on an iPhone. The owner authorized with the configured test-user account, selected the intended private folder `finance-tracker-database`, observed the invented JSON file in that folder, saw the exact read-back PASS, and approved deletion. The page reported the temporary file was deleted. The owner then rotated the restricted API key, removed the old key, updated their private note, and reran the probe successfully.
+**User-confirmed PASS (2026-10-24, user's local date):** The probe was run from the deployed GitHub Pages site on an iPad. The owner authorized with the configured test-user account, selected the intended private folder `finance-tracker-database`, observed the invented JSON file in that folder, saw the exact read-back PASS, and approved deletion. The page reported the temporary file was deleted. The owner then rotated the restricted API key, removed the old key, updated their private note, and reran the probe successfully.
 
 This establishes the tested create/read-back/confirmed-delete path only. It does not validate cross-device synchronization, conflict safety, recovery, or production ledger storage. No real financial data was used. Do not add credentials or folder IDs to this repository.
 
