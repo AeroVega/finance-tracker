@@ -20,7 +20,7 @@ test("Pages deploys main on push and supports manual branch deployments", () => 
 
 test("deployment stamps the checked-out source commit into the artifact", () => {
   assert.match(workflow, /git rev-parse HEAD/);
-  assert.match(workflow, /source_sha.*40/);
+  assert.match(workflow, /\[0-9a-f\]\{40\}/);
   assert.match(workflow, /cat > js\/build-info\.js/);
   assert.match(workflow, /Deploying source commit:/);
   assert.match(buildInfo, /development \(not deployed\)/);
