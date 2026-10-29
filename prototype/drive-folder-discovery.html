@@ -33,7 +33,7 @@
   </style>
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
-  <script type="module" src="drive-folder-discovery.mjs?v=76859d8f"></script>
+  <script type="module" src="drive-folder-discovery.mjs?v=standalone-discovery-1"></script>
   <script src="../js/build-info.js" defer></script>
 </head>
 <body>
@@ -56,6 +56,7 @@
       <p class="fine-print">For the first pass only, use Picker to select the intended private folder. Its ID is retained in this tab's session storage to compare against the discovery result after reload.</p>
       <button id="select-folder" class="secondary" type="button" disabled>Choose Drive folder</button>
       <p id="selection-status" class="status" role="status" aria-live="polite"></p>
+      <button id="clear-reference" class="secondary" type="button">Forget saved comparison</button>
     </section>
     <section class="panel">
       <h2>2. Discover without Picker</h2>
@@ -63,7 +64,7 @@
       <input id="folder-name" value="finance-tracker-database" autocomplete="off" spellcheck="false">
       <button id="discover-folder" type="button" disabled>Discover folder</button>
       <p id="discovery-status" class="status" role="status" aria-live="polite"></p>
-      <p class="fine-print">Run discovery once after selecting the folder. Then reload this page, authorize again, and run discovery again without opening Picker. A zero or multiple-match result is reported as such; the app never guesses.</p>
+      <p class="fine-print">To test discovery on its own, tap “Forget saved comparison” above, then authorize and run discovery. The app will search by exact name and report whether there is one match, without relying on the saved Picker ID.</p>
     </section>
     <p class="fine-print">No access tokens, API keys, folder IDs, or file listings are displayed. A successful result tests only this account, browser, folder, and OAuth configuration.</p>
     <footer>Source commit <code id="build-sha">development (not deployed)</code></footer>
