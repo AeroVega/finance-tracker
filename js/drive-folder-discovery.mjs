@@ -35,7 +35,7 @@ function requireOk(response) {
     if (status === 403) {
       throw new DriveFolderDiscoveryError(
         "permission-denied",
-        "Google denied access to the folder search. Check the selected account and Drive permission; no folder was selected.",
+        "Google denied access to the folder search. Check the selected account or reauthorize; if needed, choose the intended folder with Google Picker. No folder was selected.",
         status
       );
     }
@@ -62,7 +62,7 @@ export function classifyFolderDiscoveryResult(result) {
   }
   return {
     status: "candidate-found",
-    mayUsePicker: false,
+    mayUsePicker: true,
     candidate: result.match,
     requiresIdentityVerification: true
   };
