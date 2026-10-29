@@ -1,5 +1,5 @@
-import { GOOGLE_CONFIG } from "../js/google-config.js?v=76859d8f";
-import { discoverFoldersByExactName } from "../js/drive-folder-discovery.mjs?v=76859d8f";
+import { GOOGLE_CONFIG } from "../js/google-config.js?v=standalone-discovery-1";
+import { discoverFoldersByExactName } from "../js/drive-folder-discovery.mjs?v=standalone-discovery-1";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
@@ -14,6 +14,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const connectButton = $("connect-google");
 const selectFolderButton = $("select-folder");
+const clearReferenceButton = $("clear-reference");
 const discoverButton = $("discover-folder");
 const folderNameInput = $("folder-name");
 const authStatus = $("auth-status");
@@ -69,6 +70,14 @@ function saveSelection(folderId, folderName) {
   state.selectedFolderId = folderId;
   state.selectedFolderName = folderName;
   window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ folderId, folderName }));
+}
+
+function clearSavedReference() {
+  state.selectedFolderId = "";
+  state.selectedFolderName = "";
+  window.sessionStorage.removeItem(STORAGE_KEY);
+  setStatus(selectionStatus, "Saved Picker comparison reference cleared. Discovery can now run without it.", "success");
+  setStatus(discoveryStatus, "Ready to test independent discovery by folder name.", "info");
 }
 
 function waitFor(check, label) {
@@ -202,6 +211,8 @@ connectButton.addEventListener("click", async () => {
   }
 });
 
+clearReferenceButton.addEventListener("click", clearSavedReference);
+
 selectFolderButton.addEventListener("click", () => {
   try {
     getUsableToken();
@@ -234,8 +245,8 @@ discoverButton.addEventListener("click", async () => {
     } else if (!state.selectedFolderId) {
       setStatus(
         discoveryStatus,
-        "ONE MATCH: Drive returned one exact-name folder, but no Picker reference is available in this tab to compare identity.",
-        "warning"
+        "FOUND: Drive returned one exact-name folder without using a saved Picker reference. The folder name was unique in the accessible results; no file was changed.",
+        "success"
       );
     } else if (result.match.id === state.selectedFolderId) {
       setStatus(
