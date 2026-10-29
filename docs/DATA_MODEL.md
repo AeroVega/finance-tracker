@@ -1,8 +1,8 @@
 # Data Model and Reconciliation Principles
 
-**Status:** Conceptual baseline; schema not yet implemented
+**Status:** Conceptual baseline with a proposed canonical contract and pure synthetic reference module under PR #11; production schema/storage not implemented
 
-The canonical model will be designed after sanitized exports are inspected. These are design requirements, not a final schema.
+The canonical contract is documented in [CANONICAL_LEDGER_CONTRACT.md](CANONICAL_LEDGER_CONTRACT.md); its first version is under review in PR #11. The pure reference module is not a provider parser or durable storage implementation. These broader model principles remain requirements for later implementation.
 
 ## Logical concepts
 - **Institution/source:** provider of a file or response.
@@ -20,10 +20,12 @@ The canonical model will be designed after sanitized exports are inspected. Thes
 - Report recognized, imported, skipped, duplicate, rejected, and review-needed counts.
 - Preserve descriptions, available IDs, and source provenance.
 - Record import identity/fingerprint without logging sensitive contents.
+- Require explicit account mapping and strict recognition of a known versioned source format; fail safely when either is unresolved.
 - Make re-imports idempotent and overlapping ranges safe.
 - Record coverage and import timestamp separately from newest transaction date.
 - Distinguish parser failure from a valid empty file.
-- Define behavior for corrections, reversals, and pending-to-posted transitions; do not silently overwrite.
+- Preserve source observations across pending-to-posted transitions when identity confidence is high.
+- Represent corrections and reversals as append-only events; derive effective reporting state without counting a reversal/correction as a second independent economic event.
 - Keep an auditable path for user corrections and rule changes.
 
 ## Duplicate matching
