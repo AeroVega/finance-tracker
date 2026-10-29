@@ -50,7 +50,7 @@ The entity is called **activity**, not just transaction, because Fidelity files 
 | `postedDate` | date or null | yes | Distinct posting/settlement date when supplied; otherwise null |
 | `amountMinor` | integer or null | yes | Signed value in currency minor units; null when non-monetary or using decimal fallback |
 | `amountDecimal` | decimal string or null | yes | Exact signed decimal fallback when the currency exponent is unsupported; otherwise null. Never populate both amount fields for the same value |
-| `currency` | ISO 4217 code or null | yes | Currency of `amountMinor`; null only when amount is null or not monetary |
+| `currency` | ISO 4217 code or null | yes | Currency of either amount field; null only when both amount fields are null or not monetary |
 | `sourceDescription` | string | yes | Source description preserved verbatim, including empty string only when source is genuinely blank |
 | `normalizedDescription` | string or null | yes | Optional derived searchable description; never replaces source text |
 | `sourceAction` | string or null | yes | Provider's original action/type, especially for investment events |
@@ -189,12 +189,12 @@ These are documented sample observations, not guarantees about every future expo
 - [x] Owner decisions for monetary representation, date provenance, unified ledger, pending/posted linkage, partial results, empty files, strict formats, source retention, account mapping, append-only recovery, and storage scope are recorded in this contract.
 - [x] Every fixture is deliberately invented and structurally representative, not copied from a real/sanitized row.
 - [x] Structural tests verify fixture headers/shapes, signed amounts, optional blanks, Fidelity leading blanks/footer, and invented identifiers.
-- [x] Pure synthetic tests cover identical-file no-op, unique overlap, ambiguous same-day collisions, duplicate-shaped rows within one file, source-ID conflicts, pending-to-posted lifecycle evidence, explicit correction events, malformed-row partial results, valid empty input, and deterministic re-execution.
+- [x] Pure synthetic tests cover identical-file no-op, unique overlap, ambiguous same-day collisions, duplicate-shaped rows within one file, source-ID conflicts, pending-to-posted lifecycle evidence, explicit correction/reversal events, decimal fallback, malformed-row partial results, valid empty input, and deterministic re-execution.
 - [x] Execute the full Node test suite with GitHub Actions on PR #11 (`node --test tests/*.test.mjs`); the job completed successfully.
 - [ ] Add provider-specific strict parser tests for actual supported format variants before enabling adapters.
 - [ ] Add persistence-level atomicity, interruption/retry, and restore tests before production storage.
 - [ ] Document schema migration behavior before persisted real data is introduced.
 
-The pure suite is intentionally not a parser or storage integration suite. Rejected and ambiguous observations are preserved in its result, and corrections are represented as append-only events rather than mutating the existing activity.
+The pure suite is intentionally not a parser or storage integration suite. Rejected and ambiguous observations are preserved in its result, and corrections and reversals are represented as append-only events rather than mutating the existing activity.
 
 **Boundary:** the pure reconciliation module and synthetic tests are a reference implementation of contract decisions, not a provider parser or durable ledger. They do not implement production storage, Drive synchronization, authentication, atomic commits, or crash recovery. A deterministic re-run test proves only the pure calculation is repeatable; persistence-level interruption/retry remains an open integration test. The Drive prototype remains separate; real financial data must not be used until security/storage release gates are approved.
