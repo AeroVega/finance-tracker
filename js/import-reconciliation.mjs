@@ -50,8 +50,8 @@ function exactSignedDecimal(activity) {
     if (!Number.isInteger(exponent)) return null;
     const negative = activity.amountMinor < 0;
     const absolute = BigInt(Math.abs(activity.amountMinor)).toString().padStart(exponent + 1, "0");
-    const whole = exponent ? absolute.slice(0, -exponent) : absolute;
-    const fraction = exponent ? absolute.slice(-exponent) : "";
+    const whole = exponent > 0 ? absolute.slice(0, -exponent) : absolute;
+    const fraction = exponent > 0 ? absolute.slice(-exponent) : "";
     return (negative ? "-" : "") + whole + (fraction ? "." + fraction : "");
   }
   if (typeof activity.amountDecimal === "string" && /^-?\d+(?:\.\d+)?$/.test(activity.amountDecimal)) {
