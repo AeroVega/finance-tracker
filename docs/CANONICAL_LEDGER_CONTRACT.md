@@ -130,7 +130,7 @@ One import run is one attempt to process one selected file for one explicitly ma
 
 Required `counts` keys: `rowsSeen`, `rowsRecognized`, `created`, `matched`, `review`, `rejected`, `ignored`. Counts are non-negative integers. Their meanings are mutually exclusive row dispositions for terminal runs: `created + matched + review + rejected + ignored = rowsRecognized`; `rowsSeen` can exceed `rowsRecognized` because of headers, footers, blank separators, or unsupported non-data rows. If a parser cannot classify a nonblank row, it must report it as rejected/review-needed, not silently omit it.
 
-A valid empty file is a successful `processed` run with zero data rows and explicit coverage nulls. A malformed/unsupported file is `failed` or `needs-review`, not a successful empty import. Terminal `no-op` runs refer to a previously completed identical fingerprint/context and must not reapply side effects.
+A valid empty file is a successful `processed` run with zero data rows and explicit coverage nulls. A malformed/unsupported file is `failed` or `needs-review`, not a successful empty import. An identical-file retry is a `no-op` only when the matching institution, account, source format, and fingerprint already have a successfully `processed` run. Failed and `needs-review` runs do not suppress retry; a retry must be allowed to re-evaluate the file. A terminal `no-op` must not reapply side effects.
 
 ### Review decision
 
