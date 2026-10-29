@@ -34,8 +34,17 @@ test("money parser preserves exact precision for signed, zero, and trailing-zero
   assert.throws(() => parseMoney("NaN", "USD"), /invalid-money/);
 });
 
-test("money parser refuses unsafe integer-minor-unit results instead of rounding", () => {
-  assert.throws(() => parseMoney("90071992547409.92", "USD"), /money-out-of-range/);
+test("money parser falls back to exact decimal text when integer minor units exceed safe range", () => {
+  assert.deepEqual(parseMoney("90071992547409.92", "USD"), {
+    amountMinor: null,
+    amountDecimal: "90071992547409.92",
+    currency: "USD",
+  });
+  assert.deepEqual(parseMoney("-90071992547409.92", "USD"), {
+    amountMinor: null,
+    amountDecimal: "-90071992547409.92",
+    currency: "USD",
+  });
 });
 
 test("malformed amount representations and impossible dates are rejected without creating activities", () => {
@@ -52,6 +61,21 @@ test("malformed amount representations and impossible dates are rejected without
   assert.equal(result.activities.length, 0);
   assert.equal(result.counts.created + result.counts.matched + result.counts.review +
     result.counts.rejected + result.counts.ignored, result.counts.rowsRecognized);
+});
+
+test("invalid canonical posted dates are rejected while source date provenance remains intact", () => {
+  const invalid = reconcileImport({ ...base, rows: [row({ postedDate: "2026-02-30" })] });
+  assert.equal(invalid.counts.rejected, 1);
+  assert.equal(invalid.activities.length, 0);
+
+  const valid = reconcileImport({ ...base, rows: [row({
+    effectiveDate: "2026-02-01",
+    postedDate: "2026-02-03",
+    sourceFields: { Date: "02/01/2026", Posted: "02/03/2026" },
+  })] });
+  assert.equal(valid.activities[0].effectiveDate, "2026-02-01");
+  assert.equal(valid.activities[0].postedDate, "2026-02-03");
+  assert.deepEqual(valid.observations[0].sourceFields, { Date: "02/01/2026", Posted: "02/03/2026" });
 });
 
 test("failed prior attempts do not suppress a retry of the same file", () => {
