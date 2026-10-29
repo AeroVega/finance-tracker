@@ -23,6 +23,18 @@ MVP1 uses user-provided CSV imports. Google Drive is the **selected private-stor
 - [Data model and reconciliation principles](docs/DATA_MODEL.md)
 - [Contributor and agent instructions](AGENTS.md)
 
+## Deploying a branch for experiments
+
+The GitHub Pages URL is a **single shared deployment**, not an isolated staging environment. The deployed page is public, and whichever branch is deployed is what every visitor sees.
+
+- A push to `main` automatically deploys `main`.
+- To try a branch without merging it: open **Actions → Deploy static site to GitHub Pages → Run workflow**, choose the desired branch in the branch selector, then run the workflow.
+- The workflow checks out the selected ref and stamps the deployed artifact with that checked-out commit's full 40-character SHA. The dashboard and Drive prototype show that SHA at the bottom of the page.
+- To restore the stable version, manually run the same workflow with `main` selected, or push an approved change to `main`.
+- A later push to `main` will replace an experimental deployment. Deployments share one concurrency group, so a newer run can cancel an in-progress deployment.
+
+The build SHA is generated in the Actions workspace and is not committed back to the source branch. The `development (not deployed)` label is only the local/source fallback; a successful Pages deployment should display a full SHA.
+
 ## Non-negotiable constraints
 
 1. No recurring costs for hosting, storage, aggregation, refresh, or AI.
