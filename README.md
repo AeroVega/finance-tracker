@@ -10,7 +10,7 @@ A second-generation personal finance tracker built around trustworthy data, tran
 
 MVP1 uses user-provided CSV imports. Google Drive is the **selected private-storage direction**. The deployed synthetic Drive probe has passed a user-confirmed create/read-back/confirmed-delete test, including a successful repeat after API-key rotation; this validates the prototype path only, not production ledger storage.
 
-**Current phase:** data-integration prototype. **Next milestone:** finalize the canonical ledger/import-run contract and create deliberately synthetic fixtures for Wells Fargo, SoFi, and Fidelity before implementing tested parsers. Production Drive writes remain blocked on synchronization/conflict handling, backup/restore, authorization/revocation, and confirmation of sustainable $0 production terms. No production financial data or secrets belong in this public repository. Free, authorized direct institution integrations remain an MVP2 research goal, not a dependency for MVP1.
+**Current phase:** data-integration prototype. **Current milestone:** PR #11 records the canonical ledger/import-run decisions and adds a pure synthetic reconciliation reference module with fixtures/tests. The full Node test suite now passes in GitHub Actions; owner review/acceptance and provider-specific strict parser tests remain before M1 can be considered complete. Production Drive writes remain blocked on synchronization/conflict handling, backup/restore, authorization/revocation, and confirmation of sustainable $0 production terms. No production financial data or secrets belong in this public repository. Free, authorized direct institution integrations remain an MVP2 research goal, not a dependency for MVP1.
 
 ## Start here
 

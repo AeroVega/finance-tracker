@@ -1,0 +1,270 @@
+const CURRENCY_EXPONENTS = Object.freeze({ USD: 2, CAD: 2, EUR: 2, GBP: 2, JPY: 0, KRW: 0, KWD: 3, BHD: 3 });
+
+export function parseMoney(value, currency) {
+  if (typeof value !== "string" || !/^-?\d+(?:\.\d+)?$/.test(value.trim())) {
+    throw new TypeError("invalid-money");
+  }
+  const text = value.trim();
+  const exponent = CURRENCY_EXPONENTS[currency];
+  if (Number.isInteger(exponent)) {
+    const negative = text.startsWith("-");
+    const unsigned = negative ? text.slice(1) : text;
+    const [whole, fraction = ""] = unsigned.split(".");
+    if (fraction.length > exponent && /[^0]/.test(fraction.slice(exponent))) throw new TypeError("unsupported-money-precision");
+    const minor = Number(whole) * (10 ** exponent) + Number((fraction + "0".repeat(exponent)).slice(0, exponent) || "0");
+    if (!Number.isSafeInteger(minor)) {
+      // Preserve the exact source decimal rather than rounding through Number.
+      // Adapters should retain the original source text in sourceFields as well.
+      return { amountMinor: null, amountDecimal: text, currency };
+    }
+    return { amountMinor: minor === 0 ? 0 : (negative ? -minor : minor), amountDecimal: null, currency };
+  }
+  return { amountMinor: null, amountDecimal: text, currency };
+}
+
+export function recognizeFormat(sourceFormat) {
+  return new Set(["wells-fargo-csv-v1", "sofi-csv-v1", "fidelity-accounts-history-csv-v1"]).has(sourceFormat);
+}
+
+function isCalendarDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function sameComposite(a, b) {
+  return a.institutionId === b.institutionId &&
+    a.accountId === b.accountId &&
+    a.currency === b.currency &&
+    a.amountMinor === b.amountMinor &&
+    (a.amountDecimal ?? null) === (b.amountDecimal ?? null) &&
+    a.effectiveDate === b.effectiveDate &&
+    (a.normalizedDescription ?? a.sourceDescription ?? "") === (b.normalizedDescription ?? b.sourceDescription ?? "") &&
+    (a.sourceAction ?? "") === (b.sourceAction ?? "");
+}
+
+
+function exactSignedDecimal(activity) {
+  if (Number.isSafeInteger(activity.amountMinor)) {
+    const exponent = CURRENCY_EXPONENTS[activity.currency];
+    if (!Number.isInteger(exponent)) return null;
+    const negative = activity.amountMinor < 0;
+    const absolute = BigInt(Math.abs(activity.amountMinor)).toString().padStart(exponent + 1, "0");
+    const whole = exponent > 0 ? absolute.slice(0, -exponent) : absolute;
+    const fraction = exponent > 0 ? absolute.slice(-exponent) : "";
+    return (negative ? "-" : "") + whole + (fraction ? "." + fraction : "");
+  }
+  if (typeof activity.amountDecimal === "string" && /^-?\d+(?:\.\d+)?$/.test(activity.amountDecimal)) {
+    return activity.amountDecimal;
+  }
+  return null;
+}
+
+function decimalParts(value) {
+  if (typeof value !== "string" || !/^-?\d+(?:\.\d+)?$/.test(value)) return null;
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole, fraction = ""] = unsigned.split(".");
+  const digits = (whole + fraction).replace(/^0+(?=\d)/, "");
+  return { negative: negative && /[1-9]/.test(digits), digits: BigInt(digits || "0"), scale: fraction.length };
+}
+
+function compareAbsoluteDecimals(a, b) {
+  const left = decimalParts(a);
+  const right = decimalParts(b);
+  if (!left || !right) return null;
+  const scale = Math.max(left.scale, right.scale);
+  const l = left.digits * (10n ** BigInt(scale - left.scale));
+  const r = right.digits * (10n ** BigInt(scale - right.scale));
+  return l < r ? -1 : l > r ? 1 : 0;
+}
+
+function hasOppositeSigns(a, b) {
+  const left = decimalParts(a);
+  const right = decimalParts(b);
+  return Boolean(left && right && left.digits !== 0n && right.digits !== 0n && left.negative !== right.negative);
+}
+
+function validReversalAmount(original, reversal) {
+  if (!original || !reversal || original.currency !== reversal.currency) return false;
+  const originalValue = exactSignedDecimal(original);
+  const reversalValue = exactSignedDecimal(reversal);
+  if (originalValue === null || reversalValue === null) return false;
+  return hasOppositeSigns(originalValue, reversalValue) &&
+    compareAbsoluteDecimals(reversalValue, originalValue) !== null &&
+    compareAbsoluteDecimals(reversalValue, originalValue) <= 0;
+}
+
+function isPendingPostedTransition(oldRow, newRow) {
+  return oldRow.lifecycleStatus === "pending" && newRow.lifecycleStatus === "posted" &&
+    oldRow.accountId === newRow.accountId && oldRow.currency === newRow.currency &&
+    oldRow.amountMinor === newRow.amountMinor &&
+    (oldRow.amountDecimal ?? null) === (newRow.amountDecimal ?? null);
+}
+
+export function reconcileImport({
+  institutionId, accountId, sourceFormat, fileFingerprint, rows,
+  existingActivities = [], existingObservations = [], completedRuns = [],
+}) {
+  if (!accountId) throw new TypeError("explicit-account-mapping-required");
+  if (!recognizeFormat(sourceFormat)) throw new TypeError("unsupported-source-format");
+  if (!Array.isArray(rows)) throw new TypeError("rows-must-be-array");
+
+  const prior = completedRuns.find((run) => run.status === "processed" &&
+    run.accountId === accountId && run.institutionId === institutionId &&
+    run.sourceFormat === sourceFormat && run.fileFingerprint === fileFingerprint);
+  if (prior) {
+    return {
+      status: "no-op", noOpOfImportRunId: prior.importRunId,
+      activities: [], observations: [], events: [],
+      counts: { rowsSeen: 0, rowsRecognized: 0, created: 0, matched: 0, review: 0, rejected: 0, ignored: 0 },
+      coverageStart: null, coverageEnd: null,
+    };
+  }
+
+  const activities = [];
+  const observations = [];
+  const events = [];
+  const counts = { rowsSeen: rows.length, rowsRecognized: 0, created: 0, matched: 0, review: 0, rejected: 0, ignored: 0 };
+  const validDates = [];
+  // Repeated provider IDs with contradictory monetary identity in one input file
+  // are not resolved by row order. Keep every conflicting occurrence for review.
+  const sourceIdRows = new Map();
+  for (let index = 0; index < rows.length; index++) {
+    const candidate = rows[index];
+    if (!candidate || typeof candidate.sourceRecordId !== "string" || !candidate.sourceRecordId) continue;
+    const signature = JSON.stringify([
+      candidate.currency ?? null,
+      candidate.amountMinor ?? null,
+      candidate.amountDecimal ?? null,
+    ]);
+    if (!sourceIdRows.has(candidate.sourceRecordId)) sourceIdRows.set(candidate.sourceRecordId, new Map());
+    const signatures = sourceIdRows.get(candidate.sourceRecordId);
+    if (!signatures.has(signature)) signatures.set(signature, []);
+    signatures.get(signature).push(index);
+  }
+  const conflictingSourceIdRows = new Set();
+  for (const signatures of sourceIdRows.values()) {
+    if (signatures.size > 1) {
+      for (const indexes of signatures.values()) for (const index of indexes) conflictingSourceIdRows.add(index);
+    }
+  }
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
+    if (!row || row.valid === false || !isCalendarDate(row.effectiveDate) ||
+        (row.postedDate !== null && row.postedDate !== undefined && !isCalendarDate(row.postedDate)) ||
+        typeof row.sourceDescription !== "string" ||
+        (((row.amountMinor !== null && row.amountMinor !== undefined) || (row.amountDecimal !== null && row.amountDecimal !== undefined)) && (typeof row.currency !== "string" || !/^[A-Z]{3}$/.test(row.currency))) ||
+        (row.amountMinor !== null && row.amountMinor !== undefined && !Number.isSafeInteger(row.amountMinor)) ||
+        (row.amountDecimal !== null && row.amountDecimal !== undefined && (typeof row.amountDecimal !== "string" || !/^-?\d+(?:\.\d+)?$/.test(row.amountDecimal))) ||
+        (row.amountMinor !== null && row.amountMinor !== undefined && row.amountDecimal !== null && row.amountDecimal !== undefined)) {
+      counts.rejected++;
+      counts.rowsRecognized++;
+      observations.push({ rowOrdinal: row?.rowOrdinal ?? null, activityId: null, disposition: "rejected", reasonCode: row?.errorCode ?? "invalid-row" });
+      continue;
+    }
+
+    counts.rowsRecognized++;
+    validDates.push(row.effectiveDate);
+    if (conflictingSourceIdRows.has(rowIndex)) {
+      counts.review++;
+      observations.push({
+        rowOrdinal: row.rowOrdinal ?? rowIndex + 1,
+        accountId, institutionId,
+        sourceRecordId: row.sourceRecordId,
+        activityId: null,
+        sourceFields: row.sourceFields ?? {},
+        disposition: "review",
+        reasonCode: "source-id-conflict-within-file",
+        sourceRowFingerprint: row.sourceRowFingerprint ?? null,
+      });
+      continue;
+    }
+    const incoming = { ...row, accountId, institutionId };
+    let match = null;
+    let disposition = "created";
+    let reasonCode = null;
+
+    if (row.reversalOfActivityId) {
+      match = existingActivities.find((activity) => activity.activityId === row.reversalOfActivityId) ?? null;
+      if (!match) {
+        disposition = "review"; reasonCode = "reversal-target-not-found";
+      } else if (match.institutionId !== institutionId || match.accountId !== accountId) {
+        match = null;
+        disposition = "review"; reasonCode = "reversal-target-out-of-scope";
+      } else if (!validReversalAmount(match, incoming)) {
+        match = null;
+        disposition = "review"; reasonCode = "invalid-reversal-amount";
+      } else {
+        disposition = "matched";
+        events.push({
+          eventType: "reversal", activityId: match.activityId,
+          observationRowOrdinal: row.rowOrdinal, reversalAmountMinor: row.amountMinor ?? null,
+          reversalAmountDecimal: row.amountDecimal ?? null,
+          currency: row.currency ?? null, appendOnly: true,
+        });
+      }
+    } else if (row.sourceRecordId) {
+      const candidates = [...existingObservations, ...observations]
+        .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.activityId)
+        .map((obs) => existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId))
+        .filter((activity) => activity && activity.institutionId === institutionId && activity.accountId === accountId);
+      const unique = [...new Map(candidates.map((a) => [a.activityId, a])).values()];
+      if (unique.length > 1) {
+        disposition = "review"; reasonCode = "source-id-multiple-candidates";
+      } else if (unique.length === 1) {
+        match = unique[0];
+        if (match.currency !== (row.currency ?? null) || match.amountMinor !== (row.amountMinor ?? null) ||
+            (match.amountDecimal ?? null) !== (row.amountDecimal ?? null)) {
+          if (row.correctionOfActivityId === match.activityId) {
+            disposition = "matched";
+            events.push({ eventType: "correction", activityId: match.activityId, observationRowOrdinal: row.rowOrdinal, priorAmountMinor: match.amountMinor ?? null, proposedAmountMinor: row.amountMinor ?? null, appendOnly: true });
+          } else {
+            disposition = "review"; reasonCode = "source-id-conflict";
+          }
+        } else if (isPendingPostedTransition(match, incoming)) {
+          disposition = "matched";
+          events.push({ eventType: "lifecycle-transition", activityId: match.activityId, from: "pending", to: "posted", observationRowOrdinal: row.rowOrdinal, appendOnly: true });
+        } else {
+          disposition = "matched";
+        }
+      }
+    } else {
+      const candidates = existingActivities.filter((a) => sameComposite(a, incoming));
+      if (candidates.length === 1) {
+        match = candidates[0];
+        disposition = "matched";
+      } else if (candidates.length > 1) {
+        disposition = "review"; reasonCode = "ambiguous-composite-match";
+      }
+    }
+
+    let activityId = match?.activityId ?? null;
+    if (disposition === "created") {
+      activityId = "synthetic-activity-" + String(activities.length + 1);
+      activities.push({ ...incoming, activityId, processingStatus: "processed" });
+      counts.created++;
+    } else if (disposition === "matched") {
+      counts.matched++;
+    } else if (disposition === "review") {
+      counts.review++;
+    }
+
+    observations.push({
+      rowOrdinal: row.rowOrdinal ?? observations.length + 1, accountId, institutionId,
+      sourceRecordId: row.sourceRecordId ?? null, activityId: disposition === "review" ? null : activityId,
+      sourceFields: row.sourceFields ?? {}, disposition, reasonCode,
+      sourceRowFingerprint: row.sourceRowFingerprint ?? null,
+    });
+  }
+
+  const unresolved = counts.review > 0 || counts.rejected > 0;
+  return {
+    status: unresolved ? "needs-review" : "processed",
+    activities, observations, events, counts,
+    coverageStart: validDates.length ? validDates.sort()[0] : null,
+    coverageEnd: validDates.length ? validDates.sort().at(-1) : null,
+  };
+}

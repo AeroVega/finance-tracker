@@ -36,7 +36,8 @@ Google Drive is the selected storage direction, but production use remains gated
 - Explain and minimize any data transferred to Drive.
 - Validate file structure, dates, amounts, and row types; treat CSV contents as untrusted input.
 - Never execute imported values as code or HTML; render descriptions as text.
-- Avoid retaining raw imports longer than necessary; retention policy remains to be defined.
+- Retain original imports only in approved private storage for **540 days (18 months)** from successful retention. Record the retention timestamp and calculate deletion eligibility 540 days later; expiry alone is not confirmation of deletion. Indefinite retention is not the default. Keep file-retention state distinct from import-processing status, record confirmed deletion, and make deletion failures visible and retryable. After confirmed deletion, remove the live file locator while preserving only permitted row-level provenance and import metadata.
+- The 540-day duration is approved; private-storage implementation and the detailed controls still require approval before production use. Define how backup copies expire or are deleted consistently with the policy; backup/restore must not silently reintroduce originals that the policy says were deleted.
 - Do not log full rows, account identifiers, or sensitive amounts by default.
 - Show import errors without leaking sensitive details to public logs.
 - Preserve provenance and use conservative duplicate matching; ambiguous matches go to review instead of silent deletion.
@@ -54,14 +55,15 @@ Google Drive is the selected storage direction, but production use remains gated
 - Keep parsing and calculations local unless the approved design needs a network transfer.
 - Treat browser cache/local storage as device-local and potentially readable by someone with device/browser access; do not mistake it for cross-device synchronization.
 - Avoid analytics/telemetry that could disclose financial activity. No sensitive data in URLs, console output, crash reports, or notifications.
-- Define raw CSV retention, local cache lifetime, export/deletion behavior, and response to device loss before release.
+- Define raw CSV retention duration, automatic deletion eligibility, local cache lifetime, export/deletion behavior, backup-copy lifecycle, and response to device loss before release.
 
 ## Required release gates
 1. No real financial data or secrets in tracked files, diffs, assets, fixtures, logs, or workflow artifacts.
 2. OAuth scopes, production configuration, token handling, revocation, and reauthorization verified.
 3. Storage authorization and cross-device synchronization tested on synthetic data.
 4. Conflict handling and interrupted-write recovery demonstrated.
-5. Export and backup restoration tested.
+5. Synthetic retention-lifecycle tests verify policy-based expiry, confirmed deletion, retryable deletion failure, and consistency between retained files and backup/restore behavior.
+6. Export and backup restoration tested.
 6. Current provider terms and total production cost verified as compatible with $0 recurring cost.
 7. Stale/incomplete data is clearly indicated and financial calculations reconcile to test expectations.
 
