@@ -134,7 +134,7 @@ test("reversal targets outside the current institution or account go to review",
   for (const target of [
     { institutionId: "fidelity", accountId: base.accountId },
     { institutionId: base.institutionId, accountId: "other-account" },
-    { accountId: base.accountId },
+    { institutionId: undefined, accountId: base.accountId },
   ]) {
     const result = reconcileImport({
       ...base,
