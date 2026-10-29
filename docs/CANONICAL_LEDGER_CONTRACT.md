@@ -48,7 +48,8 @@ The entity is called **activity**, not just transaction, because Fidelity files 
 | `activityKind` | enum | yes | `cash-transaction`, `trade`, `dividend`, `interest`, `fee`, `contribution`, `distribution`, `transfer`, `valuation-change`, `other`, `unclassified` |
 | `effectiveDate` | `YYYY-MM-DD` | yes | Source date selected by documented adapter policy; never a timestamp inferred from import time |
 | `postedDate` | date or null | yes | Distinct posting/settlement date when supplied; otherwise null |
-| `amountMinor` | integer or null | yes | Signed value in currency minor units; null only when this activity has no meaningful monetary amount |
+| `amountMinor` | integer or null | yes | Signed value in currency minor units; null when non-monetary or using decimal fallback |
+| `amountDecimal` | decimal string or null | yes | Exact signed decimal fallback when the currency exponent is unsupported; otherwise null. Never populate both amount fields for the same value |
 | `currency` | ISO 4217 code or null | yes | Currency of `amountMinor`; null only when amount is null or not monetary |
 | `sourceDescription` | string | yes | Source description preserved verbatim, including empty string only when source is genuinely blank |
 | `normalizedDescription` | string or null | yes | Optional derived searchable description; never replaces source text |
@@ -62,9 +63,27 @@ The entity is called **activity**, not just transaction, because Fidelity files 
 | `createdAt` | ISO timestamp | yes | First canonical creation timestamp |
 | `updatedAt` | ISO timestamp | yes | Last metadata update timestamp; source facts remain provenance-backed |
 
-**Signed amount convention:** negative means money leaves the account; positive means money enters it. An adapter must explicitly convert a provider's convention if different. Preserve the original source amount representation in its source observation. Zero is a valid value and is not the same as missing.
+**Signed amount convention:** negative means money leaves the account; positive means money enters it. An adapter must explicitly convert a provider's convention if different. For monetary activities, populate exactly one of `amountMinor` or `amountDecimal`; both null means no meaningful monetary amount. `currency` is required whenever either amount field is populated. Preserve the original source amount representation in its source observation. Zero is a valid value and is not the same as missing.
 
 **Date convention:** preserve all supplied dates separately in source observation. The adapter documents which source date becomes `effectiveDate`; use settlement/posting dates only for `postedDate` when semantically appropriate. Import time is never a substitute for an activity date.
+
+### Append-only ledger event
+
+Corrections, reversals, and lifecycle transitions are immutable events linked to the affected activity and source evidence. They do not erase or silently rewrite prior observations or accepted facts.
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `eventId` | string | yes | Unique event identity |
+| `eventType` | enum | yes | `correction`, `reversal`, `lifecycle-transition` |
+| `activityId` | string | yes | Activity affected by the event |
+| `sourceObservationId` | string or null | yes | Source observation that supports the event |
+| `recordedAt` | ISO timestamp | yes | Event creation time |
+| `priorValues` | object or null | yes | Prior values relevant to the correction/transition |
+| `proposedValues` | object or null | yes | New source-supported values; do not overwrite the prior event |
+| `reversesEventId` | string or null | yes | Earlier event being reversed, when applicable |
+| `rationale` | string or null | yes | Safe explanation or reason code |
+
+A reversal is an event, not a second copy of the original transaction. Reports must derive the effective economic state from the event chain and avoid counting the reversal/correction as an unrelated additional expense, income, or return. The original activity and all supporting observations remain available for audit.
 
 ### Source observation
 
@@ -97,6 +116,7 @@ One import run is one attempt to process one selected file for one explicitly ma
 | `accountId` | string | yes | Resolved account |
 | `sourceFormat` | string | yes | Versioned adapter/format key |
 | `fileFingerprint` | string | yes | SHA-256 of file bytes; private metadata, never emit in public logs |
+| `privateSourceFileRef` | private opaque reference | yes | Locator for the retained original file in approved private storage; never log or expose publicly. A run cannot claim successful full-file retention if this reference is absent |
 | `startedAt` | ISO timestamp | yes | Attempt start |
 | `completedAt` | ISO timestamp or null | yes | Null until terminal |
 | `status` | enum | yes | `validating`, `processing`, `processed`, `needs-review`, `failed`, `cancelled`, `no-op` |
