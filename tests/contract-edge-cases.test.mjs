@@ -112,6 +112,7 @@ test("identical fingerprints in a different account or format context are not no
 test("partial reversal records only its supplied amount and leaves the original unchanged", () => {
   const original = {
     activityId: "original-activity",
+    institutionId: base.institutionId,
     accountId: base.accountId,
     amountMinor: -1234,
     currency: "USD",
@@ -126,6 +127,75 @@ test("partial reversal records only its supplied amount and leaves the original 
   assert.equal(result.events[0].eventType, "reversal");
   assert.equal(result.events[0].reversalAmountMinor, 500);
   assert.equal(original.amountMinor, -1234);
+});
+
+
+test("reversal targets outside the current institution or account go to review", () => {
+  for (const target of [
+    { institutionId: "fidelity", accountId: base.accountId },
+    { institutionId: base.institutionId, accountId: "other-account" },
+    { accountId: base.accountId },
+  ]) {
+    const result = reconcileImport({
+      ...base,
+      rows: [row({ amountMinor: 500, reversalOfActivityId: "target-1" })],
+      existingActivities: [{
+        activityId: "target-1", institutionId: base.institutionId,
+        accountId: base.accountId, amountMinor: -1234, currency: "USD", ...target,
+      }],
+    });
+    assert.equal(result.counts.review, 1);
+    assert.equal(result.events.length, 0);
+    assert.equal(result.observations[0].reasonCode, "reversal-target-out-of-scope");
+  }
+});
+
+test("reversal amount must have opposite sign and not exceed original absolute amount", () => {
+  const original = {
+    activityId: "purchase-1", institutionId: base.institutionId,
+    accountId: base.accountId, amountMinor: -1234, amountDecimal: null,
+    currency: "USD", lifecycleStatus: "posted",
+  };
+  for (const amountMinor of [-500, 0, 1235]) {
+    const result = reconcileImport({
+      ...base,
+      rows: [row({ amountMinor, reversalOfActivityId: original.activityId })],
+      existingActivities: [original],
+    });
+    assert.equal(result.counts.review, 1, `amount ${amountMinor} should be reviewed`);
+    assert.equal(result.events.length, 0);
+    assert.equal(result.observations[0].reasonCode, "invalid-reversal-amount");
+  }
+  const valid = reconcileImport({
+    ...base,
+    rows: [row({ amountMinor: 500, reversalOfActivityId: original.activityId })],
+    existingActivities: [original],
+  });
+  assert.equal(valid.counts.matched, 1);
+  assert.equal(valid.events[0].reversalAmountMinor, 500);
+});
+
+test("exact decimal fallback reversal amounts are compared without floating-point rounding", () => {
+  const original = {
+    activityId: "large-purchase", institutionId: base.institutionId,
+    accountId: base.accountId, amountMinor: null, amountDecimal: "-90071992547409.92",
+    currency: "USD", lifecycleStatus: "posted",
+  };
+  const valid = reconcileImport({
+    ...base,
+    rows: [row({ amountMinor: null, amountDecimal: "90071992547409.91", reversalOfActivityId: original.activityId })],
+    existingActivities: [original],
+  });
+  assert.equal(valid.counts.matched, 1);
+  assert.equal(valid.events[0].reversalAmountDecimal, "90071992547409.91");
+
+  const invalid = reconcileImport({
+    ...base,
+    rows: [row({ amountMinor: null, amountDecimal: "90071992547409.93", reversalOfActivityId: original.activityId })],
+    existingActivities: [original],
+  });
+  assert.equal(invalid.counts.review, 1);
+  assert.equal(invalid.events.length, 0);
 });
 
 test("transfer sides are only carried as linked movements when an explicit group is supplied", () => {
