@@ -117,7 +117,7 @@ test("valid empty file succeeds with zero counts and unknown coverage", () => {
   assert.equal(result.coverageEnd, null);
 });
 
-test("retry after a staged failure is deterministic and has no external side effects", () => {
+test("re-execution of the pure reconciliation function is deterministic and has no external side effects", () => {
   const first = reconcileImport({ ...base, rows: [row()] });
   const retry = reconcileImport({ ...base, rows: [row()] });
   assert.deepEqual(retry, first);
