@@ -2,7 +2,7 @@
 
 **Purpose:** Define the smallest coherent change to bring the successful Google sign-in/configuration work from Experiment A and the folder-discovery work from Experiment B together in one reviewed PR to `main`.
 
-**Status:** Integration assessment; no production ledger storage is approved. PR #15 and PR #16 remain separate and unmerged. Do not merge both experiment PRs independently: both were created from `main` separately and contain overlapping deployment/configuration work.
+**Status:** Experiment A and B integration merged via PR #16 on 2026-10-29 (merge commit `07ee4f012bb94d95bb4b526603f0ddac760bcba5`). PR #15 was closed without merging to avoid duplicating overlapping configuration/deployment changes. No production ledger storage is approved.
 
 ## Evidence to carry forward
 
@@ -70,3 +70,15 @@ Include:
 Keep both the synthetic probe and discovery UI explicitly prototype-only. Before discovery can select a canonical ledger folder automatically, decide and test a stable identity strategy: exact name alone is insufficient. A small app-owned marker/manifest may be appropriate, but its format and recovery behavior should be reviewed before implementing it.
 
 Exclude real ledger reads/writes, automatic replacement-folder creation, broader Drive scopes, stored tokens, multi-user guarantees, and claims of production-ready backup/conflict recovery. Run the full Node suite, manually deploy the integration branch, verify the source SHA, repeat the live checks, and request explicit merge approval only after review.
+
+
+## Follow-up hardening implementation — PR #17
+
+The focused follow-up hardens the discovery helper and its experiment UI without enabling ledger access:
+
+- **Typed outcomes:** zero matches are `not-found`; multiple matches are `ambiguous`; a unique exact-name match is only a `candidate-found` result and explicitly requires identity verification before it could be used as the canonical database.
+- **Explicit Picker fallback:** zero, multiple, invalid, or mismatched results tell the owner to select the intended folder with Picker. The app must not create a replacement folder automatically.
+- **Distinct failures:** HTTP 401 requests reauthorization; HTTP 403 reports access denial; other HTTP errors and network/malformed-response failures remain distinct and do not select a folder. Error messages avoid response bodies, tokens, and raw transport details.
+- **Regression coverage:** synthetic tests cover the classification contract, missing/ambiguous results, identity-verification requirement, pagination, HTTP 401/403/500, network failures, malformed responses, and required inputs.
+
+**Still open:** this does not implement the app-owned identity marker/manifest. A unique name or Picker comparison reference is not yet sufficient proof of canonical database identity. The production storage gate remains closed.
