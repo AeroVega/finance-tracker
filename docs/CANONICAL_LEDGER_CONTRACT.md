@@ -170,7 +170,7 @@ These are documented sample observations, not guarantees about every future expo
 - [x] Every fixture is deliberately invented and structurally representative, not copied from a real/sanitized row.
 - [x] Structural tests verify fixture headers/shapes, signed amounts, optional blanks, Fidelity leading blanks/footer, and invented identifiers.
 - [x] Pure synthetic tests cover identical-file no-op, unique overlap, ambiguous same-day collisions, duplicate-shaped rows within one file, source-ID conflicts, pending-to-posted lifecycle evidence, explicit correction events, malformed-row partial results, valid empty input, and deterministic re-execution.
-- [ ] Execute the full Node test suite in a runtime with the repository checked out and record the actual result; the current environment cannot clone GitHub due unavailable network access.
+- [x] Execute the full Node test suite with GitHub Actions on PR #11 (`node --test tests/*.test.mjs`); the job completed successfully.
 - [ ] Add provider-specific strict parser tests for actual supported format variants before enabling adapters.
 - [ ] Add persistence-level atomicity, interruption/retry, and restore tests before production storage.
 - [ ] Document schema migration behavior before persisted real data is introduced.
