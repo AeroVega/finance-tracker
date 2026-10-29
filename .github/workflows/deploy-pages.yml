@@ -45,6 +45,31 @@ jobs:
           EOF
           echo "Deploying source commit: $source_sha"
 
+      - name: Stamp public Google configuration
+        shell: bash
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_PICKER_API_KEY: ${{ vars.GOOGLE_PICKER_API_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const config = {
+            clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
+            apiKey: process.env.GOOGLE_PICKER_API_KEY || "",
+            projectNumber: "863907870950"
+          };
+          writeFileSync(
+            "js/google-config.js",
+            "export const GOOGLE_CONFIG = Object.freeze(" +
+              JSON.stringify(config, null, 2) + ");\n"
+          );
+          console.log("Google configuration present: " + JSON.stringify({
+            clientId: Boolean(config.clientId),
+            pickerApiKey: Boolean(config.apiKey),
+            projectNumber: Boolean(config.projectNumber)
+          }));
+          NODE
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
 
