@@ -36,7 +36,7 @@ function getConfig() {
 function validateConfig(config) {
   if (!config.clientId) throw new Error("Google sign-in is not configured for this deployment.");
   if (!config.apiKey) throw new Error("Google Picker is not configured for this deployment.");
-  if (!/^\\d+$/.test(config.projectNumber)) throw new Error("The Google Cloud project number is invalid.");
+  if (!/^\d+$/.test(config.projectNumber)) throw new Error("The Google Cloud project number is invalid.");
 }
 
 function loadSelection() {
