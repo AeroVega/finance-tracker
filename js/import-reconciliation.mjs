@@ -41,7 +41,7 @@ function sameComposite(a, b) {
 function isPendingPostedTransition(oldRow, newRow) {
   return oldRow.lifecycleStatus === "pending" && newRow.lifecycleStatus === "posted" &&
     oldRow.accountId === newRow.accountId && oldRow.currency === newRow.currency &&
-    oldRow.amountMinor === newRow.amountMinor;
+    oldRow.amountMinor === newRow.amountMinor &&\n    (oldRow.amountDecimal ?? null) === (newRow.amountDecimal ?? null);
 }
 
 export function reconcileImport({
@@ -73,7 +73,7 @@ export function reconcileImport({
   for (const row of rows) {
     if (!row || row.valid === false || !isCalendarDate(row.effectiveDate) ||
         typeof row.sourceDescription !== "string" ||
-        (row.amountMinor !== null && row.amountMinor !== undefined && !Number.isSafeInteger(row.amountMinor))) {
+        (row.amountMinor !== null && row.amountMinor !== undefined && !Number.isSafeInteger(row.amountMinor)) ||\n        (row.amountDecimal !== null && row.amountDecimal !== undefined && (typeof row.amountDecimal !== "string" || !/^-?\\d+(?:\\.\\d+)?$/.test(row.amountDecimal))) ||\n        (row.amountMinor !== null && row.amountMinor !== undefined && row.amountDecimal !== null && row.amountDecimal !== undefined)) {
       counts.rejected++;
       counts.rowsRecognized++;
       observations.push({ rowOrdinal: row?.rowOrdinal ?? null, activityId: null, disposition: "rejected", reasonCode: row?.errorCode ?? "invalid-row" });
@@ -109,7 +109,7 @@ export function reconcileImport({
         disposition = "review"; reasonCode = "source-id-multiple-candidates";
       } else if (unique.length === 1) {
         match = unique[0];
-        if (match.currency !== (row.currency ?? null) || match.amountMinor !== (row.amountMinor ?? null)) {
+        if (match.currency !== (row.currency ?? null) || match.amountMinor !== (row.amountMinor ?? null) ||\n            (match.amountDecimal ?? null) !== (row.amountDecimal ?? null)) {
           if (row.correctionOfActivityId === match.activityId) {
             disposition = "matched";
             events.push({ eventType: "correction", activityId: match.activityId, observationRowOrdinal: row.rowOrdinal, priorAmountMinor: match.amountMinor ?? null, proposedAmountMinor: row.amountMinor ?? null, appendOnly: true });
