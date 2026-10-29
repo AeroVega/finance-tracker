@@ -22,8 +22,28 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out selected branch
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Stamp deployed source commit
+        shell: bash
+        run: |
+          source_sha="$(git rev-parse HEAD)"
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          cat > js/build-info.js <<EOF
+          (() => {
+            "use strict";
+            const sourceCommit = "$source_sha";
+            const target = document.getElementById("build-sha");
+            if (target) {
+              target.textContent = sourceCommit;
+              target.title = "Source commit: " + sourceCommit;
+            }
+          })();
+          EOF
+          echo "Deploying source commit: $source_sha"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6

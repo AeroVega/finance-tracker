@@ -28,11 +28,14 @@
     .status[data-kind="error"] { color: #a12c2c; }
     .fine-print { font-size: .86rem; color: #56635d; }
     a { color: #155d91; }
+    footer { margin-top: 24px; text-align: center; color: #6b756f; font-size: .78rem; overflow-wrap: anywhere; }
+    footer code { font-size: .76rem; }
     @media (max-width: 520px) { body { padding: 16px 12px 36px; } .panel { padding: 18px; } button { width: 100%; margin-right: 0; } }
   </style>
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
   <script type="module" src="drive-probe.mjs"></script>
+  <script src="../js/build-info.js" defer></script>
 </head>
 <body>
   <main>
@@ -63,6 +66,7 @@
       <button id="run-probe" type="button" disabled>Run synthetic read/write check</button>
     </section>
     <p class="fine-print">The selected folder ID is held only in page memory and is not included in the public source. This prototype uses Google's narrow drive.file permission.</p>
+    <footer>Source commit <code id="build-sha">development (not deployed)</code></footer>
   </main>
 </body>
 </html>
