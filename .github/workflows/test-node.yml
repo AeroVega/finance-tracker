@@ -18,6 +18,6 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
       - name: Run complete Node test suite
         run: node --test tests/*.test.mjs
