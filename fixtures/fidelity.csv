@@ -1,0 +1,7 @@
+,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,
+Run Date,Account,Account Number,Action,Symbol,Description,Type,Exchange Quantity,Exchange Currency,Currency,Price,Quantity,Exchange Rate,Commission,Fees,Accrued Interest,Amount,Settlement Date
+03/02/2026,EXAMPLE RETIREMENT,000000000,Contribution,,EXAMPLE EMPLOYER MATCH,Cash,,,,,,,,,,150.00,
+03/03/2026,EXAMPLE BROKERAGE,000000001,Change in Market Value,EXM,EXAMPLE INDEX FUND,Security,,,,100.00,1.5,,,,,0.00,
+,,,,,,,,,,,,,,,,,
+This is invented explanatory footer text, not a transaction row.
