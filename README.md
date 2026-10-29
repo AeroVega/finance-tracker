@@ -15,6 +15,7 @@ MVP1 uses user-provided CSV imports. Google Drive is the **selected private-stor
 ## Start here
 
 - [Project charter](docs/PROJECT_CHARTER.md)
+- [Next steps and handoff checklist](docs/NEXT_STEPS.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture decisions and open questions](docs/ARCHITECTURE_DECISIONS.md)
 - [Private storage architecture](docs/PRIVATE_STORAGE_ARCHITECTURE.md)
