@@ -10,7 +10,7 @@ export function parseMoney(value, currency) {
     const negative = text.startsWith("-");
     const unsigned = negative ? text.slice(1) : text;
     const [whole, fraction = ""] = unsigned.split(".");
-    if (fraction.length > exponent) throw new TypeError("unsupported-money-precision");
+    if (fraction.length > exponent && /[^0]/.test(fraction.slice(exponent))) throw new TypeError("unsupported-money-precision");
     const minor = Number(whole) * (10 ** exponent) + Number((fraction + "0".repeat(exponent)).slice(0, exponent) || "0");
     if (!Number.isSafeInteger(minor)) throw new RangeError("money-out-of-range");
     return { amountMinor: negative ? -minor : minor, amountDecimal: null, currency };
@@ -22,7 +22,7 @@ export function recognizeFormat(sourceFormat) {
   return new Set(["wells-fargo-csv-v1", "sofi-csv-v1", "fidelity-accounts-history-csv-v1"]).has(sourceFormat);
 }
 
-function sameComposite(a, b) {
+function isCalendarDate(value) {\n  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;\n  const [year, month, day] = value.split("-").map(Number);\n  const date = new Date(Date.UTC(year, month - 1, day));\n  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;\n}\n\nfunction sameComposite(a, b) {
   return a.accountId === b.accountId &&
     a.currency === b.currency &&
     a.amountMinor === b.amountMinor &&
