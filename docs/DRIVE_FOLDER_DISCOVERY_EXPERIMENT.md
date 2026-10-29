@@ -26,6 +26,7 @@ These are hypotheses, not assumptions. The test must report the actual result an
 - Automated tests: [`tests/drive-folder-discovery.test.mjs`](../tests/drive-folder-discovery.test.mjs)
 - The page uses the same browser OAuth pattern and `drive.file` scope, and uses Picker only to establish the reference folder for comparison.
 - The selected folder ID and name are retained in this tab's `sessionStorage` solely to compare the identity after a reload. OAuth access tokens remain in page memory only. Closing the tab clears the session reference.
+- The page also provides **Forget saved comparison**. This removes the saved folder ID and allows a separate discovery run using only the entered folder name and the fresh access token; a unique result is reported without comparing against a Picker reference.
 - The discovery helper queries exact folder name, folder MIME type, and `trashed = false`; it follows pagination and reports zero/one/multiple matches without choosing an ambiguous result. The UI reports only outcome/count, never the folder ID.
 - The branch's Pages workflow injects the public OAuth client ID and restricted Picker API key from repository Actions variables into the deployed artifact. The workflow logs only whether values are present, not their values.
 
@@ -48,7 +49,8 @@ The tests cover one, zero, and multiple exact matches, pagination, malformed res
 5. Report zero, one, or multiple matches separately. Never silently choose among ambiguous results.
 6. Reload the page. Authorize again interactively, without using Picker, and repeat the same discovery query.
 7. Record whether the exact intended folder is found, how many matches are returned, and any HTTP/API error class. Do not log access tokens, API keys, folder IDs, or private file listings.
-8. If a unique match is found, optionally perform a read-only metadata verification against that folder ID. Do not create, modify, or delete any file in this experiment unless a separately documented synthetic-only test is explicitly approved.
+8. For the standalone test, use **Forget saved comparison** to clear the Picker reference, then run discovery again. Record whether one exact-name folder is returned without relying on the saved ID.
+9. If a unique match is found, optionally perform a read-only metadata verification against that folder ID. Do not create, modify, or delete any file in this experiment unless a separately documented synthetic-only test is explicitly approved.
 
 ## Acceptance criteria
 
