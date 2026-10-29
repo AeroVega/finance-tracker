@@ -13,7 +13,7 @@ export function parseMoney(value, currency) {
     if (fraction.length > exponent && /[^0]/.test(fraction.slice(exponent))) throw new TypeError("unsupported-money-precision");
     const minor = Number(whole) * (10 ** exponent) + Number((fraction + "0".repeat(exponent)).slice(0, exponent) || "0");
     if (!Number.isSafeInteger(minor)) throw new RangeError("money-out-of-range");
-    return { amountMinor: negative ? -minor : minor, amountDecimal: null, currency };
+    return { amountMinor: minor === 0 ? 0 : (negative ? -minor : minor), amountDecimal: null, currency };
   }
   return { amountMinor: null, amountDecimal: text, currency };
 }
