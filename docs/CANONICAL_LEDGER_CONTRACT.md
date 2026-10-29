@@ -1,6 +1,6 @@
 # Canonical Ledger and Import-Run Contract (M1)
 
-**Status:** Proposed implementation contract for review; no production ledger implementation is authorized by this document alone.  
+**Status:** M1 contract decisions recorded; pure synthetic reference reconciliation is test-scoped only. No provider parser, production persistence, or production financial-data use is authorized by this document alone.  
 **Version:** `finance-tracker-ledger-v1`  
 **Last updated:** 2026-10-28
 
@@ -8,14 +8,14 @@ This is the source-independent contract that every file adapter must target. Pro
 
 ## 1. Core invariants
 
-1. **Preserve evidence.** A canonical activity is linked to one or more source observations. Keep the original source fields needed to explain normalization and matching; do not upload or retain raw CSV files in Drive by default.
+1. **Preserve evidence.** A canonical activity is linked to one or more source observations. Retain selected source fields and the full original import file privately for audit/recovery. Full-file retention is a sensitive-data requirement, not evidence that a production storage boundary is approved or implemented.
 2. **Do not lose multiplicity.** Similar-looking rows are not duplicates merely because date, amount, and description match.
 3. **Idempotent retries.** A content-identical file for the same institution/account/import context must not create duplicate side effects after a completed run. A retry after failure must be safe.
 4. **Row-level overlap reconciliation.** A newer export never replaces a whole date range. Reconcile each observation against known source observations and canonical activities.
 5. **Fail closed on ambiguity.** Automatically link only when identity evidence is sufficiently strong and exactly one candidate qualifies. Otherwise preserve the incoming observation and open a review item.
 6. **Auditable changes.** Canonical facts are not silently rewritten by matching, categorization, or review. Corrections and human decisions are recorded as linked events.
 7. **Unknown is not zero.** Missing values remain null/unknown; unavailable coverage is never represented as zero activity.
-8. **Exact money.** Store monetary values as signed integer minor units plus ISO currency code where the currency has a conventional minor unit; do not use binary floating-point arithmetic. Preserve the source amount text/value for audit. For currencies/quantities where minor-unit conversion is not well-defined, use a documented decimal-string representation.
+8. **Exact money.** Store money as signed integer minor units plus ISO currency code when that currency's exponent is defined and supported; never use binary floating-point arithmetic for financial calculations. Reject excess precision rather than silently round. For currencies whose minor-unit exponent is unsupported or not defined by the implementation, preserve a validated decimal string and currency code until an explicit policy exists. Preserve the original source amount text in the source observation.
 9. **No sensitive fixtures.** Never commit real exports, account numbers, personal data, tokens, folder IDs, or user-derived records. Invent fixtures from scratch.
 
 ## 2. Canonical entities
@@ -84,7 +84,7 @@ Each source row that is accepted, matched, or sent to review is represented as a
 | `reasonCode` | string or null | yes | Machine-readable mapping/match/rejection rationale |
 | `observedAt` | ISO timestamp | yes | Time the row was processed |
 
-The original CSV file is not uploaded to Drive by default. `sourceFields` are the selected row-level evidence necessary for audit and must be covered by the private-data storage policy.
+The full original file must be retained in the approved private storage boundary, alongside selected row-level `sourceFields`. Do not retain it in Git, public assets, public logs, test output, or the public repository. Before production use, define encryption/access controls, retention and deletion, export/backup, revocation, and recovery semantics; the synthetic Drive probe does not validate these requirements.
 
 ### Import run
 
@@ -164,13 +164,17 @@ Adapters normalize into this contract; the ledger never depends on provider-spec
 
 These are documented sample observations, not guarantees about every future export. Raw CSV mechanics and provider-specific ID semantics still require adapter tests.
 
-## 6. Acceptance criteria before parser implementation
+## 6. Acceptance criteria before provider parser implementation
 
-- [ ] Model fields and enum values are accepted or revised by review.
-- [ ] Every fixture is deliberately invented and structurally representative, not copied from a real/sanitized row.
-- [ ] Tests verify each fixture's header/shape, amount sign, optional blanks, Fidelity leading blanks/footer, and activity types.
-- [ ] Import tests cover identical-file retry, overlap, same-day collisions, ambiguous candidates, source-ID conflicts, pending/posted lifecycle, corrections, malformed rows, valid empty input, and interrupted retry.
-- [ ] Test assertions demonstrate that rejected/ambiguous rows are not silently dropped and canonical activities are not silently overwritten.
-- [ ] Contract/schema versioning and migration behavior are documented before persisted real data is introduced.
+- [x] Owner decisions for monetary representation, date provenance, unified ledger, pending/posted linkage, partial results, empty files, strict formats, source retention, account mapping, append-only recovery, and storage scope are recorded in this contract.
+- [x] Every fixture is deliberately invented and structurally representative, not copied from a real/sanitized row.
+- [x] Structural tests verify fixture headers/shapes, signed amounts, optional blanks, Fidelity leading blanks/footer, and invented identifiers.
+- [x] Pure synthetic tests cover identical-file no-op, unique overlap, ambiguous same-day collisions, duplicate-shaped rows within one file, source-ID conflicts, pending-to-posted lifecycle evidence, explicit correction events, malformed-row partial results, valid empty input, and deterministic re-execution.
+- [ ] Execute the full Node test suite in a runtime with the repository checked out and record the actual result; the current environment cannot clone GitHub due unavailable network access.
+- [ ] Add provider-specific strict parser tests for actual supported format variants before enabling adapters.
+- [ ] Add persistence-level atomicity, interruption/retry, and restore tests before production storage.
+- [ ] Document schema migration behavior before persisted real data is introduced.
 
-**Boundary:** this contract and synthetic fixtures do not implement a parser, production storage, Drive synchronization, or authorization. The Drive prototype remains separate; real financial data must not be used until security/storage release gates are approved.
+The pure suite is intentionally not a parser or storage integration suite. Rejected and ambiguous observations are preserved in its result, and corrections are represented as append-only events rather than mutating the existing activity.
+
+**Boundary:** the pure reconciliation module and synthetic tests are a reference implementation of contract decisions, not a provider parser or durable ledger. They do not implement production storage, Drive synchronization, authentication, atomic commits, or crash recovery. A deterministic re-run test proves only the pure calculation is repeatable; persistence-level interruption/retry remains an open integration test. The Drive prototype remains separate; real financial data must not be used until security/storage release gates are approved.
