@@ -1,0 +1,172 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { parseMoney, reconcileImport } from "../js/import-reconciliation.mjs";
+
+const base = {
+  institutionId: "sofi",
+  accountId: "acct-edge",
+  sourceFormat: "sofi-csv-v1",
+  fileFingerprint: "edge-fingerprint",
+};
+const row = (overrides = {}) => ({
+  rowOrdinal: 1,
+  effectiveDate: "2026-02-01",
+  postedDate: null,
+  amountMinor: -1234,
+  amountDecimal: null,
+  currency: "USD",
+  sourceDescription: "EXAMPLE PAYMENT",
+  normalizedDescription: "example payment",
+  sourceAction: "Payment",
+  lifecycleStatus: "posted",
+  activityKind: "cash-transaction",
+  sourceRecordId: null,
+  ...overrides,
+});
+
+test("money parser preserves exact precision for signed, zero, and trailing-zero values", () => {
+  assert.equal(parseMoney("0.00", "USD").amountMinor, 0);
+  assert.equal(parseMoney("-0.00", "USD").amountMinor, 0);
+  assert.equal(parseMoney("12.3400", "USD").amountMinor, 1234);
+  assert.equal(parseMoney("-12.3400", "USD").amountMinor, -1234);
+  assert.throws(() => parseMoney("12.3401", "USD"), /unsupported-money-precision/);
+  assert.throws(() => parseMoney("1e2", "USD"), /invalid-money/);
+  assert.throws(() => parseMoney("NaN", "USD"), /invalid-money/);
+});
+
+test("money parser refuses unsafe integer-minor-unit results instead of rounding", () => {
+  assert.throws(() => parseMoney("90071992547409.92", "USD"), /money-out-of-range/);
+});
+
+test("malformed amount representations and impossible dates are rejected without creating activities", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [
+      row({ amountMinor: 1.5 }),
+      row({ rowOrdinal: 2, amountMinor: null, amountDecimal: "1.2.3" }),
+      row({ rowOrdinal: 3, effectiveDate: "2026-02-29" }),
+    ],
+  });
+  assert.equal(result.status, "needs-review");
+  assert.equal(result.counts.rejected, 3);
+  assert.equal(result.activities.length, 0);
+  assert.equal(result.counts.created + result.counts.matched + result.counts.review +
+    result.counts.rejected + result.counts.ignored, result.counts.rowsRecognized);
+});
+
+test("failed prior attempts do not suppress a retry of the same file", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [row()],
+    completedRuns: [{
+      importRunId: "failed-run",
+      institutionId: base.institutionId,
+      accountId: base.accountId,
+      sourceFormat: base.sourceFormat,
+      fileFingerprint: base.fileFingerprint,
+      status: "failed",
+    }],
+  });
+  assert.equal(result.status, "processed");
+  assert.equal(result.counts.created, 1);
+});
+
+test("identical fingerprints in a different account or format context are not no-ops", () => {
+  const completedRuns = [{
+    importRunId: "other-context",
+    institutionId: base.institutionId,
+    accountId: "different-account",
+    sourceFormat: base.sourceFormat,
+    fileFingerprint: base.fileFingerprint,
+    status: "processed",
+  }];
+  const result = reconcileImport({ ...base, rows: [row()], completedRuns });
+  assert.equal(result.status, "processed");
+  assert.equal(result.counts.created, 1);
+});
+
+test("partial reversal records only its supplied amount and leaves the original unchanged", () => {
+  const original = {
+    activityId: "original-activity",
+    accountId: base.accountId,
+    amountMinor: -1234,
+    currency: "USD",
+    lifecycleStatus: "posted",
+  };
+  const result = reconcileImport({
+    ...base,
+    rows: [row({ amountMinor: 500, reversalOfActivityId: original.activityId })],
+    existingActivities: [original],
+  });
+  assert.equal(result.events.length, 1);
+  assert.equal(result.events[0].eventType, "reversal");
+  assert.equal(result.events[0].reversalAmountMinor, 500);
+  assert.equal(original.amountMinor, -1234);
+});
+
+test("transfer sides are only carried as linked movements when an explicit group is supplied", () => {
+  const outgoing = reconcileImport({
+    ...base,
+    rows: [row({ amountMinor: -5000, transferGroupId: "transfer-example-1", activityKind: "transfer" })],
+  });
+  const incoming = reconcileImport({
+    ...base,
+    accountId: "acct-edge-destination",
+    fileFingerprint: "edge-fingerprint-destination",
+    rows: [row({ amountMinor: 5000, transferGroupId: "transfer-example-1", activityKind: "transfer" })],
+  });
+  assert.equal(outgoing.activities[0].transferGroupId, "transfer-example-1");
+  assert.equal(incoming.activities[0].transferGroupId, "transfer-example-1");
+  assert.equal(outgoing.activities[0].amountMinor, -incoming.activities[0].amountMinor);
+  assert.equal(outgoing.activities[0].activityKind, "transfer");
+  assert.equal(incoming.activities[0].activityKind, "transfer");
+});
+
+test("same amount and date do not auto-link a transfer without explicit identity evidence", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [row({ amountMinor: -5000, activityKind: "transfer" })],
+    existingActivities: [{
+      activityId: "other-account-activity",
+      accountId: "different-account",
+      amountMinor: -5000,
+      amountDecimal: null,
+      currency: "USD",
+      effectiveDate: "2026-02-01",
+      sourceDescription: "EXAMPLE PAYMENT",
+      normalizedDescription: "example payment",
+      sourceAction: "Payment",
+      activityKind: "transfer",
+    }],
+  });
+  assert.equal(result.counts.created, 1);
+  assert.equal(result.activities.length, 1);
+});
+
+test("matching source IDs scoped to another account must not establish identity", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [row({ sourceRecordId: "provider-id-1" })],
+    existingActivities: [{
+      activityId: "other-account-activity",
+      accountId: "different-account",
+      amountMinor: -1234,
+      currency: "USD",
+      sourceRecordId: "provider-id-1",
+    }],
+    existingObservations: [{
+      accountId: "different-account",
+      sourceRecordId: "provider-id-1",
+      activityId: "other-account-activity",
+    }],
+  });
+  assert.equal(result.counts.created, 1);
+});
+
+test("unknown currency keeps exact decimal text and does not coerce through floating point", () => {
+  assert.deepEqual(parseMoney("-12345678901234567890.123456", "XTS"), {
+    amountMinor: null,
+    amountDecimal: "-12345678901234567890.123456",
+    currency: "XTS",
+  });
+});
