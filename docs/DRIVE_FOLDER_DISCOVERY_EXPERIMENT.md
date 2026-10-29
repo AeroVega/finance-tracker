@@ -1,6 +1,6 @@
 # Google Drive folder discovery experiment
 
-**Status:** Prototype implementation added; live validation not yet performed  
+**Status:** User-confirmed live validation passed for folder discovery after a prior Picker grant  
 **Branch:** `experiment/drive-folder-discovery`  
 **Base:** `main` (intentionally independent of the Google sign-in/configuration experiment)
 
@@ -31,6 +31,39 @@ These are hypotheses, not assumptions. The test must report the actual result an
 - The branch's Pages workflow injects the public OAuth client ID and restricted Picker API key from repository Actions variables into the deployed artifact. The workflow logs only whether values are present, not their values.
 
 The implementation is a test harness, not production storage code. The query's real visibility under `drive.file` is the experiment being tested; a zero-result outcome is not automatically treated as a code defect.
+
+## Live validation record — 2026-10-29
+
+**Result: User-confirmed PASS.** On the deployed Experiment B page, the owner:
+- authorized Google for the page session using the existing `drive.file` scope;
+- had previously selected `finance-tracker-database` through Picker and confirmed the same folder could be rediscovered after reload and reauthorization;
+- then pressed **Forget saved comparison**, clearing the folder ID/name reference from this page's `sessionStorage`;
+- ran discovery by exact folder name without reopening Picker; the page reported one exact-name folder found and no file was changed.
+
+The deployed page showed source SHA `d29a4eb19bbd3a56aa00376692d2ea2ae6b68ec7`. The screenshot confirms the success status and that the saved comparison reference was cleared. Device: iPad. Browser/version was not captured. No folder ID, token, API key, ledger data, or file listing was recorded.
+
+### What the result establishes
+
+- The Drive `files.list` exact-name query returned exactly one accessible folder for this account and configuration after a prior Picker selection/grant.
+- The app can rediscover the folder without keeping its ID in its own session storage and without opening Picker during that discovery run.
+- Together with the earlier reload/re-authorization identity-match test, the result supports using Picker as a one-time onboarding/permission-grant step and name-based discovery for subsequent recovery, subject to the limitations below.
+
+### Negative implications and disposition
+
+| Implication / risk | Does it affect this project? | Recommended treatment |
+|---|---|---|
+| **Not a first-contact/no-Picker proof.** The owner had previously selected this folder in Picker. Clearing the app's session reference does not revoke Google's file-specific authorization grant. | **In scope; important.** A brand-new user may not be able to discover an arbitrary existing folder before explicitly selecting/opening it with the app. | Keep Picker as the explicit first-run folder selection and authorization path. Test a genuinely fresh test account/folder before claiming first-run discovery works without Picker. |
+| **Folder names are not unique identifiers.** A second folder with the same name can produce multiple matches; a rename can produce zero matches. | **In scope.** The database must not silently attach to the wrong folder. | Keep zero/multiple outcomes as stop-and-review states. For a unique match, consider a small app-owned marker/manifest and verify it before opening ledger data. Never silently pick the first result. |
+| **Discovery is permission-bounded.** A zero-result response means no matching folder was returned within the current token's accessible results; it does not prove the folder is absent. | **In scope.** Recovery must not trigger creation of a second database merely because discovery returned zero. | Show “not found in accessible results”; offer explicit Picker re-selection. Do not broaden to full-Drive scope as a fallback. |
+| **Account and authorization can change.** Tokens expire; access can be revoked; another Google account may not own or have access to the folder. | **In scope for a usable app.** | Reauthorize interactively when needed; make account identity clear enough to prevent accidental cross-account use; handle 401/403 without modifying data. Test expiry/revocation and wrong-account behavior before production storage. |
+| **Exact-name discovery may reveal folder metadata to the app.** The query returns metadata for accessible matching folders, but this prototype displays only the outcome and does not list IDs. | **Manageable and in scope.** | Request minimum fields, keep tokens in memory only, avoid logging IDs/listings, and restrict results to folder MIME type, exact name, and not-trashed. |
+| **API outages, quotas, or browser/network failures can prevent discovery.** | **In scope as ordinary failure handling; no special infrastructure required for MVP.** | Fail closed with retry/reconnect guidance. Do not treat transient errors as a missing database or create a replacement automatically. |
+| **This test does not validate ledger safety.** No ledger content was read or written; no concurrency, backup, restore, or interrupted-write path was exercised. | **Production blocker, not a reason to reject this discovery result.** | Keep real financial data disabled until synchronization/conflict policy, recovery/backup, integrity validation, and authorization lifecycle are reviewed and tested. |
+| **Google OAuth consent-screen testing mode and policy/terms may constrain broader use.** | **Potentially in scope before sharing/deployment beyond the owner.** | Before adding users, verify current Google OAuth publishing/verification requirements and sustainable cost/terms. For this single-user prototype, record as a release gate rather than expanding the experiment. |
+
+### Practical conclusion
+
+The result is useful for this single-user project: after the owner has explicitly selected the existing folder once, the app can find it again by name without persisting its ID in the app's session storage. It does **not** remove the need for Picker during initial onboarding, establish globally unique folder identity, or authorize production ledger storage. Those are separate requirements with explicit mitigations above.
 
 ## Local automated test
 
