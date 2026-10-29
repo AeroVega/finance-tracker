@@ -48,6 +48,14 @@ No real ledger or CSV was accessed. No credentials, tokens, folder IDs, or perso
 
 **What remains unverified:** cross-session reconnection, token expiry and revocation, iPhone/iPad cross-device synchronization, stale-write/conflict handling, interrupted-write recovery, backup/restore, production ledger correctness, and ongoing cost/terms. Do not treat this test as approval to store real financial records.
 
+## Latest live validation (2026-10-29)
+
+**User-confirmed PASS on the deployed experiment branch.** The owner confirmed the page displayed source commit `872ed80db73a4866ebbdb609c83aece26d9fce00`, completed Google authorization, selected `finance-tracker-database`, and received the page's PASS message: Drive write and read-back matched, and the temporary synthetic file was deleted.
+
+During setup, Picker initially rejected the configured developer key. The owner identified that the repository variable still held the previously rotated API key, replaced it with the current restricted key, and reran the probe successfully. The deployment workflow log confirmed both required public configuration values were present; no values were logged. This records the observed cause and resolution without recording either key or any token/folder ID.
+
+This is user-confirmed browser evidence, not an independently captured API trace. It confirms only the tested create/read-back/confirmed-delete path for this account, configuration, device, and deployment. It does not establish production readiness, multi-device synchronization, conflict handling, token-expiry/revocation behavior, backup/restore, or durable $0 production terms.
+
 ## Offline checks
 
 Run the dependency-free synthetic tests with:
