@@ -71,8 +71,7 @@ export function reconcileImport({
   const validDates = [];
 
   for (const row of rows) {
-    if (!row || row.valid === false || typeof row.effectiveDate !== "string" ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(row.effectiveDate) ||
+    if (!row || row.valid === false || !isCalendarDate(row.effectiveDate) ||
         typeof row.sourceDescription !== "string" ||
         (row.amountMinor !== null && row.amountMinor !== undefined && !Number.isSafeInteger(row.amountMinor))) {
       counts.rejected++;
