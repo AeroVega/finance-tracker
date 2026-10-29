@@ -25,7 +25,8 @@ test("money parsing uses integer minor units and exact decimal fallback", () => 
   assert.deepEqual(parseMoney("125", "JPY"), { amountMinor: 125, amountDecimal: null, currency: "JPY" });
   assert.deepEqual(parseMoney("1.234", "KWD"), { amountMinor: 1234, amountDecimal: null, currency: "KWD" });
   assert.deepEqual(parseMoney("1.2345", "XTS"), { amountMinor: null, amountDecimal: "1.2345", currency: "XTS" });
-  assert.throws(() => parseMoney("1.001", "USD"), /unsupported-money-precision/);\n  assert.deepEqual(parseMoney("125.00", "JPY"), { amountMinor: 125, amountDecimal: null, currency: "JPY" });
+  assert.throws(() => parseMoney("1.001", "USD"), /unsupported-money-precision/);
+  assert.deepEqual(parseMoney("125.00", "JPY"), { amountMinor: 125, amountDecimal: null, currency: "JPY" });
 });
 
 test("strict format recognition and explicit account mapping fail closed", () => {
