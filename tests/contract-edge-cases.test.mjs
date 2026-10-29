@@ -170,3 +170,17 @@ test("unknown currency keeps exact decimal text and does not coerce through floa
     currency: "XTS",
   });
 });
+
+test("monetary rows require a valid currency whenever an amount is present", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [
+      row({ currency: null }),
+      row({ rowOrdinal: 2, amountMinor: null, amountDecimal: "1.25", currency: null }),
+      row({ rowOrdinal: 3, amountMinor: 125, amountDecimal: "1.25", currency: "USD" }),
+    ],
+  });
+  assert.equal(result.counts.rejected, 3);
+  assert.equal(result.activities.length, 0);
+  assert.equal(result.status, "needs-review");
+});
