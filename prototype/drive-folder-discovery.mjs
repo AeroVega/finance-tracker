@@ -1,5 +1,5 @@
 import { GOOGLE_CONFIG } from "../js/google-config.js?v=standalone-discovery-1";
-import { discoverFoldersByExactName } from "../js/drive-folder-discovery.mjs?v=standalone-discovery-1";
+import { classifyFolderDiscoveryResult, discoverFoldersByExactName } from "../js/drive-folder-discovery.mjs?v=standalone-discovery-2";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
@@ -173,7 +173,7 @@ function openFolderPicker() {
         saveSelection(item.id, name);
         folderNameInput.value = name;
         setStatus(selectionStatus, "Selected folder saved for this tab's reload test: " + name + ".", "success");
-        setStatus(discoveryStatus, "Ready. Run discovery now, then reload and repeat after authorization.", "info");
+        setStatus(discoveryStatus, "Picker selection recorded for comparison. Discovery is not proof of canonical database identity.", "info");
       } catch {
         setStatus(selectionStatus, "The browser could not retain the temporary comparison reference.", "error");
       }
@@ -230,41 +230,51 @@ discoverButton.addEventListener("click", async () => {
       accessToken: getUsableToken(),
       folderName: folderNameInput.value
     });
-    if (result.matchCount === 0) {
+    const decision = classifyFolderDiscoveryResult(result);
+    if (decision.status === "not-found") {
       setStatus(
         discoveryStatus,
-        "NO MATCH: Drive returned no accessible folder with that exact name. This does not prove the folder is absent.",
+        "NO MATCH: No accessible folder with that exact name was returned. The folder may still exist. Use Choose Drive folder above to select it explicitly; no replacement folder will be created.",
         "warning"
       );
-    } else if (result.matchCount > 1) {
+    } else if (decision.status === "ambiguous") {
       setStatus(
         discoveryStatus,
-        "AMBIGUOUS: Drive returned " + result.matchCount + " exact-name folders. The app did not choose one.",
+        "AMBIGUOUS: Drive returned " + result.matchCount + " exact-name folders. Nothing was selected. Use Choose Drive folder above to select the intended folder.",
         "warning"
       );
+    } else if (decision.status !== "candidate-found") {
+      setStatus(discoveryStatus, "The discovery response could not be safely classified. Choose the intended folder with Google Picker.", "error");
     } else if (!state.selectedFolderId) {
       setStatus(
         discoveryStatus,
-        "FOUND: Drive returned one exact-name folder without using a saved Picker reference. The folder name was unique in the accessible results; no file was changed.",
-        "success"
+        "CANDIDATE FOUND: One exact-name folder was returned, but name alone does not verify database identity. No file was changed. Use Choose Drive folder to confirm the intended folder before any future database operation.",
+        "warning"
       );
-    } else if (result.match.id === state.selectedFolderId) {
+    } else if (decision.candidate.id === state.selectedFolderId) {
       setStatus(
         discoveryStatus,
-        "PASS: One exact-name folder was found and its identity matches the folder selected before reload. No file was changed.",
+        "MATCH: The unique result matches the folder selected before reload. This confirms the experiment reference only; it is not yet canonical database identity verification. No file was changed.",
         "success"
       );
     } else {
       setStatus(
         discoveryStatus,
-        "MISMATCH: One exact-name folder was found, but it is not the folder selected before reload. No file was changed.",
+        "MISMATCH: The unique result differs from the folder selected before reload. Nothing was selected. Use Choose Drive folder above to select the intended folder.",
         "error"
       );
     }
   } catch (error) {
+    if (error && error.code === "authorization-required") {
+      state.accessToken = "";
+      state.tokenExpiresAt = 0;
+      selectFolderButton.disabled = true;
+      discoverButton.disabled = true;
+      setStatus(authStatus, "Google authorization needs refreshing. Press Continue with Google, then retry.", "warning");
+    }
     setStatus(
       discoveryStatus,
-      error instanceof Error ? error.message : "Drive folder discovery failed.",
+      error instanceof Error ? error.message : "Drive folder discovery failed. Retry or select the intended folder with Google Picker.",
       "error"
     );
   } finally {

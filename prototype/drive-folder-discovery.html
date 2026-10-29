@@ -33,7 +33,7 @@
   </style>
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
-  <script type="module" src="drive-folder-discovery.mjs?v=standalone-discovery-1"></script>
+  <script type="module" src="drive-folder-discovery.mjs?v=standalone-discovery-2"></script>
   <script src="../js/build-info.js" defer></script>
 </head>
 <body>
@@ -64,7 +64,7 @@
       <input id="folder-name" value="finance-tracker-database" autocomplete="off" spellcheck="false">
       <button id="discover-folder" type="button" disabled>Discover folder</button>
       <p id="discovery-status" class="status" role="status" aria-live="polite"></p>
-      <p class="fine-print">To test discovery on its own, tap “Forget saved comparison” above, then authorize and run discovery. The app will search by exact name and report whether there is one match, without relying on the saved Picker ID.</p>
+      <p class="fine-print">To test discovery on its own, tap “Forget saved comparison” above, then authorize and run discovery. The app searches by exact name. Zero or multiple matches require explicit Picker selection; one match remains only a candidate until identity is verified. The app never creates a replacement folder automatically.</p>
     </section>
     <p class="fine-print">No access tokens, API keys, folder IDs, or file listings are displayed. A successful result tests only this account, browser, folder, and OAuth configuration.</p>
     <footer>Source commit <code id="build-sha">development (not deployed)</code></footer>
