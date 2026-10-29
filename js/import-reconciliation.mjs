@@ -34,7 +34,8 @@ function isCalendarDate(value) {
 }
 
 function sameComposite(a, b) {
-  return a.accountId === b.accountId &&
+  return a.institutionId === b.institutionId &&
+    a.accountId === b.accountId &&
     a.currency === b.currency &&
     a.amountMinor === b.amountMinor &&
     (a.amountDecimal ?? null) === (b.amountDecimal ?? null) &&
