@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f5f7">
+  <title>Finance Tracker · Drive folder discovery</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #102018; background: #f5f5f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px 48px; }
+    main { width: min(760px, 100%); margin: 0 auto; }
+    h1 { margin: 4px 0 18px; font-size: clamp(2rem, 7vw, 3.25rem); letter-spacing: -.05em; }
+    h2 { margin: 0 0 12px; font-size: 1.15rem; }
+    p { line-height: 1.55; }
+    .eyebrow { color: #547064; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .panel { margin: 16px 0; padding: 22px; border: 1px solid #e3e6e5; border-radius: 18px; background: #fff; box-shadow: 0 6px 24px #17251d0a; }
+    .notice { border-color: #b8e5d1; background: #effaf5; }
+    label { display: block; margin: 14px 0 6px; font-size: .9rem; font-weight: 650; }
+    input { width: 100%; padding: 12px; border: 1px solid #bec8c3; border-radius: 9px; font: inherit; }
+    button { margin: 10px 8px 0 0; padding: 11px 15px; border: 1px solid #1e5d4b; border-radius: 10px; color: #fff; background: #1e5d4b; font: inherit; font-weight: 650; cursor: pointer; }
+    button.secondary { color: #1e5d4b; background: #fff; }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    .status { min-height: 1.6em; margin: 12px 0 0; color: #35453d; overflow-wrap: anywhere; }
+    .status[data-kind="success"] { color: #087b55; }
+    .status[data-kind="warning"] { color: #805700; }
+    .status[data-kind="error"] { color: #a12c2c; }
+    .fine-print { font-size: .86rem; color: #56635d; }
+    a { color: #155d91; }
+    footer { margin-top: 24px; text-align: center; color: #6b756f; font-size: .78rem; overflow-wrap: anywhere; }
+    footer code { font-size: .76rem; }
+    @media (max-width: 520px) { body { padding: 16px 12px 36px; } .panel { padding: 18px; } button { width: 100%; margin-right: 0; } }
+  </style>
+  <script async src="https://accounts.google.com/gsi/client"></script>
+  <script async src="https://apis.google.com/js/api.js"></script>
+  <script type="module" src="drive-folder-discovery.mjs"></script>
+  <script src="../js/build-info.js" defer></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Finance Tracker · Experiment B</p>
+    <h1>Drive folder discovery</h1>
+    <section class="panel notice">
+      <strong>Discovery-only test.</strong>
+      <p>This experiment checks whether a folder explicitly selected once in Google Picker can be rediscovered through Drive's files list after a reload and fresh authorization.</p>
+      <p class="fine-print">It does not read or change ledger contents and does not create, update, or delete files. The selected folder ID is held in this tab's session storage only so the test can compare results after reload; it is not sent to a server or written to logs.</p>
+    </section>
+    <section class="panel">
+      <h2>Connect your Google account</h2>
+      <p class="fine-print">Google handles authorization. This experiment requests only Google's narrow drive.file scope.</p>
+      <button id="connect-google" type="button" disabled>Continue with Google</button>
+      <p id="auth-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="panel">
+      <h2>1. Select the existing folder once</h2>
+      <p class="fine-print">For the first pass only, use Picker to select the intended private folder. Its ID is retained in this tab's session storage to compare against the discovery result after reload.</p>
+      <button id="select-folder" class="secondary" type="button" disabled>Choose Drive folder</button>
+      <p id="selection-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="panel">
+      <h2>2. Discover without Picker</h2>
+      <label for="folder-name">Exact folder name</label>
+      <input id="folder-name" value="finance-tracker-database" autocomplete="off" spellcheck="false">
+      <button id="discover-folder" type="button" disabled>Discover folder</button>
+      <p id="discovery-status" class="status" role="status" aria-live="polite"></p>
+      <p class="fine-print">Run discovery once after selecting the folder. Then reload this page, authorize again, and run discovery again without opening Picker. A zero or multiple-match result is reported as such; the app never guesses.</p>
+    </section>
+    <p class="fine-print">No access tokens, API keys, folder IDs, or file listings are displayed. A successful result tests only this account, browser, folder, and OAuth configuration.</p>
+    <footer>Source commit <code id="build-sha">development (not deployed)</code></footer>
+  </main>
+</body>
+</html>
