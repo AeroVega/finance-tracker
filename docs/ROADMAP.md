@@ -16,11 +16,11 @@ This is a plan, not a guarantee that all proposed capabilities are feasible unde
 - The Drive probe validates only that narrow prototype path. Production ledger writes, cross-device synchronization, conflict handling, recovery, backup/restore, and current production cost/terms are **not yet validated**.
 
 ### M1 status — Canonical import contract and synthetic reconciliation
-**Current state:** contract decisions are recorded and a pure JavaScript reconciliation reference module plus synthetic tests have been added on PR #11. The full Node test suite passed in GitHub Actions on the PR branch. M1 still needs owner review/acceptance; parser-specific and persistence-level tests remain outstanding.
+**Current state:** PR #11 is under a stronger owner-requested pre-merge review. Additional deterministic edge-case tests cover monetary boundaries, malformed values/dates, retries, partial reversals, transfer-link evidence, and account-scoped identity. Monetary negative zero is normalized. The full Node test suite must pass on the final PR head before merge consideration. M1 still needs owner review/acceptance; provider-specific parser and persistence-level tests remain outstanding.
 
 Recorded decisions: integer minor units with decimal-string fallback; preserve source dates separately from effective/posted dates; one unified typed activity ledger; retain pending and posted observations linked to one activity only with strong evidence; allow explicitly reported partial results; accept valid empty files; strict known-format recognition; retain the original CSV privately; require explicit account mapping; append-only correction/reversal events; no production storage in this PR; full synthetic reconciliation suite before merge.
 
-**Next step:** review/accept the pure reference algorithm and contract, then add provider-specific format tests before implementing any production parser. Keep production Drive writes and real financial data blocked.
+**Next step:** review the strengthened synthetic suite and close any discovered contract/code gaps. Keep production Drive writes and real financial data blocked. Original-file retention duration remains undecided and must be chosen with the private-storage lifecycle policy before production use.
 
 **Parallel but separate release gate:** continue documenting and testing Drive authorization, stale-write protection, backup/restore, revocation, and $0-cost production terms. A successful synthetic round trip is not a substitute for those gates.
 
