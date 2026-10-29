@@ -1,6 +1,6 @@
 # Google Drive folder discovery experiment
 
-**Status:** Planned; live validation not yet performed  
+**Status:** Prototype implementation added; live validation not yet performed  
 **Branch:** `experiment/drive-folder-discovery`  
 **Base:** `main` (intentionally independent of the Google sign-in/configuration experiment)
 
@@ -18,6 +18,26 @@ This experiment tests discovery only. It does not enable canonical ledger reads/
 - **H4 — Existing-folder compatibility:** the existing user-created `finance-tracker-database` folder is discoverable under this scope once selected, without needing to replace it with a newly created app-owned folder.
 
 These are hypotheses, not assumptions. The test must report the actual result and HTTP/API error details that are safe to show.
+
+## Implemented prototype
+
+- Page: [`prototype/drive-folder-discovery.html`](../prototype/drive-folder-discovery.html)
+- Query helper: [`js/drive-folder-discovery.mjs`](../js/drive-folder-discovery.mjs)
+- Automated tests: [`tests/drive-folder-discovery.test.mjs`](../tests/drive-folder-discovery.test.mjs)
+- The page uses the same browser OAuth pattern and `drive.file` scope, and uses Picker only to establish the reference folder for comparison.
+- The selected folder ID and name are retained in this tab's `sessionStorage` solely to compare the identity after a reload. OAuth access tokens remain in page memory only. Closing the tab clears the session reference.
+- The discovery helper queries exact folder name, folder MIME type, and `trashed = false`; it follows pagination and reports zero/one/multiple matches without choosing an ambiguous result. The UI reports only outcome/count, never the folder ID.
+- The branch's Pages workflow injects the public OAuth client ID and restricted Picker API key from repository Actions variables into the deployed artifact. The workflow logs only whether values are present, not their values.
+
+The implementation is a test harness, not production storage code. The query's real visibility under `drive.file` is the experiment being tested; a zero-result outcome is not automatically treated as a code defect.
+
+## Local automated test
+
+Run:
+
+    node --test tests/drive-folder-discovery.test.mjs
+
+The tests cover one, zero, and multiple exact matches, pagination, malformed response shape, HTTP errors, and required inputs. They mock Drive responses and do not replace live validation.
 
 ## Protocol
 
