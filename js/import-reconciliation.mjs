@@ -87,7 +87,19 @@ export function reconcileImport({
     let disposition = "created";
     let reasonCode = null;
 
-    if (row.sourceRecordId) {
+    if (row.reversalOfActivityId) {
+      match = existingActivities.find((activity) => activity.activityId === row.reversalOfActivityId) ?? null;
+      if (match) {
+        disposition = "matched";
+        events.push({
+          eventType: "reversal", activityId: match.activityId,
+          observationRowOrdinal: row.rowOrdinal, reversalAmountMinor: row.amountMinor ?? null,
+          currency: row.currency ?? null, appendOnly: true,
+        });
+      } else {
+        disposition = "review"; reasonCode = "reversal-target-not-found";
+      }
+    } else if (row.sourceRecordId) {
       const candidates = [...existingObservations, ...observations]
         .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.activityId)
         .map((obs) => existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId))
