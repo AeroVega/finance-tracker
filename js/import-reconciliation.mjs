@@ -111,9 +111,9 @@ export function reconcileImport({
       }
     } else if (row.sourceRecordId) {
       const candidates = [...existingObservations, ...observations]
-        .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.institutionId === institutionId && obs.activityId)
+        .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.activityId)
         .map((obs) => existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId))
-        .filter((activity) => activity && activity.institutionId === institutionId && activity.accountId === accountId);
+        .filter(Boolean);
       const unique = [...new Map(candidates.map((a) => [a.activityId, a])).values()];
       if (unique.length > 1) {
         disposition = "review"; reasonCode = "source-id-multiple-candidates";
