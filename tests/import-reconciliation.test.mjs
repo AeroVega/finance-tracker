@@ -29,6 +29,16 @@ test("money parsing uses integer minor units and exact decimal fallback", () => 
   assert.deepEqual(parseMoney("125.00", "JPY"), { amountMinor: 125, amountDecimal: null, currency: "JPY" });
 });
 
+test("decimal-string fallback survives reconciliation without floating-point conversion", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [row({ amountMinor: null, amountDecimal: "-1.2345", currency: "XTS" })],
+  });
+  assert.equal(result.counts.created, 1);
+  assert.equal(result.activities[0].amountMinor, null);
+  assert.equal(result.activities[0].amountDecimal, "-1.2345");
+});
+
 test("strict format recognition and explicit account mapping fail closed", () => {
   assert.equal(recognizeFormat("fidelity-accounts-history-csv-v1"), true);
   assert.equal(recognizeFormat("unknown-export-v2"), false);
