@@ -1,5 +1,5 @@
-import { GOOGLE_CONFIG } from "../js/google-config.js";
-import { discoverFoldersByExactName } from "../js/drive-folder-discovery.mjs";
+import { GOOGLE_CONFIG } from "../js/google-config.js?v=76859d8f";
+import { discoverFoldersByExactName } from "../js/drive-folder-discovery.mjs?v=76859d8f";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
