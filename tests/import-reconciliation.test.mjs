@@ -57,6 +57,16 @@ test("identical completed file is a no-op with no new side effects", () => {
   assert.deepEqual(result.events, []);
 });
 
+test("needs-review prior run does not suppress retry of the identical file", () => {
+  const result = reconcileImport({ ...base, rows: [row()], completedRuns: [{
+    importRunId: "run-needs-review", institutionId: "sofi", accountId: "acct-1",
+    sourceFormat: "sofi-csv-v1", fileFingerprint: base.fileFingerprint, status: "needs-review",
+  }] });
+  assert.equal(result.status, "processed");
+  assert.equal(result.counts.created, 1);
+  assert.equal(result.activities.length, 1);
+});
+
 test("overlapping import with one unique composite candidate attaches provenance instead of duplicating", () => {
   const result = reconcileImport({ ...base, rows: [row()], existingActivities: [activity()] });
   assert.equal(result.counts.matched, 1);
@@ -125,18 +135,41 @@ test("explicit reversal links append a reversal event without mutating the origi
   assert.equal(prior.amountMinor, -2341);
 });
 
-test("malformed rows are rejected and safe partial results are explicitly needs-review", () => {
-  const result = reconcileImport({ ...base, rows: [row(), row({ effectiveDate: "2026-02-30", rowOrdinal: 2 })] });
-  assert.equal(result.counts.created, 1);
-  assert.equal(result.counts.rejected, 1);
+test("partial import preserves accepted rows, flags rejected and ambiguous rows, and reports exclusive counts", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [
+      row({ rowOrdinal: 1 }),
+      row({ rowOrdinal: 2, effectiveDate: "2026-02-30" }),
+      row({ rowOrdinal: 3, amountMinor: -7777, normalizedDescription: "ambiguous item", sourceDescription: "AMBIGUOUS ITEM" }),
+    ],
+    existingActivities: [
+      activity({ activityId: "ambiguous-a", amountMinor: -7777, normalizedDescription: "ambiguous item", sourceDescription: "AMBIGUOUS ITEM" }),
+      activity({ activityId: "ambiguous-b", amountMinor: -7777, normalizedDescription: "ambiguous item", sourceDescription: "AMBIGUOUS ITEM" }),
+    ],
+  });
   assert.equal(result.status, "needs-review");
-  assert.equal(result.observations[1].disposition, "rejected");
+  assert.equal(result.counts.rowsSeen, 3);
+  assert.equal(result.counts.rowsRecognized, 3);
+  assert.equal(result.counts.created, 1);
+  assert.equal(result.counts.matched, 0);
+  assert.equal(result.counts.review, 1);
+  assert.equal(result.counts.rejected, 1);
+  assert.equal(result.counts.ignored, 0);
+  assert.equal(result.activities.length, 1);
+  assert.deepEqual(result.observations.map((observation) => observation.disposition), ["created", "rejected", "review"]);
+  assert.equal(result.counts.created + result.counts.matched + result.counts.review +
+    result.counts.rejected + result.counts.ignored, result.counts.rowsRecognized);
+  assert.equal(result.coverageStart, "2026-02-01");
+  assert.equal(result.coverageEnd, "2026-02-01");
 });
 
-test("valid empty file succeeds with zero counts and unknown coverage", () => {
+test("valid empty file succeeds with every data-row count zero and unknown coverage", () => {
   const result = reconcileImport({ ...base, rows: [] });
   assert.equal(result.status, "processed");
-  assert.equal(result.counts.rowsSeen, 0);
+  assert.deepEqual(result.counts, {
+    rowsSeen: 0, rowsRecognized: 0, created: 0, matched: 0, review: 0, rejected: 0, ignored: 0,
+  });
   assert.equal(result.coverageStart, null);
   assert.equal(result.coverageEnd, null);
 });
