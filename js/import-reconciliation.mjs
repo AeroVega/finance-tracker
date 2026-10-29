@@ -12,7 +12,11 @@ export function parseMoney(value, currency) {
     const [whole, fraction = ""] = unsigned.split(".");
     if (fraction.length > exponent && /[^0]/.test(fraction.slice(exponent))) throw new TypeError("unsupported-money-precision");
     const minor = Number(whole) * (10 ** exponent) + Number((fraction + "0".repeat(exponent)).slice(0, exponent) || "0");
-    if (!Number.isSafeInteger(minor)) throw new RangeError("money-out-of-range");
+    if (!Number.isSafeInteger(minor)) {
+      // Preserve the exact source decimal rather than rounding through Number.
+      // Adapters should retain the original source text in sourceFields as well.
+      return { amountMinor: null, amountDecimal: text, currency };
+    }
     return { amountMinor: minor === 0 ? 0 : (negative ? -minor : minor), amountDecimal: null, currency };
   }
   return { amountMinor: null, amountDecimal: text, currency };
@@ -74,6 +78,7 @@ export function reconcileImport({
 
   for (const row of rows) {
     if (!row || row.valid === false || !isCalendarDate(row.effectiveDate) ||
+        (row.postedDate !== null && row.postedDate !== undefined && !isCalendarDate(row.postedDate)) ||
         typeof row.sourceDescription !== "string" ||
         (((row.amountMinor !== null && row.amountMinor !== undefined) || (row.amountDecimal !== null && row.amountDecimal !== undefined)) && (typeof row.currency !== "string" || !/^[A-Z]{3}$/.test(row.currency))) ||
         (row.amountMinor !== null && row.amountMinor !== undefined && !Number.isSafeInteger(row.amountMinor)) ||
@@ -106,9 +111,9 @@ export function reconcileImport({
       }
     } else if (row.sourceRecordId) {
       const candidates = [...existingObservations, ...observations]
-        .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.activityId)
+        .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.institutionId === institutionId && obs.activityId)
         .map((obs) => existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId))
-        .filter(Boolean);
+        .filter((activity) => activity && activity.institutionId === institutionId && activity.accountId === accountId);
       const unique = [...new Map(candidates.map((a) => [a.activityId, a])).values()];
       if (unique.length > 1) {
         disposition = "review"; reasonCode = "source-id-multiple-candidates";
