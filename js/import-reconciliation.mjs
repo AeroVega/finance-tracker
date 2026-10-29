@@ -75,8 +75,31 @@ export function reconcileImport({
   const events = [];
   const counts = { rowsSeen: rows.length, rowsRecognized: 0, created: 0, matched: 0, review: 0, rejected: 0, ignored: 0 };
   const validDates = [];
+  // Repeated provider IDs with contradictory monetary identity in one input file
+  // are not resolved by row order. Keep every conflicting occurrence for review.
+  const sourceIdRows = new Map();
+  for (let index = 0; index < rows.length; index++) {
+    const candidate = rows[index];
+    if (!candidate || typeof candidate.sourceRecordId !== "string" || !candidate.sourceRecordId) continue;
+    const signature = JSON.stringify([
+      candidate.currency ?? null,
+      candidate.amountMinor ?? null,
+      candidate.amountDecimal ?? null,
+    ]);
+    if (!sourceIdRows.has(candidate.sourceRecordId)) sourceIdRows.set(candidate.sourceRecordId, new Map());
+    const signatures = sourceIdRows.get(candidate.sourceRecordId);
+    if (!signatures.has(signature)) signatures.set(signature, []);
+    signatures.get(signature).push(index);
+  }
+  const conflictingSourceIdRows = new Set();
+  for (const signatures of sourceIdRows.values()) {
+    if (signatures.size > 1) {
+      for (const indexes of signatures.values()) for (const index of indexes) conflictingSourceIdRows.add(index);
+    }
+  }
 
-  for (const row of rows) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
     if (!row || row.valid === false || !isCalendarDate(row.effectiveDate) ||
         (row.postedDate !== null && row.postedDate !== undefined && !isCalendarDate(row.postedDate)) ||
         typeof row.sourceDescription !== "string" ||
@@ -92,6 +115,20 @@ export function reconcileImport({
 
     counts.rowsRecognized++;
     validDates.push(row.effectiveDate);
+    if (conflictingSourceIdRows.has(rowIndex)) {
+      counts.review++;
+      observations.push({
+        rowOrdinal: row.rowOrdinal ?? rowIndex + 1,
+        accountId, institutionId,
+        sourceRecordId: row.sourceRecordId,
+        activityId: null,
+        sourceFields: row.sourceFields ?? {},
+        disposition: "review",
+        reasonCode: "source-id-conflict-within-file",
+        sourceRowFingerprint: row.sourceRowFingerprint ?? null,
+      });
+      continue;
+    }
     const incoming = { ...row, accountId, institutionId };
     let match = null;
     let disposition = "created";
@@ -113,7 +150,7 @@ export function reconcileImport({
       const candidates = [...existingObservations, ...observations]
         .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.activityId)
         .map((obs) => existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId))
-        .filter(Boolean);
+        .filter((activity) => activity && activity.institutionId === institutionId && activity.accountId === accountId);
       const unique = [...new Map(candidates.map((a) => [a.activityId, a])).values()];
       if (unique.length > 1) {
         disposition = "review"; reasonCode = "source-id-multiple-candidates";
