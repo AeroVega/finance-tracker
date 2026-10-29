@@ -116,7 +116,7 @@ One import run is one attempt to process one selected file for one explicitly ma
 | `accountId` | string | yes | Resolved account |
 | `sourceFormat` | string | yes | Versioned adapter/format key |
 | `fileFingerprint` | string | yes | SHA-256 of file bytes; private metadata, never emit in public logs |
-| `privateSourceFileRef` | private opaque reference or null | yes | Locator for the retained original file in approved private storage; never log or expose publicly. It is null after confirmed deletion or when no retained original exists |
+| `privateSourceFileRef` | private opaque reference or null | yes | Locator for the retained original file in approved private storage; never log or expose publicly. A run cannot claim successful full-file retention if this reference is absent. It is null after confirmed deletion or when no retained original exists |
 | `sourceFileRetentionStatus` | enum | yes | `not-retained`, `retained`, `deletion-pending`, `deleted`, `deletion-failed`; retention state is separate from import processing status |
 | `sourceFileRetentionExpiresAt` | ISO timestamp or null | yes | Policy-derived deletion eligibility time; null only when no approved retention schedule applies or the policy has not yet been configured |
 | `sourceFileDeletedAt` | ISO timestamp or null | yes | Confirmed deletion time; populated only after deletion is verified |
