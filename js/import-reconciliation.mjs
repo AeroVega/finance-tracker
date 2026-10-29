@@ -75,6 +75,7 @@ export function reconcileImport({
   for (const row of rows) {
     if (!row || row.valid === false || !isCalendarDate(row.effectiveDate) ||
         typeof row.sourceDescription !== "string" ||
+        (((row.amountMinor !== null && row.amountMinor !== undefined) || (row.amountDecimal !== null && row.amountDecimal !== undefined)) && (typeof row.currency !== "string" || !/^[A-Z]{3}$/.test(row.currency))) ||
         (row.amountMinor !== null && row.amountMinor !== undefined && !Number.isSafeInteger(row.amountMinor)) ||
         (row.amountDecimal !== null && row.amountDecimal !== undefined && (typeof row.amountDecimal !== "string" || !/^-?\d+(?:\.\d+)?$/.test(row.amountDecimal))) ||
         (row.amountMinor !== null && row.amountMinor !== undefined && row.amountDecimal !== null && row.amountDecimal !== undefined)) {
