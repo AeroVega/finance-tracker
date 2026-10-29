@@ -25,7 +25,7 @@ test("money parsing uses integer minor units and exact decimal fallback", () => 
   assert.deepEqual(parseMoney("125", "JPY"), { amountMinor: 125, amountDecimal: null, currency: "JPY" });
   assert.deepEqual(parseMoney("1.234", "KWD"), { amountMinor: 1234, amountDecimal: null, currency: "KWD" });
   assert.deepEqual(parseMoney("1.2345", "XTS"), { amountMinor: null, amountDecimal: "1.2345", currency: "XTS" });
-  assert.throws(() => parseMoney("1.001", "USD"), /unsupported-money-precision/);
+  assert.throws(() => parseMoney("1.001", "USD"), /unsupported-money-precision/);\n  assert.deepEqual(parseMoney("125.00", "JPY"), { amountMinor: 125, amountDecimal: null, currency: "JPY" });
 });
 
 test("strict format recognition and explicit account mapping fail closed", () => {
@@ -102,7 +102,7 @@ test("conflicting stable source ID goes to review unless an explicit correction 
 });
 
 test("malformed rows are rejected and safe partial results are explicitly needs-review", () => {
-  const result = reconcileImport({ ...base, rows: [row(), row({ effectiveDate: "not-a-date", rowOrdinal: 2 })] });
+  const result = reconcileImport({ ...base, rows: [row(), row({ effectiveDate: "2026-02-30", rowOrdinal: 2 })] });
   assert.equal(result.counts.created, 1);
   assert.equal(result.counts.rejected, 1);
   assert.equal(result.status, "needs-review");
