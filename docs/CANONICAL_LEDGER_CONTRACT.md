@@ -15,7 +15,7 @@ This is the source-independent contract that every file adapter must target. Pro
 5. **Fail closed on ambiguity.** Automatically link only when identity evidence is sufficiently strong and exactly one candidate qualifies. Otherwise preserve the incoming observation and open a review item.
 6. **Auditable changes.** Canonical facts are not silently rewritten by matching, categorization, or review. Corrections and human decisions are recorded as linked events.
 7. **Unknown is not zero.** Missing values remain null/unknown; unavailable coverage is never represented as zero activity.
-8. **Exact money.** Store money as signed integer minor units plus ISO currency code when that currency's exponent is defined and supported; never use binary floating-point arithmetic for financial calculations. Reject excess precision rather than silently round. For currencies whose minor-unit exponent is unsupported or not defined by the implementation, preserve a validated decimal string and currency code until an explicit policy exists. Preserve the original source amount text in the source observation.
+8. **Exact money.** Store money as signed integer minor units plus ISO currency code when that currency's exponent is defined and supported and the result fits a safe integer; never use binary floating-point arithmetic for financial calculations. Reject excess non-zero precision rather than silently round. If the currency exponent is unsupported or the minor-unit result exceeds the safe-integer range, preserve a validated exact decimal string and currency code instead of rounding or rejecting an otherwise representable value. Preserve the original source amount text in the source observation.
 9. **No sensitive fixtures.** Never commit real exports, account numbers, personal data, tokens, folder IDs, or user-derived records. Invent fixtures from scratch.
 
 ## 2. Canonical entities
@@ -65,7 +65,7 @@ The entity is called **activity**, not just transaction, because Fidelity files 
 
 **Signed amount convention:** negative means money leaves the account; positive means money enters it. An adapter must explicitly convert a provider's convention if different. For monetary activities, populate exactly one of `amountMinor` or `amountDecimal`; both null means no meaningful monetary amount. `currency` is required whenever either amount field is populated. Preserve the original source amount representation in its source observation. Zero is a valid value and is not the same as missing.
 
-**Date convention:** preserve all supplied dates separately in source observation. The adapter documents which source date becomes `effectiveDate`; use settlement/posting dates only for `postedDate` when semantically appropriate. Import time is never a substitute for an activity date.
+**Date convention:** preserve all supplied source dates separately in `sourceFields` within the source observation. The adapter documents which source date becomes `effectiveDate`; use settlement/posting dates only for `postedDate` when semantically appropriate. Validate canonical `effectiveDate` and any supplied canonical `postedDate` as real calendar dates; invalid values are rejected or flagged, never silently normalized. Import time is never a substitute for an activity date.
 
 ### Append-only ledger event
 
