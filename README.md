@@ -8,7 +8,7 @@ A second-generation personal finance tracker built around trustworthy data, tran
 
 ## Project status
 
-MVP1 uses user-provided CSV imports. Google Drive is the **selected private-storage direction**. The deployed synthetic Drive probe has passed a user-confirmed create/read-back/confirmed-delete test, including a successful repeat after API-key rotation; this validates the prototype path only, not production ledger storage.
+MVP1 uses user-provided CSV imports. Google Drive is the **selected private-storage direction**. The deployed synthetic Drive probe passed a user-confirmed create/read-back/confirmed-delete test on 2026-10-29 at experiment source commit `872ed80db73a4866ebbdb609c83aece26d9fce00`; replacing a stale, rotated API key in the repository variable resolved the Picker error. This validates the prototype path only, not production ledger storage. See [the live validation record](docs/DRIVE_SYNTHETIC_PROBE.md#latest-live-validation-2026-10-29).
 
 **Current phase:** data-integration prototype. **Current milestone:** PR #11 records the canonical ledger/import-run decisions and adds a pure synthetic reconciliation reference module with fixtures/tests. The full Node test suite now passes in GitHub Actions; owner review/acceptance and provider-specific strict parser tests remain before M1 can be considered complete. Production Drive writes remain blocked on synchronization/conflict handling, backup/restore, authorization/revocation, and confirmation of sustainable $0 production terms. No production financial data or secrets belong in this public repository. Free, authorized direct institution integrations remain an MVP2 research goal, not a dependency for MVP1.
 
