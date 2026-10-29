@@ -110,7 +110,7 @@ export function reconcileImport({
   if (!recognizeFormat(sourceFormat)) throw new TypeError("unsupported-source-format");
   if (!Array.isArray(rows)) throw new TypeError("rows-must-be-array");
 
-  const prior = completedRuns.find((run) => run.status !== "failed" &&
+  const prior = completedRuns.find((run) => run.status === "processed" &&
     run.accountId === accountId && run.institutionId === institutionId &&
     run.sourceFormat === sourceFormat && run.fileFingerprint === fileFingerprint);
   if (prior) {
