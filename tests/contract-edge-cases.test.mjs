@@ -258,6 +258,29 @@ test("matching source IDs scoped to another account must not establish identity"
 });
 
 
+test("composite matching cannot link across institutions even if account IDs and row facts collide", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [row()],
+    existingActivities: [{
+      activityId: "other-institution-activity",
+      institutionId: "wells-fargo",
+      accountId: "acct-edge",
+      effectiveDate: "2026-02-01",
+      amountMinor: -1234,
+      amountDecimal: null,
+      currency: "USD",
+      sourceDescription: "EXAMPLE PAYMENT",
+      normalizedDescription: "example payment",
+      sourceAction: "Payment",
+      lifecycleStatus: "posted",
+    }],
+  });
+  assert.equal(result.counts.created, 1);
+  assert.equal(result.counts.matched, 0);
+  assert.equal(result.activities[0].institutionId, "sofi");
+});
+
 test("source IDs cannot link across institutions even when account IDs and provider IDs collide", () => {
   const result = reconcileImport({
     ...base,
