@@ -187,6 +187,67 @@ test("matching source IDs scoped to another account must not establish identity"
   assert.equal(result.counts.created, 1);
 });
 
+
+test("source IDs cannot link across institutions even when account IDs and provider IDs collide", () => {
+  const result = reconcileImport({
+    ...base,
+    institutionId: "sofi",
+    accountId: "same-local-account-id",
+    rows: [row({ sourceRecordId: "provider-id-collision" })],
+    existingActivities: [{
+      activityId: "other-institution-activity",
+      institutionId: "fidelity",
+      accountId: "same-local-account-id",
+      amountMinor: -1234,
+      amountDecimal: null,
+      currency: "USD",
+    }],
+    existingObservations: [{
+      institutionId: "fidelity",
+      accountId: "same-local-account-id",
+      sourceRecordId: "provider-id-collision",
+      activityId: "other-institution-activity",
+    }],
+  });
+  assert.equal(result.counts.created, 1);
+  assert.equal(result.counts.matched, 0);
+  assert.equal(result.activities[0].institutionId, "sofi");
+});
+
+test("contradictory repeated source IDs in one file send every conflicting occurrence to review", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [
+      row({ rowOrdinal: 1, sourceRecordId: "repeated-provider-id", amountMinor: -1234 }),
+      row({ rowOrdinal: 2, sourceRecordId: "repeated-provider-id", amountMinor: -9999 }),
+    ],
+  });
+  assert.equal(result.status, "needs-review");
+  assert.equal(result.counts.created, 0);
+  assert.equal(result.counts.review, 2);
+  assert.deepEqual(result.observations.map((observation) => observation.disposition), ["review", "review"]);
+  assert.deepEqual(result.observations.map((observation) => observation.reasonCode), [
+    "source-id-conflict-within-file",
+    "source-id-conflict-within-file",
+  ]);
+  assert.equal(result.counts.created + result.counts.matched + result.counts.review +
+    result.counts.rejected + result.counts.ignored, result.counts.rowsRecognized);
+});
+
+test("identical repeated source IDs in one file may attach to the first observation without duplicating activity", () => {
+  const result = reconcileImport({
+    ...base,
+    rows: [
+      row({ rowOrdinal: 1, sourceRecordId: "repeated-provider-id" }),
+      row({ rowOrdinal: 2, sourceRecordId: "repeated-provider-id" }),
+    ],
+  });
+  assert.equal(result.counts.created, 1);
+  assert.equal(result.counts.matched, 1);
+  assert.equal(result.activities.length, 1);
+  assert.equal(result.observations[0].activityId, result.observations[1].activityId);
+});
+
 test("unknown currency keeps exact decimal text and does not coerce through floating point", () => {
   assert.deepEqual(parseMoney("-12345678901234567890.123456", "XTS"), {
     amountMinor: null,
