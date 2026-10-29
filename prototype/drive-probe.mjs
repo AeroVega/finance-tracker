@@ -1,3 +1,4 @@
+import { GOOGLE_CONFIG } from "../js/google-config.js";
 import {
   DRIVE_FILES_ENDPOINT,
   runSyntheticDriveProbe
@@ -26,17 +27,21 @@ function setStatus(node, message, kind) {
 
 function getConfig() {
   return {
-    clientId: $("oauth-client-id").value.trim(),
-    apiKey: $("picker-api-key").value.trim(),
-    projectNumber: $("cloud-project-number").value.trim()
+    clientId: String(GOOGLE_CONFIG.clientId || "").trim(),
+    apiKey: String(GOOGLE_CONFIG.apiKey || "").trim(),
+    projectNumber: String(GOOGLE_CONFIG.projectNumber || "").trim()
   };
 }
 
 function validateConfig(config) {
-  if (!config.clientId) throw new Error("Enter the Google OAuth web client ID.");
-  if (!config.apiKey) throw new Error("Enter the restricted Google API key for Picker.");
+  if (!config.clientId) {
+    throw new Error("Google sign-in is not configured for this deployment. Add the GOOGLE_OAUTH_CLIENT_ID Actions variable and redeploy.");
+  }
+  if (!config.apiKey) {
+    throw new Error("Google Picker is not configured for this deployment. Add the GOOGLE_PICKER_API_KEY Actions variable and redeploy.");
+  }
   if (!/^\d+$/.test(config.projectNumber)) {
-    throw new Error("Enter the numeric Google Cloud project number for Picker.");
+    throw new Error("The Google Cloud project number for Picker is not configured correctly.");
   }
 }
 
@@ -88,7 +93,7 @@ function requestAccessToken(clientId) {
       },
       error_callback: () => reject(new Error("Google authorization was closed or blocked."))
     });
-    tokenClient.requestAccessToken();
+    tokenClient.requestAccessToken({ prompt: "select_account" });
   });
 }
 
@@ -175,7 +180,7 @@ connectButton.addEventListener("click", async () => {
   state.accessToken = "";
   state.folderId = "";
   state.folderName = "";
-  setStatus(folderStatus, "Opening Google's authorization flow…", "info");
+  setStatus(folderStatus, "Opening Google account selection and authorization…", "info");
   try {
     const config = getConfig();
     validateConfig(config);
@@ -248,8 +253,14 @@ setStatus(folderStatus, "Loading Google's authorization and Picker libraries…"
 setStatus(probeStatus, "No Drive read/write check has run.", "info");
 
 ensureGoogleLibraries().then(() => {
-  connectButton.disabled = false;
-  setStatus(folderStatus, "Google services are ready. Enter the Cloud configuration, then connect.", "info");
+  const config = getConfig();
+  const configured = Boolean(config.clientId && config.apiKey && /^\d+$/.test(config.projectNumber));
+  connectButton.disabled = !configured;
+  if (configured) {
+    setStatus(folderStatus, "Google is ready. Continue to choose your account and authorize Drive access.", "info");
+  } else {
+    setStatus(folderStatus, "Google connection is not configured for this deployment. Set the repository Actions variables and redeploy this branch.", "warning");
+  }
 }).catch((error) => {
   setStatus(folderStatus, error instanceof Error ? error.message : "Google services could not load.", "error");
 });

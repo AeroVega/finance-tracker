@@ -1,6 +1,6 @@
 # Google Cloud setup for the Finance Tracker Drive probe
 
-This guide creates the three values needed by the synthetic Drive probe: a web OAuth client ID, a restricted browser API key, and the Cloud project number. It does not configure production ledger storage.
+This guide configures the synthetic Drive probe with a web OAuth client ID, a restricted browser API key, and the Cloud project number. The app no longer asks you to paste configuration values into the page. It does not configure production ledger storage.
 
 ## Before you start
 
@@ -75,12 +75,23 @@ Google documents these restrictions in its [web Picker setup guide](https://deve
 
 Open **IAM & Admin → Settings** in the same project and copy the numeric **Project number**. Do not use the project ID. The probe passes this number to Google Picker as its App ID.
 
-## 7. Run the synthetic check
+## 7. Configure the deployed app
+
+In the public repository's **Settings → Secrets and variables → Actions → Variables**, add these two repository variables:
+
+- `GOOGLE_OAUTH_CLIENT_ID`: the Web application client ID from step 4.
+- `GOOGLE_PICKER_API_KEY`: the restricted browser API key from step 5.
+
+These are public browser configuration values, not secrets. The OAuth client ID is a public identifier; the API key is intentionally visible to browser users and must remain restricted to the allowed website referrers and APIs. Do not put a client secret or access token in repository variables or browser code.
+
+The Picker project number is already configured as `863907870950` for this prototype. The Pages workflow injects the two repository variables into the deployed artifact; it does not commit them into Git. After adding or changing the variables, run **Actions → Deploy static site to GitHub Pages → Run workflow**, select the branch you intend to test, and confirm the page footer SHA matches that branch's source commit.
+
+## 8. Run the synthetic check
 
 After the probe is served from the authorized site:
 
-1. Enter the OAuth client ID, restricted API key, and project number in the page.
-2. Choose **Connect Google Drive** and authorize the `drive.file` request with the test-user account.
+1. Choose **Continue with Google** and select the account that owns the private folder.
+2. Review and authorize the `drive.file` request in Google's dialog.
 3. Choose **Choose Drive folder** and select the intended private folder.
 4. Confirm the folder name, then run the synthetic read/write check.
 5. The probe creates one invented JSON file, reads it back, compares its contents, then asks before deleting that temporary file. It never opens or changes the canonical ledger and never uploads a CSV.
@@ -97,4 +108,4 @@ This establishes the tested create/read-back/confirmed-delete path only. It does
 
 Google's [Drive API usage-limits page](https://developers.google.com/workspace/drive/api/guides/limits) currently says standard Drive API use is available at no additional cost. Google also says charges for use above quota limits are planned for later in 2026. This personal synthetic check should use ordinary API requests; do not request a quota increase or enable billing just for the probe. Recheck Google's current terms and limits before production.
 
-*Setup guidance checked 2026-10-21.*
+*Setup guidance checked 2026-10-21; deployment-variable instructions added 2026-10-29.*

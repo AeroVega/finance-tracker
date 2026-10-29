@@ -16,13 +16,13 @@ See [Google Cloud setup for the Drive probe](GOOGLE_CLOUD_SETUP.md) for step-by-
 2. Create a Web application OAuth client. Add the deployed HTTPS origin to Authorized JavaScript origins. For the current GitHub Pages project site, the expected origin is https://aerovega.github.io; verify the live Pages URL before registering it. Add http://localhost only for local development.
 3. Configure the OAuth consent screen for the Google account that owns the selected folder. Use the drive.file scope. The browser-only token flow requires the owner to be present and to reconnect after token expiry.
 4. Create an API key for the browser probe. Under Website restrictions, allow the Pages referrer pattern https://aerovega.github.io/* and https://docs.google.com/* (where Picker is rendered); add the localhost referrer only while testing locally. Under API restrictions, allow both Google Picker API and Google Drive API. The project number is used as the Picker App ID.
-5. Do not place the supplied folder ID, access token, API key, OAuth client secret, or financial data in this public repository. The client ID is a public identifier; the probe asks for it in the page and keeps it only in page memory. No client secret is used.
+5. Do not place the supplied folder ID, access token, OAuth client secret, or financial data in this public repository. Configure the public OAuth client ID and restricted browser API key as repository Actions variables named `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_PICKER_API_KEY`. The deployment injects them into the public page; they are not secrets, and the API key must remain restricted. No client secret is used.
 
 ## Run the live synthetic check
 
-1. Serve this page over HTTPS or from http://localhost. Do not open it with a file URL.
-2. Enter the OAuth client ID, restricted API key, and numeric Cloud project number.
-3. Press Connect Google Drive and grant the requested Drive permission in Google's consent dialog.
+1. Configure the two repository Actions variables described in [Google Cloud setup](GOOGLE_CLOUD_SETUP.md) and deploy the branch you want to test.
+2. Serve the page over HTTPS or from http://localhost. Do not open it with a file URL.
+3. Press Continue with Google, select the intended account, and grant the requested Drive permission in Google's consent dialog.
 4. Press Choose Drive folder and select the existing private folder.
 5. Confirm the folder name shown on the page, then press Run synthetic read/write check.
 6. The page writes a uniquely named synthetic JSON file under that folder, reads it back, and verifies the contents. It then asks before deleting that file. If deletion is declined or fails, the page identifies the remaining synthetic file.
