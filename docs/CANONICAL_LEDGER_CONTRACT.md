@@ -198,3 +198,27 @@ These are documented sample observations, not guarantees about every future expo
 The pure suite is intentionally not a parser or storage integration suite. Rejected and ambiguous observations are preserved in its result, and corrections and reversals are represented as append-only events rather than mutating the existing activity.
 
 **Boundary:** the pure reconciliation module and synthetic tests are a reference implementation of contract decisions, not a provider parser or durable ledger. They do not implement production storage, Drive synchronization, authentication, atomic commits, or crash recovery. A deterministic re-run test proves only the pure calculation is repeatable; persistence-level interruption/retry remains an open integration test. The Drive prototype remains separate; real financial data must not be used until security/storage release gates are approved.
+
+## 7. Owner review decisions and strengthened pre-merge gate (2026-10-28)
+
+The following clarifications are binding for this contract and its synthetic reference tests:
+
+- **Monetary precision:** Never silently round or truncate. If fractional digits beyond the currency exponent contain nonzero value, reject/flag the row for review while preserving original source amount text. Extra trailing zeroes may be accepted when the numeric value is exactly representable. Integer minor-unit results must remain within JavaScript's safe-integer range; canonicalize negative zero to zero. Unsupported currency exponents use exact validated decimal strings, not floating-point conversion.
+- **Transaction identity:** Match conservatively. A stable source ID is scoped to institution and account and must not override contradictory amount/currency evidence. Ambiguous candidates go to review. Distinct duplicate-shaped rows in one source file remain distinct unless source identity evidence establishes duplication. Identical completed-file retries are a separate idempotency case.
+- **Corrections/reversals/transfers:** Keep correction and reversal events append-only and linked to their targets. Partial reversals must state the actual reversed amount and must not imply that the whole original event was reversed. Internal transfer sides require an explicit shared link backed by evidence; matching amounts alone are insufficient. Reporting must not double-count reversal/correction events or classify internal transfers as consolidated income/spending.
+- **Import outcomes:** Distinguish complete success (processed), valid empty success (processed with zero data rows and null coverage), partial results requiring review (needs-review), and failure (failed). For terminal row dispositions, created + matched + review + rejected + ignored = rowsRecognized; report accepted, rejected, and review-needed counts distinctly in user-facing summaries. A rejected row is not also counted as an accepted row.
+- **Source-file retention:** Retain full original files only in an approved private storage boundary. Production approval requires access controls, encryption, deletion behavior, backup/restore, revocation, and a defined retention period. **The retention duration is still undecided** and must be chosen before production use; do not assume indefinite retention. Synthetic tests must use invented data only.
+
+### Strengthened deterministic pre-merge test gate
+
+Before PR #11 is merge-ready, run node --test tests/*.test.mjs on the final PR head and cover, at minimum:
+
+1. Monetary precision, including negative values, zero/negative zero, trailing zeroes, nonzero excess precision, unsafe integer range, malformed strings, and exact decimal fallback.
+2. Conservative identity matching, ambiguous candidates, same-file duplicate-shaped rows, and source-ID conflicts/scoping.
+3. Pending-to-posted transitions retaining provenance.
+4. Append-only corrections, full and partial reversals, and linked transfer sides; do not claim a report-level calculation is implemented unless it is actually tested.
+5. Partial imports with accurate, mutually exclusive row counts and explicit needs-review status.
+6. Invalid/unknown formats, malformed rows, and safe failure.
+7. Valid empty files and idempotent identical-file reimports, including failed prior attempts and different account/import contexts.
+
+Any unimplemented behavior must be described as a limitation, not implied by a passing test. In particular, this pure module does not prove persistence atomicity, interrupted-write recovery, durable deduplication, private file retention/deletion, or financial-reporting correctness. Those remain future integration/release gates. PR #11 must remain unmerged until the owner explicitly approves merging.
