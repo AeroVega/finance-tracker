@@ -104,6 +104,12 @@ If deletion is declined or fails, remove only the clearly named `finance-tracker
 
 This establishes the tested create/read-back/confirmed-delete path only. It does not validate cross-device synchronization, conflict safety, recovery, or production ledger storage. No real financial data was used. Do not add credentials or folder IDs to this repository.
 
+## Latest live validation (2026-10-29)
+
+The owner reran the deployed experiment branch at source commit `872ed80db73a4866ebbdb609c83aece26d9fce00` and confirmed a complete PASS: Google authorization succeeded, Picker selected `finance-tracker-database`, Drive write/read-back matched, and the temporary synthetic file was deleted. The initial Picker “API developer key is invalid” error was traced to the repository variable still containing the previously rotated key; replacing it with the current restricted key resolved the issue.
+
+The Actions log confirmed both public configuration values were injected without logging their values. This remains user-confirmed live evidence for the synthetic test only. It does not authorize real financial-data storage or prove conflict safety, recovery, cross-device synchronization, token expiry/revocation handling, or production cost/terms. Never record the key, access token, or folder ID in repository files.
+
 ## Cost note
 
 Google's [Drive API usage-limits page](https://developers.google.com/workspace/drive/api/guides/limits) currently says standard Drive API use is available at no additional cost. Google also says charges for use above quota limits are planned for later in 2026. This personal synthetic check should use ordinary API requests; do not request a quota increase or enable billing just for the probe. Recheck Google's current terms and limits before production.
