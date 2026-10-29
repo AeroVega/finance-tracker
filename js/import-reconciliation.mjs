@@ -43,6 +43,58 @@ function sameComposite(a, b) {
     (a.sourceAction ?? "") === (b.sourceAction ?? "");
 }
 
+
+function exactSignedDecimal(activity) {
+  if (Number.isSafeInteger(activity.amountMinor)) {
+    const exponent = CURRENCY_EXPONENTS[activity.currency];
+    if (!Number.isInteger(exponent)) return null;
+    const negative = activity.amountMinor < 0;
+    const absolute = BigInt(Math.abs(activity.amountMinor)).toString().padStart(exponent + 1, "0");
+    const whole = exponent ? absolute.slice(0, -exponent) : absolute;
+    const fraction = exponent ? absolute.slice(-exponent) : "";
+    return (negative ? "-" : "") + whole + (fraction ? "." + fraction : "");
+  }
+  if (typeof activity.amountDecimal === "string" && /^-?\d+(?:\.\d+)?$/.test(activity.amountDecimal)) {
+    return activity.amountDecimal;
+  }
+  return null;
+}
+
+function decimalParts(value) {
+  if (typeof value !== "string" || !/^-?\d+(?:\.\d+)?$/.test(value)) return null;
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole, fraction = ""] = unsigned.split(".");
+  const digits = (whole + fraction).replace(/^0+(?=\d)/, "");
+  return { negative: negative && /[1-9]/.test(digits), digits: BigInt(digits || "0"), scale: fraction.length };
+}
+
+function compareAbsoluteDecimals(a, b) {
+  const left = decimalParts(a);
+  const right = decimalParts(b);
+  if (!left || !right) return null;
+  const scale = Math.max(left.scale, right.scale);
+  const l = left.digits * (10n ** BigInt(scale - left.scale));
+  const r = right.digits * (10n ** BigInt(scale - right.scale));
+  return l < r ? -1 : l > r ? 1 : 0;
+}
+
+function hasOppositeSigns(a, b) {
+  const left = decimalParts(a);
+  const right = decimalParts(b);
+  return Boolean(left && right && left.digits !== 0n && right.digits !== 0n && left.negative !== right.negative);
+}
+
+function validReversalAmount(original, reversal) {
+  if (!original || !reversal || original.currency !== reversal.currency) return false;
+  const originalValue = exactSignedDecimal(original);
+  const reversalValue = exactSignedDecimal(reversal);
+  if (originalValue === null || reversalValue === null) return false;
+  return hasOppositeSigns(originalValue, reversalValue) &&
+    compareAbsoluteDecimals(reversalValue, originalValue) !== null &&
+    compareAbsoluteDecimals(reversalValue, originalValue) <= 0;
+}
+
 function isPendingPostedTransition(oldRow, newRow) {
   return oldRow.lifecycleStatus === "pending" && newRow.lifecycleStatus === "posted" &&
     oldRow.accountId === newRow.accountId && oldRow.currency === newRow.currency &&
@@ -136,15 +188,22 @@ export function reconcileImport({
 
     if (row.reversalOfActivityId) {
       match = existingActivities.find((activity) => activity.activityId === row.reversalOfActivityId) ?? null;
-      if (match) {
+      if (!match) {
+        disposition = "review"; reasonCode = "reversal-target-not-found";
+      } else if (match.institutionId !== institutionId || match.accountId !== accountId) {
+        match = null;
+        disposition = "review"; reasonCode = "reversal-target-out-of-scope";
+      } else if (!validReversalAmount(match, incoming)) {
+        match = null;
+        disposition = "review"; reasonCode = "invalid-reversal-amount";
+      } else {
         disposition = "matched";
         events.push({
           eventType: "reversal", activityId: match.activityId,
           observationRowOrdinal: row.rowOrdinal, reversalAmountMinor: row.amountMinor ?? null,
+          reversalAmountDecimal: row.amountDecimal ?? null,
           currency: row.currency ?? null, appendOnly: true,
         });
-      } else {
-        disposition = "review"; reasonCode = "reversal-target-not-found";
       }
     } else if (row.sourceRecordId) {
       const candidates = [...existingObservations, ...observations]
