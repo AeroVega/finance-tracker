@@ -102,6 +102,19 @@ test("conflicting stable source ID goes to review unless an explicit correction 
   assert.equal(prior.amountMinor, -2341);
 });
 
+test("explicit reversal links append a reversal event without mutating the original activity", () => {
+  const prior = activity();
+  const result = reconcileImport({
+    ...base, rows: [row({ amountMinor: 2341, reversalOfActivityId: "activity-1" })],
+    existingActivities: [prior],
+  });
+  assert.equal(result.counts.matched, 1);
+  assert.equal(result.events[0].eventType, "reversal");
+  assert.equal(result.events[0].reversalAmountMinor, 2341);
+  assert.equal(result.events[0].appendOnly, true);
+  assert.equal(prior.amountMinor, -2341);
+});
+
 test("malformed rows are rejected and safe partial results are explicitly needs-review", () => {
   const result = reconcileImport({ ...base, rows: [row(), row({ effectiveDate: "2026-02-30", rowOrdinal: 2 })] });
   assert.equal(result.counts.created, 1);
