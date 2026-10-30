@@ -8,10 +8,10 @@ This is the pick-up point for the next work session. Keep the sequence below; do
 
 ## Immediate checkpoint
 
-- [ ] Review the latest PR #17 diff and confirm its Node contract-test workflow is green for the final head commit.
-- [ ] Merge PR #17 only after that check is green.
-- [ ] Confirm the merge and the resulting `main` test workflow succeeded. Do not infer a successful merge/deployment from a commit alone.
-- [ ] If a Pages deployment is needed for another experiment, deliberately choose the branch in **Actions → Deploy static site to GitHub Pages → Run workflow**. Pages is one shared public URL, not a staging environment. Verify the deployed footer's full source SHA and restore `main` after the experiment.
+- [x] Review the latest PR #17 diff and confirm its Node contract-test workflow is green for the final head commit.
+- [x] Merge PR #17 only after that check is green.
+- [x] Confirm the merge and the resulting `main` test workflow succeeded. Do not infer a successful merge/deployment from a commit alone.
+- [x] If a Pages deployment is needed for another experiment, deliberately choose the branch in **Actions → Deploy static site to GitHub Pages → Run workflow**. Pages is one shared public URL, not a staging environment. Verify the deployed footer's full source SHA and restore `main` after the experiment.
 
 ## Next implementation: stable database identity
 
