@@ -14,7 +14,7 @@ This is the current pick-up point. PR #17 is complete and merged. Keep the seque
 - [x] PR #17 final-head Node contract-test workflow passed (run #72).
 - [x] PR #17 merge commit: `d2b941cbc10d9c3ca96c8beb7989b82ff3eef83e`.
 
-**Verification note:** PR #17's final-head check is confirmed green. A corresponding workflow run for the merge commit was not found during the 2026-10-30 status review; verify the current `main` workflow before treating post-merge CI as independently confirmed. No new Pages deployment is implied by merging PR #17.
+**Verification note (confirmed 2026-10-30):** PR #17's final-head Node contract-test workflow passed (run #72), and the owner has now confirmed that the post-merge `main` workflow also succeeded. Both pre-merge and post-merge CI verification are complete. No new Pages deployment is implied by merging PR #17.
 
 ## Next task: stable database identity — design first
 
