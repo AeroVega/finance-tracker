@@ -1,13 +1,13 @@
 # Roadmap
 
-**Status:** Active planning baseline; M1 contract decisions recorded, validation gates still open  
+**Status:** Active planning baseline; M1 canonical contract/reference implementation merged; parser, reporting, and storage validation remain open  
 **MVP1 target:** 2027-01-01
 
 This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints.
 
-## Current project position — 2026-10-28
+## Current project position — 2026-10-30
 
-**Current phase:** Data-integration prototype / foundation. The project is moving from discovery into the first tested import vertical slice. The January 1, 2027 MVP1 target remains conditional on privacy, correctness, recovery, and $0 recurring-cost exit criteria.
+**Current phase:** Google Drive integration prototype plus MVP1 file-import foundation. The January 1, 2027 MVP1 target remains conditional on privacy, correctness, recovery, and $0 recurring-cost exit criteria.
 
 ### Completed or demonstrated
 - Project constraints, provider-export research, and initial Wells Fargo, SoFi, and Fidelity sample-schema observations are documented.
@@ -30,11 +30,11 @@ Recorded decisions: integer minor units with decimal-string fallback; preserve s
 - [x] Record Fidelity export capabilities confirmed by the project owner.
 - [x] Inspect sanitized sample exports for MVP1 account types (Wells Fargo, SoFi, Fidelity).
 - [x] Document observed schemas, date formats, confirmed signs, and available identifiers/activity fields; validate raw CSV mechanics when appropriate.
-- [x] Record canonical ledger/import-run contract decisions and add a pure synthetic reconciliation reference module (PR #11; merge and test gates still open).
+- [x] Record and merge canonical ledger/import-run contract decisions and a pure synthetic reconciliation reference module (PR #11; complete).
 - [ ] Complete production evaluation of private storage, authentication, backup/recovery, and portability (the synthetic Drive round trip is a successful prototype check, not production approval).
 - [ ] Review and document architecture decisions before production implementation.
 
-Phase 0 discovery is substantially complete. The contract and synthetic reference behavior are under review in PR #11; do not begin provider parsers until the full test suite has run and the contract is accepted. The Drive probe does not complete the storage/security phase.
+Phase 0 discovery is substantially complete. The canonical contract and synthetic reference behavior are merged through PR #11. Provider parsers can now be developed against that contract using invented fixtures; production persistence remains separately gated. The Drive probe does not complete the storage/security phase.
 
 ## MVP1 — Reliable file-based tracker
 Scope:
