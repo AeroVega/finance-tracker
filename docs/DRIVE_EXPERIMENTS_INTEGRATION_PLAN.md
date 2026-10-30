@@ -57,11 +57,11 @@ User-confirmed live PASS on 2026-10-29 (deployed source commit `d29a4eb19bbd3a56
 
 The result is useful for this single-user project: after the owner has explicitly selected the existing folder once, the app can find it again by name without persisting its ID in the app's session storage. It does **not** remove the need for Picker during initial onboarding, establish globally unique folder identity, or authorize production ledger storage.
 
-## Proposed next PR
+## Historical integration scope — completed by PR #16
 
-Start a **new integration branch from current `main`** and port the useful changes deliberately. Do not merge PR #15 and PR #16 wholesale because their deployment workflow edits overlap.
+The following describes the work proposed before PR #16 and is retained for traceability. It is not a request to repeat or re-port that work. PR #15 and PR #16 were not merged wholesale because their deployment workflow edits overlapped.
 
-Include:
+The integrated result included:
 - Experiment A's public configuration injection (exactly one workflow step), familiar Google account chooser, and tested synthetic round-trip probe.
 - Experiment B's discovery helper, pagination, strict zero/one/multiple handling, and automated tests.
 - Updated docs recording both user-confirmed live results and their limitations.
