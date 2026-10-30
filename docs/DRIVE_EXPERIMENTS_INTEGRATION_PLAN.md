@@ -67,7 +67,7 @@ Include:
 - Updated docs recording both user-confirmed live results and their limitations.
 - One deployment workflow with SHA stamping and no secret values printed.
 
-Keep both the synthetic probe and discovery UI explicitly prototype-only. Before discovery can select a canonical ledger folder automatically, decide and test a stable identity strategy: exact name alone is insufficient. A small app-owned marker/manifest may be appropriate, but its format and recovery behavior should be reviewed before implementing it.
+Keep both the synthetic probe and discovery UI explicitly prototype-only. The remaining next design task is stable database identity: exact name alone is insufficient. A small app-owned marker/manifest may be appropriate, but its format and recovery behavior must be reviewed before implementing it.
 
 Exclude real ledger reads/writes, automatic replacement-folder creation, broader Drive scopes, stored tokens, multi-user guarantees, and claims of production-ready backup/conflict recovery. Run the full Node suite, manually deploy the integration branch, verify the source SHA, repeat the live checks, and request explicit merge approval only after review.
 
