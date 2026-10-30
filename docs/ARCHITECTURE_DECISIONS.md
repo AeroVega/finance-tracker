@@ -1,7 +1,7 @@
 # Architecture Decisions and Open Questions
 
 **Status:** Baseline with Google Drive selected as the storage direction; implementation details remain subject to validation  
-**Last updated:** 2026-10-24
+**Last updated:** 2026-10-30
 
 ## Current development status and next milestone
 
@@ -18,7 +18,7 @@
 **Status: Accepted.** The public repo contains application code, documentation, and deliberately synthetic tests only. Real exports, records, balances, holdings, credentials, and secrets are prohibited. Removing a file in a later commit does not erase prior history.
 
 ## ADR-003 — Source-independent canonical ledger
-**Status: Accepted as a design principle; schema pending.** File and future API adapters feed one normalized ledger and the same deduplication, review, and reporting pipeline. Preserve source identity, descriptions, identifiers, and import provenance.
+**Status: Accepted; canonical contract recorded in PR #11 and merged.** File and future API adapters feed one normalized ledger and the same deduplication, review, and reporting pipeline. Preserve source identity, descriptions, identifiers, and import provenance.
 
 ## ADR-004 — No recurring operating cost
 **Status: Accepted release constraint.** No recurring fees for hosting, storage, aggregation, refresh, or AI. A development sandbox or expiring trial does not qualify as free production access. Production terms and any potential billable conditions must be verified before release.
