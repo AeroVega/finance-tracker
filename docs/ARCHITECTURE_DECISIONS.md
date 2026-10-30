@@ -5,11 +5,13 @@
 
 ## Current development status and next milestone
 
-**Current phase:** data-integration prototype. Discovery and initial provider-format research are documented; the Drive synthetic probe has passed its user-confirmed live create/read-back/confirmed-delete check. That probe does not authorize real ledger storage.
+**Current phase:** Google Drive integration prototype plus MVP1 file-import foundation. The canonical ledger/import-run contract and pure synthetic reconciliation reference module were merged in PR #11. Drive Experiments A+B were integrated in PR #16, and PR #17 hardened folder discovery and safe Picker/error fallback. These are prototype capabilities only; no production ledger storage is approved.
 
-**Next milestone (M1): canonical import contract and synthetic fixtures.** Before implementing parsers, define the normalized activity and account fields, source provenance, import-run outcomes, review decisions, coverage/freshness semantics, signed amounts, and conservative duplicate/correction behavior. Then create fully invented fixtures for representative Wells Fargo, SoFi, and Fidelity CSV shapes and acceptance tests for repeat imports, overlapping history, malformed rows, ambiguous matches, and retries.
+**Next milestone:** design stable database identity before coding. Exact folder name and Picker comparison history are not sufficient proof of canonical database identity. Propose and review an app-owned marker/manifest (or alternative), including schema/version, identity generation, validation, onboarding, and recovery behavior. Keep database identity conceptually separate from the currently authorized Google account. Add synthetic tests before implementing the identity-only prototype.
 
-**Production storage remains a separate gate:** validate token expiry/revocation, safe cross-device writes and stale-revision conflicts, interrupted-write recovery, backup/restore, and sustainable $0 production terms. Until those gates pass, use synthetic data only and do not enable production Drive ledger writes.
+**Parallel MVP1 work:** implement strict Wells Fargo, SoFi, and Fidelity CSV parsers against the merged canonical contract, using invented fixtures. Add parser-to-reconciliation tests and define report-level correction/reversal/transfer and investment semantics.
+
+**Production storage remains a separate gate:** validate token expiry/revocation, account selection, safe cross-device writes and stale-revision conflicts, interrupted-write recovery, backup/restore, retention/deletion, privacy/security, and sustainable $0 production terms. Until those gates pass, use synthetic data only and do not enable production Drive ledger writes.
 
 ## ADR-001 — File imports for MVP1
 **Status: Accepted.** MVP1 ingests CSV files downloaded by the project owner. MVP2 may add free, authorized direct integrations only after cost, authorization, sustainability, and security are verified. This keeps delivery independent of an unproven API and makes import correctness a first-class capability.
