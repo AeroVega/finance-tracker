@@ -1,8 +1,8 @@
 # Integrating Google Drive Experiments A and B
 
-**Purpose:** Define the smallest coherent change to bring the successful Google sign-in/configuration work from Experiment A and the folder-discovery work from Experiment B together in one reviewed PR to `main`.
+**Purpose:** Historical design and evidence record for integrating Google sign-in/configuration Experiment A with folder-discovery Experiment B.
 
-**Status:** Experiment A and B integration merged via PR #16 on 2026-10-29 (merge commit `07ee4f012bb94d95bb4b526603f0ddac760bcba5`). PR #15 was closed without merging to avoid duplicating overlapping configuration/deployment changes. No production ledger storage is approved.
+**Status: Complete.** Experiment A and B integration merged via PR #16 on 2026-10-29 (merge commit `07ee4f012bb94d95bb4b526603f0ddac760bcba5`). PR #15 was closed without merging to avoid duplicating overlapping configuration/deployment changes. PR #17 subsequently hardened discovery and Picker fallback and is also merged. This document is retained as the rationale/evidence record; its proposed implementation sequence below is historical, not outstanding work. No production ledger storage is approved.
 
 ## Evidence to carry forward
 
@@ -57,19 +57,19 @@ User-confirmed live PASS on 2026-10-29 (deployed source commit `d29a4eb19bbd3a56
 
 The result is useful for this single-user project: after the owner has explicitly selected the existing folder once, the app can find it again by name without persisting its ID in the app's session storage. It does **not** remove the need for Picker during initial onboarding, establish globally unique folder identity, or authorize production ledger storage.
 
-## Proposed next PR
+## Historical integration scope — completed by PR #16
 
-Start a **new integration branch from current `main`** and port the useful changes deliberately. Do not merge PR #15 and PR #16 wholesale because their deployment workflow edits overlap.
+The following describes the work proposed before PR #16 and is retained for traceability. It is not a request to repeat or re-port that work. PR #15 and PR #16 were not merged wholesale because their deployment workflow edits overlapped.
 
-Include:
+The integrated result included:
 - Experiment A's public configuration injection (exactly one workflow step), familiar Google account chooser, and tested synthetic round-trip probe.
 - Experiment B's discovery helper, pagination, strict zero/one/multiple handling, and automated tests.
 - Updated docs recording both user-confirmed live results and their limitations.
 - One deployment workflow with SHA stamping and no secret values printed.
 
-Keep both the synthetic probe and discovery UI explicitly prototype-only. Before discovery can select a canonical ledger folder automatically, decide and test a stable identity strategy: exact name alone is insufficient. A small app-owned marker/manifest may be appropriate, but its format and recovery behavior should be reviewed before implementing it.
+Keep both the synthetic probe and discovery UI explicitly prototype-only. The remaining next design task is stable database identity: exact name alone is insufficient. A small app-owned marker/manifest may be appropriate, but its format and recovery behavior must be reviewed before implementing it.
 
-Exclude real ledger reads/writes, automatic replacement-folder creation, broader Drive scopes, stored tokens, multi-user guarantees, and claims of production-ready backup/conflict recovery. Run the full Node suite, manually deploy the integration branch, verify the source SHA, repeat the live checks, and request explicit merge approval only after review.
+The integration deliberately excluded real ledger reads/writes, automatic replacement-folder creation, broader Drive scopes, stored tokens, multi-user guarantees, and claims of production-ready backup/conflict recovery. Those exclusions remain project safety constraints. PR #16 completed the integration; PR #17 added the follow-up hardening described below.
 
 
 ## Follow-up hardening implementation — PR #17
