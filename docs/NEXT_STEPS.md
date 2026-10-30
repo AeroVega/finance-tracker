@@ -1,7 +1,7 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-10-30  
-**Current branch/PR:** `docs/sync-project-status-2026-10-30` / documentation synchronization  
+**Current workstream:** documentation synchronized through this PR; next implementation task is stable database identity design  
 **Current phase:** Google Drive integration prototype and MVP1 file-import foundation; production financial-data storage is **not approved**.
 
 This is the current pick-up point. PR #17 is complete and merged. Keep the sequence below; do not skip ahead to real ledger reads or writes.
