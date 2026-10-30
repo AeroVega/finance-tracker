@@ -1,54 +1,61 @@
 # Finance Tracker — next steps and handoff
 
-**Last updated:** 2026-10-29  
-**Current branch/PR:** `hardening/drive-discovery-fallback` / [PR #17](https://github.com/AeroVega/finance-tracker/pull/17)  
-**Current phase:** Google Drive integration prototype; production financial-data storage is **not approved**.
+**Last updated:** 2026-10-30  
+**Current branch/PR:** `docs/sync-project-status-2026-10-30` / documentation synchronization  
+**Current phase:** Google Drive integration prototype and MVP1 file-import foundation; production financial-data storage is **not approved**.
 
-This is the pick-up point for the next work session. Keep the sequence below; do not skip ahead to real ledger reads or writes.
+This is the current pick-up point. PR #17 is complete and merged. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
-## Immediate checkpoint
+## Completed checkpoints
 
-- [x] Review the latest PR #17 diff and confirm its Node contract-test workflow is green for the final head commit.
-- [x] Merge PR #17 only after that check is green.
-- [x] Confirm the merge and the resulting `main` test workflow succeeded. Do not infer a successful merge/deployment from a commit alone.
-- [x] If a Pages deployment is needed for another experiment, deliberately choose the branch in **Actions → Deploy static site to GitHub Pages → Run workflow**. Pages is one shared public URL, not a staging environment. Verify the deployed footer's full source SHA and restore `main` after the experiment.
+- [x] PR #11 merged: canonical ledger/import-run contract and pure synthetic reconciliation reference module are on `main`. The full 41-test suite passed on the final reviewed PR head before merge.
+- [x] PR #16 merged: Google authorization/configuration and Drive Experiments A+B integration.
+- [x] PR #17 merged: typed folder-discovery outcomes, explicit Picker fallback, safe authorization/error handling, and synthetic regression coverage.
+- [x] PR #17 final-head Node contract-test workflow passed (run #72).
+- [x] PR #17 merge commit: `d2b941cbc10d9c3ca96c8beb7989b82ff3eef83e`.
 
-## Next implementation: stable database identity
+**Verification note:** PR #17's final-head check is confirmed green. A corresponding workflow run for the merge commit was not found during the 2026-10-30 status review; verify the current `main` workflow before treating post-merge CI as independently confirmed. No new Pages deployment is implied by merging PR #17.
 
-**This is the next design task after PR #17.** A unique folder name and a remembered Picker selection are not proof that a folder is the canonical Finance Tracker database.
+## Next task: stable database identity — design first
 
-1. **Write a short decision/design proposal before coding.** Compare a small app-owned marker/manifest inside the selected folder with alternatives. Define its schema/version, required fields, ownership/identity checks, and how the app distinguishes an initialized database from an arbitrary folder.
-2. **Define safe onboarding and recovery states.**
+A unique folder name, an earlier Picker selection, and a remembered comparison reference are not proof that a folder is the canonical Finance Tracker database. PR #17 deliberately leaves this unresolved.
+
+1. **Write a decision/design proposal before coding.** Compare a small app-owned marker/manifest inside the selected folder with alternatives. Define its schema/version, required fields, identity generation, validation rules, and how the app distinguishes an initialized database from an arbitrary folder.
+2. **Keep database identity separate from Google account authorization.** Decide what the manifest proves about the database and what must instead be verified by the active Google authorization. Do not treat a matching database ID as proof that the current account is authorized, or an account identity as the database identity.
+3. **Define safe onboarding and recovery states.**
    - First connection: authorize with Google and explicitly select the intended folder with Picker when discovery cannot safely establish identity.
-   - One exact-name match: treat it only as a candidate until the marker/manifest is verified.
+   - One exact-name match: treat it only as a candidate until the app-owned identity mechanism is verified.
    - Zero matches: explain that no accessible match was returned; offer Picker. Never assume the folder is absent and never auto-create a replacement.
    - Multiple matches: stop and ask the owner to select the intended folder.
    - Missing, malformed, unsupported-version, or mismatched marker: stop without modifying files and explain the recovery choice.
-3. **Add synthetic tests first.** Cover valid identity, missing marker, malformed marker, unsupported schema version, wrong database identity, duplicate folder names, rename/missing folder, and failed/partial reads. No real account data or identifiers in fixtures.
-4. **Implement only the marker/identity prototype in a focused branch and PR.** Keep ledger reads/writes out of scope. Use the existing public-config injection and narrow `drive.file` scope; do not add stored tokens, bank credentials, a backend, or recurring-cost dependencies.
-5. **Run a live synthetic validation after review.** Verify the source SHA. Test the normal path and safe failure/recovery paths on the target iPhone/iPad browser. Record only outcomes and non-sensitive evidence; never record tokens, API keys, folder IDs, or financial data.
+4. **Add synthetic tests first.** Cover valid identity, missing/malformed marker, unsupported schema version, wrong database identity, duplicate folder names, rename/missing folder, wrong account/permission, and failed/partial reads. Use invented IDs and data only.
+5. **Implement only the marker/identity prototype in a focused branch and PR.** Keep ledger reads/writes out of scope. Use the existing public-config injection and narrow `drive.file` scope; do not add stored tokens, bank credentials, a backend, or recurring-cost dependencies.
+6. **Run live synthetic validation after review.** Verify the deployed source SHA. Test normal and safe failure/recovery paths on the target iPhone/iPad browser. Record only outcomes and non-sensitive evidence; never record tokens, API keys, folder IDs, or financial data.
+
+## Parallel MVP1 work: provider parsers and reporting semantics
+
+The Drive prototype must not block the permanent file-import path.
+
+- [ ] Add strict provider-specific parser tests for verified Wells Fargo, SoFi, and Fidelity CSV formats using fully invented fixtures.
+- [ ] Implement the adapters against the merged canonical contract; preserve source dates, source descriptions, exact monetary values, account mapping, and provenance.
+- [ ] Exercise repeat imports and overlapping exports through parser output, including pending-to-posted transitions, ambiguous matches, corrections/reversals, and partial-import recovery.
+- [ ] Define and test report-level effective-state calculations for reversals, corrections, and explicit transfer links before reports rely on those events.
+- [ ] Define investment reporting treatment for contributions, distributions, trades, dividends, fees, and market-value changes.
+- [ ] Keep coverage/freshness explicit; unavailable data must never appear as zero or current.
+- [ ] Keep sanitized real samples outside this public repository; never commit statements, exports, account identifiers, balances, tokens, or secrets.
 
 ## Remaining storage-readiness gates
 
-These are required before any real ledger data may be stored in Drive. A successful synthetic folder discovery or file round trip does not satisfy them.
+These are required before any real ledger data may be stored in Drive. Successful synthetic folder discovery or a synthetic file round trip does not satisfy them.
 
-- [ ] **Authorization and account handling:** verify account choice is clear; test expiry, revocation, wrong account, denied permissions, reconnect, and `401`/`403` recovery.
+- [ ] **Authorization and account handling:** verify account choice is clear; test expiry, revocation, wrong account, denied permissions, reconnect, and 401/403 recovery.
 - [ ] **Concurrency and correctness:** define single-writer or locking strategy, stale-write detection, versioning, idempotency, and conflict resolution. Never silently overwrite newer data.
 - [ ] **Crash/interruption recovery:** specify behavior for partial writes, interrupted operations, duplicate/retried requests, and inconsistent state.
 - [ ] **Backup, restore, and portability:** define export/backup format, restore validation, recovery steps, and how the owner can leave the service.
-- [ ] **Deletion and retention:** define user-approved deletion versus completed deletion, original-import retention, and recovery implications.
+- [ ] **Deletion and retention:** implement and test the approved 540-day (18-month) original-file retention lifecycle, distinguishing deletion eligibility from confirmed deletion and handling backup copies consistently.
 - [ ] **Privacy/security review:** document threat model, least-privilege scope, browser token lifetime/storage, data exposure risks, and how errors/logs avoid sensitive data.
-- [ ] **Sustainable cost and terms:** recheck current Google API terms/quotas and confirm the full design remains at **$0 recurring cost** without trials or enabling billing.
-- [ ] **Owner acceptance:** review the design, test evidence, failure states, and documentation before approving any production-storage implementation.
-
-## Parallel MVP1 work
-
-The Drive prototype must not block the file-import MVP.
-
-- [ ] Finish owner review/acceptance of the canonical ledger/import-run contract and reconcile the actual current PR/merge status before relying on it.
-- [ ] Add strict provider-specific parser tests for verified Wells Fargo, SoFi, and Fidelity formats using invented fixtures.
-- [ ] Keep re-import deduplication, pending-to-posted transitions, correction/reversal handling, provenance, partial-import recovery, and coverage/freshness visible in tests.
-- [ ] Keep sanitized real samples outside this public repository; never commit statements, exports, account identifiers, balances, tokens, or secrets.
+- [ ] **Sustainable cost and terms:** recheck current Google API terms/quotas and confirm the full design remains at $0 recurring cost without trials or enabling billing.
+- [ ] **Owner acceptance:** review design, test evidence, failure states, and documentation before approving any production-storage implementation.
 
 ## Working rules
 
