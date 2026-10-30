@@ -1,8 +1,8 @@
 # Integrating Google Drive Experiments A and B
 
-**Purpose:** Define the smallest coherent change to bring the successful Google sign-in/configuration work from Experiment A and the folder-discovery work from Experiment B together in one reviewed PR to `main`.
+**Purpose:** Historical design and evidence record for integrating Google sign-in/configuration Experiment A with folder-discovery Experiment B.
 
-**Status:** Experiment A and B integration merged via PR #16 on 2026-10-29 (merge commit `07ee4f012bb94d95bb4b526603f0ddac760bcba5`). PR #15 was closed without merging to avoid duplicating overlapping configuration/deployment changes. No production ledger storage is approved.
+**Status: Complete.** Experiment A and B integration merged via PR #16 on 2026-10-29 (merge commit `07ee4f012bb94d95bb4b526603f0ddac760bcba5`). PR #15 was closed without merging to avoid duplicating overlapping configuration/deployment changes. PR #17 subsequently hardened discovery and Picker fallback and is also merged. This document is retained as the rationale/evidence record; its proposed implementation sequence below is historical, not outstanding work. No production ledger storage is approved.
 
 ## Evidence to carry forward
 
