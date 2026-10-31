@@ -7,13 +7,13 @@ This is a plan, not a guarantee that all proposed capabilities are feasible unde
 
 ## Current project position — 2026-10-31
 
-**Current phase:** PR #19's 108-decision database identity/lifecycle/storage/recovery architecture baseline is merged. The synthetic-only Google Drive feasibility spike is underway; production ledger writes remain blocked until safe concurrency, folder visibility, snapshot consistency, recovery, privacy, and $0 recurring-cost requirements are demonstrated.
+**Current phase:** PR #19's 108-decision database identity/lifecycle/storage/recovery architecture baseline is merged. Google Drive remains the selected private-storage direction. The tested Drive v3 stale-`If-Match` path failed; the owner accepted single-user, single-active-device operation, with simultaneous multi-device use explicitly unsupported and writes refused when another active session is detected. Production ledger writes remain blocked pending session coordination, serialized writes, recovery, snapshot consistency, privacy, and $0 recurring-cost validation.
 
 ### Completed or demonstrated
 - Project constraints, provider-export research, and initial Wells Fargo, SoFi, and Fidelity sample-schema observations are documented.
 - The public-repository privacy rules and source-independent, conservative import/reconciliation principles are documented.
 - Google Drive remains the selected private-storage direction. The deployed synthetic probe has passed a user-confirmed create/read-back/confirmed-delete test, including a repeat after API-key rotation.
-- The Drive probe validates only that narrow prototype path. Production ledger writes, cross-device synchronization, conflict handling, recovery, backup/restore, and current production cost/terms are **not yet validated**.
+- The Drive probe validates only the tested prototype paths. Sequential device handoff is the intended cross-device model; simultaneous multi-device use is unsupported. Production ledger writes, session-conflict handling, recovery, backup/restore, and current production cost/terms are **not yet validated**.
 - Drive Experiments A+B were integrated in PR #16. PR #17 then hardened folder discovery, Picker fallback, and authorization/error handling; it is merged, and its final-head Node contract-test run #72 passed.
 - PR #19 merged 108 accepted database identity, schema/versioning, immutable storage, commit/journal, initialization, migration, backup/restore, and recovery decisions. It is documentation-only and does not authorize production storage.
 
@@ -25,7 +25,7 @@ Recorded decisions: integer minor units with decimal-string fallback; preserve s
 
 **Remaining M1 follow-through:** provider-specific strict parser tests, report-level reversal/correction/transfer accounting, schema/persistence integration, and recovery tests remain outstanding. The pure reference module is not a provider parser, durable ledger, or reporting engine. Keep production Drive writes and real financial data blocked.
 
-**Parallel but separate release gate:** continue documenting and testing Drive authorization, stale-write protection, backup/restore, revocation, and $0-cost production terms. A successful synthetic round trip is not a substitute for those gates.
+**Parallel but separate release gate:** continue documenting and testing Drive authorization, best-effort single-session detection, serialized writes, interruption recovery, backup/restore, revocation, and $0-cost production terms. A successful synthetic round trip is not a substitute for those gates.
 
 ## Phase 0 — Foundation and discovery
 - [x] Set North Star, MVP1 file-import path, and $0 recurring-cost constraint.
