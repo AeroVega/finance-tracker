@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-31  
 **Current workstream:** PR #19 architecture baseline ready for review; next milestone is a synthetic-only Google Drive feasibility spike  
-**Current phase:** Google Drive integration prototype and MVP1 file-import foundation; production financial-data storage is **not approved**.
+**Current phase:** PR #19 architecture baseline ready for review; production financial-data storage is **not approved**.
 
 This is the current pick-up point. PR #17 is complete and merged. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
