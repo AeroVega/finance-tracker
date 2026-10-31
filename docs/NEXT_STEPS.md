@@ -29,7 +29,9 @@ The design now specifies:
 
 **Critical unresolved feasibility gate:** Google Drive concurrency. The design requires server-enforced stale-write exclusion. A client-side read-version-then-update sequence is not sufficient. The Drive file version is useful for detecting changes, but the current API review has not established a compare-and-swap contract for manifest publication. If a safe writer/fencing mechanism cannot be demonstrated, production ledger writes remain blocked or the storage architecture must be reconsidered.
 
-## Active task: synthetic-only Google Drive feasibility spike (PR in preparation)\n\nSee [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log.
+## Active task: synthetic-only Google Drive feasibility spike (PR in preparation)
+
+See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log.
 
 The active branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 
