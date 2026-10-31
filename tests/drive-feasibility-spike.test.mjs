@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { validateGoogleConfig } from "../js/google-config-validation.mjs";
 import {
   DRIVE_FILES_ENDPOINT,
   DRIVE_UPLOAD_ENDPOINT,
@@ -218,4 +219,35 @@ test("conditional write reports missing ETag as untestable and sends no request"
 test("browser feasibility page module has valid JavaScript syntax", () => {
   const modulePath = fileURLToPath(new URL("../prototype/drive-feasibility-spike.mjs", import.meta.url));
   execFileSync(process.execPath, ["--check", modulePath], { stdio: "pipe" });
+});
+
+
+test("Google configuration accepts a populated numeric project number", () => {
+  assert.doesNotThrow(() => validateGoogleConfig({
+    clientId: "synthetic-client-id",
+    apiKey: "synthetic-picker-key",
+    projectNumber: "863907870950"
+  }));
+});
+
+test("Google configuration rejects a missing project number", () => {
+  assert.throws(
+    () => validateGoogleConfig({
+      clientId: "synthetic-client-id",
+      apiKey: "synthetic-picker-key",
+      projectNumber: ""
+    }),
+    /project number is missing or invalid/
+  );
+});
+
+test("Google configuration rejects a nonnumeric project number", () => {
+  assert.throws(
+    () => validateGoogleConfig({
+      clientId: "synthetic-client-id",
+      apiKey: "synthetic-picker-key",
+      projectNumber: "8639abc"
+    }),
+    /project number is missing or invalid/
+  );
 });
