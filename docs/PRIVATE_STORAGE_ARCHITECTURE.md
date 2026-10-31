@@ -21,9 +21,9 @@ This is an architectural direction, not a claim that every OAuth, scope, billing
 - **Verified from repository constraints:** GitHub Pages content and this public repository must be treated as public; browser-local storage alone does not synchronize devices.
 - **Hypothesis pending verification:** Google Drive API plus browser OAuth can meet the required production workflow with no recurring cost and acceptable recovery guarantees.
 - **Verified for the prototype (user-confirmed 2026-10-24):** the configured OAuth/Picker flow and selected-folder create/read-back/delete operations worked from the deployed GitHub Pages origin.
-- **Open:** token expiry, reauthorization and revocation behavior; cross-device synchronization; stale-write/conflict handling; interrupted-write and corruption recovery; backup/restore; production publishing/verification requirements; and current production billing/terms.
+- **Open for validation:** token expiry, reauthorization and revocation behavior; cross-device synchronization; whether Google Drive can enforce the documented stale-writer exclusion; implementation and testing of interrupted-write recovery, corruption handling, and verified backup/restore; production publishing/verification requirements; and current production billing/terms.
 
-## Intended data flow
+## Intended data flow (target; not yet implemented)
 
 1. The user selects a supported CSV on their device.
 2. The browser parses and validates the file locally by default.
@@ -48,7 +48,7 @@ No raw CSV or ledger data should be sent to unrelated services. Avoid analytics/
 
 ## Data layout — architecture baseline
 
-The detailed database identity and persistence model is recorded in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md), currently under review in PR #19.
+The detailed database identity and persistence model is recorded in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md), ready to merge in PR #19. The ADR defines the target behavior; it does not establish that the Drive API can satisfy every requirement.
 
 The target model is no longer a single mutable JSON ledger file:
 - One canonical finance-tracker-manifest.json identifies the logical database and physical copy, declares manifestVersion and schemaVersion, and points to the current committed snapshot.
@@ -78,7 +78,7 @@ The app must not claim a commit succeeded until the manifest and complete refere
 ## Backup, export, and portability
 
 - Provide an export format the owner can retain independently of the app.
-- Define a backup cadence, destination, and retention policy; a second file in the same Drive account may not protect against account loss or account-wide deletion.
+- MVP1 defines verified snapshot backups, but backup cadence and an independent destination remain open. A second file in the same Drive account may not protect against account loss or account-wide deletion; automated backup scheduling/retention is deferred to MVP2.
 - Document how to restore and how to recognize a valid backup.
 - Test restore on synthetic data and verify transaction counts and totals.
 - Keep the data model source-independent so that changing storage providers does not require rewriting CSV parsers or financial calculations.
@@ -103,7 +103,7 @@ Do not implement elaborate quota optimization before there is measured evidence 
 - [x] Run the separate synthetic Drive probe in the user-selected folder: temporary invented JSON was created, observed in the folder, read back with exact match, and deleted after explicit confirmation. The owner repeated the test successfully after rotating the API key (user-confirmed 2026-10-24). No ledger or CSV was accessed.
 - [ ] Demonstrate create/read/update/export on synthetic data from iPhone and iPad.
 - [ ] Test two-device stale writes, simultaneous edits, retries, interrupted uploads, deletion, and corruption recovery.
-- [ ] Define and test backup/restore outside the normal read/write path.
+- [ ] Test verified snapshot backup/restore outside the normal read/write path, and decide whether an independent backup destination is required.
 - [ ] Verify current terms and confirm no recurring production cost or expiring-trial dependency.
 - [ ] Review data leakage through browser storage, logs, URLs, telemetry, and GitHub assets.
 - [ ] Keep real financial records out of the public repo and all public CI artifacts.
