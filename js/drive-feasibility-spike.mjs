@@ -211,15 +211,24 @@ export async function createSyntheticObject(options) {
     }
   }
 
-  const verified = await readSyntheticFile({
-    accessToken,
-    fileId,
-    expectedHash,
-    expectedFolderId: folderId,
-    fetchImpl
-  });
-  if (verified.content !== content) {
-    throw new DriveFeasibilityError("content-mismatch", "The synthetic object content differed after read-back.");
+  let verified;
+  try {
+    verified = await readSyntheticFile({
+      accessToken,
+      fileId,
+      expectedHash,
+      expectedFolderId: folderId,
+      fetchImpl
+    });
+    if (verified.content !== content) {
+      throw new DriveFeasibilityError("content-mismatch", "The synthetic object content differed after read-back.");
+    }
+  } catch (error) {
+    if (error && typeof error === "object") {
+      error.fileId = fileId;
+      error.fileName = fileName;
+    }
+    throw error;
   }
   return { fileId, fileName, sha256: expectedHash, retryReturned409: createResponse.status === 409, verified: true };
 }
@@ -239,18 +248,35 @@ export async function createRaceTarget(options) {
 export async function readRaceTarget(options) {
   const settings = options || {};
   const fetchImpl = settings.fetchImpl || globalThis.fetch;
+  const fileId = String(settings.fileId || "");
+  if (!fileId) throw new DriveFeasibilityError("missing-file-id", "Enter the shared synthetic race-test file ID.");
   const response = await fetchImpl(
-    DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(settings.fileId) +
+    DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(fileId) +
       "?fields=id,name,description,version,parents,appProperties",
     { method: "GET", headers: authHeaders(settings.accessToken) }
   );
   requireOk(response, "race target read");
   const metadata = await readJson(response, "race target read");
+  if (
+    !metadata ||
+    metadata.id !== fileId ||
+    typeof metadata.name !== "string" ||
+    !metadata.name.startsWith("finance-tracker-spike-race-") ||
+    !metadata.appProperties ||
+    metadata.appProperties.financeTrackerSpike !== "synthetic-only"
+  ) {
+    throw new DriveFeasibilityError("unsafe-race-target", "The selected file is not a Finance Tracker synthetic race-test file. No update was attempted.");
+  }
+  if (settings.expectedFolderId && (!Array.isArray(metadata.parents) || !metadata.parents.includes(settings.expectedFolderId))) {
+    throw new DriveFeasibilityError("race-folder-mismatch", "The synthetic race-test file is not in the selected test folder. No update was attempted.");
+  }
   const etag = response.headers && typeof response.headers.get === "function"
     ? response.headers.get("etag")
     : null;
   return {
     id: metadata.id,
+    name: metadata.name,
+    synthetic: true,
     description: metadata.description || "",
     version: metadata.version || null,
     etag,
@@ -263,6 +289,12 @@ export async function attemptConditionalWrite(options) {
   const fetchImpl = settings.fetchImpl || globalThis.fetch;
   if (!settings.fileId) throw new DriveFeasibilityError("missing-file-id", "Enter the shared synthetic race-test file ID.");
   if (!settings.etag) return { outcome: "etag-unavailable", status: null };
+  await readRaceTarget({
+    accessToken: settings.accessToken,
+    fileId: settings.fileId,
+    expectedFolderId: settings.expectedFolderId,
+    fetchImpl
+  });
 
   let response;
   try {
