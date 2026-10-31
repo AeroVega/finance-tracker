@@ -189,26 +189,34 @@ export async function createSyntheticObject(options) {
   );
 
   let createResponse;
-  if (settings.simulateLostResponse === true) {
-    createResponse = await request();
-    if (!createResponse || !createResponse.ok) {
-      requireOk(createResponse, "first synthetic object creation");
-    }
-    // Deliberately discard the successful response to model a lost response.
-    createResponse = await request();
-    if (!createResponse || createResponse.status !== 409) {
-      throw new DriveFeasibilityError("retry-not-conflict", "Retrying the same pre-generated ID did not return the expected HTTP 409.");
-    }
-  } else {
-    try {
+  try {
+    if (settings.simulateLostResponse === true) {
       createResponse = await request();
-    } catch {
-      // The outcome is unknown. Retry only with the exact same pre-generated ID.
+      if (!createResponse || !createResponse.ok) {
+        requireOk(createResponse, "first synthetic object creation");
+      }
+      // Deliberately discard the successful response to model a lost response.
       createResponse = await request();
+      if (!createResponse || createResponse.status !== 409) {
+        throw new DriveFeasibilityError("retry-not-conflict", "Retrying the same pre-generated ID did not return the expected HTTP 409.");
+      }
+    } else {
+      try {
+        createResponse = await request();
+      } catch {
+        // The outcome is unknown. Retry only with the exact same pre-generated ID.
+        createResponse = await request();
+      }
+      if (!createResponse || (!createResponse.ok && createResponse.status !== 409)) {
+        requireOk(createResponse, "synthetic object creation");
+      }
     }
-    if (!createResponse || (!createResponse.ok && createResponse.status !== 409)) {
-      requireOk(createResponse, "synthetic object creation");
+  } catch (error) {
+    if (error && typeof error === "object") {
+      error.fileId = fileId;
+      error.fileName = fileName;
     }
+    throw error;
   }
 
   let verified;
