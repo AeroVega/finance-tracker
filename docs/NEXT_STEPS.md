@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-31  
 **Current workstream:** Workstream 1 — synthetic-only Google Drive feasibility spike, branch `feat/drive-feasibility-spike`  
-**Current phase:** Phase 1 live validation complete. The tested Drive `If-Match` path failed, and the owner has accepted a single-user, single-active-device operating model. Production financial-data storage is **not approved**.
+**Current phase:** PR #20's synthetic-only Drive feasibility spike has completed its live Phase 1 validation and final-head CI. The tested Drive `If-Match` path failed; the owner accepted single-user, single-active-device operation. PR #20 is ready to merge as a feasibility record, not as production storage approval. Production financial-data storage is **not approved**.
 
 This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/drive-feasibility-spike`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
@@ -30,11 +30,11 @@ The design now specifies:
 
 **Concurrency decision (owner-confirmed 2026-10-31):** retain Google Drive and adopt single-user, single-active-device operation. Simultaneous use on two devices is explicitly unsupported. The owner will not edit Drive files outside Finance Tracker and will end the active session before switching devices. The app must refuse writes when it detects another active session. The live raw REST probe showed that the tested Drive v3 `files.update` path accepts a deliberately stale `If-Match` value, so do not use it as a lock or spend time on the same two-session race. App-level session detection is best-effort, not a server-enforced mutex; simultaneous starts/network partitions may defeat it. Production writes remain blocked until the app demonstrates safe serialized writes, session-conflict handling, and crash recovery within this explicit operating constraint.
 
-## Active task: synthetic-only Google Drive feasibility spike ([PR #20, draft](https://github.com/AeroVega/finance-tracker/pull/20))
+## Completed task: synthetic-only Google Drive feasibility spike ([PR #20](https://github.com/AeroVega/finance-tracker/pull/20))
 
-See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20 is intentionally a draft pending CI review and live validation.
+See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20's owner-confirmed live synthetic checks are complete. Final-head Node contract tests passed in GitHub Actions run #129 (73/73); the PR is ready for merge as a prototype feasibility record only.
 
-The active branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
+The branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 
 **Live validation update (owner-confirmed 2026-10-31):** complete folder enumeration passed; pre-generated-ID retry returned HTTP 409; exact SHA-256 read-back passed; cleanup was confirmed. The original browser metadata response did not expose an ETag. The raw REST probe returned HTTP 200 despite a deliberately stale `If-Match`; read-back confirmed the probe description was written and Drive version advanced to 4. **The tested conditional-update mechanism failed.** The owner then accepted the single-active-device policy described above; the project is continuing with Google Drive under that explicit operating constraint.
 
@@ -48,7 +48,7 @@ The active branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibili
 
 Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the session-coordination or recovery gates.
 
-Phase 1 established folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the failure of the tested raw REST stale-`If-Match` path. The owner accepted single-active-device use as the operating constraint. Next, implement and test session-conflict handling, serialized writes, and interruption recovery using synthetic data. Snapshot backup/restore and production storage remain gated until those safeguards, security, authorization, and $0-cost terms pass. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
+Phase 1 established folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the failure of the tested raw REST stale-`If-Match` path. The owner accepted single-active-device use as the operating constraint. After PR #20 merges, implement and test session-conflict handling, serialized writes, and interruption recovery using synthetic data in a separate PR. Snapshot backup/restore and production storage remain gated until those safeguards, security, authorization, and $0-cost terms pass. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
 
 ### Historical discovery requirements retained from PR #17
 
