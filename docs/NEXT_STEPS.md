@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-31  
 **Current workstream:** Workstream 1 — synthetic-only Google Drive feasibility spike, branch `feat/drive-feasibility-spike`  
-**Current phase:** Feasibility implementation and live validation; production financial-data storage is **not approved**.
+**Current phase:** Phase 1 live validation complete; the tested Drive `If-Match` concurrency path failed. Production financial-data storage is **not approved**.
 
 This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/drive-feasibility-spike`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
@@ -27,7 +27,7 @@ The design now specifies:
 - Staged commits, interruption recovery, explicit initialization, verified backups/restores, copy registration, promotion, retirement, and forward-only MVP1 migrations.
 - Conservative integrity gates, no offline writes, and no silent fallback to backups.
 
-**Critical unresolved feasibility gate:** Google Drive concurrency. The design requires server-enforced stale-write exclusion. A client-side read-version-then-update sequence is not sufficient. The Drive file version is useful for detecting changes, but the current API review has not established a compare-and-swap contract for manifest publication. If a safe writer/fencing mechanism cannot be demonstrated, production ledger writes remain blocked or the storage architecture must be reconsidered.
+**Critical unresolved feasibility gate:** Google Drive concurrency. The design requires server-enforced stale-write exclusion. A client-side read-version-then-update sequence is not sufficient. The live raw REST probe returned HTTP 200 and read-back confirmed the update was applied despite a deliberately stale `If-Match` value. Therefore the tested browser-origin Drive v3 `files.update` path does not enforce the precondition and is rejected as a concurrency mechanism. Do not spend time on the two-session race using this same path. Production ledger writes remain blocked until a materially different, documented server-enforced atomic primitive is identified and tested, or the storage architecture is reconsidered.
 
 ## Active task: synthetic-only Google Drive feasibility spike ([PR #20, draft](https://github.com/AeroVega/finance-tracker/pull/20))
 
@@ -35,19 +35,19 @@ See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Ph
 
 The active branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 
-**Live validation update (owner-confirmed 2026-10-31):** complete folder enumeration passed (including an empty listing and subsequent listing with two synthetic children); pre-generated-ID retry returned the expected HTTP 409; exact SHA-256 read-back passed; cleanup was confirmed to leave no child items. The original browser ETag probe did not expose an ETag, so no two-session conditional write was attempted. A raw REST stale-`If-Match` probe has now been added to the harness; its live result remains open.
+**Live validation update (owner-confirmed 2026-10-31):** complete folder enumeration passed (including an empty listing and subsequent listing with two synthetic children); pre-generated-ID retry returned the expected HTTP 409; exact SHA-256 read-back passed; cleanup was confirmed to leave no child items. The original browser metadata response did not expose an ETag. The targeted raw REST probe then returned HTTP 200 despite a deliberately stale `If-Match` value; read-back confirmed the probe description was written and Drive version advanced to 4. The session cleanup control subsequently confirmed all synthetic files created by that session were deleted or already absent. **Concurrency gate failed for this request path.**
 
 1. **Folder visibility:** prove complete child enumeration, pagination, and safe empty-folder detection under the existing drive.file scope after Picker selection and reauthorization. The harness implements enumeration and fails closed on incomplete results.
 2. **Immutable objects:** upload invented bytes, read them back, and verify raw SHA-256. This first iteration covers one isolated object, not the complete snapshot layout.
 3. **Idempotent creation:** test pre-generated Drive file IDs, including a deliberately discarded successful response, same-ID retry, expected 409, and read-back verification.
-4. **Concurrency:** first run the new raw REST stale-`If-Match` probe against a verified synthetic race-test file. HTTP 412 indicates the stale precondition was enforced; a successful update indicates the header was ignored; browser/CORS failure is inconclusive. If the raw probe returns 412, proceed to simultaneous conditional updates from two browser sessions and require repeatable one-success/one-412 outcomes. A version comparison alone is not a pass.
+4. **Concurrency — blocked:** the raw REST stale-`If-Match` probe returned HTTP 200 and read-back proved the stale update was accepted. Do not run the two-session race against this same request path; it cannot establish safe writer exclusion. Research only materially different, documented server-enforced atomic primitives or reconsider storage architecture. A version comparison or client-side read/check/write sequence is not a pass.
 5. **Recovery:** after the concurrency gate, implement fault-injection coverage for every staged transaction boundary, including before/after manifest publication and before the final journal event.
 6. **Backup/restore:** after the concurrency gate, implement a synthetic snapshot copy/restore test with new `copyId`, object/hash verification, and preserved lineage.
 7. **Cost and terms:** verify current Drive API terms, quotas, OAuth requirements, and the complete $0 recurring-cost path before production.
 
 Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the concurrency or recovery gate.
 
-Phase 1 is limited to folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the two-session ETag/If-Match concurrency probe. Staged recovery and snapshot backup/restore follow only if concurrency is viable. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
+Phase 1 established folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the failure of the tested raw REST stale-`If-Match` concurrency path. Staged recovery and snapshot backup/restore remain gated; do not implement production storage until a viable server-enforced concurrency primitive is demonstrated. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
 
 ### Historical discovery requirements retained from PR #17
 
