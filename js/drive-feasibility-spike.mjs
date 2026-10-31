@@ -78,8 +78,8 @@ export async function listFolderChildren(options) {
     if (!payload || !Array.isArray(payload.files)) {
       throw new DriveFeasibilityError("invalid-response", "Drive returned an unexpected folder listing.");
     }
-    if (payload.incompleteSearch === true) {
-      throw new DriveFeasibilityError("incomplete-search", "Drive marked the folder listing incomplete. The folder cannot be treated as empty or fully enumerated.");
+    if (payload.incompleteSearch !== false) {
+      throw new DriveFeasibilityError("incomplete-search", "Drive did not explicitly confirm that the folder listing is complete. The folder cannot be treated as empty or fully enumerated.");
     }
     files.push(...payload.files);
     const next = typeof payload.nextPageToken === "string" ? payload.nextPageToken : "";
@@ -139,8 +139,9 @@ async function readSyntheticFile({ accessToken, fileId, expectedHash, expectedFo
     { method: "GET", headers }
   );
   requireOk(contentResponse, "synthetic object read-back");
-  const content = await contentResponse.text();
-  const actualHash = await sha256Hex(content);
+  const contentBytes = new Uint8Array(await contentResponse.arrayBuffer());
+  const actualHash = await sha256Hex(contentBytes);
+  const content = new TextDecoder().decode(contentBytes);
   if (actualHash !== expectedHash) {
     throw new DriveFeasibilityError("hash-mismatch", "The synthetic object's raw-byte SHA-256 did not match the expected value.");
   }
