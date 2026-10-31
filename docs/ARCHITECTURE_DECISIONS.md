@@ -5,9 +5,9 @@
 
 ## Current development status and next milestone
 
-**Current phase:** PR #19's database identity, lifecycle, immutable storage, transaction, migration, and recovery architecture baseline is ready to merge. The Drive experiments remain prototypes; no production ledger storage is approved.
+**Current phase:** PR #19's database identity, lifecycle, immutable storage, transaction, migration, and recovery architecture baseline is merged. Workstream 1's synthetic-only Drive feasibility harness is in progress on `feat/drive-feasibility-spike`; no production ledger storage is approved.
 
-**Next milestone:** merge PR #19 as the documentation baseline, then conduct a synthetic-only Google Drive feasibility spike covering folder visibility, immutable objects, retry-safe creation, concurrency, interruption recovery, and backup/restore. Do not implement production persistence until Drive folder visibility, immutable object handling, safe recovery, and especially server-enforced stale-write exclusion are demonstrated. No real ledger reads/writes are authorized.
+**Current milestone:** complete Phase 1 live validation of folder visibility, immutable objects, retry-safe creation, and especially server-enforced stale-write exclusion. Only if concurrency is viable should later phases implement synthetic staged-recovery and snapshot backup/restore experiments. Do not implement production persistence until all storage, recovery, security, and $0-cost gates pass. No real ledger reads/writes are authorized.
 
 **Parallel MVP1 work:** implement strict Wells Fargo, SoFi, and Fidelity CSV parsers against the merged canonical contract, using invented fixtures. Add parser-to-reconciliation tests and define report-level correction/reversal/transfer and investment semantics.
 
@@ -48,7 +48,7 @@
 - Use an authorized OAuth flow; never ask for or store the user's Google password.
 - Request the narrowest practical Drive permission. Evaluate `drive.file` and a dedicated app-created/user-selected folder; verify its actual behavior before committing to a scope.
 - Do not put OAuth client secrets, access tokens, refresh tokens, or financial data in the public repository or static frontend source.
-- Prefer parsing selected CSVs locally in the browser. Only send normalized records and necessary metadata to Drive after the user authorizes the action.
+- Parse selected CSVs locally in the browser. Retain each original CSV in private Drive storage for **540 days (18 months)** from successful retention, then delete it and verify deletion. Store normalized records and necessary import provenance in Drive after the user authorizes the action. Do not send financial records or source files to unrelated services.
 - Treat browser storage as a cache, not the canonical cross-device store.
 - Plan for expiring access tokens, explicit reauthorization, offline/error states, and provider/API revocation.
 - Drive file APIs are not a transactional database. Specify conflict detection, version/revision checks where supported, safe write ordering, recovery from interrupted writes, and a non-destructive conflict path before enabling real writes.
@@ -66,13 +66,13 @@
 
 ## ADR-009 — Database identity, immutable storage, and recovery architecture
 
-**Status: Design baseline ready to merge in PR #19; production implementation not authorized.** The owner accepted 108 numbered decisions in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). The record defines the manifest, schema versions, physical copy lifecycle, immutable snapshot model, commit and transaction histories, initialization, migration, backup/restore, and recovery behavior.
+**Status: Design baseline merged in PR #19; production implementation not authorized.** The owner accepted 108 numbered decisions in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). The record defines the manifest, schema versions, physical copy lifecycle, immutable snapshot model, commit and transaction histories, initialization, migration, backup/restore, and recovery behavior.
 
 The selected target model uses immutable content-addressed data objects and complete commit snapshot descriptors. The manifest publishes the current committed snapshot only after all referenced objects and metadata are staged and verified. The transaction journal is append-only, and interrupted operations are resolved by inspection rather than guesswork.
 
 **Critical open feasibility gate:** Google Drive must provide a demonstrably safe server-enforced concurrency/fencing mechanism for stale-write exclusion. The Drive file version can detect changes but is not itself an atomic lock. A read-then-update sequence is insufficient. If a safe mechanism cannot be proven under the $0 and least-privilege constraints, production ledger writes remain blocked or the storage direction must be reconsidered.
 
-Merging PR #19 records this design baseline only. It does not approve production persistence. After merge, the next task is a synthetic-only Drive feasibility spike.
+Merging PR #19 records this design baseline only. It does not approve production persistence. The synthetic-only Drive feasibility spike is now underway.
 
 ## Open decisions and follow-up work
 
@@ -83,10 +83,14 @@ The database identity and lifecycle baseline is recorded in [DATABASE_IDENTITY_A
 3. Validate immutable content-addressed objects, pre-generated-ID retries, read-after-write behavior, and cross-copy object lookup.
 4. Validate two-device concurrent commits, interrupted operations, journal recovery, backup/restore, and promotion.
 5. Verify OAuth expiry/revocation, account selection, current Google terms/quotas, and sustainable $0 production cost.
-6. Complete encryption-at-rest and threat-model decisions, device-loss/account-compromise response, and deletion/retention behavior.
+6. Complete encryption-at-rest and threat-model decisions, device-loss/account-compromise response, and implementation of the already-approved 540-day original-file retention/deletion lifecycle.
 7. Finish the canonical ledger schema, provider parsers, report definitions, and historical summary treatment.
 
-These are release gates or implementation tasks. They do not authorize production financial-data storage.
+These are release gates or implementation tasks. The 540-day original CSV retention duration is settled; its private-storage lifecycle and backup consistency still require implementation and validation. None of these items authorizes production financial-data storage.
+
+## ADR-010 — Original CSV retention duration
+
+**Status: Accepted; reaffirmed 2026-10-31.** Retain each original CSV import in approved private Drive storage for 540 days (18 months) from the time it is successfully retained. After that period, delete the source file and verify deletion. Eligibility for deletion is not proof that deletion succeeded; deletion failures must remain visible and retryable. Backup copies must preserve the original retention timestamp and must not restart the retention clock or reintroduce an expired original. This decision supersedes the earlier 2026-10-21 preference not to retain original CSV files in Drive. The policy duration is settled; implementation, backup behavior, and deletion verification remain release gates.
 
 ## MVP1 vertical-slice sequence
 1. Upload one sanitized/synthetic CSV.
