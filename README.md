@@ -18,6 +18,7 @@ MVP1 uses user-provided CSV imports. Google Drive is the **selected private-stor
 - [Next steps and handoff checklist](docs/NEXT_STEPS.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture decisions and open questions](docs/ARCHITECTURE_DECISIONS.md)
+- [Database identity and lifecycle design (draft)](docs/DATABASE_IDENTITY_AND_LIFECYCLE.md)
 - [Private storage architecture](docs/PRIVATE_STORAGE_ARCHITECTURE.md)
 - [Security and privacy requirements](docs/SECURITY.md)
 - [Data-source research](docs/DATA_SOURCES.md)
