@@ -111,6 +111,12 @@ async function verifyFolder(item) {
       DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(item.id) + "?fields=id,name,mimeType"
     );
     if (metadata.mimeType !== FOLDER_MIME) throw new Error("Select a Drive folder, not a file.");
+    if (!window.confirm("Confirm that “" + (metadata.name || item.name || "this folder") + "” is a dedicated synthetic test folder containing no personal financial data. Continue?")) {
+      state.folderId = "";
+      setReady(false);
+      status("connection-status", "Folder selection cancelled. Choose a dedicated synthetic test folder.", "warning");
+      return;
+    }
     state.folderId = metadata.id;
     state.folderName = metadata.name || item.name || "Selected test folder";
     setReady(true);
