@@ -222,7 +222,7 @@ Keep the complete lightweight commit metadata history indefinitely for MVP1. It 
 
 If the manifest is valid and ledger files pass structural checks but commit-history records are missing or malformed:
 - Allow read-only inspection and diagnostics.
-- Block normal writes, backup creation, and restoration.
+- Block normal writes, backup creation from the damaged copy, and restoration or promotion using the damaged copy as a source.
 - Mark the copy as needing attention.
 - Require a deliberate recovery process before normal operations resume.
 - Never silently reconstruct missing records or invent parent relationships.
@@ -231,7 +231,7 @@ Readable ledger files do not make an unverifiable history safe to manage.
 
 ### 29. Quarantine when no healthy history backup exists
 
-If a healthy, verified backup with intact history exists, use the normal verified restore process. If no healthy backup exists, quarantine the damaged copy, preserve original files and diagnostics, and prohibit automatic history reconstruction or lineage repair.
+If a healthy, verified backup with intact history exists, use the normal verified restore process to recover from that backup; the damaged copy must not be used as the restore source. If no healthy backup exists, quarantine the damaged copy, preserve original files and diagnostics, and prohibit automatic history reconstruction or lineage repair.
 
 Manual recovery or re-establishment of commit history is out of scope for MVP1 and may be considered separately in a future version.
 
