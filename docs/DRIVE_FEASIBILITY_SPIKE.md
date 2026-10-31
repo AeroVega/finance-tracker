@@ -88,11 +88,11 @@ Interpretation:
 | Result | Meaning |
 |---|---|
 | HTTP 412 | Drive enforced the deliberately stale precondition for this browser-origin REST request. This is a useful prerequisite, not proof of a two-writer race guarantee. |
-| HTTP 2xx and final description contains `finance-tracker-raw-if-match-probe-` | Drive accepted the update despite the stale validator; `If-Match` is not protecting this update path. Concurrency gate fails. |
+| HTTP 2xx and final description contains `finance-tracker-raw-if-match-probe-` | Drive accepted the update despite the stale validator; `If-Match` is not protecting this update path. The tested conditional-update mechanism is unsuitable for stale-writer protection. |
 | Browser/network error before an HTTP response | Inconclusive. A CORS preflight rejection is possible because `If-Match` is a non-simple request header. No conclusion about server enforcement can be drawn. |
 | Other HTTP error | Inconclusive until the exact error is understood. |
 
-Because the live raw REST probe returned HTTP 200 and read-back confirmed the probe description was written despite the deliberately stale validator, do not proceed with the two-session race test using this request path. The tested Drive v3 browser-origin update path does not provide the required stale-writer exclusion. This is a failed concurrency gate, not an inconclusive result.
+Because the live raw REST probe returned HTTP 200 and read-back confirmed the probe description was written despite the deliberately stale validator, do not proceed with the two-session race test using this request path. The tested Drive v3 browser-origin update path does not provide the required stale-writer exclusion. This is a failed conditional-update experiment, not an inconclusive result.
 
 ### Two-session conditional-write test
 
@@ -134,8 +134,8 @@ Session A owns the race-test file it created. Use its cleanup control after both
 | ETag visibility in browser metadata response | **User-confirmed: unavailable** | Two-session probe did not expose ETag; version alone is not a concurrency primitive |
 | Raw REST stale `If-Match` enforcement | **Failed for tested request path** | Owner live run returned HTTP 200 despite deliberately stale validator; final read-back showed the probe description was written (version 4) |
 | Server-enforced two-session stale-writer exclusion | **Not supported / out of scope by owner decision** | Owner accepted single-user, single-active-device operation; no claim of server-enforced mutual exclusion |
-| Staged commit interruption recovery | **Not yet implemented** | Later phase, gated on concurrency |
-| Snapshot backup/restore | **Not yet implemented** | Later phase, gated on concurrency |
+| Staged commit interruption recovery | **Not yet implemented** | Later phase, gated on session coordination and recovery |
+| Snapshot backup/restore | **Not yet implemented** | Later phase, gated on session coordination and recovery |
 | Production terms, quota, and $0 cost | **Open** | Recheck current official Google requirements before release |
 
 ## Explicit exclusions
