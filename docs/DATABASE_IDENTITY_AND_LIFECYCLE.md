@@ -101,7 +101,7 @@ If the primary cannot be verified because of network, authorization, or availabi
 The manifest design should distinguish shared database metadata from per-copy metadata. Proposed optional timestamps include:
 - `databaseCreatedAt`: creation time of the logical database, shared by its copies.
 - `copyCreatedAt`: creation time of this physical copy.
-- `lastModifiedAt`: time associated with the latest committed database state.
+- `lastCommittedAt`: time associated with the latest committed database state.
 
 Additional metadata may be included only when its semantics are reliable and useful. Do not turn the manifest into a dumping ground. Do not include account email, OAuth tokens, API keys, account numbers, balances, transactions, or other financial records.
 
@@ -111,11 +111,12 @@ The manifest has strictly validated core fields and an optional `extensions` sec
 
 ### 13A. Use semantic major/minor manifest compatibility
 
-Manifest compatibility uses major/minor semantics:
+Manifest compatibility uses semantic major/minor/patch nomenclature:
 - A major version change indicates a breaking change; an app that does not support that major version refuses access.
-- A minor version change is backward-compatible. An older app may continue only when all fields and semantics it relies on remain compatible.
+- A minor version change is a backward-compatible addition. An older app may continue only when all fields and semantics it relies on remain compatible.
+- A patch version change is a clarification or correction that does not change compatibility or persisted meaning.
 - Adding a newly required field or changing existing semantics requires a major version change.
-- Unknown optional fields may be ignored when the declared compatibility rules permit it.
+- Unknown optional extension fields may be ignored when the declared compatibility rules permit it.
 
 Manifest version is independent of ledger schema version and app software version.
 
@@ -124,6 +125,7 @@ Manifest version is independent of ledger schema version and app software versio
 Required core fields:
 - `format`
 - `manifestVersion`
+- `schemaVersion`
 - `databaseId`
 - `copyId`
 - `role`
@@ -134,7 +136,7 @@ Required core fields:
 Optional operational metadata:
 - `databaseCreatedAt`
 - `copyCreatedAt`
-- `lastModifiedAt`
+- `lastCommittedAt`
 - `extensions`
 
 New manifests should populate applicable timestamps. An older supported manifest that lacks an optional timestamp remains valid; missing historical information must not be invented.
