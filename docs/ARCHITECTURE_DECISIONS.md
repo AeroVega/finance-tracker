@@ -1,13 +1,13 @@
 # Architecture Decisions and Open Questions
 
 **Status:** Baseline with Google Drive selected as the storage direction; implementation details remain subject to validation  
-**Last updated:** 2026-10-30
+**Last updated:** 2026-10-31
 
 ## Current development status and next milestone
 
 **Current phase:** Google Drive integration prototype plus MVP1 file-import foundation. The canonical ledger/import-run contract and pure synthetic reconciliation reference module were merged in PR #11. Drive Experiments A+B were integrated in PR #16, and PR #17 hardened folder discovery and safe Picker/error fallback. These are prototype capabilities only; no production ledger storage is approved.
 
-**Next milestone:** complete review of the database identity and lifecycle design recorded in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md) (draft PR). The owner has accepted 29 decisions covering manifest identity, copy roles, primary selection, backup/restore, lifecycle, commit lineage, and corruption handling. Exact manifest schema, initialization behavior, lineage storage, and recoverable multi-file transition protocols remain open. Do not code until those details and the overall architecture are reviewed. Any eventual first prototype must be identity-only and synthetic; no ledger reads/writes.
+**Next milestone:** review PR #19, which consolidates 108 accepted decisions covering database identity, schema/manifest versions, immutable content-addressed storage, commit history, transaction journaling, initialization, migration, backup/restore, and recovery. The next technical task is a synthetic-only Google Drive feasibility spike. Do not implement production persistence until Drive folder visibility, immutable object handling, safe recovery, and especially server-enforced stale-write exclusion are demonstrated. No real ledger reads/writes are authorized.
 
 **Parallel MVP1 work:** implement strict Wells Fargo, SoFi, and Fidelity CSV parsers against the merged canonical contract, using invented fixtures. Add parser-to-reconciliation tests and define report-level correction/reversal/transfer and investment semantics.
 
@@ -64,18 +64,29 @@
 5. Review data flow, browser storage, logs, and permissions for privacy leakage.
 6. Confirm the complete production path has no recurring cost and does not depend on an expiring trial.
 
-## Open decisions and follow-up work
-1. Exact Drive file/folder layout and manifest format.
-2. Exact OAuth scope and whether folder selection is needed.
-3. File revision/conflict algorithm and recovery behavior.
-4. Encryption-at-rest expectations beyond provider-managed storage, including whether client-side encryption is necessary and feasible.
-5. Backup cadence, destination, retention, and restore UX.
-6. Local cache and raw CSV retention/deletion policy.
-7. Final canonical ledger schema and report definitions.
-8. Historical summary migration from the archived workbook, only where methodology and supported figures are clear.
-9. Incident response for device loss, account compromise, provider revocation, or accidental deletion.
+## ADR-009 — Database identity, immutable storage, and recovery architecture
 
-These open items are implementation/verification tasks, not reasons to pause independent CSV parsing and analysis work.
+**Status: Design baseline ready for review in PR #19; production implementation not authorized.** The owner accepted 108 numbered decisions in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). The record defines the manifest, schema versions, physical copy lifecycle, immutable snapshot model, commit and transaction histories, initialization, migration, backup/restore, and recovery behavior.
+
+The selected target model uses immutable content-addressed data objects and complete commit snapshot descriptors. The manifest publishes the current committed snapshot only after all referenced objects and metadata are staged and verified. The transaction journal is append-only, and interrupted operations are resolved by inspection rather than guesswork.
+
+**Critical open feasibility gate:** Google Drive must provide a demonstrably safe server-enforced concurrency/fencing mechanism for stale-write exclusion. The Drive file version can detect changes but is not itself an atomic lock. A read-then-update sequence is insufficient. If a safe mechanism cannot be proven under the $0 and least-privilege constraints, production ledger writes remain blocked or the storage direction must be reconsidered.
+
+Merging PR #19 records this design baseline only. It does not approve production persistence. The next task is a synthetic-only Drive feasibility spike.
+
+## Open decisions and follow-up work
+
+The database identity and lifecycle baseline is recorded in [DATABASE_IDENTITY_AND_LIFECYCLE.md](DATABASE_IDENTITY_AND_LIFECYCLE.md) and PR #19. Remaining work is primarily feasibility and implementation validation, not further product-level identity decisions:
+
+1. Prove server-enforced stale-write exclusion/atomic publication with Google Drive under the existing least-privilege scope; if unavailable, do not enable production writes.
+2. Prove complete-enough folder-child enumeration and safe initialization under drive.file.
+3. Validate immutable content-addressed objects, pre-generated-ID retries, read-after-write behavior, and cross-copy object lookup.
+4. Validate two-device concurrent commits, interrupted operations, journal recovery, backup/restore, and promotion.
+5. Verify OAuth expiry/revocation, account selection, current Google terms/quotas, and sustainable $0 production cost.
+6. Complete encryption-at-rest and threat-model decisions, device-loss/account-compromise response, and deletion/retention behavior.
+7. Finish the canonical ledger schema, provider parsers, report definitions, and historical summary treatment.
+
+These are release gates or implementation tasks. They do not authorize production financial-data storage.
 
 ## MVP1 vertical-slice sequence
 1. Upload one sanitized/synthetic CSV.
