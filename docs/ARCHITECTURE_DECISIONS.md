@@ -5,9 +5,9 @@
 
 ## Current development status and next milestone
 
-**Current phase:** PR #19's database identity, lifecycle, immutable storage, transaction, migration, and recovery architecture baseline is ready for review. The Drive experiments remain prototypes; no production ledger storage is approved.
+**Current phase:** PR #19's database identity, lifecycle, immutable storage, transaction, migration, and recovery architecture baseline is ready to merge. The Drive experiments remain prototypes; no production ledger storage is approved.
 
-**Next milestone:** review PR #19, which consolidates 108 accepted decisions covering database identity, schema/manifest versions, immutable content-addressed storage, commit history, transaction journaling, initialization, migration, backup/restore, and recovery. The next technical task is a synthetic-only Google Drive feasibility spike. Do not implement production persistence until Drive folder visibility, immutable object handling, safe recovery, and especially server-enforced stale-write exclusion are demonstrated. No real ledger reads/writes are authorized.
+**Next milestone:** merge PR #19 as the documentation baseline, then conduct a synthetic-only Google Drive feasibility spike covering folder visibility, immutable objects, retry-safe creation, concurrency, interruption recovery, and backup/restore. Do not implement production persistence until Drive folder visibility, immutable object handling, safe recovery, and especially server-enforced stale-write exclusion are demonstrated. No real ledger reads/writes are authorized.
 
 **Parallel MVP1 work:** implement strict Wells Fargo, SoFi, and Fidelity CSV parsers against the merged canonical contract, using invented fixtures. Add parser-to-reconciliation tests and define report-level correction/reversal/transfer and investment semantics.
 
@@ -66,17 +66,17 @@
 
 ## ADR-009 — Database identity, immutable storage, and recovery architecture
 
-**Status: Design baseline ready for review in PR #19; production implementation not authorized.** The owner accepted 108 numbered decisions in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). The record defines the manifest, schema versions, physical copy lifecycle, immutable snapshot model, commit and transaction histories, initialization, migration, backup/restore, and recovery behavior.
+**Status: Design baseline ready to merge in PR #19; production implementation not authorized.** The owner accepted 108 numbered decisions in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). The record defines the manifest, schema versions, physical copy lifecycle, immutable snapshot model, commit and transaction histories, initialization, migration, backup/restore, and recovery behavior.
 
 The selected target model uses immutable content-addressed data objects and complete commit snapshot descriptors. The manifest publishes the current committed snapshot only after all referenced objects and metadata are staged and verified. The transaction journal is append-only, and interrupted operations are resolved by inspection rather than guesswork.
 
 **Critical open feasibility gate:** Google Drive must provide a demonstrably safe server-enforced concurrency/fencing mechanism for stale-write exclusion. The Drive file version can detect changes but is not itself an atomic lock. A read-then-update sequence is insufficient. If a safe mechanism cannot be proven under the $0 and least-privilege constraints, production ledger writes remain blocked or the storage direction must be reconsidered.
 
-Merging PR #19 records this design baseline only. It does not approve production persistence. The next task is a synthetic-only Drive feasibility spike.
+Merging PR #19 records this design baseline only. It does not approve production persistence. After merge, the next task is a synthetic-only Drive feasibility spike.
 
 ## Open decisions and follow-up work
 
-The database identity and lifecycle baseline is recorded in [DATABASE_IDENTITY_AND_LIFECYCLE.md](DATABASE_IDENTITY_AND_LIFECYCLE.md) and PR #19. Remaining work is primarily feasibility and implementation validation, not further product-level identity decisions:
+The database identity and lifecycle baseline is recorded in [DATABASE_IDENTITY_AND_LIFECYCLE.md](DATABASE_IDENTITY_AND_LIFECYCLE.md) and PR #19. The identity/lifecycle baseline is settled. Remaining work is feasibility validation plus separate security, data-model, and release decisions:
 
 1. Prove server-enforced stale-write exclusion/atomic publication with Google Drive under the existing least-privilege scope; if unavailable, do not enable production writes.
 2. Prove complete-enough folder-child enumeration and safe initialization under drive.file.
