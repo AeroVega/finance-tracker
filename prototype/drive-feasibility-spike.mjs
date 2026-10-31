@@ -88,9 +88,10 @@ async function driveGet(url) {
   return response.json();
 }
 function setReady(ready) {
-  ["list-children", "create-object", "create-race", "read-race", "reread-race", "cleanup"].forEach((id) => {
+  ["list-children", "create-object", "create-race", "read-race", "reread-race"].forEach((id) => {
     $(id).disabled = !ready;
   });
+  $("cleanup").disabled = !state.accessToken || !state.createdFileIds.size;
   $("attempt-write").disabled = !ready || !state.raceEtag;
 }
 function onPicker(data) {
@@ -159,6 +160,7 @@ $("connect-google").addEventListener("click", async () => {
     const response = await requestToken(GOOGLE_CONFIG.clientId);
     state.accessToken = response.access_token;
     state.tokenExpiresAt = Date.now() + Number(response.expires_in || 0) * 1000;
+    $("cleanup").disabled = !state.createdFileIds.size;
     $("select-folder").disabled = false;
     status("connection-status", "Connected for this page session. Choose a dedicated test folder.", "success");
   } catch (error) {
