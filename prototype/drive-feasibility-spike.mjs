@@ -7,6 +7,7 @@ import {
   listFolderChildren,
   readRaceTarget,
   attemptConditionalWrite,
+  probeRawIfMatch,
   deleteSyntheticFile
 } from "../js/drive-feasibility-spike.mjs";
 
@@ -92,6 +93,7 @@ function setReady(ready) {
   });
   $("cleanup").disabled = !state.accessToken || !state.createdFileIds.size;
   $("attempt-write").disabled = !ready || !state.raceEtag;
+  $("raw-if-match").disabled = !ready || !$("race-file-id").value.trim();
 }
 function onPicker(data) {
   if (!data || data.action !== window.google.picker.Action.PICKED) {
@@ -263,6 +265,39 @@ $("attempt-write").addEventListener("click", async () => {
   } catch (error) {
     status("race-write-status", error instanceof Error ? error.message : "Conditional write failed.", "error");
   }
+});
+
+$("raw-if-match").addEventListener("click", async () => {
+  $("raw-if-match").disabled = true;
+  status("raw-if-match-status", "Sending a deliberately stale If-Match validator to the raw Drive REST endpoint, then reading the synthetic file back…");
+  try {
+    const result = await probeRawIfMatch({
+      accessToken: token(),
+      fileId: $("race-file-id").value.trim(),
+      expectedFolderId: state.folderId,
+      probeId: crypto.randomUUID(),
+      fetchImpl: globalThis.fetch
+    });
+    const finalState = result.finalRead && result.finalRead.description
+      ? " Final description: " + result.finalRead.description + " · version: " + (result.finalRead.version || "unavailable") + "."
+      : " Final read-back unavailable.";
+    if (result.outcome === "precondition-enforced") {
+      status("raw-if-match-status", "HTTP 412: Drive rejected the deliberately stale If-Match value. This is evidence the raw REST precondition is enforced for this request. Baseline ETag visible: " + result.baselineEtagVisible + "." + finalState, "success");
+    } else if (result.outcome === "if-match-not-enforced") {
+      status("raw-if-match-status", "HTTP " + result.status + ": Drive accepted the update despite the deliberately stale If-Match value. Treat If-Match as not enforced for this path; concurrency gate remains blocked." + finalState, "error");
+    } else if (result.outcome === "browser-request-blocked-or-network-error") {
+      status("raw-if-match-status", "The browser could not complete the raw request (CORS preflight or network failure). No update response was received; result is inconclusive. Baseline ETag visible: " + result.baselineEtagVisible + ".", "warning");
+    } else {
+      status("raw-if-match-status", "Drive returned HTTP " + result.status + " to the raw If-Match probe. This is not a concurrency pass; inspect the response and repeat only after understanding the error." + finalState, "warning");
+    }
+  } catch (error) {
+    status("raw-if-match-status", error instanceof Error ? error.message : "Raw If-Match probe failed before a result was established.", "error");
+  } finally {
+    $("raw-if-match").disabled = !state.folderId || !$("race-file-id").value.trim();
+  }
+});
+$("race-file-id").addEventListener("input", () => {
+  $("raw-if-match").disabled = !state.folderId || !$("race-file-id").value.trim();
 });
 
 $("reread-race").addEventListener("click", async () => {
