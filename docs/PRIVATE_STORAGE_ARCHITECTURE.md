@@ -103,7 +103,7 @@ Do not implement elaborate quota optimization before there is measured evidence 
 - [ ] Confirm no client secret or privileged credential ships in the frontend.
 - [x] Run the separate synthetic Drive probe in the user-selected folder: temporary invented JSON was created, observed in the folder, read back with exact match, and deleted after explicit confirmation. The owner repeated the test successfully after rotating the API key (user-confirmed 2026-10-24). No ledger or CSV was accessed.
 - [ ] Demonstrate create/read/update/export on synthetic data from iPhone and iPad.\n- [ ] Verify the 540-day original-CSV lifecycle, including confirmed deletion, retryable deletion failures, and backup/restore behavior that cannot extend retention.
-- [ ] Test two-device stale writes, simultaneous edits, retries, interrupted uploads, deletion, and corruption recovery.
+- [ ] Test sequential device handoff, refusal to write when another session is detected, retries, interrupted uploads, deletion, and corruption recovery. Simultaneous multi-device use is unsupported.
 - [ ] Test verified snapshot backup/restore outside the normal read/write path, and decide whether an independent backup destination is required.
 - [ ] Verify current terms and confirm no recurring production cost or expiring-trial dependency.
 - [ ] Review data leakage through browser storage, logs, URLs, telemetry, and GitHub assets.
