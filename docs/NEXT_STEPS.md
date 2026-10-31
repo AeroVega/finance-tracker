@@ -42,11 +42,11 @@ The active branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibili
 2. **Immutable objects:** upload invented bytes, read them back, and verify raw SHA-256. This first iteration covers one isolated object, not the complete snapshot layout.
 3. **Idempotent creation:** test pre-generated Drive file IDs, including a deliberately discarded successful response, same-ID retry, expected 409, and read-back verification.
 4. **Session coordination:** implement best-effort active-session detection and refuse writes when another session is detected. Simultaneous use on two devices is unsupported by owner decision. Do not claim the session marker is a server-enforced lock; fail closed on ambiguous session state and document that simultaneous starts/network partitions remain a limitation.
-5. **Recovery:** after the concurrency gate, implement fault-injection coverage for every staged transaction boundary, including before/after manifest publication and before the final journal event.
-6. **Backup/restore:** after the concurrency gate, implement a synthetic snapshot copy/restore test with new `copyId`, object/hash verification, and preserved lineage.
+5. **Recovery:** implement fault-injection coverage for every staged transaction boundary, including before/after manifest publication and before the final journal event. Recovery must be safe under the single-active-device operating model and must block further writes while an outcome is ambiguous.
+6. **Backup/restore:** after session coordination and interruption recovery are validated, implement a synthetic snapshot copy/restore test with new `copyId`, object/hash verification, and preserved lineage.
 7. **Cost and terms:** verify current Drive API terms, quotas, OAuth requirements, and the complete $0 recurring-cost path before production.
 
-Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the concurrency or recovery gate.
+Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the session-coordination or recovery gates.
 
 Phase 1 established folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the failure of the tested raw REST stale-`If-Match` path. The owner accepted single-active-device use as the operating constraint. Next, implement and test session-conflict handling, serialized writes, and interruption recovery using synthetic data. Snapshot backup/restore and production storage remain gated until those safeguards, security, authorization, and $0-cost terms pass. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
 
