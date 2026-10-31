@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-31  
 **Current workstream:** Workstream 1 — synthetic-only Google Drive feasibility spike, branch `feat/drive-feasibility-spike`  
-**Current phase:** Phase 1 live validation complete; the tested Drive `If-Match` concurrency path failed. Production financial-data storage is **not approved**.
+**Current phase:** Phase 1 live validation complete. The tested Drive `If-Match` path failed, and the owner has accepted a single-user, single-active-device operating model. Production financial-data storage is **not approved**.
 
 This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/drive-feasibility-spike`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
@@ -22,12 +22,13 @@ This is the current pick-up point. PRs #17 and #19 are complete and merged. Work
 
 The design now specifies:
 - Logical database identity versus physical copies, primary/backup roles, lifecycle and derived health.
+- Single-user, single-active-device operation; simultaneous use on two devices is unsupported, and the app must refuse writes when another active session is detected (best-effort detection, not a server lock).
 - Required versioned manifest, UUIDs, timestamps, storage binding, and strict validation.
 - Immutable content-addressed objects, complete commit snapshots, hash-chained commit history, and append-only transaction/migration records.
 - Staged commits, interruption recovery, explicit initialization, verified backups/restores, copy registration, promotion, retirement, and forward-only MVP1 migrations.
 - Conservative integrity gates, no offline writes, and no silent fallback to backups.
 
-**Critical unresolved feasibility gate:** Google Drive concurrency. The design requires server-enforced stale-write exclusion. A client-side read-version-then-update sequence is not sufficient. The live raw REST probe returned HTTP 200 and read-back confirmed the update was applied despite a deliberately stale `If-Match` value. Therefore the tested browser-origin Drive v3 `files.update` path does not enforce the precondition and is rejected as a concurrency mechanism. Do not spend time on the two-session race using this same path. Production ledger writes remain blocked until a materially different, documented server-enforced atomic primitive is identified and tested, or the storage architecture is reconsidered.
+**Concurrency decision (owner-confirmed 2026-10-31):** retain Google Drive and adopt single-user, single-active-device operation. Simultaneous use on two devices is explicitly unsupported. The owner will not edit Drive files outside Finance Tracker and will end the active session before switching devices. The app must refuse writes when it detects another active session. The live raw REST probe showed that the tested Drive v3 `files.update` path accepts a deliberately stale `If-Match` value, so do not use it as a lock or spend time on the same two-session race. App-level session detection is best-effort, not a server-enforced mutex; simultaneous starts/network partitions may defeat it. Production writes remain blocked until the app demonstrates safe serialized writes, session-conflict handling, and crash recovery within this explicit operating constraint.
 
 ## Active task: synthetic-only Google Drive feasibility spike ([PR #20, draft](https://github.com/AeroVega/finance-tracker/pull/20))
 
@@ -35,19 +36,19 @@ See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Ph
 
 The active branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 
-**Live validation update (owner-confirmed 2026-10-31):** complete folder enumeration passed (including an empty listing and subsequent listing with two synthetic children); pre-generated-ID retry returned the expected HTTP 409; exact SHA-256 read-back passed; cleanup was confirmed to leave no child items. The original browser metadata response did not expose an ETag. The targeted raw REST probe then returned HTTP 200 despite a deliberately stale `If-Match` value; read-back confirmed the probe description was written and Drive version advanced to 4. The session cleanup control subsequently confirmed all synthetic files created by that session were deleted or already absent. **Concurrency gate failed for this request path.**
+**Live validation update (owner-confirmed 2026-10-31):** complete folder enumeration passed; pre-generated-ID retry returned HTTP 409; exact SHA-256 read-back passed; cleanup was confirmed. The original browser metadata response did not expose an ETag. The raw REST probe returned HTTP 200 despite a deliberately stale `If-Match`; read-back confirmed the probe description was written and Drive version advanced to 4. **The tested conditional-update mechanism failed.** The owner then accepted the single-active-device policy described above; the project is continuing with Google Drive under that explicit operating constraint.
 
 1. **Folder visibility:** prove complete child enumeration, pagination, and safe empty-folder detection under the existing drive.file scope after Picker selection and reauthorization. The harness implements enumeration and fails closed on incomplete results.
 2. **Immutable objects:** upload invented bytes, read them back, and verify raw SHA-256. This first iteration covers one isolated object, not the complete snapshot layout.
 3. **Idempotent creation:** test pre-generated Drive file IDs, including a deliberately discarded successful response, same-ID retry, expected 409, and read-back verification.
-4. **Concurrency — blocked:** the raw REST stale-`If-Match` probe returned HTTP 200 and read-back proved the stale update was accepted. Do not run the two-session race against this same request path; it cannot establish safe writer exclusion. Research only materially different, documented server-enforced atomic primitives or reconsider storage architecture. A version comparison or client-side read/check/write sequence is not a pass.
+4. **Session coordination:** implement best-effort active-session detection and refuse writes when another session is detected. Simultaneous use on two devices is unsupported by owner decision. Do not claim the session marker is a server-enforced lock; fail closed on ambiguous session state and document that simultaneous starts/network partitions remain a limitation.
 5. **Recovery:** after the concurrency gate, implement fault-injection coverage for every staged transaction boundary, including before/after manifest publication and before the final journal event.
 6. **Backup/restore:** after the concurrency gate, implement a synthetic snapshot copy/restore test with new `copyId`, object/hash verification, and preserved lineage.
 7. **Cost and terms:** verify current Drive API terms, quotas, OAuth requirements, and the complete $0 recurring-cost path before production.
 
 Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the concurrency or recovery gate.
 
-Phase 1 established folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the failure of the tested raw REST stale-`If-Match` concurrency path. Staged recovery and snapshot backup/restore remain gated; do not implement production storage until a viable server-enforced concurrency primitive is demonstrated. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
+Phase 1 established folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the failure of the tested raw REST stale-`If-Match` path. The owner accepted single-active-device use as the operating constraint. Next, implement and test session-conflict handling, serialized writes, and interruption recovery using synthetic data. Snapshot backup/restore and production storage remain gated until those safeguards, security, authorization, and $0-cost terms pass. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
 
 ### Historical discovery requirements retained from PR #17
 
@@ -76,7 +77,7 @@ The Drive prototype must not block the permanent file-import path.
 These are required before any real ledger data may be stored in Drive. Successful synthetic folder discovery or a synthetic file round trip does not satisfy them.
 
 - [ ] **Authorization and account handling:** verify account choice is clear; test expiry, revocation, wrong account, denied permissions, reconnect, and 401/403 recovery.
-- [ ] **Concurrency and correctness:** demonstrate that the documented server-enforced stale-write exclusion, versioning, idempotency, and conflict handling work under two-device races. Never silently overwrite newer data.
+- [ ] **Session coordination and correctness:** demonstrate that the app detects an existing active session and refuses writes, serializes operations within the active session, prohibits offline writes, and recovers ambiguous outcomes. Simultaneous two-device use is explicitly unsupported; session detection is best-effort rather than a server-enforced mutex.
 - [ ] **Crash/interruption recovery:** implement and test the documented staged-transaction, journal, retry, and ambiguous-outcome recovery behavior.
 - [ ] **Backup, restore, and portability:** implement and test verified snapshot backup/restore, export validation, recovery steps, and portability.
 - [ ] **Deletion and retention:** implement and test the approved 540-day (18-month) original-file retention lifecycle, distinguishing deletion eligibility from confirmed deletion and handling backup copies consistently.
