@@ -10,7 +10,8 @@ import {
   listFolderChildren,
   createSyntheticObject,
   readRaceTarget,
-  attemptConditionalWrite
+  attemptConditionalWrite,
+  probeRawIfMatch
 } from "../js/drive-feasibility-spike.mjs";
 
 function jsonResponse(value, status = 200, headers = {}) {
@@ -250,4 +251,89 @@ test("Google configuration rejects a nonnumeric project number", () => {
     }),
     /project number is missing or invalid/
   );
+});
+
+
+test("raw REST probe sends a deliberately stale If-Match and recognizes HTTP 412", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (options.method === "PATCH") return new Response(null, { status: 412 });
+    return jsonResponse({
+      id: "synthetic-race-file",
+      name: "finance-tracker-spike-race-test.txt",
+      description: "base",
+      version: "17",
+      parents: ["synthetic-folder"],
+      appProperties: { financeTrackerSpike: "synthetic-only" }
+    }, 200, { ETag: '"etag-17"' });
+  };
+  const result = await probeRawIfMatch({
+    accessToken: "synthetic-token",
+    fileId: "synthetic-race-file",
+    expectedFolderId: "synthetic-folder",
+    probeId: "test-probe",
+    fetchImpl
+  });
+  const patch = calls.find((call) => call.options.method === "PATCH");
+  assert.equal(patch.options.headers["If-Match"], '"finance-tracker-deliberately-stale-test-probe"');
+  assert.equal(result.outcome, "precondition-enforced");
+  assert.equal(result.status, 412);
+  assert.equal(result.baselineEtagVisible, true);
+  assert.equal(result.finalRead.description, "base");
+});
+
+test("raw REST probe detects a successful update despite a deliberately stale If-Match", async () => {
+  let description = "base";
+  const fetchImpl = async (url, options = {}) => {
+    if (options.method === "PATCH") {
+      description = JSON.parse(options.body).description;
+      return jsonResponse({ id: "synthetic-race-file" }, 200);
+    }
+    return jsonResponse({
+      id: "synthetic-race-file",
+      name: "finance-tracker-spike-race-test.txt",
+      description,
+      version: description === "base" ? "17" : "18",
+      parents: ["synthetic-folder"],
+      appProperties: { financeTrackerSpike: "synthetic-only" }
+    }, 200, { ETag: '"etag-17"' });
+  };
+  const result = await probeRawIfMatch({
+    accessToken: "synthetic-token",
+    fileId: "synthetic-race-file",
+    expectedFolderId: "synthetic-folder",
+    probeId: "test-success",
+    fetchImpl
+  });
+  assert.equal(result.outcome, "if-match-not-enforced");
+  assert.equal(result.status, 200);
+  assert.match(result.finalRead.description, /^finance-tracker-raw-if-match-probe-/);
+});
+
+test("raw REST probe reports a browser/network failure as inconclusive", async () => {
+  let calls = 0;
+  const result = await probeRawIfMatch({
+    accessToken: "synthetic-token",
+    fileId: "synthetic-race-file",
+    expectedFolderId: "synthetic-folder",
+    probeId: "test-network",
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return jsonResponse({
+          id: "synthetic-race-file",
+          name: "finance-tracker-spike-race-test.txt",
+          description: "base",
+          version: "17",
+          parents: ["synthetic-folder"],
+          appProperties: { financeTrackerSpike: "synthetic-only" }
+        });
+      }
+      throw new TypeError("CORS request blocked");
+    }
+  });
+  assert.equal(result.outcome, "browser-request-blocked-or-network-error");
+  assert.equal(result.status, null);
+  assert.equal(result.finalRead, null);
 });
