@@ -49,7 +49,7 @@ These tests validate application logic only. They do not establish live Google D
 1. Use a dedicated synthetic test folder. Do not select the folder containing any real Finance Tracker data.
 2. Deploy the branch through **Actions → Deploy static site to GitHub Pages → Run workflow**, selecting `feat/drive-feasibility-spike`.
 3. Open `https://aerovega.github.io/finance-tracker/prototype/drive-feasibility-spike.html` and confirm the displayed source SHA matches the branch commit.
-4. Use the existing OAuth client ID, restricted Picker API key, and project number. Do not paste them into GitHub, chat, issues, or repository files.
+4. The existing Pages deployment workflow injects the configured public OAuth client ID, restricted Picker API key, and project number into `js/google-config.js`. The harness imports that configuration; no manual credential entry is required. If the deployed page reports missing configuration, stop and check the existing repository variables rather than pasting values into chat or source.
 5. Connect and select the dedicated test folder.
 
 GitHub Pages is a single shared deployment. Deploying this branch temporarily replaces the currently published page for everyone who visits the project URL. Re-deploy `main` when the experiment is complete.
