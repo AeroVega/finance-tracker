@@ -1,4 +1,5 @@
 import { GOOGLE_CONFIG } from "../js/google-config.js";
+import { validateGoogleConfig } from "../js/google-config-validation.mjs";
 import {
   DRIVE_FILES_ENDPOINT,
   createSyntheticObject,
