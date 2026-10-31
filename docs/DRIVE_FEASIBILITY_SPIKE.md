@@ -1,6 +1,6 @@
 # Google Drive Storage Feasibility Spike
 
-**Status:** Phase 1 live validation complete for the tested Drive path; raw REST stale-If-Match probe demonstrated that the deliberately stale validator was not enforced  
+**Status:** Phase 1 live validation complete; owner accepted single-user, single-active-device operation after the tested raw REST stale-If-Match path failed  
 **Branch:** `feat/drive-feasibility-spike`  
 **Scope:** Synthetic-only experimentation. This work does not authorize production persistence or access to real financial data.
 
@@ -13,7 +13,7 @@ The first phase intentionally tests the earliest go/no-go gates before implement
 1. Complete folder-child enumeration.
 2. Pre-generated-ID creation and retry after an ambiguous/lost response.
 3. Exact synthetic-object read-back and SHA-256 verification.
-4. Whether Drive exposes a usable ETag to the browser and enforces an `If-Match` conditional update across two sessions.
+4. Whether Drive exposes a usable ETag and enforces a stale `If-Match` precondition. The live test showed that the tested update path does not; the project has since adopted a single-active-device operating constraint.
 
 The experiment must use a dedicated test folder containing no personal financial data. It must never discover, read, create, update, or delete the canonical database manifest.
 
@@ -31,7 +31,7 @@ Available checks:
 
 - **Folder enumeration:** lists every child page under the selected folder, follows `nextPageToken`, rejects repeated tokens, and fails closed unless Drive explicitly returns `incompleteSearch: false`.
 - **Immutable-object retry:** requests a pre-generated Drive file ID, creates a uniquely named synthetic text object, deliberately discards the successful create response, retries the same ID, expects HTTP 409, then reads the file by ID and verifies exact content and SHA-256.
-- **Two-session conditional-write probe:** creates a disposable synthetic file whose description is the test value. Before displaying an ETag or allowing an update, the harness verifies the file name, app-owned synthetic marker, and selected test-folder parent. Both sessions read the same file's metadata and capture the HTTP ETag response header (if browser CORS exposes it). Each session then sends a PATCH with `If-Match` and a different synthetic writer marker.
+- **Historical two-session conditional-write probe:** retained in the harness for reference only. It was not completed because the browser metadata response did not expose an ETag. The project owner subsequently made simultaneous multi-device use explicitly unsupported.
 - **Raw REST stale-validator probe:** independently sends a PATCH through browser `fetch` to the Drive v3 REST endpoint with a deliberately stale, syntactically valid `If-Match` entity tag. It first validates the target as an app-owned synthetic race file in the selected folder, then reads the file back after the response. HTTP 412 is evidence the stale precondition was enforced; a 2xx plus the probe marker in read-back is evidence the header was not enforced. A browser/network error (including a CORS preflight failure) is inconclusive. The only possible mutation is the disposable file's description.
 - **Cleanup:** deletes only temporary files created by the current browser session, after an explicit confirmation.
 
@@ -115,7 +115,7 @@ Interpretation:
 | Network error, timeout, or unknown outcome | Inconclusive. Re-read the synthetic test file and repeat with a new file; do not call it a pass. |
 | One 2xx and one other error | Inconclusive until the error is understood and the test is repeated. |
 
-The current `If-Match` route is not a candidate for production concurrency control. Revisit only if a materially different, documented server-enforced atomic primitive is identified and independently tested.
+The current `If-Match` route is not a candidate for production concurrency control. Finance Tracker will instead support one active device at a time. Any app-level session marker is best-effort detection, not a server-enforced mutex; simultaneous starts and network partitions may defeat it. The owner must end the active session before switching devices.
 
 ### Cleanup
 
@@ -133,7 +133,7 @@ Session A owns the race-test file it created. Use its cleanup control after both
 | Synthetic-file cleanup | **User-confirmed** | Owner confirmed cleanup left no child items in the test folder |
 | ETag visibility in browser metadata response | **User-confirmed: unavailable** | Two-session probe did not expose ETag; version alone is not a concurrency primitive |
 | Raw REST stale `If-Match` enforcement | **Failed for tested request path** | Owner live run returned HTTP 200 despite deliberately stale validator; final read-back showed the probe description was written (version 4) |
-| Server-enforced two-session stale-writer exclusion | **Not established / critical blocker** | No two-session race attempted; raw REST probe showed stale `If-Match` was not enforced, so this path was abandoned |
+| Server-enforced two-session stale-writer exclusion | **Not supported / out of scope by owner decision** | Owner accepted single-user, single-active-device operation; no claim of server-enforced mutual exclusion |
 | Staged commit interruption recovery | **Not yet implemented** | Later phase, gated on concurrency |
 | Snapshot backup/restore | **Not yet implemented** | Later phase, gated on concurrency |
 | Production terms, quota, and $0 cost | **Open** | Recheck current official Google requirements before release |
@@ -144,6 +144,7 @@ Session A owns the race-test file it created. Use its cleanup control after both
 - No real CSV, transaction, balance, account identifier, or other personal financial data is used.
 - No production storage engine or automatic initialization is implemented.
 - No offline writes, queue, or local authoritative database is introduced.
+- Simultaneous use on two devices is explicitly unsupported. The app must refuse writes when another active session is detected; session detection is best-effort and is not a server-enforced lock.
 - No claim of production readiness follows from passing the harness.
 
 ## Retention policy
