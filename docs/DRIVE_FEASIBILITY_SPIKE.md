@@ -1,6 +1,6 @@
 # Google Drive Storage Feasibility Spike
 
-**Status:** Phase 1 harness implemented; live Drive validation pending  
+**Status:** Phase 1 harness implemented; folder enumeration, immutable retry/read-back, and cleanup user-confirmed; raw REST conditional probe ready for live validation  
 **Branch:** `feat/drive-feasibility-spike`  
 **Scope:** Synthetic-only experimentation. This work does not authorize production persistence or access to real financial data.
 
@@ -31,14 +31,15 @@ Available checks:
 
 - **Folder enumeration:** lists every child page under the selected folder, follows `nextPageToken`, rejects repeated tokens, and fails closed unless Drive explicitly returns `incompleteSearch: false`.
 - **Immutable-object retry:** requests a pre-generated Drive file ID, creates a uniquely named synthetic text object, deliberately discards the successful create response, retries the same ID, expects HTTP 409, then reads the file by ID and verifies exact content and SHA-256.
-- **Conditional-write probe:** creates a disposable synthetic file whose description is the test value. Before displaying an ETag or allowing an update, the harness verifies the file name, app-owned synthetic marker, and selected test-folder parent. Both sessions read the same file's metadata and capture the HTTP ETag response header (if browser CORS exposes it). Each session then sends a PATCH with `If-Match` and a different synthetic writer marker.
+- **Two-session conditional-write probe:** creates a disposable synthetic file whose description is the test value. Before displaying an ETag or allowing an update, the harness verifies the file name, app-owned synthetic marker, and selected test-folder parent. Both sessions read the same file's metadata and capture the HTTP ETag response header (if browser CORS exposes it). Each session then sends a PATCH with `If-Match` and a different synthetic writer marker.
+- **Raw REST stale-validator probe:** independently sends a PATCH through browser `fetch` to the Drive v3 REST endpoint with a deliberately stale, syntactically valid `If-Match` entity tag. It first validates the target as an app-owned synthetic race file in the selected folder, then reads the file back after the response. HTTP 412 is evidence the stale precondition was enforced; a 2xx plus the probe marker in read-back is evidence the header was not enforced. A browser/network error (including a CORS preflight failure) is inconclusive. The only possible mutation is the disposable file's description.
 - **Cleanup:** deletes only temporary files created by the current browser session, after an explicit confirmation.
 
 The object retry test is a controlled simulation of a lost response: the first successful response is deliberately discarded by the client, and the same request is retried with the same pre-generated ID. It validates the duplicate-prevention behavior, not every possible network failure mode.
 
 ### Automated tests
 
-`tests/drive-feasibility-spike.test.mjs` covers pagination, incomplete listings, repeated page tokens, pre-generated-ID retry/409 verification, filename safety, ETag capture, and conditional-write request behavior using mocked HTTP responses.
+`tests/drive-feasibility-spike.test.mjs` covers pagination, incomplete listings, repeated page tokens, pre-generated-ID retry/409 verification, filename safety, ETag capture, conditional-write request behavior, and raw REST stale-validator outcomes using mocked HTTP responses.
 
 These tests validate application logic only. They do not establish live Google Drive behavior.
 
@@ -72,13 +73,34 @@ A successful result establishes visibility only for the selected folder and the 
 
 Record any 403, unsupported scope, 409 mismatch, missing file, or hash mismatch as a failed or inconclusive test. Do not infer success from the first create response alone.
 
+### Raw REST stale-If-Match probe
+
+This targeted probe is designed for the case where the normal browser metadata response does not expose an ETag.
+
+1. Create a fresh race-test file in Session A, or use an existing synthetic race-test file that is still in the selected test folder.
+2. If using a second session, select the same dedicated folder and paste the shared synthetic race-test file ID into the input.
+3. Click **Probe raw REST If-Match**. The page validates the target's ID, synthetic filename, app-owned marker, and selected parent before sending any update.
+4. The probe sends a deliberately stale `If-Match` entity tag that cannot match the current object validator. It then reads the file back and reports the HTTP result, whether the baseline ETag response header was visible, and the final description/version.
+5. Record the result and clean up the file from the session that created it.
+
+Interpretation:
+
+| Result | Meaning |
+|---|---|
+| HTTP 412 | Drive enforced the deliberately stale precondition for this browser-origin REST request. This is a useful prerequisite, not proof of a two-writer race guarantee. |
+| HTTP 2xx and final description contains `finance-tracker-raw-if-match-probe-` | Drive accepted the update despite the stale validator; `If-Match` is not protecting this update path. Concurrency gate fails. |
+| Browser/network error before an HTTP response | Inconclusive. A CORS preflight rejection is possible because `If-Match` is a non-simple request header. No conclusion about server enforcement can be drawn. |
+| Other HTTP error | Inconclusive until the exact error is understood. |
+
+A 412 result should be followed by the two-session race test below. The final gate still requires repeated trials where exactly one of two simultaneous updates succeeds and the stale writer receives 412.
+
 ### Two-session conditional-write test
 
 1. In Session A, select the same test folder and click **Create race-test file**.
 2. Copy the resulting synthetic file ID to Session B. Session B must connect to the same Google account and select the same test folder.
 3. Paste the file ID into Session B.
 4. In both sessions, click **Read baseline ETag and version**.
-5. Compare the displayed baseline version and ETag. They must match exactly. If either session cannot see an ETag, stop: the browser cannot perform this conditional-write test under the current response/CORS behavior.
+5. Compare the displayed baseline version and ETag. They must match exactly. If either session cannot see an ETag, the original two-session route remains unavailable; use the raw REST probe above to determine whether a direct conditional request can work.
 6. Once both sessions are ready with the same ETag, click **Attempt conditional write** in both sessions as nearly simultaneously as possible.
 7. Record both HTTP outcomes. Then click **Read final race-test state** in each session.
 8. Repeat several times with a newly created race-test file for each trial. Do not reuse a stale ETag from an earlier trial.
@@ -105,11 +127,13 @@ Session A owns the race-test file it created. Use its cleanup control after both
 |---|---|---|
 | Existing Picker-based folder selection | **User-confirmed** | Prior experiment B; PR #17 and its live validation record |
 | Existing synthetic create/read-back/delete | **User-confirmed** | Prior experiment A; 2026-10-24 |
-| Complete child enumeration in this harness | **Open** | Live run required |
-| Pre-generated ID retry in this harness | **Open** | Live run required |
-| Raw SHA-256 read-back in Drive | **Open** | Live run required |
-| ETag visibility in browser | **Open** | Live run required |
-| Server-enforced `If-Match` stale-writer exclusion | **Open / critical blocker** | Two-session live race required |
+| Complete child enumeration in this harness | **User-confirmed** | Live harness returned complete listings (0 children initially; 2 after test artifacts existed) |
+| Pre-generated ID retry in this harness | **User-confirmed** | Same-ID retry returned HTTP 409; read-back verified exact bytes |
+| Raw SHA-256 read-back in Drive | **User-confirmed** | SHA-256 verified against the expected synthetic payload |
+| Synthetic-file cleanup | **User-confirmed** | Owner confirmed cleanup left no child items in the test folder |
+| ETag visibility in browser metadata response | **User-confirmed: unavailable** | Two-session probe did not expose ETag; version alone is not a concurrency primitive |
+| Raw REST stale `If-Match` enforcement | **Open** | New targeted probe added; live browser run required |
+| Server-enforced two-session stale-writer exclusion | **Open / critical blocker** | Requires usable conditional request plus repeated two-session race trials |
 | Staged commit interruption recovery | **Not yet implemented** | Later phase, gated on concurrency |
 | Snapshot backup/restore | **Not yet implemented** | Later phase, gated on concurrency |
 | Production terms, quota, and $0 cost | **Open** | Recheck current official Google requirements before release |
