@@ -129,8 +129,10 @@ Required core fields:
 - `databaseId`
 - `copyId`
 - `role`
+- `lifecycleStatus`
 - `revision`
 - `commitId`
+- `parentCommitId` (nullable only for the initial commit)
 - `storageBinding`
 
 Optional operational metadata:
