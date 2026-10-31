@@ -1,7 +1,7 @@
 # Finance Tracker — next steps and handoff
 
-**Last updated:** 2026-10-30  
-**Current workstream:** database identity and lifecycle decisions documented in a draft PR; continue design review before implementation  
+**Last updated:** 2026-10-31  
+**Current workstream:** PR #19 architecture baseline ready for review; next milestone is a synthetic-only Google Drive feasibility spike  
 **Current phase:** Google Drive integration prototype and MVP1 file-import foundation; production financial-data storage is **not approved**.
 
 This is the current pick-up point. PR #17 is complete and merged. Keep the sequence below; do not skip ahead to real ledger reads or writes.
@@ -16,25 +16,44 @@ This is the current pick-up point. PR #17 is complete and merged. Keep the seque
 
 **Verification note (confirmed 2026-10-30):** PR #17's final-head Node contract-test workflow passed (run #72), and the owner has now confirmed that the post-merge `main` workflow also succeeded. Both pre-merge and post-merge CI verification are complete. No new Pages deployment is implied by merging PR #17.
 
-## Next task: complete database identity and lifecycle design review
+## Current checkpoint: PR #19 ready for review
 
-The 29 decisions made in the design discussion are recorded in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). This is a documentation-only draft; it does not authorize production implementation. Review the record as a whole, then resolve its explicitly listed open implementation details before proposing an identity-only prototype.
+[PR #19 — Database identity, lifecycle, storage, and recovery architecture](https://github.com/AeroVega/finance-tracker/pull/19) now consolidates 108 accepted decisions. It is a documentation-only architecture baseline; it does not authorize production persistence or real financial-data storage.
 
-The settled design includes an app-owned JSON manifest, shared logical database identity with per-copy identity, primary/backup roles, guided and emergency promotion, verified snapshots, explicit copy lifecycle, conservative state labels, minimal append-only commit lineage, and quarantine behavior for damaged history.
+The design now specifies:
+- Logical database identity versus physical copies, primary/backup roles, lifecycle and derived health.
+- Required versioned manifest, UUIDs, timestamps, storage binding, and strict validation.
+- Immutable content-addressed objects, complete commit snapshots, hash-chained commit history, and append-only transaction/migration records.
+- Staged commits, interruption recovery, explicit initialization, verified backups/restores, copy registration, promotion, retirement, and forward-only MVP1 migrations.
+- Conservative integrity gates, no offline writes, and no silent fallback to backups.
 
-Before implementation, complete the remaining design work: exact manifest schema and compatibility rules; initialization and invalid-folder behavior; role versus lifecycle/health fields; storage binding; commit-history persistence and durability; snapshot consistency; recoverable promotion/move transitions; restore lineage; and older-versus-divergent classification rules. Keep the manifest's identity role separate from Google authorization and financial-data correctness.
+**Critical unresolved feasibility gate:** Google Drive concurrency. The design requires server-enforced stale-write exclusion. A client-side read-version-then-update sequence is not sufficient. The Drive file version is useful for detecting changes, but the current API review has not established a compare-and-swap contract for manifest publication. If a safe writer/fencing mechanism cannot be demonstrated, production ledger writes remain blocked or the storage architecture must be reconsidered.
 
-When the design is approved, synthetic tests must precede a focused identity-only prototype. No ledger reads/writes, production data, or real financial information are in scope.
+## Next task: synthetic-only Google Drive feasibility spike
+
+The next branch/PR should test the storage assumptions without reading or writing a real ledger. Use only an invented test account/folder and synthetic records.
+
+1. **Folder visibility:** prove complete child enumeration, pagination, and safe empty-folder detection under the existing drive.file scope after Picker selection and reauthorization.
+2. **Immutable objects:** upload synthetic bytes, read them back, verify raw SHA-256, detect duplicate names/IDs, and test content-addressed lookup across copies.
+3. **Idempotent creation:** test Drive pre-generated file IDs, including retries after a lost response and verification after a 409 conflict.
+4. **Concurrency:** run simultaneous commits from two browser sessions/devices using the same base revision; test stale writers, lost responses, and authorization changes. Demonstrate server-enforced exclusion, not merely client-side detection.
+5. **Recovery:** interrupt at every stage, including immediately before and after manifest publication and before the final journal event. Verify that the previous committed state remains intact or the outcome is explicitly unknown and writes stop.
+6. **Backup/restore:** copy one verified immutable snapshot into a new folder, assign a new copyId, and verify all objects, history, and lineage.
+7. **Cost and terms:** verify current Drive API terms, quotas, OAuth requirements, and the complete $0 recurring-cost path.
+
+Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the concurrency or recovery gate.
+
+No production ledger reads/writes, real financial records, or storage implementation are in scope for this spike.
 
 ### Historical discovery requirements retained from PR #17
 
 A unique folder name, an earlier Picker selection, and a remembered comparison reference are not proof that a folder is the canonical Finance Tracker database. Safe onboarding and recovery must continue to respect these constraints:
 
 1. **First connection:** authorize with Google and explicitly select the intended folder with Picker when discovery cannot safely establish identity.
-2. **One exact-name match:** treat it only as a candidate until the app-owned identity mechanism is verified.
-3. **Zero matches:** explain that no accessible match was returned; offer Picker. Never assume the folder is absent and never auto-create a replacement.
+2. **One exact-name match:** treat it only as a candidate until the app-owned manifest and storage binding are verified.
+3. **Zero matches:** explain that no accessible match was returned; offer Picker. Never infer absence or auto-create a replacement.
 4. **Multiple matches:** stop and ask the owner to select the intended folder.
-5. **Missing, malformed, unsupported-version, or mismatched marker:** stop without modifying files and explain the recovery choice.
+5. **Missing, malformed, unsupported-version, or mismatched manifest:** stop without modifying files and explain the recovery path.
 
 ## Parallel MVP1 work: provider parsers and reporting semantics
 
