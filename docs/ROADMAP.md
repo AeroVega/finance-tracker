@@ -5,15 +5,16 @@
 
 This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints.
 
-## Current project position — 2026-10-30
+## Current project position — 2026-10-31
 
-**Current phase:** Google Drive integration prototype plus MVP1 file-import foundation. The January 1, 2027 MVP1 target remains conditional on privacy, correctness, recovery, and $0 recurring-cost exit criteria.
+**Current phase:** PR #19's 108-decision database identity/lifecycle/storage/recovery architecture baseline is ready for review. Next is a synthetic-only Google Drive feasibility spike; production ledger writes remain blocked until safe concurrency, folder visibility, snapshot consistency, recovery, privacy, and $0 recurring-cost requirements are demonstrated.
 
 ### Completed or demonstrated
 - Project constraints, provider-export research, and initial Wells Fargo, SoFi, and Fidelity sample-schema observations are documented.
 - The public-repository privacy rules and source-independent, conservative import/reconciliation principles are documented.
 - Google Drive remains the selected private-storage direction. The deployed synthetic probe has passed a user-confirmed create/read-back/confirmed-delete test, including a repeat after API-key rotation.
 - The Drive probe validates only that narrow prototype path. Production ledger writes, cross-device synchronization, conflict handling, recovery, backup/restore, and current production cost/terms are **not yet validated**.\n- Drive Experiments A+B were integrated in PR #16. PR #17 then hardened folder discovery, Picker fallback, and authorization/error handling; it is merged, and its final-head Node contract-test run #72 passed.
+- PR #19 consolidates 108 accepted database identity, schema/versioning, immutable storage, commit/journal, initialization, migration, backup/restore, and recovery decisions. It is documentation-only and ready for review; it does not authorize production storage.
 
 ### M1 status — Canonical import contract and synthetic reconciliation
 
