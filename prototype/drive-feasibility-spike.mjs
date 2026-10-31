@@ -218,6 +218,7 @@ $("create-race").addEventListener("click", async () => {
     });
     state.createdFileIds.add(result.fileId);
     $("race-file-id").value = result.fileId;
+    $("raw-if-match").disabled = false;
     $("cleanup").disabled = false;
     status("race-read-status", "Created synthetic race-test file. Share this ID with the second session: " + result.fileId, "success");
   } catch (error) {
