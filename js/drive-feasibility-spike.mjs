@@ -337,3 +337,85 @@ export async function deleteSyntheticFile(options) {
   }
   return { deletedOrAbsent: true };
 }
+
+export async function probeRawIfMatch(options) {
+  const settings = options || {};
+  const fetchImpl = settings.fetchImpl || globalThis.fetch;
+  const fileId = String(settings.fileId || "");
+  const accessToken = settings.accessToken;
+  if (!fileId) throw new DriveFeasibilityError("missing-file-id", "Enter the shared synthetic race-test file ID.");
+  if (typeof fetchImpl !== "function") throw new DriveFeasibilityError("fetch-unavailable", "Fetch is unavailable.");
+
+  // This read validates the exact target before any mutation. Never accept an arbitrary Drive ID.
+  const baseline = await readRaceTarget({
+    accessToken,
+    fileId,
+    expectedFolderId: settings.expectedFolderId,
+    fetchImpl
+  });
+
+  const staleTag = '"finance-tracker-deliberately-stale-' +
+    String(settings.probeId || (globalThis.crypto && globalThis.crypto.randomUUID
+      ? globalThis.crypto.randomUUID()
+      : Date.now())) + '"';
+  let patchResponse;
+  try {
+    patchResponse = await fetchImpl(
+      DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(fileId) + "?fields=id,description,version",
+      {
+        method: "PATCH",
+        headers: Object.assign({}, authHeaders(accessToken), {
+          "Content-Type": "application/json",
+          "If-Match": staleTag
+        }),
+        body: JSON.stringify({
+          description: "finance-tracker-raw-if-match-probe-" + String(settings.probeId || "synthetic")
+        })
+      }
+    );
+  } catch {
+    return {
+      outcome: "browser-request-blocked-or-network-error",
+      status: null,
+      baselineEtagVisible: baseline.etagVisible,
+      baselineVersion: baseline.version,
+      staleTagSent: staleTag,
+      finalRead: null
+    };
+  }
+
+  let outcome;
+  if (patchResponse.status === 412) outcome = "precondition-enforced";
+  else if (patchResponse.ok) outcome = "if-match-not-enforced";
+  else outcome = "http-error";
+
+  // Always inspect final state after a response. A 2xx with the synthetic marker proves
+  // that Drive accepted the update despite the deliberately stale validator.
+  let finalRead = null;
+  try {
+    const final = await readRaceTarget({
+      accessToken,
+      fileId,
+      expectedFolderId: settings.expectedFolderId,
+      fetchImpl
+    });
+    finalRead = {
+      description: final.description,
+      version: final.version,
+      etag: final.etag,
+      etagVisible: final.etagVisible
+    };
+  } catch {
+    finalRead = { readError: true };
+  }
+
+  return {
+    outcome,
+    status: patchResponse.status,
+    baselineEtagVisible: baseline.etagVisible,
+    baselineEtag: baseline.etag,
+    baselineVersion: baseline.version,
+    staleTagSent: staleTag,
+    finalRead
+  };
+}
