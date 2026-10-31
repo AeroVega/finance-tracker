@@ -29,9 +29,9 @@ The design now specifies:
 
 **Critical unresolved feasibility gate:** Google Drive concurrency. The design requires server-enforced stale-write exclusion. A client-side read-version-then-update sequence is not sufficient. The Drive file version is useful for detecting changes, but the current API review has not established a compare-and-swap contract for manifest publication. If a safe writer/fencing mechanism cannot be demonstrated, production ledger writes remain blocked or the storage architecture must be reconsidered.
 
-## Active task: synthetic-only Google Drive feasibility spike (PR in preparation)
+## Active task: synthetic-only Google Drive feasibility spike (PR in preparation)\n\nSee [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log.
 
-The active branch `feat/drive-feasibility-spike` adds an isolated browser harness and Node tests for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
+The active branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 
 1. **Folder visibility:** prove complete child enumeration, pagination, and safe empty-folder detection under the existing drive.file scope after Picker selection and reauthorization. The harness implements enumeration and fails closed on incomplete results.
 2. **Immutable objects:** upload invented bytes, read them back, and verify raw SHA-256. This first iteration covers one isolated object, not the complete snapshot layout.
@@ -43,7 +43,7 @@ The active branch `feat/drive-feasibility-spike` adds an isolated browser harnes
 
 Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the concurrency or recovery gate.
 
-No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
+Phase 1 is limited to folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the two-session ETag/If-Match concurrency probe. Staged recovery and snapshot backup/restore follow only if concurrency is viable. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
 
 ### Historical discovery requirements retained from PR #17
 
