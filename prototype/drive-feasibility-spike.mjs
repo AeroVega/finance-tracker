@@ -1,3 +1,4 @@
+import { GOOGLE_CONFIG } from "../js/google-config.js";
 import {
   DRIVE_FILES_ENDPOINT,
   createSyntheticObject,
@@ -128,8 +129,7 @@ async function verifyFolder(item) {
   }
 }
 function openPicker() {
-  const value = config();
-  validateConfig(value);
+  validateConfig();
   const folderView = new window.google.picker.DocsView(window.google.picker.ViewId.FOLDERS)
     .setIncludeFolders(true)
     .setSelectFolderEnabled(true)
@@ -137,8 +137,8 @@ function openPicker() {
   const picker = new window.google.picker.PickerBuilder()
     .addView(folderView)
     .setOAuthToken(token())
-    .setDeveloperKey(value.apiKey)
-    .setAppId(value.projectNumber)
+    .setDeveloperKey(GOOGLE_CONFIG.apiKey)
+    .setAppId(GOOGLE_CONFIG.projectNumber)
     .setOrigin(window.location.origin)
     .setTitle("Choose a dedicated synthetic test folder")
     .setCallback(onPicker)
@@ -156,9 +156,8 @@ $("connect-google").addEventListener("click", async () => {
   setReady(false);
   status("connection-status", "Opening Google's authorization flow…");
   try {
-    const value = config();
-    validateConfig(value);
-    const response = await requestToken(value.clientId);
+    validateConfig();
+    const response = await requestToken(GOOGLE_CONFIG.clientId);
     state.accessToken = response.access_token;
     state.tokenExpiresAt = Date.now() + Number(response.expires_in || 0) * 1000;
     $("select-folder").disabled = false;
