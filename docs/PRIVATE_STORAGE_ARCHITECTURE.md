@@ -1,7 +1,7 @@
 # Private Storage Architecture — Google Drive
 
 **Status:** Selected direction; production validation required  
-**Decision date:** 2026-10-17  
+**Decision date:** 2026-10-17; architecture baseline updated 2026-10-31  
 **Scope:** Architecture and verification plan only. This document does not authorize production implementation or storage of real financial data.
 
 ## Decision
@@ -21,9 +21,9 @@ This is an architectural direction, not a claim that every OAuth, scope, billing
 - **Verified from repository constraints:** GitHub Pages content and this public repository must be treated as public; browser-local storage alone does not synchronize devices.
 - **Hypothesis pending verification:** Google Drive API plus browser OAuth can meet the required production workflow with no recurring cost and acceptable recovery guarantees.
 - **Verified for the prototype (user-confirmed 2026-10-24):** the configured OAuth/Picker flow and selected-folder create/read-back/delete operations worked from the deployed GitHub Pages origin.
-- **Open:** token expiry, reauthorization and revocation behavior; cross-device synchronization; stale-write/conflict handling; interrupted-write and corruption recovery; backup/restore; production publishing/verification requirements; and current production billing/terms.
+- **Open for validation:** token expiry, reauthorization and revocation behavior; cross-device synchronization; whether Google Drive can enforce the documented stale-writer exclusion; implementation and testing of interrupted-write recovery, corruption handling, and verified backup/restore; production publishing/verification requirements; and current production billing/terms.
 
-## Intended data flow
+## Intended data flow (target; not yet implemented)
 
 1. The user selects a supported CSV on their device.
 2. The browser parses and validates the file locally by default.
@@ -46,33 +46,39 @@ No raw CSV or ledger data should be sent to unrelated services. Avoid analytics/
 - Make sign-out and access revocation understandable, and fail closed when authorization is absent.
 - Test on iPhone and iPad using synthetic records before connecting real financial data.
 
-## Data layout — working proposal
+## Data layout — architecture baseline
 
-The synthetic Drive probe is isolated from the canonical ledger. The production persistence proposal, pending architecture review, is:
-- Keep a versioned JSON ledger in the user's selected Drive folder. Include normalized activities, source provenance, import-run summaries, and schema version.
-- Retain the original CSV only in the browser's selected-file flow; do not upload or archive CSVs in Drive.
-- Keep any recovery snapshots as ledger snapshots, not source-file archives. Final snapshot cadence and retention remain open.
-- Do not include the user's folder ID or OAuth configuration in the public repository.
+The detailed database identity and persistence model is recorded in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md), ready to merge in PR #19. The ADR defines the target behavior; it does not establish that the Drive API can satisfy every requirement.
 
-This keeps the parser and financial calculations independent of the storage provider while making the ledger portable.
+The target model is no longer a single mutable JSON ledger file:
+- One canonical finance-tracker-manifest.json identifies the logical database and physical copy, declares manifestVersion and schemaVersion, and points to the current committed snapshot.
+- Each commit record contains a complete logical path-to-content-hash map for one immutable database state.
+- Stored data objects are immutable and content-addressed by SHA-256. Unchanged objects are reused; stable logical partitioning avoids rewriting the entire growing ledger for every import.
+- Commit history, transaction journal, and migration history are separate append-only records.
+- Drive file IDs are physical locators, not logical database identity. A backup copy has its own Drive IDs while preserving logical commit identity.
+- The original CSV import retention policy remains separate from database snapshot/object retention.
+
+This is an architecture target, not an implemented or production-validated storage format. Exact partitioning, index layout, and Drive file mapping remain subject to the synthetic feasibility spike.
 
 ## Consistency and failure handling
 
-Drive is file storage, not a transactional database. Before real writes are enabled, specify and test:
-- how the app detects stale revisions or concurrent updates;
-- how a write is staged and committed without leaving a partially updated dataset;
-- how the app distinguishes an upload accepted by Drive from a complete, verified update;
-- how duplicate requests and retries remain idempotent;
-- how conflicting edits are surfaced without silently discarding either version;
-- how corrupt, missing, deleted, or unexpectedly modified files are detected;
-- how the app behaves offline, after a timeout, after token expiry, and after access revocation.
+Drive is file storage, not a transactional database. The target staged protocol is documented in the identity/lifecycle ADR. Before real writes are enabled, prove:
+- server-enforced stale-write exclusion or a safe writer/fencing protocol; a read-version-then-update sequence is insufficient;
+- immutable object creation, exact raw-byte hash verification, and retry-safe behavior after lost responses;
+- complete folder enumeration under drive.file for initialization and object discovery;
+- publication of the manifest's current commit pointer only after all snapshot objects and commit metadata are verified;
+- idempotent transaction journaling and deterministic recovery after interruption at every stage;
+- snapshot consistency, backup/restore, and cross-copy portability;
+- handling of external modifications, missing objects, delayed visibility, network failure, token expiry, and access revocation.
 
-Use revision/version metadata where the API supports it. Preserve a prior known-good version or a recoverable snapshot before replacing canonical state. Exact mechanics are open until tested; do not promise database-grade transactions or automatic conflict resolution without evidence.
+Google documents a monotonically increasing output-only file version that can help detect changes, but it must not be treated as a lock or atomic compare-and-swap. Google also documents pre-generated Drive file IDs for retry-safe creation: a repeated create using an already-used pre-generated ID returns 409 rather than creating a duplicate. Both behaviors must be tested in the deployed browser flow and actual scope.
+
+The app must not claim a commit succeeded until the manifest and complete referenced snapshot read back and verify. If concurrency protection cannot be proven, keep production ledger writes disabled.
 
 ## Backup, export, and portability
 
 - Provide an export format the owner can retain independently of the app.
-- Define a backup cadence, destination, and retention policy; a second file in the same Drive account may not protect against account loss or account-wide deletion.
+- MVP1 defines verified snapshot backups, but backup cadence and an independent destination remain open. A second file in the same Drive account may not protect against account loss or account-wide deletion; automated backup scheduling/retention is deferred to MVP2.
 - Document how to restore and how to recognize a valid backup.
 - Test restore on synthetic data and verify transaction counts and totals.
 - Keep the data model source-independent so that changing storage providers does not require rewriting CSV parsers or financial calculations.
@@ -97,10 +103,19 @@ Do not implement elaborate quota optimization before there is measured evidence 
 - [x] Run the separate synthetic Drive probe in the user-selected folder: temporary invented JSON was created, observed in the folder, read back with exact match, and deleted after explicit confirmation. The owner repeated the test successfully after rotating the API key (user-confirmed 2026-10-24). No ledger or CSV was accessed.
 - [ ] Demonstrate create/read/update/export on synthetic data from iPhone and iPad.
 - [ ] Test two-device stale writes, simultaneous edits, retries, interrupted uploads, deletion, and corruption recovery.
-- [ ] Define and test backup/restore outside the normal read/write path.
+- [ ] Test verified snapshot backup/restore outside the normal read/write path, and decide whether an independent backup destination is required.
 - [ ] Verify current terms and confirm no recurring production cost or expiring-trial dependency.
 - [ ] Review data leakage through browser storage, logs, URLs, telemetry, and GitHub assets.
 - [ ] Keep real financial records out of the public repo and all public CI artifacts.
+
+## Google Drive API references relevant to this design
+
+- [Drive files resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/files) — the file version is output-only and monotonically increasing; file names are not guaranteed unique.
+- [Drive files.update](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/update) — documents PATCH update semantics; this review has not established a conditional compare-and-swap guarantee for the intended publication path.
+- [Create and manage files](https://developers.google.com/workspace/drive/api/guides/create-file) — pre-generated file IDs can be reused for create/copy retries; after successful creation, retrying with the same ID returns 409 Conflict.
+- [Manage file revisions](https://developers.google.com/workspace/drive/api/guides/manage-revisions) — unpinned binary revisions may be purged; only up to 200 revisions per file can be kept forever.
+
+These references were checked on 2026-10-31. Recheck current API behavior, terms, quotas, and OAuth requirements during the feasibility spike and before production release.
 
 ## Development sequence and target
 
