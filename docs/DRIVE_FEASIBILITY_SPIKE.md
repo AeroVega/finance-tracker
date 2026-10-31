@@ -1,6 +1,6 @@
 # Google Drive Storage Feasibility Spike
 
-**Status:** Phase 1 harness implemented; folder enumeration, immutable retry/read-back, and cleanup user-confirmed; raw REST conditional probe ready for live validation  
+**Status:** Phase 1 live validation complete for the tested Drive path; raw REST stale-If-Match probe demonstrated that the deliberately stale validator was not enforced  
 **Branch:** `feat/drive-feasibility-spike`  
 **Scope:** Synthetic-only experimentation. This work does not authorize production persistence or access to real financial data.
 
@@ -92,7 +92,7 @@ Interpretation:
 | Browser/network error before an HTTP response | Inconclusive. A CORS preflight rejection is possible because `If-Match` is a non-simple request header. No conclusion about server enforcement can be drawn. |
 | Other HTTP error | Inconclusive until the exact error is understood. |
 
-A 412 result should be followed by the two-session race test below. The final gate still requires repeated trials where exactly one of two simultaneous updates succeeds and the stale writer receives 412.
+Because the live raw REST probe returned HTTP 200 and read-back confirmed the probe description was written despite the deliberately stale validator, do not proceed with the two-session race test using this request path. The tested Drive v3 browser-origin update path does not provide the required stale-writer exclusion. This is a failed concurrency gate, not an inconclusive result.
 
 ### Two-session conditional-write test
 
@@ -115,7 +115,7 @@ Interpretation:
 | Network error, timeout, or unknown outcome | Inconclusive. Re-read the synthetic test file and repeat with a new file; do not call it a pass. |
 | One 2xx and one other error | Inconclusive until the error is understood and the test is repeated. |
 
-A passing trial is not yet production approval. The mechanism must be repeatable and must protect the actual manifest publication operation under the exact same authorization scope and browser-origin conditions.
+The current `If-Match` route is not a candidate for production concurrency control. Revisit only if a materially different, documented server-enforced atomic primitive is identified and independently tested.
 
 ### Cleanup
 
@@ -132,8 +132,8 @@ Session A owns the race-test file it created. Use its cleanup control after both
 | Raw SHA-256 read-back in Drive | **User-confirmed** | SHA-256 verified against the expected synthetic payload |
 | Synthetic-file cleanup | **User-confirmed** | Owner confirmed cleanup left no child items in the test folder |
 | ETag visibility in browser metadata response | **User-confirmed: unavailable** | Two-session probe did not expose ETag; version alone is not a concurrency primitive |
-| Raw REST stale `If-Match` enforcement | **Open** | New targeted probe added; live browser run required |
-| Server-enforced two-session stale-writer exclusion | **Open / critical blocker** | Requires usable conditional request plus repeated two-session race trials |
+| Raw REST stale `If-Match` enforcement | **Failed for tested request path** | Owner live run returned HTTP 200 despite deliberately stale validator; final read-back showed the probe description was written (version 4) |
+| Server-enforced two-session stale-writer exclusion | **Not established / critical blocker** | No two-session race attempted; raw REST probe showed stale `If-Match` was not enforced, so this path was abandoned |
 | Staged commit interruption recovery | **Not yet implemented** | Later phase, gated on concurrency |
 | Snapshot backup/restore | **Not yet implemented** | Later phase, gated on concurrency |
 | Production terms, quota, and $0 cost | **Open** | Recheck current official Google requirements before release |
