@@ -71,7 +71,7 @@ test("folder enumeration detects a repeated page token instead of looping", asyn
     listFolderChildren({
       accessToken: "synthetic-token",
       folderId: "synthetic-folder",
-      fetchImpl: async () => jsonResponse({ files: [], nextPageToken: "repeat" })
+      fetchImpl: async () => jsonResponse({ files: [], nextPageToken: "repeat", incompleteSearch: false })
     }),
     (error) => error instanceof DriveFeasibilityError && error.code === "pagination-loop"
   );
