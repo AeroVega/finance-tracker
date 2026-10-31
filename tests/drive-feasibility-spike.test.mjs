@@ -23,10 +23,11 @@ test("folder enumeration follows every page and returns only after a complete se
     calls.push(new URL(url));
     const page = new URL(url).searchParams.get("pageToken");
     return page
-      ? jsonResponse({ files: [{ id: "child-2", name: "second.txt" }] })
+      ? jsonResponse({ files: [{ id: "child-2", name: "second.txt" }], incompleteSearch: false })
       : jsonResponse({
           files: [{ id: "child-1", name: "first.txt" }],
-          nextPageToken: "next-page"
+          nextPageToken: "next-page",
+          incompleteSearch: false
         });
   };
 
@@ -49,6 +50,17 @@ test("folder enumeration fails closed when Drive marks results incomplete", asyn
       accessToken: "synthetic-token",
       folderId: "synthetic-folder",
       fetchImpl: async () => jsonResponse({ files: [], incompleteSearch: true })
+    }),
+    (error) => error instanceof DriveFeasibilityError && error.code === "incomplete-search"
+  );
+});
+
+test("folder enumeration fails closed when completeness metadata is missing", async () => {
+  await assert.rejects(
+    listFolderChildren({
+      accessToken: "synthetic-token",
+      folderId: "synthetic-folder",
+      fetchImpl: async () => jsonResponse({ files: [] })
     }),
     (error) => error instanceof DriveFeasibilityError && error.code === "incomplete-search"
   );
