@@ -27,17 +27,10 @@ function status(id, message, kind = "info") {
   node.textContent = message;
   node.dataset.kind = kind;
 }
-function config() {
-  return {
-    clientId: $("oauth-client-id").value.trim(),
-    apiKey: $("picker-api-key").value.trim(),
-    projectNumber: $("cloud-project-number").value.trim()
-  };
-}
-function validateConfig(value) {
-  if (!value.clientId) throw new Error("Enter the Google OAuth web client ID.");
-  if (!value.apiKey) throw new Error("Enter the restricted Google API key for Picker.");
-  if (!/^\\d+$/.test(value.projectNumber)) throw new Error("Enter the numeric Google Cloud project number.");
+function validateConfig() {
+  if (!GOOGLE_CONFIG.clientId) throw new Error("The deployed Google OAuth client ID is missing. Check the repository's deployment configuration.");
+  if (!GOOGLE_CONFIG.apiKey) throw new Error("The deployed restricted Picker API key is missing. Check the repository's deployment configuration.");
+  if (!/^\\d+$/.test(GOOGLE_CONFIG.projectNumber)) throw new Error("The deployed Google Cloud project number is missing or invalid.");
 }
 function waitFor(check, label) {
   return new Promise((resolve, reject) => {
