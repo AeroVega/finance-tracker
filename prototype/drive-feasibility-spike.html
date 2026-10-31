@@ -46,12 +46,7 @@
     </section>
     <section class="panel">
       <h2>Connect and select a test folder</h2>
-      <label for="oauth-client-id">Google OAuth web client ID</label>
-      <input id="oauth-client-id" autocomplete="off" spellcheck="false">
-      <label for="picker-api-key">Restricted Google API key for Picker</label>
-      <input id="picker-api-key" autocomplete="off" spellcheck="false">
-      <label for="cloud-project-number">Google Cloud project number</label>
-      <input id="cloud-project-number" inputmode="numeric" autocomplete="off" spellcheck="false">
+      <p class="fine">The branch deployment uses the same public Google OAuth client ID, restricted Picker API key, and project number already configured for the Finance Tracker. These values are injected by the existing Pages workflow; they are not duplicated in this prototype or committed to source.</p>
       <button id="connect-google" type="button" disabled>Connect Google Drive</button>
       <button id="select-folder" class="secondary" type="button" disabled>Choose synthetic test folder</button>
       <p id="connection-status" class="status" role="status" aria-live="polite">Loading Google services…</p>
