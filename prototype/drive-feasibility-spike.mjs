@@ -200,7 +200,8 @@ $("create-object").addEventListener("click", async () => {
     $("cleanup").disabled = false;
     status("object-status", "PASS: retry returned HTTP 409; the existing object was read back and its exact SHA-256 verified. File ID: " + result.fileId + " · SHA-256: " + result.sha256, "success");
   } catch (error) {
-    status("object-status", error instanceof Error ? error.message : "Synthetic object test failed.", "error");
+    if (error && error.fileId) { state.createdFileIds.add(error.fileId); $("cleanup").disabled = false; }
+    status("object-status", error instanceof Error ? error.message + (error.fileId ? " Temporary file ID: " + error.fileId : "") : "Synthetic object test failed.", "error");
   } finally { $("create-object").disabled = false; }
 });
 
@@ -219,7 +220,8 @@ $("create-race").addEventListener("click", async () => {
     $("cleanup").disabled = false;
     status("race-read-status", "Created synthetic race-test file. Share this ID with the second session: " + result.fileId, "success");
   } catch (error) {
-    status("race-read-status", error instanceof Error ? error.message : "Could not create race-test file.", "error");
+    if (error && error.fileId) { state.createdFileIds.add(error.fileId); $("cleanup").disabled = false; }
+    status("race-read-status", error instanceof Error ? error.message + (error.fileId ? " Temporary file ID: " + error.fileId : "") : "Could not create race-test file.", "error");
   } finally { $("create-race").disabled = false; }
 });
 
@@ -228,7 +230,7 @@ $("read-race").addEventListener("click", async () => {
   state.raceEtag = "";
   state.raceVersion = "";
   try {
-    const result = await readRaceTarget({ accessToken: token(), fileId: $("race-file-id").value.trim() });
+    const result = await readRaceTarget({ accessToken: token(), fileId: $("race-file-id").value.trim(), expectedFolderId: state.folderId });
     state.raceEtag = result.etag || "";
     state.raceVersion = result.version || "";
     const etagText = result.etagVisible ? result.etag : "not exposed to browser";
@@ -252,6 +254,7 @@ $("attempt-write").addEventListener("click", async () => {
     const result = await attemptConditionalWrite({
       accessToken: token(),
       fileId: $("race-file-id").value.trim(),
+      expectedFolderId: state.folderId,
       etag: state.raceEtag,
       writerMarker
     });
@@ -266,7 +269,7 @@ $("attempt-write").addEventListener("click", async () => {
 $("reread-race").addEventListener("click", async () => {
   $("reread-race").disabled = true;
   try {
-    const result = await readRaceTarget({ accessToken: token(), fileId: $("race-file-id").value.trim() });
+    const result = await readRaceTarget({ accessToken: token(), fileId: $("race-file-id").value.trim(), expectedFolderId: state.folderId });
     status("race-write-status", "Final state: version " + (result.version || "unavailable") + " · description " + result.description + " · ETag " + (result.etag || "not exposed"), "success");
   } catch (error) {
     status("race-write-status", error instanceof Error ? error.message : "Could not read final state.", "error");
