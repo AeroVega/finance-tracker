@@ -29,7 +29,7 @@ The access token remains in page memory. The harness does not persist the select
 
 Available checks:
 
-- **Folder enumeration:** lists every child page under the selected folder, follows `nextPageToken`, rejects repeated tokens, and fails closed if Drive returns `incompleteSearch: true`.
+- **Folder enumeration:** lists every child page under the selected folder, follows `nextPageToken`, rejects repeated tokens, and fails closed unless Drive explicitly returns `incompleteSearch: false`.
 - **Immutable-object retry:** requests a pre-generated Drive file ID, creates a uniquely named synthetic text object, deliberately discards the successful create response, retries the same ID, expects HTTP 409, then reads the file by ID and verifies exact content and SHA-256.
 - **Conditional-write probe:** creates a disposable synthetic file whose description is the test value. Both sessions read the same file's metadata and capture the HTTP ETag response header (if browser CORS exposes it). Each session then sends a PATCH with `If-Match` and a different synthetic writer marker.
 - **Cleanup:** deletes only temporary files created by the current browser session, after an explicit confirmation.
