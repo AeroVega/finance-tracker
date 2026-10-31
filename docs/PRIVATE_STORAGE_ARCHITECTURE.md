@@ -1,7 +1,7 @@
 # Private Storage Architecture — Google Drive
 
 **Status:** Selected direction; production validation required  
-**Decision date:** 2026-10-17; architecture baseline updated 2026-10-31  
+**Decision date:** 2026-10-17; architecture baseline and original-import retention reaffirmed 2026-10-31  
 **Scope:** Architecture and verification plan only. This document does not authorize production implementation or storage of real financial data.
 
 ## Decision
@@ -14,9 +14,9 @@ This is an architectural direction, not a claim that every OAuth, scope, billing
 
 ## Status labels
 
-- **User-confirmed (2026-10-21):** Use the owner's existing Google Drive folder as the private home for the canonical ledger. Parse selected CSVs locally; store the normalized ledger and import provenance in Drive; do not retain original CSV files there. Short-lived access tokens and interactive reauthorization are acceptable.
+- **User-confirmed (2026-10-31; supersedes the earlier 2026-10-21 preference):** Use the owner's existing Google Drive folder as the private home for the canonical ledger and retained source imports. Parse selected CSVs locally; retain each original CSV in private Drive storage for **540 days (18 months)** from successful retention, then delete it and verify deletion. Store normalized ledger data and import provenance in Drive. Short-lived access tokens and interactive reauthorization are acceptable.
 - **User-confirmed (baseline):** The public repository must not contain personal financial data; recurring production cost must remain $0; CSV import remains a permanent fallback; cross-device access is required.
-- **Selected direction:** Keep the dashboard as public static content and call Drive from the browser after explicit user authorization. The Drive folder will hold the ledger rather than a collection of archived source CSVs.
+- **Selected direction:** Keep the dashboard as public static content and call Drive from the browser after explicit user authorization. Drive holds the canonical ledger, import provenance, and separately governed original CSV files subject to the approved 540-day retention lifecycle; it is not an indefinite source-file archive.
 - **Verified prototype result (user-confirmed 2026-10-24):** The deployed synthetic probe succeeded with the `drive.file` scope and Google Picker folder selection. It created invented JSON in the selected private folder, read back an exact match, and deleted the temporary file after user confirmation. The owner repeated the test successfully after rotating the restricted API key. This validates only the probe's create/read-back/confirmed-delete path; it does not authorize production ledger writes.
 - **Verified from repository constraints:** GitHub Pages content and this public repository must be treated as public; browser-local storage alone does not synchronize devices.
 - **Hypothesis pending verification:** Google Drive API plus browser OAuth can meet the required production workflow with no recurring cost and acceptable recovery guarantees.
@@ -48,7 +48,7 @@ No raw CSV or ledger data should be sent to unrelated services. Avoid analytics/
 
 ## Data layout — architecture baseline
 
-The detailed database identity and persistence model is recorded in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md), ready to merge in PR #19. The ADR defines the target behavior; it does not establish that the Drive API can satisfy every requirement.
+The detailed database identity and persistence model is recorded in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md), merged in PR #19. The ADR defines the target behavior; it does not establish that the Drive API can satisfy every requirement.
 
 The target model is no longer a single mutable JSON ledger file:
 - One canonical finance-tracker-manifest.json identifies the logical database and physical copy, declares manifestVersion and schemaVersion, and points to the current committed snapshot.
@@ -56,7 +56,7 @@ The target model is no longer a single mutable JSON ledger file:
 - Stored data objects are immutable and content-addressed by SHA-256. Unchanged objects are reused; stable logical partitioning avoids rewriting the entire growing ledger for every import.
 - Commit history, transaction journal, and migration history are separate append-only records.
 - Drive file IDs are physical locators, not logical database identity. A backup copy has its own Drive IDs while preserving logical commit identity.
-- The original CSV import retention policy remains separate from database snapshot/object retention.
+- Original CSV files are retained as separately governed private Drive objects, not as immutable database snapshot objects. Their approved retention period is 540 days (18 months) from successful retention. This lifecycle remains separate from database snapshot/object retention; backups must preserve the original retention timestamp and must never restore an already-expired original file.
 
 This is an architecture target, not an implemented or production-validated storage format. Exact partitioning, index layout, and Drive file mapping remain subject to the synthetic feasibility spike.
 
@@ -79,7 +79,7 @@ The app must not claim a commit succeeded until the manifest and complete refere
 
 - Provide an export format the owner can retain independently of the app.
 - MVP1 defines verified snapshot backups, but backup cadence and an independent destination remain open. A second file in the same Drive account may not protect against account loss or account-wide deletion; automated backup scheduling/retention is deferred to MVP2.
-- Document how to restore and how to recognize a valid backup.
+- Document how to restore and how to recognize a valid backup. Any backup copy of an original CSV must preserve its original retention timestamp and expiry; restoring a backup must not restart the 540-day clock or resurrect an expired original.
 - Test restore on synthetic data and verify transaction counts and totals.
 - Keep the data model source-independent so that changing storage providers does not require rewriting CSV parsers or financial calculations.
 - The owner should be able to retrieve data without depending on the deployed web app remaining available.
@@ -101,7 +101,7 @@ Do not implement elaborate quota optimization before there is measured evidence 
 - [ ] Confirm access-token lifetime, reauthorization, sign-out, and revocation behavior.
 - [ ] Confirm no client secret or privileged credential ships in the frontend.
 - [x] Run the separate synthetic Drive probe in the user-selected folder: temporary invented JSON was created, observed in the folder, read back with exact match, and deleted after explicit confirmation. The owner repeated the test successfully after rotating the API key (user-confirmed 2026-10-24). No ledger or CSV was accessed.
-- [ ] Demonstrate create/read/update/export on synthetic data from iPhone and iPad.
+- [ ] Demonstrate create/read/update/export on synthetic data from iPhone and iPad.\n- [ ] Verify the 540-day original-CSV lifecycle, including confirmed deletion, retryable deletion failures, and backup/restore behavior that cannot extend retention.
 - [ ] Test two-device stale writes, simultaneous edits, retries, interrupted uploads, deletion, and corruption recovery.
 - [ ] Test verified snapshot backup/restore outside the normal read/write path, and decide whether an independent backup destination is required.
 - [ ] Verify current terms and confirm no recurring production cost or expiring-trial dependency.
