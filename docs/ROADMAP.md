@@ -7,7 +7,7 @@ This is a plan, not a guarantee that all proposed capabilities are feasible unde
 
 ## Current project position — 2026-10-31
 
-**Current phase:** PR #19's 108-decision database identity/lifecycle/storage/recovery architecture baseline is ready for review. Next is a synthetic-only Google Drive feasibility spike; production ledger writes remain blocked until safe concurrency, folder visibility, snapshot consistency, recovery, privacy, and $0 recurring-cost requirements are demonstrated.
+**Current phase:** PR #19's 108-decision database identity/lifecycle/storage/recovery architecture baseline is ready to merge. After merge, the next task is a synthetic-only Google Drive feasibility spike; production ledger writes remain blocked until safe concurrency, folder visibility, snapshot consistency, recovery, privacy, and $0 recurring-cost requirements are demonstrated.
 
 ### Completed or demonstrated
 - Project constraints, provider-export research, and initial Wells Fargo, SoFi, and Fidelity sample-schema observations are documented.
@@ -34,7 +34,7 @@ Recorded decisions: integer minor units with decimal-string fallback; preserve s
 - [x] Document observed schemas, date formats, confirmed signs, and available identifiers/activity fields; validate raw CSV mechanics when appropriate.
 - [x] Record and merge canonical ledger/import-run contract decisions and a pure synthetic reconciliation reference module (PR #11; complete).
 - [ ] Complete production evaluation of private storage, authentication, backup/recovery, and portability (the synthetic Drive round trip is a successful prototype check, not production approval).
-- [ ] Review and document architecture decisions before production implementation.
+- [x] Document and review the database identity/lifecycle/storage architecture (PR #19; merge pending; production implementation remains separately gated).
 
 Phase 0 discovery is substantially complete. The canonical contract and synthetic reference behavior are merged through PR #11. Provider parsers can now be developed against that contract using invented fixtures; production persistence remains separately gated. The Drive probe does not complete the storage/security phase.
 
