@@ -1,10 +1,10 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-10-31  
-**Current workstream:** PR #19 architecture baseline ready for review; next milestone is a synthetic-only Google Drive feasibility spike  
-**Current phase:** PR #19 architecture baseline ready for review; production financial-data storage is **not approved**.
+**Current workstream:** PR #19 architecture baseline ready to merge; next milestone after merge is a synthetic-only Google Drive feasibility spike  
+**Current phase:** PR #19 architecture baseline ready to merge; production financial-data storage is **not approved**.
 
-This is the current pick-up point. PR #17 is complete and merged. Keep the sequence below; do not skip ahead to real ledger reads or writes.
+This is the current pick-up point. PR #17 is complete and merged; PR #19 is ready to merge. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
 ## Completed checkpoints
 
@@ -16,7 +16,7 @@ This is the current pick-up point. PR #17 is complete and merged. Keep the seque
 
 **Verification note (confirmed 2026-10-30):** PR #17's final-head Node contract-test workflow passed (run #72), and the owner has now confirmed that the post-merge `main` workflow also succeeded. Both pre-merge and post-merge CI verification are complete. No new Pages deployment is implied by merging PR #17.
 
-## Current checkpoint: PR #19 ready for review
+## Current checkpoint: PR #19 ready to merge
 
 [PR #19 — Database identity, lifecycle, storage, and recovery architecture](https://github.com/AeroVega/finance-tracker/pull/19) now consolidates 108 accepted decisions. It is a documentation-only architecture baseline; it does not authorize production persistence or real financial-data storage.
 
@@ -72,13 +72,13 @@ The Drive prototype must not block the permanent file-import path.
 These are required before any real ledger data may be stored in Drive. Successful synthetic folder discovery or a synthetic file round trip does not satisfy them.
 
 - [ ] **Authorization and account handling:** verify account choice is clear; test expiry, revocation, wrong account, denied permissions, reconnect, and 401/403 recovery.
-- [ ] **Concurrency and correctness:** define single-writer or locking strategy, stale-write detection, versioning, idempotency, and conflict resolution. Never silently overwrite newer data.
-- [ ] **Crash/interruption recovery:** specify behavior for partial writes, interrupted operations, duplicate/retried requests, and inconsistent state.
-- [ ] **Backup, restore, and portability:** define export/backup format, restore validation, recovery steps, and how the owner can leave the service.
+- [ ] **Concurrency and correctness:** demonstrate that the documented server-enforced stale-write exclusion, versioning, idempotency, and conflict handling work under two-device races. Never silently overwrite newer data.
+- [ ] **Crash/interruption recovery:** implement and test the documented staged-transaction, journal, retry, and ambiguous-outcome recovery behavior.
+- [ ] **Backup, restore, and portability:** implement and test verified snapshot backup/restore, export validation, recovery steps, and portability.
 - [ ] **Deletion and retention:** implement and test the approved 540-day (18-month) original-file retention lifecycle, distinguishing deletion eligibility from confirmed deletion and handling backup copies consistently.
 - [ ] **Privacy/security review:** document threat model, least-privilege scope, browser token lifetime/storage, data exposure risks, and how errors/logs avoid sensitive data.
 - [ ] **Sustainable cost and terms:** recheck current Google API terms/quotas and confirm the full design remains at $0 recurring cost without trials or enabling billing.
-- [ ] **Owner acceptance:** review design, test evidence, failure states, and documentation before approving any production-storage implementation.
+- [ ] **Owner acceptance:** review feasibility evidence, test results, failure states, and security/cost findings before separately authorizing any production-storage implementation.
 
 ## Working rules
 
