@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   DRIVE_FILES_ENDPOINT,
   DRIVE_UPLOAD_ENDPOINT,
@@ -210,4 +212,10 @@ test("conditional write reports missing ETag as untestable and sends no request"
     fetchImpl: async () => { throw new Error("Must not make a request"); }
   });
   assert.deepEqual(result, { outcome: "etag-unavailable", status: null });
+});
+
+
+test("browser feasibility page module has valid JavaScript syntax", () => {
+  const modulePath = fileURLToPath(new URL("../prototype/drive-feasibility-spike.mjs", import.meta.url));
+  execFileSync(process.execPath, ["--check", modulePath], { stdio: "pipe" });
 });
