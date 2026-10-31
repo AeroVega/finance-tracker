@@ -13,8 +13,9 @@ This is a plan, not a guarantee that all proposed capabilities are feasible unde
 - Project constraints, provider-export research, and initial Wells Fargo, SoFi, and Fidelity sample-schema observations are documented.
 - The public-repository privacy rules and source-independent, conservative import/reconciliation principles are documented.
 - Google Drive remains the selected private-storage direction. The deployed synthetic probe has passed a user-confirmed create/read-back/confirmed-delete test, including a repeat after API-key rotation.
-- The Drive probe validates only that narrow prototype path. Production ledger writes, cross-device synchronization, conflict handling, recovery, backup/restore, and current production cost/terms are **not yet validated**.\n- Drive Experiments A+B were integrated in PR #16. PR #17 then hardened folder discovery, Picker fallback, and authorization/error handling; it is merged, and its final-head Node contract-test run #72 passed.
-- PR #19 consolidates 108 accepted database identity, schema/versioning, immutable storage, commit/journal, initialization, migration, backup/restore, and recovery decisions. It is documentation-only and ready for review; it does not authorize production storage.
+- The Drive probe validates only that narrow prototype path. Production ledger writes, cross-device synchronization, conflict handling, recovery, backup/restore, and current production cost/terms are **not yet validated**.
+- Drive Experiments A+B were integrated in PR #16. PR #17 then hardened folder discovery, Picker fallback, and authorization/error handling; it is merged, and its final-head Node contract-test run #72 passed.
+- PR #19 consolidates 108 accepted database identity, schema/versioning, immutable storage, commit/journal, initialization, migration, backup/restore, and recovery decisions. It is documentation-only and ready to merge; it does not authorize production storage.
 
 ### M1 status — Canonical import contract and synthetic reconciliation
 
