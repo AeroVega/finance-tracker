@@ -29,9 +29,7 @@ function status(id, message, kind = "info") {
   node.dataset.kind = kind;
 }
 function validateConfig() {
-  if (!GOOGLE_CONFIG.clientId) throw new Error("The deployed Google OAuth client ID is missing. Check the repository's deployment configuration.");
-  if (!GOOGLE_CONFIG.apiKey) throw new Error("The deployed restricted Picker API key is missing. Check the repository's deployment configuration.");
-  if (!/^\\d+$/.test(GOOGLE_CONFIG.projectNumber)) throw new Error("The deployed Google Cloud project number is missing or invalid.");
+  validateGoogleConfig(GOOGLE_CONFIG);
 }
 function waitFor(check, label) {
   return new Promise((resolve, reject) => {
