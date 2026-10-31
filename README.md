@@ -10,7 +10,7 @@ A second-generation personal finance tracker built around trustworthy data, tran
 
 MVP1 uses user-provided CSV imports. Google Drive is the **selected private-storage direction**. Experiment A's synthetic Drive probe passed a user-confirmed create/read-back/confirmed-delete test after API-key rotation. Experiment B then passed user-confirmed exact-name folder discovery after a prior Picker grant, including after reload/reauthorization and again with the app's saved comparison reference cleared (2026-10-29; source SHA `d29a4eb19bbd3a56aa00376692d2ea2ae6b68ec7`). These validate prototype paths only, not production ledger storage. See [Experiment B's live result and risk assessment](docs/DRIVE_FOLDER_DISCOVERY_EXPERIMENT.md#live-validation-record--2026-10-29) and [the A+B integration design and evidence record](docs/DRIVE_EXPERIMENTS_INTEGRATION_PLAN.md).
 
-**Current phase:** PR #19 contains the database identity, lifecycle, transaction, recovery, and migration architecture baseline: 108 accepted decisions, ready to merge. After PR #19 is merged, the next technical milestone is a synthetic-only Google Drive feasibility spike—not production persistence. It must prove complete-enough folder enumeration, immutable object handling, retry-safe file creation, backup/restore, and, critically, server-enforced stale-write exclusion across devices. If safe concurrency cannot be demonstrated under the existing least-privilege and $0 constraints, production ledger writes remain blocked. The PR changes documentation only; no production ledger reads/writes or real financial data are authorized. In parallel, build strict Wells Fargo, SoFi, and Fidelity CSV parsers against the merged canonical contract using invented fixtures.
+**Current phase:** PR #19's 108-decision database identity, lifecycle, transaction, recovery, and migration architecture baseline is merged. The synthetic-only Google Drive feasibility spike is now underway on `feat/drive-feasibility-spike`; it is not production persistence. The spike has demonstrated complete folder enumeration, immutable object handling, and retry-safe file creation. The tested Drive v3 stale-`If-Match` update path failed. The owner has accepted a single-user, single-active-device model: simultaneous use on two devices is unsupported, and the app must refuse writes when it detects another active session. Session detection is best-effort, not a server-enforced lock. Serialized writes, interruption recovery, backup/restore, authorization, and $0 terms remain release gates. No real financial data or canonical-ledger operations are authorized. In parallel, build strict Wells Fargo, SoFi, and Fidelity CSV parsers against the merged canonical contract using invented fixtures.
 
 ## Start here
 
@@ -18,8 +18,9 @@ MVP1 uses user-provided CSV imports. Google Drive is the **selected private-stor
 - [Next steps and handoff checklist](docs/NEXT_STEPS.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Architecture decisions and open questions](docs/ARCHITECTURE_DECISIONS.md)
-- [Database identity and lifecycle architecture (PR #19)](docs/DATABASE_IDENTITY_AND_LIFECYCLE.md)
+- [Database identity and lifecycle architecture (PR #19, merged)](docs/DATABASE_IDENTITY_AND_LIFECYCLE.md)
 - [Private storage architecture](docs/PRIVATE_STORAGE_ARCHITECTURE.md)
+- [Google Drive feasibility spike and live test procedure](docs/DRIVE_FEASIBILITY_SPIKE.md)
 - [Security and privacy requirements](docs/SECURITY.md)
 - [Data-source research](docs/DATA_SOURCES.md)
 - [Data model and reconciliation principles](docs/DATA_MODEL.md)
@@ -43,8 +44,9 @@ The build SHA is generated in the Actions workspace and is not committed back to
 2. No real personal financial data or secrets in this public repository.
 3. No stored bank passwords, unauthorized scraping, or reliance on expiring trials.
 4. Manual file imports remain a permanent fallback.
-5. Do not enable production financial-data storage until data access, storage, authentication, synchronization, recovery, and security have been implemented and reviewed.
-6. Distinguish verified facts, user-confirmed observations, hypotheses, and open questions.
+5. Finance Tracker is single-user and single-active-device; simultaneous use on two devices is unsupported. The app must refuse writes when it detects another active session.
+6. Do not enable production financial-data storage until data access, storage, authentication, sequential device handoff, recovery, and security have been implemented and reviewed.
+7. Distinguish verified facts, user-confirmed observations, hypotheses, and open questions.
 
 ## Working approach
 

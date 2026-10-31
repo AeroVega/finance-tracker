@@ -1,10 +1,10 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-10-31  
-**Current workstream:** PR #19 architecture baseline ready to merge; next milestone after merge is a synthetic-only Google Drive feasibility spike  
-**Current phase:** PR #19 architecture baseline ready to merge; production financial-data storage is **not approved**.
+**Current workstream:** Workstream 1 — synthetic-only Google Drive feasibility spike, branch `feat/drive-feasibility-spike`  
+**Current phase:** PR #20's synthetic-only Drive feasibility spike has completed its live Phase 1 validation and final-head CI. The tested Drive `If-Match` path failed; the owner accepted single-user, single-active-device operation. PR #20 is ready to merge as a feasibility record, not as production storage approval. Production financial-data storage is **not approved**.
 
-This is the current pick-up point. PR #17 is complete and merged; PR #19 is ready to merge. Keep the sequence below; do not skip ahead to real ledger reads or writes.
+This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/drive-feasibility-spike`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
 ## Completed checkpoints
 
@@ -16,34 +16,39 @@ This is the current pick-up point. PR #17 is complete and merged; PR #19 is read
 
 **Verification note (confirmed 2026-10-30):** PR #17's final-head Node contract-test workflow passed (run #72), and the owner has now confirmed that the post-merge `main` workflow also succeeded. Both pre-merge and post-merge CI verification are complete. No new Pages deployment is implied by merging PR #17.
 
-## Current checkpoint: PR #19 ready to merge
+## Completed checkpoint: PR #19 merged
 
-[PR #19 — Database identity, lifecycle, storage, and recovery architecture](https://github.com/AeroVega/finance-tracker/pull/19) now consolidates 108 accepted decisions. It is a documentation-only architecture baseline; it does not authorize production persistence or real financial-data storage.
+[PR #19 — Database identity, lifecycle, storage, and recovery architecture](https://github.com/AeroVega/finance-tracker/pull/19) merged the 108 accepted decisions. It is a documentation-only architecture baseline; it does not authorize production persistence or real financial-data storage.
 
 The design now specifies:
 - Logical database identity versus physical copies, primary/backup roles, lifecycle and derived health.
+- Single-user, single-active-device operation; simultaneous use on two devices is unsupported, and the app must refuse writes when another active session is detected (best-effort detection, not a server lock).
 - Required versioned manifest, UUIDs, timestamps, storage binding, and strict validation.
 - Immutable content-addressed objects, complete commit snapshots, hash-chained commit history, and append-only transaction/migration records.
 - Staged commits, interruption recovery, explicit initialization, verified backups/restores, copy registration, promotion, retirement, and forward-only MVP1 migrations.
 - Conservative integrity gates, no offline writes, and no silent fallback to backups.
 
-**Critical unresolved feasibility gate:** Google Drive concurrency. The design requires server-enforced stale-write exclusion. A client-side read-version-then-update sequence is not sufficient. The Drive file version is useful for detecting changes, but the current API review has not established a compare-and-swap contract for manifest publication. If a safe writer/fencing mechanism cannot be demonstrated, production ledger writes remain blocked or the storage architecture must be reconsidered.
+**Concurrency decision (owner-confirmed 2026-10-31):** retain Google Drive and adopt single-user, single-active-device operation. Simultaneous use on two devices is explicitly unsupported. The owner will not edit Drive files outside Finance Tracker and will end the active session before switching devices. The app must refuse writes when it detects another active session. The live raw REST probe showed that the tested Drive v3 `files.update` path accepts a deliberately stale `If-Match` value, so do not use it as a lock or spend time on the same two-session race. App-level session detection is best-effort, not a server-enforced mutex; simultaneous starts/network partitions may defeat it. Production writes remain blocked until the app demonstrates safe serialized writes, session-conflict handling, and crash recovery within this explicit operating constraint.
 
-## Next task: synthetic-only Google Drive feasibility spike
+## Completed task: synthetic-only Google Drive feasibility spike ([PR #20](https://github.com/AeroVega/finance-tracker/pull/20))
 
-The next branch/PR should test the storage assumptions without reading or writing a real ledger. Use only an invented test account/folder and synthetic records.
+See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20's owner-confirmed live synthetic checks are complete. Final-head Node contract tests passed in GitHub Actions run #129 (73/73); the PR is ready for merge as a prototype feasibility record only.
 
-1. **Folder visibility:** prove complete child enumeration, pagination, and safe empty-folder detection under the existing drive.file scope after Picker selection and reauthorization.
-2. **Immutable objects:** upload synthetic bytes, read them back, verify raw SHA-256, detect duplicate names/IDs, and test content-addressed lookup across copies.
-3. **Idempotent creation:** test Drive pre-generated file IDs, including retries after a lost response and verification after a 409 conflict.
-4. **Concurrency:** run simultaneous commits from two browser sessions/devices using the same base revision; test stale writers, lost responses, and authorization changes. Demonstrate server-enforced exclusion, not merely client-side detection.
-5. **Recovery:** interrupt at every stage, including immediately before and after manifest publication and before the final journal event. Verify that the previous committed state remains intact or the outcome is explicitly unknown and writes stop.
-6. **Backup/restore:** copy one verified immutable snapshot into a new folder, assign a new copyId, and verify all objects, history, and lineage.
-7. **Cost and terms:** verify current Drive API terms, quotas, OAuth requirements, and the complete $0 recurring-cost path.
+The branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 
-Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the concurrency or recovery gate.
+**Live validation update (owner-confirmed 2026-10-31):** complete folder enumeration passed; pre-generated-ID retry returned HTTP 409; exact SHA-256 read-back passed; cleanup was confirmed. The original browser metadata response did not expose an ETag. The raw REST probe returned HTTP 200 despite a deliberately stale `If-Match`; read-back confirmed the probe description was written and Drive version advanced to 4. **The tested conditional-update mechanism failed.** The owner then accepted the single-active-device policy described above; the project is continuing with Google Drive under that explicit operating constraint.
 
-No production ledger reads/writes, real financial records, or storage implementation are in scope for this spike.
+1. **Folder visibility:** prove complete child enumeration, pagination, and safe empty-folder detection under the existing drive.file scope after Picker selection and reauthorization. The harness implements enumeration and fails closed on incomplete results.
+2. **Immutable objects:** upload invented bytes, read them back, and verify raw SHA-256. This first iteration covers one isolated object, not the complete snapshot layout.
+3. **Idempotent creation:** test pre-generated Drive file IDs, including a deliberately discarded successful response, same-ID retry, expected 409, and read-back verification.
+4. **Session coordination:** implement best-effort active-session detection and refuse writes when another session is detected. Simultaneous use on two devices is unsupported by owner decision. Do not claim the session marker is a server-enforced lock; fail closed on ambiguous session state and document that simultaneous starts/network partitions remain a limitation.
+5. **Recovery:** implement fault-injection coverage for every staged transaction boundary, including before/after manifest publication and before the final journal event. Recovery must be safe under the single-active-device operating model and must block further writes while an outcome is ambiguous.
+6. **Backup/restore:** after session coordination and interruption recovery are validated, implement a synthetic snapshot copy/restore test with new `copyId`, object/hash verification, and preserved lineage.
+7. **Cost and terms:** verify current Drive API terms, quotas, OAuth requirements, and the complete $0 recurring-cost path before production.
+
+Record each result as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. A successful synthetic file round trip does not satisfy the session-coordination or recovery gates.
+
+Phase 1 established folder enumeration, pre-generated-ID retry, exact synthetic-object hashing, and the failure of the tested raw REST stale-`If-Match` path. The owner accepted single-active-device use as the operating constraint. After PR #20 merges, implement and test session-conflict handling, serialized writes, and interruption recovery using synthetic data in a separate PR. Snapshot backup/restore and production storage remain gated until those safeguards, security, authorization, and $0-cost terms pass. No production ledger reads/writes, real financial records, or production storage implementation are in scope for this spike. Original CSV retention is 540 days (18 months) from successful private retention; backup copies must not reset that clock or resurrect expired originals.
 
 ### Historical discovery requirements retained from PR #17
 
@@ -72,7 +77,7 @@ The Drive prototype must not block the permanent file-import path.
 These are required before any real ledger data may be stored in Drive. Successful synthetic folder discovery or a synthetic file round trip does not satisfy them.
 
 - [ ] **Authorization and account handling:** verify account choice is clear; test expiry, revocation, wrong account, denied permissions, reconnect, and 401/403 recovery.
-- [ ] **Concurrency and correctness:** demonstrate that the documented server-enforced stale-write exclusion, versioning, idempotency, and conflict handling work under two-device races. Never silently overwrite newer data.
+- [ ] **Session coordination and correctness:** demonstrate that the app detects an existing active session and refuses writes, serializes operations within the active session, prohibits offline writes, and recovers ambiguous outcomes. Simultaneous two-device use is explicitly unsupported; session detection is best-effort rather than a server-enforced mutex.
 - [ ] **Crash/interruption recovery:** implement and test the documented staged-transaction, journal, retry, and ambiguous-outcome recovery behavior.
 - [ ] **Backup, restore, and portability:** implement and test verified snapshot backup/restore, export validation, recovery steps, and portability.
 - [ ] **Deletion and retention:** implement and test the approved 540-day (18-month) original-file retention lifecycle, distinguishing deletion eligibility from confirmed deletion and handling backup copies consistently.
