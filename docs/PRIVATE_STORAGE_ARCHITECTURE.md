@@ -8,20 +8,21 @@
 
 Use the project owner's own Google Drive as the intended canonical private store for the Finance Tracker's ledger and related metadata. Continue down this path unless a concrete, material blocker is found that cannot reasonably be worked around. Do not reopen the decision based only on hypothetical scale concerns.
 
-The goal is an app hosted as public static content on GitHub Pages that can authenticate the owner through Google's authorized OAuth flow, read and write the owner's private files, and synchronize records across iPhone and iPad—without a separate paid database service or recurring operating cost.
+The goal is an app hosted as public static content on GitHub Pages that can authenticate the owner through Google's authorized OAuth flow and read/write the owner's private files without a separate paid database service or recurring operating cost. Device access is sequential only: one active device at a time, with an orderly handoff between iPhone and iPad.
 
 This is an architectural direction, not a claim that every OAuth, scope, billing, synchronization, or recovery detail has already been validated.
 
 ## Status labels
 
 - **User-confirmed (2026-10-31; supersedes the earlier 2026-10-21 preference):** Use the owner's existing Google Drive folder as the private home for the canonical ledger and retained source imports. Parse selected CSVs locally; retain each original CSV in private Drive storage for **540 days (18 months)** from successful retention, then delete it and verify deletion. Store normalized ledger data and import provenance in Drive. Short-lived access tokens and interactive reauthorization are acceptable.
-- **User-confirmed (baseline):** The public repository must not contain personal financial data; recurring production cost must remain $0; CSV import remains a permanent fallback; cross-device access is required.
+- **User-confirmed (2026-10-31):** Finance Tracker is single-user and single-active-device. Simultaneous use on two devices is explicitly unsupported, even when both sessions belong to the owner. The app must refuse writes when it detects another active session. The owner will end the prior session before switching devices and will not edit Drive data outside the app.
+- **User-confirmed (baseline):** The public repository must not contain personal financial data; recurring production cost must remain $0; CSV import remains a permanent fallback; sequential cross-device access is required.
 - **Selected direction:** Keep the dashboard as public static content and call Drive from the browser after explicit user authorization. Drive holds the canonical ledger, import provenance, and separately governed original CSV files subject to the approved 540-day retention lifecycle; it is not an indefinite source-file archive.
 - **Verified prototype result (user-confirmed 2026-10-24):** The deployed synthetic probe succeeded with the `drive.file` scope and Google Picker folder selection. It created invented JSON in the selected private folder, read back an exact match, and deleted the temporary file after user confirmation. The owner repeated the test successfully after rotating the restricted API key. This validates only the probe's create/read-back/confirmed-delete path; it does not authorize production ledger writes.
 - **Verified from repository constraints:** GitHub Pages content and this public repository must be treated as public; browser-local storage alone does not synchronize devices.
 - **Hypothesis pending verification:** Google Drive API plus browser OAuth can meet the required production workflow with no recurring cost and acceptable recovery guarantees.
 - **Verified for the prototype (user-confirmed 2026-10-24):** the configured OAuth/Picker flow and selected-folder create/read-back/delete operations worked from the deployed GitHub Pages origin.
-- **Open for validation:** token expiry, reauthorization and revocation behavior; cross-device synchronization; whether Google Drive can enforce the documented stale-writer exclusion; implementation and testing of interrupted-write recovery, corruption handling, and verified backup/restore; production publishing/verification requirements; and current production billing/terms.
+- **Open for validation:** token expiry, reauthorization and revocation behavior; sequential device handoff; best-effort active-session detection and write refusal; implementation and testing of serialized writes, interrupted-write recovery, corruption handling, and verified backup/restore; production publishing/verification requirements; and current production billing/terms.
 
 ## Intended data flow (target; not yet implemented)
 
@@ -32,7 +33,7 @@ This is an architectural direction, not a claim that every OAuth, scope, billing
 5. The app reconciles the import using the documented idempotent import contract.
 6. It writes changes only after checking for stale data/conflicts; it must not silently replace a newer version.
 7. It reports success, pending work, failure, or unresolved conflict honestly.
-8. A later session on the other device reads the synchronized canonical data from Drive.
+8. After the active session is explicitly ended, a later session on the other device reads the synchronized canonical data from Drive. Simultaneous sessions are unsupported.
 
 No raw CSV or ledger data should be sent to unrelated services. Avoid analytics/telemetry that could expose financial activity.
 
@@ -44,7 +45,7 @@ No raw CSV or ledger data should be sent to unrelated services. Avoid analytics/
 - Never embed client secrets in static frontend code. Do not commit tokens or real OAuth configuration secrets.
 - Prefer short-lived access tokens held in memory where practical. Handle expiry and reauthentication; do not assume a browser-only client can safely retain long-lived refresh tokens.
 - Make sign-out and access revocation understandable, and fail closed when authorization is absent.
-- Test on iPhone and iPad using synthetic records before connecting real financial data.
+- Test sequential iPhone-to-iPad handoff using synthetic records before connecting real financial data. Do not support simultaneous active sessions.
 
 ## Data layout — architecture baseline
 
@@ -63,7 +64,7 @@ This is an architecture target, not an implemented or production-validated stora
 ## Consistency and failure handling
 
 Drive is file storage, not a transactional database. The target staged protocol is documented in the identity/lifecycle ADR. Before real writes are enabled, prove:
-- server-enforced stale-write exclusion or a safe writer/fencing protocol; a read-version-then-update sequence is insufficient;
+- best-effort active-session detection that refuses writes when another session is observed; clearly disclose that Drive does not provide a server-enforced mutex through the tested update path;
 - immutable object creation, exact raw-byte hash verification, and retry-safe behavior after lost responses;
 - complete folder enumeration under drive.file for initialization and object discovery;
 - publication of the manifest's current commit pointer only after all snapshot objects and commit metadata are verified;
@@ -73,7 +74,7 @@ Drive is file storage, not a transactional database. The target staged protocol 
 
 Google documents a monotonically increasing output-only file version that can help detect changes, but it must not be treated as a lock or atomic compare-and-swap. Google also documents pre-generated Drive file IDs for retry-safe creation: a repeated create using an already-used pre-generated ID returns 409 rather than creating a duplicate. Both behaviors must be tested in the deployed browser flow and actual scope.
 
-The app must not claim a commit succeeded until the manifest and complete referenced snapshot read back and verify. If concurrency protection cannot be proven, keep production ledger writes disabled.
+The app must not claim a commit succeeded until the manifest and complete referenced snapshot read back and verify. Serialize all writes in the active app, prohibit offline writes, and recover ambiguous operations before accepting another write. The owner accepts the explicit single-active-device constraint. Session detection is best-effort and cannot guarantee exclusion during simultaneous startup or a network partition; the owner must not use two devices at once. Production storage remains gated on demonstrating safe behavior within this operating model.
 
 ## Backup, export, and portability
 
