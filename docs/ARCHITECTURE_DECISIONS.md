@@ -5,7 +5,7 @@
 
 ## Current development status and next milestone
 
-**Current phase:** Google Drive integration prototype plus MVP1 file-import foundation. The canonical ledger/import-run contract and pure synthetic reconciliation reference module were merged in PR #11. Drive Experiments A+B were integrated in PR #16, and PR #17 hardened folder discovery and safe Picker/error fallback. These are prototype capabilities only; no production ledger storage is approved.
+**Current phase:** PR #19's database identity, lifecycle, immutable storage, transaction, migration, and recovery architecture baseline is ready for review. The Drive experiments remain prototypes; no production ledger storage is approved.
 
 **Next milestone:** review PR #19, which consolidates 108 accepted decisions covering database identity, schema/manifest versions, immutable content-addressed storage, commit history, transaction journaling, initialization, migration, backup/restore, and recovery. The next technical task is a synthetic-only Google Drive feasibility spike. Do not implement production persistence until Drive folder visibility, immutable object handling, safe recovery, and especially server-enforced stale-write exclusion are demonstrated. No real ledger reads/writes are authorized.
 
