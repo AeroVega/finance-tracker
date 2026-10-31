@@ -138,8 +138,9 @@ test("race-target read captures an exposed ETag and server version", async () =>
   const result = await readRaceTarget({
     accessToken: "synthetic-token",
     fileId: "synthetic-race-file",
+    expectedFolderId: "synthetic-folder",
     fetchImpl: async () => jsonResponse(
-      { id: "synthetic-race-file", description: "base", version: "17" },
+      { id: "synthetic-race-file", name: "finance-tracker-spike-race-test.txt", description: "base", version: "17", parents: ["synthetic-folder"], appProperties: { financeTrackerSpike: "synthetic-only" } },
       200,
       { ETag: '"etag-17"' }
     )
@@ -151,20 +152,53 @@ test("race-target read captures an exposed ETag and server version", async () =>
 
 test("conditional write sends If-Match and classifies a stale-writer rejection", async () => {
   let captured;
+  let calls = 0;
   const result = await attemptConditionalWrite({
     accessToken: "synthetic-token",
     fileId: "synthetic-race-file",
+    expectedFolderId: "synthetic-folder",
     etag: '"etag-base"',
     writerMarker: "synthetic-writer-a",
     fetchImpl: async (url, options) => {
+      calls += 1;
       captured = { url, options };
+      if (options.method === "GET") {
+        return jsonResponse({
+          id: "synthetic-race-file",
+          name: "finance-tracker-spike-race-test.txt",
+          description: "base",
+          version: "17",
+          parents: ["synthetic-folder"],
+          appProperties: { financeTrackerSpike: "synthetic-only" }
+        }, 200, { ETag: '"etag-17"' });
+      }
       return new Response(null, { status: 412 });
     }
   });
+  assert.equal(calls, 2);
   assert.equal(captured.options.headers["If-Match"], '"etag-base"');
   assert.equal(captured.options.method, "PATCH");
   assert.equal(result.outcome, "precondition-failed");
   assert.equal(result.status, 412);
+});
+
+test("race-target validation rejects ordinary Drive files before conditional updates", async () => {
+  let patchAttempted = false;
+  await assert.rejects(
+    attemptConditionalWrite({
+      accessToken: "synthetic-token",
+      fileId: "ordinary-file",
+      expectedFolderId: "synthetic-folder",
+      etag: '"etag-ordinary"',
+      writerMarker: "synthetic-writer-a",
+      fetchImpl: async (url, options) => {
+        if (options.method === "PATCH") patchAttempted = true;
+        return jsonResponse({ id: "ordinary-file", name: "personal-document.txt", parents: ["synthetic-folder"], appProperties: {} });
+      }
+    }),
+    (error) => error instanceof DriveFeasibilityError && error.code === "unsafe-race-target"
+  );
+  assert.equal(patchAttempted, false);
 });
 
 test("conditional write reports missing ETag as untestable and sends no request", async () => {
