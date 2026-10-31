@@ -594,7 +594,7 @@ The spike must use invented records and folders only. If atomic concurrency prot
 
 This illustrates the accepted initial fields and values. IDs and timestamps are placeholders, not real values.
 
-\`\`\`json
+```json
 {
   "format": "finance-tracker-database",
   "manifestVersion": "1.0.0",
@@ -615,7 +615,7 @@ This illustrates the accepted initial fields and values. IDs and timestamps are 
   "lastCommittedAt": "<utc-timestamp>",
   "extensions": {}
 }
-\`\`\`
+```
 
 Health is derived by inspection and is not a manifest field. The manifest is a current-state pointer and identity record, not the commit history or transaction journal.
 
