@@ -76,7 +76,13 @@
       <p id="race-write-status" class="status" role="status" aria-live="polite">Not tested.</p>
     </section>
     <section class="panel">
-      <h2>4. Clean up temporary test files</h2>
+      <h2>4. Raw REST If-Match probe</h2>
+      <p class="fine">Use the shared synthetic race-test file ID above. This sends a deliberately stale If-Match value directly through fetch to the Drive REST API, then reads the file back. HTTP 412 means the precondition was enforced; a successful update means Drive accepted a deliberately stale validator. A browser/network error is inconclusive. The only possible mutation is the verified synthetic file's description.</p>
+      <button id="raw-if-match" type="button" disabled>Probe raw REST If-Match</button>
+      <p id="raw-if-match-status" class="status" role="status" aria-live="polite">Not tested.</p>
+    </section>
+    <section class="panel">
+      <h2>5. Clean up temporary test files</h2>
       <p class="fine">Deletes only files created by this browser session after an explicit confirmation. Files created in another session must be cleaned up from that session or manually in Drive.</p>
       <button id="cleanup" class="secondary" type="button" disabled>Review and delete this session's test files</button>
       <p id="cleanup-status" class="status" role="status" aria-live="polite">No temporary files created in this session.</p>
