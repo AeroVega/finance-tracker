@@ -1,7 +1,7 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-10-30  
-**Current workstream:** documentation synchronized through this PR; next implementation task is stable database identity design  
+**Current workstream:** database identity and lifecycle decisions documented in a draft PR; continue design review before implementation  
 **Current phase:** Google Drive integration prototype and MVP1 file-import foundation; production financial-data storage is **not approved**.
 
 This is the current pick-up point. PR #17 is complete and merged. Keep the sequence below; do not skip ahead to real ledger reads or writes.
@@ -16,21 +16,25 @@ This is the current pick-up point. PR #17 is complete and merged. Keep the seque
 
 **Verification note (confirmed 2026-10-30):** PR #17's final-head Node contract-test workflow passed (run #72), and the owner has now confirmed that the post-merge `main` workflow also succeeded. Both pre-merge and post-merge CI verification are complete. No new Pages deployment is implied by merging PR #17.
 
-## Next task: stable database identity — design first
+## Next task: complete database identity and lifecycle design review
 
-A unique folder name, an earlier Picker selection, and a remembered comparison reference are not proof that a folder is the canonical Finance Tracker database. PR #17 deliberately leaves this unresolved.
+The 29 decisions made in the design discussion are recorded in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). This is a documentation-only draft; it does not authorize production implementation. Review the record as a whole, then resolve its explicitly listed open implementation details before proposing an identity-only prototype.
 
-1. **Write a decision/design proposal before coding.** Compare a small app-owned marker/manifest inside the selected folder with alternatives. Define its schema/version, required fields, identity generation, validation rules, and how the app distinguishes an initialized database from an arbitrary folder.
-2. **Keep database identity separate from Google account authorization.** Decide what the manifest proves about the database and what must instead be verified by the active Google authorization. Do not treat a matching database ID as proof that the current account is authorized, or an account identity as the database identity.
-3. **Define safe onboarding and recovery states.**
-   - First connection: authorize with Google and explicitly select the intended folder with Picker when discovery cannot safely establish identity.
-   - One exact-name match: treat it only as a candidate until the app-owned identity mechanism is verified.
-   - Zero matches: explain that no accessible match was returned; offer Picker. Never assume the folder is absent and never auto-create a replacement.
-   - Multiple matches: stop and ask the owner to select the intended folder.
-   - Missing, malformed, unsupported-version, or mismatched marker: stop without modifying files and explain the recovery choice.
-4. **Add synthetic tests first.** Cover valid identity, missing/malformed marker, unsupported schema version, wrong database identity, duplicate folder names, rename/missing folder, wrong account/permission, and failed/partial reads. Use invented IDs and data only.
-5. **Implement only the marker/identity prototype in a focused branch and PR.** Keep ledger reads/writes out of scope. Use the existing public-config injection and narrow `drive.file` scope; do not add stored tokens, bank credentials, a backend, or recurring-cost dependencies.
-6. **Run live synthetic validation after review.** Verify the deployed source SHA. Test normal and safe failure/recovery paths on the target iPhone/iPad browser. Record only outcomes and non-sensitive evidence; never record tokens, API keys, folder IDs, or financial data.
+The settled design includes an app-owned JSON manifest, shared logical database identity with per-copy identity, primary/backup roles, guided and emergency promotion, verified snapshots, explicit copy lifecycle, conservative state labels, minimal append-only commit lineage, and quarantine behavior for damaged history.
+
+Before implementation, complete the remaining design work: exact manifest schema and compatibility rules; initialization and invalid-folder behavior; role versus lifecycle/health fields; storage binding; commit-history persistence and durability; snapshot consistency; recoverable promotion/move transitions; restore lineage; and older-versus-divergent classification rules. Keep the manifest's identity role separate from Google authorization and financial-data correctness.
+
+When the design is approved, synthetic tests must precede a focused identity-only prototype. No ledger reads/writes, production data, or real financial information are in scope.
+
+### Historical discovery requirements retained from PR #17
+
+A unique folder name, an earlier Picker selection, and a remembered comparison reference are not proof that a folder is the canonical Finance Tracker database. Safe onboarding and recovery must continue to respect these constraints:
+
+1. **First connection:** authorize with Google and explicitly select the intended folder with Picker when discovery cannot safely establish identity.
+2. **One exact-name match:** treat it only as a candidate until the app-owned identity mechanism is verified.
+3. **Zero matches:** explain that no accessible match was returned; offer Picker. Never assume the folder is absent and never auto-create a replacement.
+4. **Multiple matches:** stop and ask the owner to select the intended folder.
+5. **Missing, malformed, unsupported-version, or mismatched marker:** stop without modifying files and explain the recovery choice.
 
 ## Parallel MVP1 work: provider parsers and reporting semantics
 
