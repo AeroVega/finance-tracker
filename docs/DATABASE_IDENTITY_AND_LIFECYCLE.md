@@ -1,7 +1,7 @@
 # Database Identity and Lifecycle — Architecture Decision Record
 
-**Status:** Architecture decision record ready for review in PR #19; implementation not authorized  
-**Decision scope:** Stable database identity, physical copies, primary designation, backups, lifecycle, commit lineage, and corruption handling  
+**Status:** Architecture decision record ready to merge in PR #19; implementation not authorized  
+**Decision scope:** Database identity, manifest/schema versioning, physical copies, immutable storage, commit lineage, transaction journaling, initialization, migrations, backups, lifecycle, and recovery  
 **Storage direction:** Google Drive, subject to the existing production-readiness gates  
 **Target:** MVP1  
 **Related baseline:** `docs/PRIVATE_STORAGE_ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/DATA_MODEL.md`, and `docs/ARCHITECTURE_DECISIONS.md`
@@ -666,4 +666,4 @@ All fixtures, IDs, folders, and financial records must be synthetic. No real fin
 
 ## Approval boundary
 
-This ADR is ready for architecture review. Merging it records the agreed design and constraints; it does **not** authorize production persistence. The next implementation proposal is a focused synthetic-only Google Drive feasibility spike. A separate owner review is required after its evidence is available and before any identity prototype or production ledger storage is authorized.
+This ADR is ready to merge. Merging it records the agreed design and constraints; it does **not** authorize production persistence. The next implementation proposal is a focused synthetic-only Google Drive feasibility spike. A separate owner review is required after its evidence is available and before any identity prototype or production ledger storage is authorized.
