@@ -35,10 +35,12 @@ See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Ph
 
 The active branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 
+**Live validation update (owner-confirmed 2026-10-31):** complete folder enumeration passed (including an empty listing and subsequent listing with two synthetic children); pre-generated-ID retry returned the expected HTTP 409; exact SHA-256 read-back passed; cleanup was confirmed to leave no child items. The original browser ETag probe did not expose an ETag, so no two-session conditional write was attempted. A raw REST stale-`If-Match` probe has now been added to the harness; its live result remains open.
+
 1. **Folder visibility:** prove complete child enumeration, pagination, and safe empty-folder detection under the existing drive.file scope after Picker selection and reauthorization. The harness implements enumeration and fails closed on incomplete results.
 2. **Immutable objects:** upload invented bytes, read them back, and verify raw SHA-256. This first iteration covers one isolated object, not the complete snapshot layout.
 3. **Idempotent creation:** test pre-generated Drive file IDs, including a deliberately discarded successful response, same-ID retry, expected 409, and read-back verification.
-4. **Concurrency:** run simultaneous conditional updates from two browser sessions against the same disposable test file and baseline ETag. Determine whether Drive exposes a usable ETag and enforces `If-Match`; a version comparison alone is not a pass.
+4. **Concurrency:** first run the new raw REST stale-`If-Match` probe against a verified synthetic race-test file. HTTP 412 indicates the stale precondition was enforced; a successful update indicates the header was ignored; browser/CORS failure is inconclusive. If the raw probe returns 412, proceed to simultaneous conditional updates from two browser sessions and require repeatable one-success/one-412 outcomes. A version comparison alone is not a pass.
 5. **Recovery:** after the concurrency gate, implement fault-injection coverage for every staged transaction boundary, including before/after manifest publication and before the final journal event.
 6. **Backup/restore:** after the concurrency gate, implement a synthetic snapshot copy/restore test with new `copyId`, object/hash verification, and preserved lineage.
 7. **Cost and terms:** verify current Drive API terms, quotas, OAuth requirements, and the complete $0 recurring-cost path before production.
