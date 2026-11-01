@@ -149,3 +149,19 @@ test("stale sessions are never taken over automatically and require explicit rec
   assert.equal(lifecycle.state, "ready");
   assert.notEqual(sessionAdapter.record.sessionId, "previous-page");
 });
+
+test("manifest initialization is gated behind verified session acquisition", async () => {
+  const { lifecycle, sessionAdapter } = setup();
+  lifecycle.manifestFileId = null;
+  let initialized = false;
+  lifecycle.initializeManifest = async () => {
+    assert.equal(sessionAdapter.record?.state, "active");
+    assert.equal(lifecycle.coordinator.canWrite, true);
+    initialized = true;
+    return "synthetic-manifest-created-under-session";
+  };
+  await lifecycle.start();
+  assert.equal(initialized, true);
+  assert.equal(lifecycle.manifestFileId, "synthetic-manifest-created-under-session");
+  assert.equal(lifecycle.state, "ready");
+});
