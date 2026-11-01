@@ -56,7 +56,7 @@ export class GoogleDriveTransactionAdapter {
     }
     this.accessToken = accessToken;
     this.folderId = folderId;
-    this.fetch = fetchImpl;
+    this.fetch = (...args) => fetchImpl.apply(globalThis, args);
     this.crypto = cryptoImpl;
     this.onRequest = onRequest;
     this.visibilityAttempts = visibilityAttempts;
