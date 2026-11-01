@@ -69,6 +69,11 @@ function publishStatus(snapshot) {
     ["stale-session", "session-active", "offline", "recovery-required", "ownership-unknown", "release-unconfirmed"].includes(snapshot.state) ? "warning" : "info");
   if (snapshot.state === "ready") status("crash-status", "Storage recovered and ready. Session ID: " + (state.lifecycle?.coordinator?.session?.sessionId || "unavailable"), "success");
   if (snapshot.state === "session-active") status("handoff-status", "PASS: Drive reported another active session. This page did not acquire ownership or enable writes. Release the first device, then retry Start here.", "success");
+  if (snapshot.state === "ready" && $("handoff-status").textContent.startsWith("PASS: Drive reported another active session.")) {
+    status("handoff-status", "PASS: the second device was refused while the first session was active, then acquired successfully after verified release.", "success");
+    text("check-handoff", "Active-session refusal + sequential device handoff: PASS (owner-confirmed)");
+    $("check-handoff").className = "pass";
+  }
 }
 function waitFor(check, label) {
   return new Promise((resolve, reject) => {
