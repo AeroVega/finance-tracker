@@ -1,10 +1,26 @@
 # Finance Tracker — next steps and handoff
 
-**Last updated:** 2026-10-31  
-**Current workstream:** Workstream 1 — synthetic-only Google Drive feasibility spike, branch `feat/drive-feasibility-spike`  
-**Current phase:** PR #20's synthetic-only Drive feasibility spike has completed its live Phase 1 validation and final-head CI. The tested Drive `If-Match` path failed; the owner accepted single-user, single-active-device operation. PR #20 is ready to merge as a feasibility record, not as production storage approval. Production financial-data storage is **not approved**.
+**Last updated:** 2026-11-01  
+**Current workstream:** Workstream 1 — best-effort single-active-session coordination, branch `feat/single-active-session-coordination`  
+**Current phase:** PR #20 is merged. PR #21's best-effort single-active-session coordination implementation and synthetic browser harness have passed owner-operated live tests for acquisition, guarded no-op writes, heartbeat, offline refusal, reconnect revalidation, stale expiry/recovery, and read-back verification. Final-head CI for the latest UI reporting fix is pending. Production financial-data storage is **not approved**.
 
-This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/drive-feasibility-spike`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
+This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/single-active-session-coordination`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
+
+## Current task: PR #21 — best-effort single-active-session coordination and live browser validation
+
+Branch: `feat/single-active-session-coordination`  
+Base: `main` at PR #20 merge commit `1e4fc1f86948f2892b5ab88a85d6f73d632719b8`.
+
+Scope:
+- Detect an existing active session and refuse a second session.
+- Require verified ownership before each serialized write.
+- Fail closed on incomplete folder enumeration, duplicate/malformed marker records, network errors, future-dated state, or uncertain read-back.
+- Refresh and verify a heartbeat while the page is active/online.
+- Release explicitly and verify release before device handoff.
+- Never take over a stale session automatically; require explicit confirmation and re-read before recovery.
+- Test stale sessions, network interruption, browser-crash expiry, lost responses, and orderly handoff using synthetic data only.
+
+The Drive marker adapter, state machine, and browser harness are implemented on the PR #21 branch. The owner confirmed successful live synthetic-folder tests on 2026-11-01: session acquisition and guarded no-op write; automatic heartbeat; offline write refusal; explicit same-session revalidation after reconnect; stale-session detection after heartbeat expiry; explicit stale recovery with verified read-back. The UI now clears old marker status while a fresh inspection is pending, ignores superseded inspection results, and distinguishes an active marker from locally verified ownership. Final-head GitHub Actions run #141 passed 110/110 tests on commit `3bfaff6df0b74033ac504b8dc58a27b7c1b73014`, including the new inspection-freshness regression check. The tested Drive `If-Match` path is not an atomic lock; simultaneous starts and network partitions remain possible. This PR does not integrate session coordination into production ledger reads/writes and does not authorize production persistence.
 
 ## Completed checkpoints
 
@@ -32,9 +48,9 @@ The design now specifies:
 
 ## Completed task: synthetic-only Google Drive feasibility spike ([PR #20](https://github.com/AeroVega/finance-tracker/pull/20))
 
-See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20's owner-confirmed live synthetic checks are complete. Final-head Node contract tests passed in GitHub Actions run #129 (73/73); the PR is ready for merge as a prototype feasibility record only.
+See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20's owner-confirmed live synthetic checks are complete. Final-head Node contract tests passed in GitHub Actions run #129 (73/73), and PR #20 merged to `main` at `1e4fc1f86948f2892b5ab88a85d6f73d632719b8`.
 
-The branch `feat/drive-feasibility-spike` adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
+The merged PR #20 adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 
 **Live validation update (owner-confirmed 2026-10-31):** complete folder enumeration passed; pre-generated-ID retry returned HTTP 409; exact SHA-256 read-back passed; cleanup was confirmed. The original browser metadata response did not expose an ETag. The raw REST probe returned HTTP 200 despite a deliberately stale `If-Match`; read-back confirmed the probe description was written and Drive version advanced to 4. **The tested conditional-update mechanism failed.** The owner then accepted the single-active-device policy described above; the project is continuing with Google Drive under that explicit operating constraint.
 

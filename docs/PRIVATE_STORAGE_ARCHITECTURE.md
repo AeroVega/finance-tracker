@@ -85,6 +85,18 @@ The app must not claim a commit succeeded until the manifest and complete refere
 - Keep the data model source-independent so that changing storage providers does not require rewriting CSV parsers or financial calculations.
 - The owner should be able to retrieve data without depending on the deployed web app remaining available.
 
+## Best-effort active-session coordination (PR #21)
+
+The owner-approved operating model is one active device at a time. The session marker is a coordination hint stored in the selected app-owned Drive folder, not a lock or fencing token.
+
+The marker must be uniquely discoverable through complete folder enumeration. Duplicate marker files, malformed content, incomplete enumeration, permission failures, and network errors are ambiguous states and must block writes. A valid active marker contains a random page-session ID and heartbeat/expiry timestamps. The app verifies the exact session ID before each serialized mutation and reads back every marker update.
+
+A stale heartbeat never triggers automatic takeover. The user must explicitly request recovery; the app re-reads the same stale record immediately before replacement and verifies the new owner by read-back. This narrows but cannot eliminate races. An orderly handoff stops new writes, drains in-flight operations, marks the session released, and verifies the released record before another device starts. A browser crash cannot guarantee release; it leaves a marker that becomes stale after the heartbeat window. Offline writes remain prohibited.
+
+Any failed heartbeat, uncertain update response, lost network, malformed marker, changed owner, or failed release verification disables writes. After a transient interruption, the same page may revalidate only its exact prior session ID; stale or changed ownership remains blocked. Do not claim this mechanism provides server-enforced mutual exclusion or makes simultaneous starts/network partitions safe.
+
+PR #21's synthetic contract tests do not authorize production financial-data reads or writes. A separate synthetic live validation and the remaining storage/security/recovery release gates are required before production integration.
+
 ## Cost and provider terms
 
 The $0 recurring-cost constraint is a release gate. Published quota headroom may make ordinary one-person API usage unlikely to hit limits, but quota limits and billing terms are separate questions. Before production:
