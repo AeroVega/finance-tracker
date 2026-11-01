@@ -387,7 +387,26 @@ export class DriveTransactionEngine {
         if (state.transactionId !== transactionId) fail("journal-identity-mismatch", "A journal group contains inconsistent transaction IDs.");
         const decision = classifyTransactionRecovery({ journalState: state, manifest });
         if (decision.action === "already-terminal") {
-          outcomes.push({ transactionId, ...decision });
+          if (decision.outcome === "committed") {
+            const commitFile = files.find((file) =>
+              file.appProperties?.[TAG + "Kind"] === "commit-record" &&
+              file.appProperties?.[TAG + "Transaction"] === transactionId);
+            if (!commitFile) fail("missing-commit-record", "A terminal committed transaction has no immutable commit record.");
+            const record = await this.adapter.readJson(commitFile.id);
+            const actual = await hashBytes(new TextEncoder().encode(canonicalizeJcs(record)), this.crypto);
+            if (actual !== state.commit?.recordHash || record.commitId !== state.commit.commitId) {
+              fail("commit-verification-failed", "A terminal committed transaction failed commit-record verification.");
+            }
+            for (const reference of Object.values(record.snapshot || {})) {
+              const bytes = await this.adapter.readBytes(reference.fileId);
+              if (await hashBytes(bytes, this.crypto) !== reference.sha256) {
+                fail("snapshot-object-verification-failed", "A terminal committed snapshot object failed verification.");
+              }
+            }
+            outcomes.push({ transactionId, action: "verified-committed", outcome: "committed", commitId: record.commitId });
+          } else {
+            outcomes.push({ transactionId, ...decision });
+          }
           continue;
         }
         // This first engine iteration deliberately does not auto-publish or discard
