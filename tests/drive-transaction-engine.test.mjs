@@ -154,7 +154,7 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
     } else if (boundary === 2 || boundary === 5) {
       await assert.rejects(
         engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest }),
-        (error) => error.code === "not-found"
+        (error) => error.message === "not found"
       );
       assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
       assert.equal(engine.recoveryRequired, true);
