@@ -264,10 +264,10 @@
       $("release-synthetic-storage").disabled = false;
       $("storage-status").textContent = "Connected to " + result.folderName + ". " + result.snapshot.length + " synthetic row(s) restored. CSV imports remain local.";
       $("storage-status").dataset.kind = "success";
+      connectStorageButton.disabled = true;
     } catch (error) {
       $("storage-status").textContent = error instanceof Error ? error.message : "Synthetic storage connection failed.";
       $("storage-status").dataset.kind = "error";
-    } finally {
       connectStorageButton.disabled = false;
     }
   });
@@ -275,8 +275,8 @@
     $("release-synthetic-storage").disabled = true;
     try {
       await syntheticStorage?.release();
-      syntheticStorage = null;
-      $("storage-status").textContent = "Synthetic storage session released. CSV imports remain local.";
+      $("storage-status").textContent = "Synthetic storage session released. You can reconnect or switch devices now; CSV imports remain local."; 
+      connectStorageButton.disabled = false;
       $("storage-status").dataset.kind = "success";
     } catch (error) {
       $("storage-status").textContent = error instanceof Error ? error.message : "Storage release could not be verified.";
