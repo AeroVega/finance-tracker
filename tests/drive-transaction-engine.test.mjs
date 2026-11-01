@@ -40,6 +40,11 @@ class SyntheticDrive {
     if (!file) { const error = new Error("not found"); error.code = "drive-request-failed"; error.details = { status: 404 }; throw error; }
     return file.json || JSON.parse(new TextDecoder().decode(file.bytes));
   }
+  async readMetadata(id) {
+    const file = this.files.get(id);
+    if (!file) throw new Error("not found");
+    return { id, parents: ["synthetic-folder"], appProperties: file.appProperties || {} };
+  }
   async readBytes(id) {
     const file = this.files.get(id);
     if (!file) throw new Error("not found");
@@ -59,7 +64,7 @@ class SyntheticDrive {
     const json = typeof content === "string" ? JSON.parse(content) : null;
     this.files.set(fileId, {
       bytes, json, name,
-      appProperties: { financeTrackerKind: kind, financeTrackerTransaction: transactionId }
+      appProperties: { financeTrackerKind: kind, financeTrackerTransaction: transactionId, financeTrackerHash: expectedSha256 }
     });
     this.mutate();
     return { fileId };
@@ -137,6 +142,19 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
     assert.equal(adapter.mutations, boundary);
     assert.equal(engine.recoveryRequired, true);
     assert.ok(adapter.files.size >= 2, `boundary ${boundary} retains its durable evidence`);
+    const recovered = await engine.recover({
+      manifestFileId: "manifest",
+      makeManifest: transaction.makeManifest
+    });
+    const outcome = recovered.transactions[0];
+    if (boundary <= 5) {
+      assert.equal(outcome.outcome, "aborted", `boundary ${boundary} safely aborts at the original base`);
+      assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
+    } else {
+      assert.equal(outcome.outcome, "committed", `boundary ${boundary} resumes or verifies the commit`);
+      assert.equal(adapter.files.get("manifest").json.revision, 4);
+    }
+    assert.equal(engine.recoveryRequired, false);
   }
 });
 
@@ -145,7 +163,7 @@ test("recovery verifies a manifest published before its response was lost", asyn
   await assert.rejects(engine.transact(transaction), (error) => error.code === "transaction-unresolved");
   const manifest = adapter.files.get("manifest").json;
   assert.equal(manifest.revision, 4);
-  const recovered = await engine.recover({ manifestFileId: "manifest" });
+  const recovered = await engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest });
   assert.equal(recovered.transactions[0].action, "verified-committed");
   assert.equal(engine.recoveryRequired, false);
 });
@@ -166,15 +184,16 @@ test("recovery verifies a terminal commit when the final journal response is los
   assert.equal(recovered.transactions[0].outcome, "committed");
 });
 
-test("recovery fails closed before publication and leaves all staged evidence intact", async () => {
+test("recovery resumes a fully staged transaction when the manifest remains at its verified base", async () => {
   const { adapter, engine, transaction } = setup(8);
   await assert.rejects(engine.transact(transaction), (error) => error.code === "transaction-unresolved");
-  const before = adapter.files.size;
-  await assert.rejects(engine.recover({ manifestFileId: "manifest" }), (error) =>
-    error.code === "recovery-needs-intervention");
-  assert.equal(adapter.files.size, before);
-  assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
-  assert.equal(engine.recoveryRequired, true);
+  const recovered = await engine.recover({
+    manifestFileId: "manifest",
+    makeManifest: transaction.makeManifest
+  });
+  assert.equal(recovered.transactions[0].outcome, "committed");
+  assert.equal(adapter.files.get("manifest").json.revision, 4);
+  assert.equal(engine.recoveryRequired, false);
 });
 
 test("offline writes are refused before the first durable mutation", async () => {
