@@ -535,7 +535,7 @@ export class DriveTransactionEngine {
           // A crash can occur after the immutable commit record is durable but before
           // the publication-intent event. The complete record and snapshot are verified
           // before recovery creates that missing intent.
-          const verified = await verifyCommit(transactionId, state);
+          const verified = await verifyCommit(transactionId, state, state.commit?.commitId, events);
           if (typeof makeManifest !== "function") {
             fail("recovery-manifest-builder-required", "Safe publication recovery requires the application's manifest builder.", { transactionId });
           }
