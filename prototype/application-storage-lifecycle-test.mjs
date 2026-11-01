@@ -457,16 +457,25 @@ async function cleanupSyntheticFiles() {
     adapter: createDriveSessionAdapter({ accessToken: () => token(), folderId: state.folderId, fetchImpl: globalThis.fetch })
   });
   const inspection = await sessionCoordinator.inspect();
-  if (inspection.status === "active") throw new Error("An active session marker exists. Cleanup is blocked while another page/device may be using this synthetic folder.");
+  if (inspection.status !== "absent" && inspection.status !== "released") {
+    throw new Error("Cleanup requires a positively verified absent or released session marker. Current inspection: " +
+      inspection.status + ". Active, stale, ambiguous, or unreadable markers all block deletion.");
+  }
   const adapter = new GoogleDriveTransactionAdapter({
     accessToken: async () => token(), folderId: state.folderId, fetchImpl: globalThis.fetch, cryptoImpl: crypto
   });
   const files = await adapter.listChildren();
-  const targets = files.filter((file) =>
-    file.name === MANIFEST_NAME ||
-    (typeof file.appProperties?.financeTrackerTransaction === "string" &&
-      file.appProperties.financeTrackerTransaction.startsWith("pr24-"))
-  );
+  const targets = files.filter((file) => {
+    if (!Array.isArray(file.parents) || !file.parents.includes(state.folderId)) return false;
+    const properties = file.appProperties || {};
+    const isBootstrapManifest = file.name === MANIFEST_NAME &&
+      properties.financeTrackerKind === "synthetic-manifest" &&
+      properties.financeTrackerTransaction === BOOTSTRAP_TRANSACTION;
+    const isTaggedTransaction = typeof properties.financeTrackerTransaction === "string" &&
+      properties.financeTrackerTransaction.startsWith("pr24-") &&
+      ["snapshot-object", "journal-event", "commit-record"].includes(properties.financeTrackerKind);
+    return isBootstrapManifest || isTaggedTransaction;
+  });
   if (!targets.length) {
     status("cleanup-status", "No PR24 synthetic transaction files were found. The session marker, if present, was not touched.", "success");
     return;
@@ -488,9 +497,10 @@ async function cleanupSyntheticFiles() {
     ? "Cleanup incomplete. Remaining file IDs: " + failures.join(", ") + ". Inspect the folder manually."
     : "PASS: all PR24 synthetic transaction files were deleted. The session marker was retained.",
   failures.length ? "warning" : "success");
-  state.manifestFileId = "";
-  state.manifestRevision = null;
-}
+  if (!failures.length) {
+    state.manifestFileId = "";
+    state.manifestRevision = null;
+  }
 async function simulateCrash() {
   if (!state.lifecycle?.coordinator?.canWrite) throw new Error("An active session is required to simulate a crash.");
   if (!window.confirm("Stop this page's heartbeat and discard its in-memory session context WITHOUT writing a release marker? Wait at least two minutes before attempting stale recovery. Continue?")) return;
