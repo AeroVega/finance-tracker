@@ -240,9 +240,12 @@
   connectStorageButton.disabled = true;
   void import("./dashboard-synthetic-storage.mjs").then(async ({ DashboardSyntheticStorage }) => {
     syntheticStorage = new DashboardSyntheticStorage({
-      onStatus: ({ message, kind }) => {
+      onStatus: ({ state: lifecycleState, message, kind }) => {
         $("storage-status").textContent = message;
         $("storage-status").dataset.kind = kind || "info";
+        $("recover-stale-storage").hidden = lifecycleState !== "stale-session";
+        if (lifecycleState === "ready") connectStorageButton.disabled = true;
+        else if (lifecycleState !== "connecting" && lifecycleState !== "recovering" && lifecycleState !== "reconnecting") connectStorageButton.disabled = false;
       },
       onSnapshot: (rows) => {
         state.syntheticTransactions = rows;
@@ -269,6 +272,23 @@
       $("storage-status").textContent = error instanceof Error ? error.message : "Synthetic storage connection failed.";
       $("storage-status").dataset.kind = "error";
       connectStorageButton.disabled = false;
+    }
+  });
+  $("recover-stale-storage").addEventListener("click", async () => {
+    if (!window.confirm("Drive reports that the previous session is conclusively stale. Confirm takeover and transaction recovery? Do not continue if another device may still be active.")) return;
+    $("recover-stale-storage").disabled = true;
+    try {
+      const rows = await syntheticStorage.recoverStaleSession();
+      $("storage-status").textContent = "Stale session recovered. " + rows.length + " synthetic row(s) verified.";
+      $("storage-status").dataset.kind = "success";
+      $("recover-stale-storage").hidden = true;
+      $("recover-stale-storage").disabled = false;
+      $("release-synthetic-storage").disabled = false;
+      connectStorageButton.disabled = true;
+    } catch (error) {
+      $("storage-status").textContent = error instanceof Error ? error.message : "Stale-session recovery failed.";
+      $("storage-status").dataset.kind = "error";
+      $("recover-stale-storage").disabled = false;
     }
   });
   $("release-synthetic-storage").addEventListener("click", async () => {
