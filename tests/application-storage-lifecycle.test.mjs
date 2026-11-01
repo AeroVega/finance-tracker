@@ -127,3 +127,25 @@ test("pagehide makes a best-effort release attempt", async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(sessionAdapter.record.state, "released");
 });
+
+test("stale sessions are never taken over automatically and require explicit recovery", async () => {
+  const now = Date.now();
+  const staleRecord = {
+    format: "finance-tracker-session",
+    version: 1,
+    sessionId: "previous-page",
+    state: "active",
+    startedAt: now - 240_000,
+    heartbeatAt: now - 240_000,
+    expiresAt: now - 120_000,
+    releasedAt: null
+  };
+  const { lifecycle, sessionAdapter } = setup({ initialRecord: staleRecord });
+  await assert.rejects(lifecycle.start(), (error) => error.code === "stale-session");
+  assert.equal(sessionAdapter.record.sessionId, "previous-page");
+  await assert.rejects(lifecycle.recoverStaleSession({ confirm: false }), (error) => error.code === "confirmation-required");
+  assert.equal(sessionAdapter.record.sessionId, "previous-page");
+  await lifecycle.recoverStaleSession({ confirm: true });
+  assert.equal(lifecycle.state, "ready");
+  assert.notEqual(sessionAdapter.record.sessionId, "previous-page");
+});
