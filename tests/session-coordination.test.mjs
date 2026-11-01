@@ -240,6 +240,45 @@ test("browser-crash simulation becomes stale only after the heartbeat window", a
   assert.equal(replacement.canWrite, true);
 });
 
+test("scheduled heartbeats refresh ownership and stop cleanly", async () => {
+  const now = { value: 10_000 };
+  const adapter = new MemorySessionAdapter();
+  const session = coordinator(adapter, now);
+  await session.start();
+  let tick;
+  let cleared = false;
+  session.startHeartbeat({
+    intervalMs: 500,
+    isOnline: () => true,
+    setIntervalImpl: (callback) => { tick = callback; return 7; },
+    clearIntervalImpl: (id) => { cleared = id === 7; }
+  });
+  now.value += 500;
+  await tick();
+  assert.equal(adapter.record.heartbeatAt, now.value);
+  await session.release();
+  assert.equal(cleared, true);
+});
+
+test("offline heartbeat scheduling immediately disables writes", async () => {
+  const now = { value: 10_000 };
+  const adapter = new MemorySessionAdapter();
+  const session = coordinator(adapter, now);
+  await session.start();
+  let tick;
+  let errorCode = "";
+  session.startHeartbeat({
+    intervalMs: 500,
+    isOnline: () => false,
+    setIntervalImpl: (callback) => { tick = callback; return 8; },
+    clearIntervalImpl: () => undefined,
+    onError: (error) => { errorCode = error.code; }
+  });
+  await tick();
+  assert.equal(errorCode, "offline");
+  assert.equal(session.canWrite, false);
+});
+
 test("heartbeat extends the lease only while the current owner is still verified", async () => {
   const now = { value: 10_000 };
   const adapter = new MemorySessionAdapter();

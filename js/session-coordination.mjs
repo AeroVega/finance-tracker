@@ -26,7 +26,10 @@ function validRecord(record) {
     Number.isSafeInteger(record.heartbeatAt) &&
     Number.isSafeInteger(record.expiresAt) &&
     record.expiresAt >= record.heartbeatAt &&
-    (record.releasedAt === null || Number.isSafeInteger(record.releasedAt))
+    record.startedAt <= record.heartbeatAt &&
+    ((record.state === "active" && record.releasedAt === null) ||
+      (record.state === "released" && Number.isSafeInteger(record.releasedAt) &&
+        record.releasedAt >= record.heartbeatAt))
   );
 }
 
@@ -207,10 +210,11 @@ export class SessionCoordinator {
       fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.");
     }
 
+    const heartbeatAt = this.now();
     const record = {
       ...this.session,
-      heartbeatAt: this.now(),
-      expiresAt: this.now() + this.staleAfterMs,
+      heartbeatAt,
+      expiresAt: heartbeatAt + this.staleAfterMs,
       releasedAt: null
     };
     try {
@@ -227,6 +231,52 @@ export class SessionCoordinator {
     });
     this.writeQueue = run.catch(() => undefined);
     return run;
+  }
+
+  startHeartbeat(options) {
+    const settings = options || {};
+    const intervalMs = Number(settings.intervalMs || Math.floor(this.staleAfterMs / 3));
+    if (!this.canWrite || this.releasing) fail("not-owner", "Acquire a verified session before starting heartbeats.");
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 1 || intervalMs >= this.staleAfterMs) {
+      fail("invalid-timing", "The heartbeat interval must be positive and shorter than the session expiry window.");
+    }
+    if (this.heartbeatStop) this.heartbeatStop();
+    const setIntervalImpl = settings.setIntervalImpl || globalThis.setInterval;
+    const clearIntervalImpl = settings.clearIntervalImpl || globalThis.clearInterval;
+    const isOnline = settings.isOnline || (() =>
+      typeof globalThis.navigator === "undefined" || globalThis.navigator.onLine !== false);
+    const onError = typeof settings.onError === "function" ? settings.onError : () => {};
+    if (typeof setIntervalImpl !== "function" || typeof clearIntervalImpl !== "function") {
+      fail("timer-unavailable", "Heartbeat scheduling is unavailable.");
+    }
+    let stopped = false;
+    const timer = setIntervalImpl(async () => {
+      if (stopped) return;
+      if (!isOnline()) {
+        this.ownership = "unknown";
+        this.session = null;
+        stopped = true;
+        clearIntervalImpl(timer);
+        this.heartbeatStop = null;
+        onError(new SessionCoordinationError("offline", "The page went offline. Writes are disabled."));
+        return;
+      }
+      try {
+        await this.heartbeat();
+      } catch (error) {
+        stopped = true;
+        clearIntervalImpl(timer);
+        this.heartbeatStop = null;
+        onError(error);
+      }
+    }, intervalMs);
+    this.heartbeatStop = () => {
+      if (stopped) return;
+      stopped = true;
+      clearIntervalImpl(timer);
+      this.heartbeatStop = null;
+    };
+    return this.heartbeatStop;
   }
 
   async assertCanWrite(options) {
@@ -262,10 +312,11 @@ export class SessionCoordinator {
 
   async release() {
     if (!this.canWrite || this.releasing) fail("not-owner", "This page does not own a releasable session.");
+    if (this.heartbeatStop) this.heartbeatStop();
     this.releasing = true;
     await this.writeQueue;
     const current = await this.inspect();
-    if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
+    if (!this.session || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
       this.session = null;
       fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.");

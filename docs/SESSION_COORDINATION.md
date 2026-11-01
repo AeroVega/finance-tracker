@@ -32,7 +32,7 @@ The re-read-before-write pattern narrows races but is not atomic. It must never 
 
 ## Heartbeats, crashes, and handoff
 
-The active page refreshes `heartbeatAt` and `expiresAt` on a regular cadence while visible and online. A heartbeat must first verify the current owner, then write and read back the refreshed record. A failed or unverifiable heartbeat immediately disables writes; reconnecting requires a fresh ownership check.
+The active page uses `SessionCoordinator.startHeartbeat()` to refresh `heartbeatAt` and `expiresAt` on a regular cadence (default: one third of the expiry window). A heartbeat first verifies the current owner, then writes and reads back the refreshed record. Going offline or encountering a failed/unverifiable heartbeat immediately disables writes and stops the timer. Browser background suspension may delay timers; every write still performs a fresh ownership read, so an expired lease blocks writes on resume. Reconnection requires a fresh ownership check.
 
 Orderly device handoff is:
 1. Stop accepting new writes.
@@ -59,7 +59,7 @@ A browser crash cannot reliably execute release. Its record ages into the stale 
 
 `js/session-coordination.mjs` is a storage-adapter-independent state machine. `tests/session-coordination.test.mjs` uses a deterministic in-memory adapter and covers active-session refusal, stale recovery, malformed/future records, network interruptions, ownership loss, offline refusal, local write serialization, orderly release, release failure, and browser-crash staleness.
 
-These tests verify client logic, not Google Drive's live consistency, multi-device mutual exclusion, background timer behavior on iOS Safari, or production integration. The next integration step must use only synthetic files in a dedicated Drive test folder, with a Drive adapter that fails closed on incomplete folder enumeration and ambiguous marker discovery. No production manifest, ledger, or CSV data may be accessed.
+These tests verify client logic, including lost create/update responses resolved only by exact read-back, not Google Drive's live consistency, multi-device mutual exclusion, background timer behavior on iOS Safari, or production integration. The next integration step must use only synthetic files in a dedicated Drive test folder, with a Drive adapter that fails closed on incomplete folder enumeration and ambiguous marker discovery. No production manifest, ledger, or CSV data may be accessed.
 
 ## Explicit limitations
 
