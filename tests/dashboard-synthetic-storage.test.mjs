@@ -91,3 +91,10 @@ test("dashboard clear failure restores every local collection instead of losing 
   assert.match(clearFlow, /state\.importedFingerprints = previousState\.importedFingerprints/);
   assert.match(clearFlow, /state\.sourceFiles = previousState\.sourceFiles/);
 });
+
+
+test("dashboard supplies a synchronous token provider to the Drive session adapter", () => {
+  const source = readFileSync(new URL("../js/dashboard-synthetic-storage.mjs", import.meta.url), "utf8");
+  assert.match(source, /accessToken: \(\) => this\.token\(\)/);
+  assert.doesNotMatch(source, /accessToken: async \(\) => this\.token\(\)/);
+});
