@@ -273,7 +273,9 @@ export class DashboardSyntheticStorage {
           folderName: this.folderName,
           folderId: this.folderId,
           initializeManifest: ({ adapter }) => findOrCreateManifest(adapter),
-          accessToken: async () => this.token(),
+          // Session adapter folder enumeration consumes the token synchronously.
+          // Keep this provider synchronous; an async wrapper becomes Bearer [object Promise].
+          accessToken: () => this.token(),
           makeManifest: manifestBuilder,
           onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info")
         });
