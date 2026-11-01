@@ -142,6 +142,15 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
     assert.equal(adapter.mutations, boundary);
     assert.equal(engine.recoveryRequired, true);
     assert.ok(adapter.files.size >= 2, `boundary ${boundary} retains its durable evidence`);
+    if (boundary === 2 || boundary === 5) {
+      await assert.rejects(
+        engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest }),
+        (error) => error.message === "not found"
+      );
+      assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
+      assert.equal(engine.recoveryRequired, true);
+      continue;
+    }
     const recovered = await engine.recover({
       manifestFileId: "manifest",
       makeManifest: transaction.makeManifest
@@ -151,13 +160,6 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
       assert.equal(outcome.outcome, "aborted", `boundary ${boundary} safely aborts at the original base`);
       assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
       assert.equal(engine.recoveryRequired, false);
-    } else if (boundary === 2 || boundary === 5) {
-      await assert.rejects(
-        engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest }),
-        (error) => error.message === "not found"
-      );
-      assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
-      assert.equal(engine.recoveryRequired, true);
     } else {
       assert.equal(outcome.outcome, "committed", `boundary ${boundary} resumes or verifies the commit`);
       assert.equal(adapter.files.get("manifest").json.revision, 4);
