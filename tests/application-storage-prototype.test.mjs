@@ -18,6 +18,8 @@ test("prototype hub links to the PR24 application lifecycle harness", async () =
   assert.match(module, /lifecycle\.coordinator\.canWrite === true/);
   assert.match(module, /lifecycle\.engine\.recoveryRequired === false/);
   assert.match(module, /Recovery did not pass final verification/);
+  assert.match(module, /inspection\.status !== "absent" && inspection\.status !== "released"/);
+  assert.match(module, /snapshot-object.*journal-event.*commit-record/);
   assert.match(page, /id="simulate-crash"/);
   assert.match(page, /id="handoff-status"/);
   const referencedIds = [...module.matchAll(/\$\("([^"]+)"\)/g)].map((match) => match[1]);
