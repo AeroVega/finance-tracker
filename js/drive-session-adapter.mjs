@@ -138,7 +138,8 @@ export function createDriveSessionAdapter(options) {
     const previousRecord = lastReadRecord;
     const previousFileId = lastReadFileId;
     const observed = await read();
-    if (!sameRecord(observed, previousRecord) || (observed === null) !== (previousFileId === null)) {
+    if (!((observed === null && previousRecord === null) || sameRecord(observed, previousRecord)) ||
+        (observed === null) !== (previousFileId === null)) {
       throw error("ownership-unknown", "The session marker changed since it was last inspected. The write was refused.");
     }
 

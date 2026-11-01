@@ -197,6 +197,23 @@ test("orderly release is verified and permits the next device to start", async (
   assert.equal(second.session.sessionId, "device-b");
 });
 
+test("release waits for queued writes and blocks new writes during handoff", async () => {
+  const now = { value: 10_000 };
+  const adapter = new MemorySessionAdapter();
+  const session = coordinator(adapter, now);
+  await session.start();
+  let finishWrite;
+  const pending = session.withWrite(() => new Promise((resolve) => { finishWrite = resolve; }));
+  await Promise.resolve();
+  const releasing = session.release();
+  const blocked = session.withWrite(() => undefined);
+  await expectCode(blocked, "not-owner");
+  finishWrite("done");
+  await pending;
+  await releasing;
+  assert.equal(adapter.record.state, "released");
+});
+
 test("release failure is not treated as a completed handoff", async () => {
   const now = { value: 10_000 };
   const adapter = new MemorySessionAdapter();

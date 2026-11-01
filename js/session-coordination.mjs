@@ -72,6 +72,7 @@ export class SessionCoordinator {
     }
     this.session = null;
     this.ownership = "unowned";
+    this.releasing = false;
     this.writeQueue = Promise.resolve();
   }
 
@@ -151,6 +152,7 @@ export class SessionCoordinator {
     await this.verifyWrittenRecord(record, "ownership-unknown");
     this.session = record;
     this.ownership = "owned";
+    this.releasing = false;
     return record;
   }
 
@@ -190,11 +192,14 @@ export class SessionCoordinator {
     await this.verifyWrittenRecord(record, "ownership-unknown");
     this.session = record;
     this.ownership = "owned";
+    this.releasing = false;
     return record;
   }
 
   async heartbeat() {
-    if (!this.canWrite) fail("not-owner", "This session does not own the active session record.");
+    if (!this.canWrite || this.releasing) fail("not-owner", "This session does not own an available active session record.");
+    const run = this.writeQueue.then(async () => {
+    if (!this.canWrite || this.releasing) fail("not-owner", "This session does not own an available active session record.");
     const current = await this.inspect();
     if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
@@ -219,6 +224,9 @@ export class SessionCoordinator {
     this.session = record;
     this.ownership = "owned";
     return record;
+    });
+    this.writeQueue = run.catch(() => undefined);
+    return run;
   }
 
   async assertCanWrite(options) {
@@ -227,7 +235,7 @@ export class SessionCoordinator {
       this.session = null;
       fail("offline", "Offline writes are prohibited. Reconnect and re-establish the session before writing.");
     }
-    if (!this.canWrite) fail("not-owner", "No verified active session is held by this page.");
+    if (!this.canWrite || this.releasing) fail("not-owner", "No verified active session is available to this page.");
     const current = await this.inspect();
     if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
@@ -238,6 +246,9 @@ export class SessionCoordinator {
   }
 
   withWrite(operation, options) {
+    if (this.releasing) {
+      return Promise.reject(new SessionCoordinationError("not-owner", "Session handoff is in progress; new writes are disabled."));
+    }
     if (typeof operation !== "function") {
       return Promise.reject(new SessionCoordinationError("invalid-operation", "A write operation is required."));
     }
@@ -250,7 +261,9 @@ export class SessionCoordinator {
   }
 
   async release() {
-    if (!this.canWrite) fail("not-owner", "This page does not own a releasable session.");
+    if (!this.canWrite || this.releasing) fail("not-owner", "This page does not own a releasable session.");
+    this.releasing = true;
+    await this.writeQueue;
     const current = await this.inspect();
     if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
@@ -273,6 +286,7 @@ export class SessionCoordinator {
     await this.verifyWrittenRecord(record, "release-unconfirmed");
     this.session = null;
     this.ownership = "released";
+    this.releasing = false;
     return { released: true };
   }
 }
