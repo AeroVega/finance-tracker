@@ -2,6 +2,7 @@ import { GOOGLE_CONFIG } from "../js/google-config.js";
 import { validateGoogleConfig } from "../js/google-config-validation.mjs";
 import { DRIVE_FILES_ENDPOINT } from "../js/drive-feasibility-spike.mjs";
 import { ApplicationStorageLifecycle } from "../js/application-storage-lifecycle.mjs";
+import { GoogleDriveTransactionAdapter } from "../js/drive-transaction-engine.mjs";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -42,7 +43,7 @@ function updateActions() {
   const owned = Boolean(lifecycle?.coordinator?.canWrite);
   $("select-folder").disabled = !state.accessToken || state.busy;
   $("start-lifecycle").disabled = !folder || state.busy || ready();
-  $("recover-stale").disabled = !lifecycle || lifecycle.state !== "stale-session" || state.busy;
+  $("recover-stale").disabled = !lifecycle || lifecycle.state !== "stale-session" || state.busy;\n  $("simulate-crash").disabled = !lifecycle?.started || !lifecycle.coordinator?.canWrite || state.busy;
   $("recover-transaction").disabled = !lifecycle || lifecycle.state !== "recovery-required" || !owned || state.busy;
   $("run-transactions").disabled = !ready() || state.busy;
   $("simulate-offline").disabled = !ready() || state.busy;
@@ -238,7 +239,7 @@ async function runBusy(action) {
 async function startLifecycle() {
   if (!hasFolder()) throw new Error("Connect to Google and select a dedicated synthetic folder first.");
   token();
-  const bootstrapAdapter = new (await import("../js/drive-transaction-engine.mjs")).GoogleDriveTransactionAdapter({
+  const bootstrapAdapter = new GoogleDriveTransactionAdapter({
     accessToken: async () => token(), folderId: state.folderId, fetchImpl: globalThis.fetch, cryptoImpl: crypto
   });
   state.manifestFileId = await findOrCreateManifest(bootstrapAdapter);
@@ -360,7 +361,7 @@ async function recoverStale() {
   if (state.lifecycle?.state !== "stale-session") throw new Error("Drive has not reported a conclusively stale session.");
   if (!window.confirm("Confirm takeover of the stale PR24 synthetic test session? This is explicit recovery, not automatic takeover. Continue only if you are certain the previous browser/device is no longer active.")) return;
   await state.lifecycle.recoverStaleSession({ confirm: true });
-  text("check-crash", "Crash / reload / stale recovery: PASS (owner-confirmed)");
+  state.manifestRevision = (await state.lifecycle.readManifest()).revision;\n  text("check-crash", "Crash / reload / stale recovery: PASS (owner-confirmed)");
   $("check-crash").className = "pass";
   status("crash-status", "PASS: stale-session takeover required explicit confirmation, a new session ID was acquired, and transaction recovery completed.", "success");
 }
@@ -375,7 +376,7 @@ async function cleanupSyntheticFiles() {
     const inspection = await state.lifecycle.coordinator.inspect();
     if (inspection.status === "active") throw new Error("An active session marker exists. Cleanup is blocked while another page/device may be using this synthetic folder.");
   }
-  const adapter = new (await import("../js/drive-transaction-engine.mjs")).GoogleDriveTransactionAdapter({
+  const adapter = new GoogleDriveTransactionAdapter({
     accessToken: async () => token(), folderId: state.folderId, fetchImpl: globalThis.fetch, cryptoImpl: crypto
   });
   const files = await adapter.listChildren();
@@ -426,7 +427,7 @@ $("start-lifecycle").addEventListener("click", () => runBusy(async () => {
   await startLifecycle();
   status("lifecycle-status", "PASS: session acquired, transaction recovery completed before Ready, and automatic heartbeat started.", "success");
 }));
-$("recover-stale").addEventListener("click", () => runBusy(recoverStale));
+$("recover-stale").addEventListener("click", () => runBusy(recoverStale));\n$("simulate-crash").addEventListener("click", () => runBusy(simulateCrash));
 $("recover-transaction").addEventListener("click", () => runBusy(recoverTransaction));
 $("run-transactions").addEventListener("click", () => runBusy(runTransactions));
 $("simulate-offline").addEventListener("click", () => runBusy(simulateOffline));
