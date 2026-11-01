@@ -31,7 +31,7 @@ export class ApplicationStorageLifecycle {
   constructor(options = {}) {
     const {
       syntheticOnly = false, folderName = "", folderId, manifestFileId,
-      accessToken, makeManifest, fetchImpl = globalThis.fetch,
+      initializeManifest, accessToken, makeManifest, fetchImpl = globalThis.fetch,
       cryptoImpl = globalThis.crypto, isOnline = () => globalThis.navigator?.onLine !== false,
       onStatus = () => {}, lifecycleTarget = globalThis,
       setIntervalImpl = globalThis.setInterval, clearIntervalImpl = globalThis.clearInterval,
@@ -41,14 +41,15 @@ export class ApplicationStorageLifecycle {
     if (syntheticOnly !== true || !/synthetic/i.test(folderName)) {
       fail("synthetic-folder-required", "Application storage integration is restricted to a dedicated synthetic Drive folder.");
     }
-    if (!folderId || !manifestFileId || typeof accessToken !== "function" ||
-        typeof makeManifest !== "function" || typeof fetchImpl !== "function") {
+    if (!folderId || (!manifestFileId && typeof initializeManifest !== "function") ||
+        typeof accessToken !== "function" || typeof makeManifest !== "function" || typeof fetchImpl !== "function") {
       fail("invalid-config", "A verified synthetic folder, manifest, access-token provider, and manifest builder are required.");
     }
 
     this.folderName = folderName;
     this.folderId = folderId;
-    this.manifestFileId = manifestFileId;
+    this.manifestFileId = manifestFileId || null;
+    this.initializeManifest = initializeManifest || null;
     this.accessToken = accessToken;
     this.makeManifest = makeManifest;
     this.fetchImpl = fetchImpl;
@@ -152,6 +153,12 @@ export class ApplicationStorageLifecycle {
     try {
       await this.coordinator.start();
       acquired = true;
+      if (!this.manifestFileId && this.initializeManifest) {
+        this.manifestFileId = await this.coordinator.withWrite(() =>
+          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId })
+        );
+      }
+      if (!this.manifestFileId) fail("manifest-unavailable", "A verified synthetic manifest is required before recovery.");
       await this.recoverBeforeUse();
       this.startHeartbeat();
       this.attachLifecycleListeners();
@@ -177,6 +184,12 @@ export class ApplicationStorageLifecycle {
     this.publish("recovering-session", "Verifying stale session…");
     try {
       await this.coordinator.recoverStale({ confirm });
+      if (!this.manifestFileId && this.initializeManifest) {
+        this.manifestFileId = await this.coordinator.withWrite(() =>
+          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId })
+        );
+      }
+      if (!this.manifestFileId) fail("manifest-unavailable", "A verified synthetic manifest is required before recovery.");
       await this.recoverBeforeUse();
       this.startHeartbeat();
       this.attachLifecycleListeners();
