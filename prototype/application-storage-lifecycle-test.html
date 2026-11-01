@@ -112,7 +112,7 @@
   </section>
 
   <section class="panel">
-    <h2>7. Clean up synthetic transaction files</h2>
+    <h2>8. Clean up synthetic transaction files</h2>
     <p class="fine">Deletes only files carrying this page's dedicated PR24 synthetic transaction tags, plus its exact named synthetic manifest. The session marker is intentionally retained in Released state for safe future acquisition. Cleanup requires confirmation.</p>
     <button id="cleanup" class="danger" type="button" disabled>Review and delete PR24 synthetic files</button>
     <p id="cleanup-status" class="status" role="status" aria-live="polite">No cleanup performed.</p>
@@ -125,7 +125,7 @@
       <li id="check-start">Session acquisition + startup recovery: pending</li>
       <li id="check-transaction">Serialized writes + SHA-256 read-back: pending</li>
       <li id="check-reconnect">Offline refusal + same-session reconnect: pending</li>
-      <li id="check-release">Verified orderly release: pending</li>
+      <li id="check-release">Verified orderly release: pending</li>\n      <li id="check-handoff">Active-session refusal + sequential device handoff: owner test required</li>
       <li id="check-crash">Crash / reload / stale recovery: pending</li>
     </ul>
   </section>
