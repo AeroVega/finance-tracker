@@ -30,7 +30,7 @@ The suite verifies all 11 injected interruption points, preserves durable eviden
 
 The existing Drive feasibility page now includes **Run synthetic Drive transaction test**.
 
-1. Create or choose a dedicated, empty Google Drive folder used only for Finance Tracker synthetic testing. Do not select the folder containing personal financial data.
+1. Create or choose a dedicated, empty Google Drive folder used only for Finance Tracker synthetic testing. Include the word `synthetic` in its folder name (the page enforces this check). Do not select the folder containing personal financial data.
 2. Deploy branch `feat/durable-drive-transaction-engine` using the repository's documented **Actions → Deploy static site to GitHub Pages → Run workflow** procedure. This is the shared public Pages deployment; it is not an isolated staging site.
 3. Open the Drive feasibility page, connect Google, and select the dedicated synthetic folder with Picker.
 4. Run **Enumerate folder children** first. It must report a complete listing.
