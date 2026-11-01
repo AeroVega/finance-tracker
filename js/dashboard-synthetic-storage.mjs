@@ -173,6 +173,17 @@ export class DashboardSyntheticStorage {
     this.folderName = "";
     this.lifecycle = null;
     this.busy = false;
+    this.readyPromise = null;
+  }
+
+  async prepare() {
+    if (!this.readyPromise) {
+      this.readyPromise = Promise.all([loadConfig(), loadGoogleLibraries()]).then(([config]) => {
+        this.config = config;
+        return config;
+      });
+    }
+    return this.readyPromise;
   }
 
   publish(state, message, kind = "info") {
@@ -192,9 +203,10 @@ export class DashboardSyntheticStorage {
     this.busy = true;
     try {
       this.publish("connecting", "Loading Google services and deployment configuration…");
-      const [config] = await Promise.all([loadConfig(), loadGoogleLibraries()]);
-      this.config = config;
-      const response = await requestToken(config.clientId);
+      const config = this.config || await this.prepare();
+      // Invoke GIS immediately from the button handler while its user activation is live.
+      const authorization = requestToken(config.clientId);
+      const response = await authorization;
       this.accessToken = response.access_token;
       this.tokenExpiresAt = Date.now() + Number(response.expires_in || 0) * 1000;
       await new Promise((resolve, reject) => {
