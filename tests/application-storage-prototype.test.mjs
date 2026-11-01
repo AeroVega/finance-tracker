@@ -11,7 +11,11 @@ test("prototype hub links to the PR24 application lifecycle harness", async () =
   assert.match(module, /ApplicationStorageLifecycle/);
   assert.match(module, /syntheticOnly:\s*true/);
   assert.match(module, /finance-tracker-database/);
-  assert.match(module, /const firstId = crypto\.randomUUID\(\)/);\n  assert.match(module, /const raceIds = \[crypto\.randomUUID\(\), crypto\.randomUUID\(\)\]/);\n  assert.match(module, /const retryId = crypto\.randomUUID\(\)/);\n  assert.match(module, /commitId: crypto\.randomUUID\(\)/);
+  assert.match(module, /const firstId = crypto\.randomUUID\(\)/);\n  assert.match(module, /const raceIds = \[crypto\.randomUUID\(\), crypto\.randomUUID\(\)\]/);\n  assert.match(module, /const retryId = crypto\.randomUUID\(\)/);
+  assert.match(module, /snapshot: firstBase\.snapshot/);
+  assert.match(module, /snapshot: sharedBase\.snapshot/);
+  assert.match(module, /snapshot: retryBase\.snapshot/);
+  assert.match(module, /let testStage = /);\n  assert.match(module, /commitId: crypto\.randomUUID\(\)/);
   assert.match(module, /async function recoverTransaction\(\)/);
   assert.match(module, /lifecycle\.state === "ready"/);
   assert.match(module, /lifecycle\.acceptingWrites === true/);
