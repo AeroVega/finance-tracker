@@ -15,7 +15,8 @@ const state = {
   adapter: null,
   coordinator: null,
   heartbeatStop: null,
-  lastInspection: null
+  lastInspection: null,
+  inspectionSequence: 0
 };
 const $ = (id) => document.getElementById(id);
 
@@ -209,7 +210,18 @@ function describeInspection(result) {
     ["ambiguous", "unknown"].includes(result.status) ? "error" : "info");
 }
 async function inspect() {
+  const sequence = ++state.inspectionSequence;
+  // Do not leave a previous marker label visible while a newer Drive read is pending.
+  state.lastInspection = null;
+  setText("marker-state", "Inspecting…");
+  setText("owner-state", "Ownership unknown");
+  status("inspect-status", "Reading the complete Drive folder listing and session marker…");
+  setActions();
+
   const result = await state.coordinator.inspect();
+  // A later inspection or a successful acquire/recover/release may have superseded this read.
+  if (sequence !== state.inspectionSequence) return result;
+
   state.lastInspection = result;
   describeInspection(result);
   setActions();
@@ -268,6 +280,7 @@ $("acquire-session").addEventListener("click", () => runAction(
   "acquire-session", "acquire-status", "Attempting to acquire and verify this page's session…",
   async () => {
     const record = await state.coordinator.start();
+    state.inspectionSequence += 1;
     state.lastInspection = { status: "active", record };
     setText("marker-state", "Active");
     setText("owner-state", "This page owns it");
@@ -315,6 +328,7 @@ $("resume-session").addEventListener("click", () => runAction(
   "resume-session", "heartbeat-status", "Rechecking this page's exact prior session ID…",
   async () => {
     const record = await state.coordinator.resume();
+    state.inspectionSequence += 1;
     state.lastInspection = { status: "active", record };
     setText("marker-state", "Active");
     setText("owner-state", "This page owns it");
@@ -330,6 +344,7 @@ $("recover-session").addEventListener("click", () => runAction(
       return;
     }
     const record = await state.coordinator.recoverStale({ confirm: true });
+    state.inspectionSequence += 1;
     state.lastInspection = { status: "active", record };
     setText("marker-state", "Active");
     setText("owner-state", "This page owns it");
@@ -341,6 +356,7 @@ $("release-session").addEventListener("click", () => runAction(
   async () => {
     const result = await state.coordinator.release();
     state.heartbeatStop = null;
+    state.inspectionSequence += 1;
     state.lastInspection = { status: "released", record: null };
     setText("marker-state", "Released");
     setText("owner-state", "Unowned");
