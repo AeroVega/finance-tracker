@@ -279,6 +279,7 @@ async function startLifecycle() {
   }
 }
 async function runTransactions() {
+  try {
   const lifecycle = state.lifecycle;
   if (!ready()) throw new Error("Storage must be Ready before running transactions.");
   const firstBase = await lifecycle.readManifest();
@@ -342,6 +343,20 @@ async function runTransactions() {
     "success");
   text("check-transaction", "Serialized writes + SHA-256 read-back: PASS");
   $("check-transaction").className = "pass";
+  } catch (error) {
+    const details = error?.details || {};
+    const cause = details.cause || error?.code || error?.name || "unknown";
+    const diagnostic = [
+      "Transaction failed; no further writes are permitted until recovery.",
+      "Code: " + (error?.code || "unknown"),
+      "Underlying cause: " + cause,
+      details.causeMessage ? "Cause detail: " + details.causeMessage : "",
+      details.transactionId ? "Transaction ID: " + details.transactionId : "",
+      Number.isInteger(details.journalEventCount) ? "Journal events written: " + details.journalEventCount : ""
+    ].filter(Boolean).join(" ");
+    status("transaction-status", diagnostic, "error");
+    throw error;
+  }
 }
 async function simulateOffline() {
   if (!state.lifecycle) throw new Error("Start the lifecycle first.");
