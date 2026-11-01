@@ -140,7 +140,11 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
   for (let boundary = 1; boundary <= 11; boundary += 1) {
     const { adapter, engine, transaction } = setup(boundary);
     await assert.rejects(engine.transact(transaction), (error) =>
-      error.code === "transaction-unresolved" && Boolean(error.details.transactionId));
+      error.code === "transaction-unresolved" &&
+      Boolean(error.details.transactionId) &&
+      Boolean(error.details.cause) &&
+      Boolean(error.details.causeMessage) &&
+      Number.isInteger(error.details.journalEventCount));
     assert.equal(adapter.mutations, boundary);
     assert.equal(engine.recoveryRequired, true);
     assert.ok(adapter.files.size >= 2, `boundary ${boundary} retains its durable evidence`);
