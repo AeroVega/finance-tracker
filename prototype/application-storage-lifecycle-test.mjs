@@ -279,6 +279,7 @@ async function startLifecycle() {
   }
 }
 async function runTransactions() {
+  let testStage = "preparing first transaction";
   try {
   const lifecycle = state.lifecycle;
   if (!ready()) throw new Error("Storage must be Ready before running transactions.");
@@ -291,21 +292,23 @@ async function runTransactions() {
     transactionId: firstId,
     expectedBase: firstBase,
     objects: [{ logicalPath: firstPath, content: JSON.stringify(firstPayload) }],
-    commitRecord: { operationType: "pr24-synthetic-integration-test", schemaVersion: 1, snapshot: {} },
+    commitRecord: { operationType: "pr24-synthetic-integration-test", schemaVersion: 1, snapshot: firstBase.snapshot },
     makeManifest: manifestBuilder
   });
 
   // Start two writes from the same base. The serialized engine must allow one
   // commit and reject the stale-base contender rather than silently overwrite it.
+  testStage = "reading the first committed manifest";
   const sharedBase = await lifecycle.readManifest();
   const raceIds = [crypto.randomUUID(), crypto.randomUUID()];
   const racePaths = raceIds.map((id) => "synthetic/" + id + ".json");
+  testStage = "running concurrent writes from one shared base";
   const racePromises = raceIds.map((id, index) => lifecycle.transact({
     manifestFileId: state.manifestFileId,
     transactionId: id,
     expectedBase: sharedBase,
     objects: [{ logicalPath: racePaths[index], content: JSON.stringify({ test: "PR24", contender: index + 1, syntheticOnly: true }) }],
-    commitRecord: { operationType: "pr24-serialized-write-race", schemaVersion: 1, snapshot: {} },
+    commitRecord: { operationType: "pr24-serialized-write-race", schemaVersion: 1, snapshot: sharedBase.snapshot },
     makeManifest: manifestBuilder
   }).then((value) => ({ status: "fulfilled", value, index })).catch((error) => ({ status: "rejected", error, index })));
   const raceResults = await Promise.all(racePromises);
@@ -315,18 +318,21 @@ async function runTransactions() {
     throw new Error("The concurrent stale-base test did not produce exactly one commit and one safe base-conflict refusal. Results: " +
       raceResults.map((result) => result.status === "fulfilled" ? "committed" : result.error?.code || "failed").join(", "));
   }
+  testStage = "reading the concurrent-write winner";
   const retryBase = await lifecycle.readManifest();
   const retryId = crypto.randomUUID();
   const retryPath = racePaths[loser.index] + ".retry";
+  testStage = "retrying the safe stale-base conflict";
   const retry = await lifecycle.transact({
     manifestFileId: state.manifestFileId,
     transactionId: retryId,
     expectedBase: retryBase,
     objects: [{ logicalPath: retryPath, content: JSON.stringify({ test: "PR24", retryAfterConflict: true, syntheticOnly: true }) }],
-    commitRecord: { operationType: "pr24-serialized-write-retry", schemaVersion: 1, snapshot: {} },
+    commitRecord: { operationType: "pr24-serialized-write-retry", schemaVersion: 1, snapshot: retryBase.snapshot },
     makeManifest: manifestBuilder
   });
 
+  testStage = "verifying all committed objects by manifest reference and SHA-256";
   const firstRead = JSON.parse(new TextDecoder().decode(await lifecycle.readObject(firstPath)));
   const winnerRead = JSON.parse(new TextDecoder().decode(await lifecycle.readObject(racePaths[winner.index])));
   const retryRead = JSON.parse(new TextDecoder().decode(await lifecycle.readObject(retryPath)));
@@ -347,7 +353,7 @@ async function runTransactions() {
     const details = error?.details || {};
     const cause = details.cause || error?.code || error?.name || "unknown";
     const diagnostic = [
-      "Transaction failed; no further writes are permitted until recovery.",
+      "Harness stage failed: " + testStage + ".",
       "Code: " + (error?.code || "unknown"),
       "Underlying cause: " + cause,
       details.causeMessage ? "Cause detail: " + details.causeMessage : "",
