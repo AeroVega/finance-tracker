@@ -441,8 +441,11 @@ export class DriveTransactionEngine {
         const record = await this.adapter.readJson(commitFile.id);
         const actualHash = await hashBytes(new TextEncoder().encode(canonicalizeJcs(record)), this.crypto);
         const metadataHash = commitFile.appProperties?.[TAG + "Hash"];
+        const transactionBase = transactionEvents[0]?.payload || {};
         if (!expectedCommitId || record.commitId !== expectedCommitId ||
-            record.transactionId !== transactionId || metadataHash !== actualHash ||
+            record.transactionId !== transactionId || record.databaseId !== transactionBase.databaseId ||
+            record.copyId !== transactionBase.copyId || record.revision !== transactionBase.baseRevision + 1 ||
+            record.parentCommitId !== transactionBase.baseCommitId || metadataHash !== actualHash ||
             (state.commit?.recordHash && state.commit.recordHash !== actualHash)) {
           fail("commit-verification-failed", "The immutable commit record failed identity or hash verification.", { transactionId });
         }
@@ -486,6 +489,7 @@ export class DriveTransactionEngine {
         }
 
         const intendedIsPublished = state.publication &&
+          manifest.databaseId === base.databaseId && manifest.copyId === base.copyId &&
           manifest.commitId === state.publication.intendedCommitId &&
           manifest.revision === state.publication.intendedRevision;
 
@@ -559,6 +563,11 @@ export class DriveTransactionEngine {
             commitHash: verified.recordHash,
             snapshot: verified.record.snapshot
           });
+          if (nextManifest.databaseId !== manifest.databaseId || nextManifest.copyId !== manifest.copyId ||
+              nextManifest.revision !== verified.record.revision || nextManifest.commitId !== verified.record.commitId ||
+              nextManifest.parentCommitId !== manifest.commitId) {
+            fail("recovery-manifest-mismatch", "The reconstructed manifest does not preserve database identity and commit lineage.", { transactionId });
+          }
           state = await appendRecoveryEvent(transactionId, state, "manifest-publication-planned", {
             baseRevision: manifest.revision,
             baseCommitId: manifest.commitId,
@@ -587,8 +596,10 @@ export class DriveTransactionEngine {
             commitHash: verified.recordHash,
             snapshot: verified.record.snapshot
           });
-          if (nextManifest.revision !== state.publication.intendedRevision ||
-              nextManifest.commitId !== state.publication.intendedCommitId) {
+          if (nextManifest.databaseId !== base.databaseId || nextManifest.copyId !== base.copyId ||
+              nextManifest.revision !== state.publication.intendedRevision ||
+              nextManifest.commitId !== state.publication.intendedCommitId ||
+              nextManifest.parentCommitId !== base.baseCommitId) {
             fail("recovery-manifest-mismatch", "The reconstructed manifest does not match the journal's intended commit.", { transactionId });
           }
           await this.assertWritable();
