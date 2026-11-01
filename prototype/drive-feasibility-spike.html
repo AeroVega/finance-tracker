@@ -63,8 +63,14 @@
       <button id="create-object" type="button" disabled>Run object and lost-response test</button>
       <p id="object-status" class="status" role="status" aria-live="polite">Not tested.</p>
     </section>
+    <section class="panel" id="durable-transaction-test">
+      <h2>3. Durable transaction and recovery test</h2>
+      <p class="fine">Creates a disposable synthetic manifest, stages an invented object, writes the append-only journal and immutable commit record, publishes the manifest last, then reopens the transaction from Drive and verifies the committed snapshot. This does not access the canonical database. It uses a temporary manifest and synthetic records only.</p>
+      <button id="run-transaction-test" type="button" disabled>Run synthetic Drive transaction test</button>
+      <p id="transaction-test-status" class="status" role="status" aria-live="polite">Not tested.</p>
+    </section>
     <section class="panel">
-      <h2>3. Two-session conditional-write test</h2>
+      <h2>4. Two-session conditional-write test</h2>
       <p class="fine">Session A creates a temporary race-test file. Copy its file ID into Session B. Both sessions select the same test folder, read the same baseline ETag/version, then attempt a conditional update at nearly the same time. This changes only the disposable race-test file's description.</p>
       <button id="create-race" type="button" disabled>Create race-test file (Session A)</button>
       <label for="race-file-id">Shared synthetic race-test file ID</label>
@@ -76,13 +82,13 @@
       <p id="race-write-status" class="status" role="status" aria-live="polite">Not tested.</p>
     </section>
     <section class="panel">
-      <h2>4. Raw REST If-Match probe</h2>
+      <h2>5. Raw REST If-Match probe</h2>
       <p class="fine">Use the shared synthetic race-test file ID above. This sends a deliberately stale If-Match value directly through fetch to the Drive REST API, then reads the file back. HTTP 412 means the precondition was enforced; a successful update means Drive accepted a deliberately stale validator. A browser/network error is inconclusive. The only possible mutation is the verified synthetic file's description.</p>
       <button id="raw-if-match" type="button" disabled>Probe raw REST If-Match</button>
       <p id="raw-if-match-status" class="status" role="status" aria-live="polite">Not tested.</p>
     </section>
     <section class="panel">
-      <h2>5. Clean up temporary test files</h2>
+      <h2>6. Clean up temporary test files</h2>
       <p class="fine">Deletes only files created by this browser session after an explicit confirmation. Files created in another session must be cleaned up from that session or manually in Drive.</p>
       <button id="cleanup" class="secondary" type="button" disabled>Review and delete this session's test files</button>
       <p id="cleanup-status" class="status" role="status" aria-live="polite">No temporary files created in this session.</p>

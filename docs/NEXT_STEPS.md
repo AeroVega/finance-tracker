@@ -1,7 +1,7 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-11-01  
-**Current phase:** Storage implementation, beginning with transaction staging and crash recovery. PR #21 is merged; PR #22 establishes the pure transaction protocol core and is awaiting owner merge. Production financial-data persistence remains **not approved**.
+**Current phase:** PR #22's pure transaction protocol foundation is merged. PR #23's durable Google Drive transaction engine and synthetic crash-recovery tests are complete; the owner-confirmed live Drive transaction/reopen/recovery smoke test and temporary-file cleanup passed. Production financial-data persistence remains **not approved**.
 
 ## Current workstream and PR sequence
 
@@ -9,7 +9,7 @@ The owner has selected Google Drive as the intended private storage provider, su
 
 The next four PRs have deliberately separated responsibilities:
 
-### PR #22 — Transaction protocol foundation (current PR)
+### PR #22 — Transaction protocol foundation (merged 2026-11-01)
 
 Branch: `feat/transaction-staging-crash-recovery`
 
@@ -18,18 +18,21 @@ Branch: `feat/transaction-staging-crash-recovery`
 - Add synthetic tests for canonicalization, event integrity, invalid transitions, and recovery decisions.
 - Record the requirement that session management is automatic background behavior.
 
-**Exit:** protocol core and tests reviewed and merged. This PR does not perform Drive persistence.
+**Exit:** merged to `main` on 2026-11-01. The protocol core and tests do not perform Drive persistence.
 
-### PR #23 — Durable Google Drive transaction engine
+### PR #23 — Durable Google Drive transaction engine (current work)
+
+Branch: `feat/durable-drive-transaction-engine`
 
 - Implement Drive adapter operations for durable append-only journal events, immutable content-addressed object staging, immutable commit records, and manifest publication last.
 - Use pre-generated Drive file IDs and exact read-back verification to make retries idempotent after lost responses.
 - Enforce expected base revision/commit checks, serialized mutations, and verified session ownership before every mutation and immediately before manifest publication.
 - Implement deterministic crash recovery from the authoritative manifest, journal, commit records, and referenced objects.
-- Add fault injection after every durable mutation boundary, including lost responses and delayed read-after-write visibility.
-- Use synthetic data and a dedicated synthetic Drive folder only.
+- Add deterministic lost-response injection after all 11 durable mutation boundaries, including manifest publication and terminal journal append.
+- Provide a browser-driven synthetic Drive transaction smoke test in the existing feasibility page and a concise owner test guide.
+- Use synthetic data and a dedicated synthetic Drive folder only; never inspect or modify the canonical manifest or ledger.
 
-**Exit:** live synthetic Drive transactions and repeated recovery are verified; ambiguous outcomes fail closed and preserve evidence. No real financial data.
+**Exit:** Node fault-injection CI passes; the owner-confirmed live synthetic Drive transaction/reopen/recovery smoke test and cleanup passed on 2026-11-01; repeated recovery and ambiguous-outcome preservation are covered by synthetic tests. Real Drive interruption/reload rehearsals at every boundary remain open. No real financial data.
 
 ### PR #24 — Application integration and automatic lifecycle
 
@@ -52,6 +55,12 @@ Branch: `feat/transaction-staging-crash-recovery`
 
 **Exit:** explicit owner acceptance of the evidence and risks. Production financial-data persistence remains disabled until the owner separately authorizes it.
 
+## Temporary prototype navigation and MVP1 cleanup
+
+A temporary [Prototype Tools hub](../prototype/) is available from the app footer during development. It indexes the browser-based Drive and session experiments so validation does not depend on memorizing URLs. This hub is developer-only and must not become a product feature.
+
+**MVP1 completion gate:** remove the app-footer entry point and exclude all browser prototype pages under `prototype/` from the user-facing GitHub Pages deployment. Keep automated tests and useful engineering documentation; do not ship prototype pages, test controls, or prototype navigation as part of the MVP1 app. Verify the deployed artifact contains no prototype hub or prototype HTML pages before calling MVP1 complete.
+
 ## Cross-cutting product requirement: session management is automatic
 
 Session claiming, heartbeats, ownership inspection, reconnect revalidation, stale-session recovery, and orderly release are internal application lifecycle behavior—not chores for the user. The app should perform them automatically and unobtrusively. Manual intervention is reserved for genuinely ambiguous or unsafe conditions, such as conflicting ownership, malformed/duplicate markers, authorization requiring sign-in, failed verification, or an unknown transaction outcome.
@@ -60,9 +69,9 @@ The accepted operating model is single-user/single-active-device. Simultaneous u
 
 ## Current handoff
 
-Work on PR #22 is on branch `feat/transaction-staging-crash-recovery`. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`.
+PR #22 merged on 2026-11-01. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`. PR #23 adds `js/drive-transaction-engine.mjs`, `tests/drive-transaction-engine.test.mjs`, and `docs/DRIVE_TRANSACTION_ENGINE_TESTING.md`; the Drive feasibility page includes a live synthetic transaction smoke test.
 
-PR #22 is intentionally limited to protocol rules and the deterministic core. Do not add the Drive transaction adapter, durable writes, manifest publication, or application lifecycle integration to PR #22; those belong in PRs #23 and #24 as described above.
+PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation; its automated suites and owner-run live synthetic smoke test/cleanup have passed. PR #24 owns application integration and automatic session lifecycle. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
 
 Do not enable real ledger reads/writes or production financial-data persistence during these workstreams. Use invented fixtures and the dedicated synthetic Drive folder only.
 
