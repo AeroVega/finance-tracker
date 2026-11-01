@@ -1,7 +1,7 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-11-01  
-**Current phase:** PR #22's pure transaction protocol foundation is merged. PR #23 is implementing the durable Google Drive transaction engine and synthetic crash-recovery tests. Production financial-data persistence remains **not approved**.
+**Current phase:** PR #22's pure transaction protocol foundation is merged. PR #23's durable Google Drive transaction engine and synthetic crash-recovery tests are complete; the owner-confirmed live Drive transaction/reopen/recovery smoke test and temporary-file cleanup passed. Production financial-data persistence remains **not approved**.
 
 ## Current workstream and PR sequence
 
@@ -32,7 +32,7 @@ Branch: `feat/durable-drive-transaction-engine`
 - Provide a browser-driven synthetic Drive transaction smoke test in the existing feasibility page and a concise owner test guide.
 - Use synthetic data and a dedicated synthetic Drive folder only; never inspect or modify the canonical manifest or ledger.
 
-**Exit:** Node fault-injection CI passes; the owner completes the live synthetic Drive smoke test and records evidence; repeated recovery and ambiguous-outcome preservation are verified. No real financial data.
+**Exit:** Node fault-injection CI passes; the owner-confirmed live synthetic Drive transaction/reopen/recovery smoke test and cleanup passed on 2026-11-01; repeated recovery and ambiguous-outcome preservation are covered by synthetic tests. Real Drive interruption/reload rehearsals at every boundary remain open. No real financial data.
 
 ### PR #24 — Application integration and automatic lifecycle
 
@@ -71,7 +71,7 @@ The accepted operating model is single-user/single-active-device. Simultaneous u
 
 PR #22 merged on 2026-11-01. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`. PR #23 adds `js/drive-transaction-engine.mjs`, `tests/drive-transaction-engine.test.mjs`, and `docs/DRIVE_TRANSACTION_ENGINE_TESTING.md`; the Drive feasibility page includes a live synthetic transaction smoke test.
 
-PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation. PR #24 owns application integration and automatic session lifecycle. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
+PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation; its automated suites and owner-run live synthetic smoke test/cleanup have passed. PR #24 owns application integration and automatic session lifecycle. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
 
 Do not enable real ledger reads/writes or production financial-data persistence during these workstreams. Use invented fixtures and the dedicated synthetic Drive folder only.
 
