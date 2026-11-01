@@ -129,8 +129,7 @@ test("serialized transactions reject a stale second writer", async () => {
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   assert.equal(results.filter((result) => result.status === "rejected").length, 1);
   const rejected = results.find((result) => result.status === "rejected");
-  assert.match(rejected.reason.message, /transaction did not reach/i);
-  assert.equal(rejected.reason.details.cause, "base-conflict");
+  assert.equal(rejected.reason.code, "base-conflict");
 });
 
 test("every durable mutation boundary is injectable and preserves evidence", async () => {
@@ -138,7 +137,7 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
   for (let boundary = 1; boundary <= 11; boundary += 1) {
     const { adapter, engine, transaction } = setup(boundary);
     await assert.rejects(engine.transact(transaction), (error) =>
-      error.code === "transaction-unresolved" && error.details.transactionId);
+      error.code === "transaction-unresolved" && Boolean(error.details.transactionId));
     assert.equal(adapter.mutations, boundary);
     assert.equal(engine.recoveryRequired, true);
     assert.ok(adapter.files.size >= 2, `boundary ${boundary} retains its durable evidence`);
