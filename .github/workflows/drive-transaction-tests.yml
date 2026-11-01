@@ -1,0 +1,24 @@
+name: Drive transaction contract tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/durable-drive-transaction-engine]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  transaction-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js 26
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Run transaction protocol and fault-injection tests
+        run: node --test tests/transaction-protocol.test.mjs tests/drive-transaction-engine.test.mjs
