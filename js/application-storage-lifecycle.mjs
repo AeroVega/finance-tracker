@@ -183,7 +183,14 @@ export class ApplicationStorageLifecycle {
       this.started = true;
     } catch (error) {
       this.acceptingWrites = false;
-      this.publish("connection-error", error?.message || "Session recovery could not be verified.", error?.code || "unknown");
+      if (this.coordinator?.canWrite) {
+        this.started = true;
+        this.startHeartbeat();
+        this.attachLifecycleListeners();
+        this.publish("recovery-required", error?.message || "Session was acquired, but transaction recovery is unresolved.", error?.code || "recovery-required");
+      } else {
+        this.publish("connection-error", error?.message || "Session recovery could not be verified.", error?.code || "unknown");
+      }
       throw error;
     }
   }
@@ -208,8 +215,13 @@ export class ApplicationStorageLifecycle {
       this.startHeartbeat();
     } catch (error) {
       this.acceptingWrites = false;
-      const state = error?.code === "stale-session" ? "stale-session" : "ownership-unknown";
-      this.publish(state, error?.message || "The previous session could not be revalidated.", error?.code || "unknown");
+      if (this.coordinator?.canWrite && this.engine?.recoveryRequired) {
+        this.startHeartbeat();
+        this.publish("recovery-required", error?.message || "Transaction recovery remains unresolved.", error?.code || "recovery-required");
+      } else {
+        const state = error?.code === "stale-session" ? "stale-session" : "ownership-unknown";
+        this.publish(state, error?.message || "The previous session could not be revalidated.", error?.code || "unknown");
+      }
     }
   }
 
