@@ -157,3 +157,16 @@ test("stops when the manifest matches neither the known base nor intended commit
     { action: "stop", reason: "manifest-does-not-match-known-base-or-intended-state" }
   );
 });
+
+
+test("recovers a lost response after publication was planned but manifest remains at base", () => {
+  const state = {
+    status: "publishing",
+    commit: { commitId },
+    publication: { baseRevision: 4, baseCommitId: "base-commit", intendedRevision: 5, intendedCommitId: commitId }
+  };
+  assert.deepEqual(
+    classifyTransactionRecovery({ journalState: state, manifest: { revision: 4, commitId: "base-commit" } }),
+    { action: "revalidate-and-resume-publication", commitId }
+  );
+});
