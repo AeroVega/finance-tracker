@@ -244,16 +244,30 @@ export class DashboardSyntheticStorage {
         picker.setVisible(true);
       });
 
-      this.lifecycle = new ApplicationStorageLifecycle({
-        syntheticOnly: true,
-        folderName: this.folderName,
-        folderId: this.folderId,
-        initializeManifest: ({ adapter }) => findOrCreateManifest(adapter),
-        accessToken: async () => this.token(),
-        makeManifest: manifestBuilder,
-        onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info")
-      });
-      await this.lifecycle.start();
+      if (this.lifecycle && this.lifecycle.folderId !== this.folderId) {
+        if (this.lifecycle.coordinator?.canWrite) {
+          await this.lifecycle.release({ reason: "synthetic-folder-change" });
+        } else if (this.lifecycle.started) {
+          throw new Error("The previous storage session cannot be safely released. Keep this folder selected and resolve its lifecycle state first.");
+        }
+        this.lifecycle = null;
+      }
+      if (!this.lifecycle) {
+        this.lifecycle = new ApplicationStorageLifecycle({
+          syntheticOnly: true,
+          folderName: this.folderName,
+          folderId: this.folderId,
+          initializeManifest: ({ adapter }) => findOrCreateManifest(adapter),
+          accessToken: async () => this.token(),
+          makeManifest: manifestBuilder,
+          onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info")
+        });
+      }
+      if (this.lifecycle.coordinator?.canWrite && this.lifecycle.state === "recovery-required") {
+        await this.lifecycle.recover();
+      } else {
+        await this.lifecycle.start();
+      }
       const snapshot = await this.readSnapshot();
       this.onSnapshot(snapshot);
       this.publish("ready", "Synthetic storage connected. CSV imports remain local to this page.", "success");
