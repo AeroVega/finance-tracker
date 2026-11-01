@@ -43,7 +43,7 @@ export class ApplicationStorageLifecycle {
     }
     if (!folderId || (!manifestFileId && typeof initializeManifest !== "function") ||
         typeof accessToken !== "function" || typeof makeManifest !== "function" || typeof fetchImpl !== "function") {
-      fail("invalid-config", "A verified synthetic folder, manifest, access-token provider, and manifest builder are required.");
+      fail("invalid-config", "A verified synthetic folder, manifest ID or session-gated manifest initializer, access-token provider, and manifest builder are required.");
     }
 
     this.folderName = folderName;
