@@ -376,7 +376,13 @@ export class DriveTransactionEngine {
         this.recoveryRequired = true;
         throw new DriveTransactionError("transaction-unresolved",
           "The transaction did not reach a fully verified terminal state. Preserve its files and run recovery before another write.",
-          { transactionId, cause: error.code || error.name || "unknown", journalEventCount: events.length });
+          {
+            transactionId,
+            cause: error.code || error.name || "unknown",
+            causeMessage: error.message || String(error),
+            causeDetails: error.details && typeof error.details === "object" ? error.details : {},
+            journalEventCount: events.length
+          });
       }
     });
   }
