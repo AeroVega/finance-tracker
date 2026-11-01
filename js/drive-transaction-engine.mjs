@@ -336,7 +336,7 @@ export class DriveTransactionEngine {
         };
         const recordText = canonicalizeJcs(record);
         const recordHash = await hashBytes(new TextEncoder().encode(recordText), this.crypto);
-        await addEvent("commit-stage-planned", { commitId });
+        await addEvent("commit-stage-planned", { commitId, fileId: commitFileId });
         await this.guard();
         await this.adapter.createImmutable({
           fileId: commitFileId, name: `ft-commit-${commitId}.json`,
@@ -409,13 +409,22 @@ export class DriveTransactionEngine {
         };
       };
 
-      const findCommitFile = (transactionId) => files.find((file) =>
-        file.appProperties?.[TAG + "Kind"] === "commit-record" &&
-        file.appProperties?.[TAG + "Transaction"] === transactionId);
+      const findCommitFile = async (transactionId, transactionEvents) => {
+        const planned = transactionEvents.find((event) => event.eventType === "commit-stage-planned");
+        const fileId = planned?.payload?.fileId;
+        if (typeof fileId !== "string" || !fileId) {
+          fail("missing-commit-file-id", "The journal does not identify the pre-generated commit-record file ID.", { transactionId });
+        }
+        const metadata = await this.adapter.waitForMetadata(fileId);
+        if (metadata.appProperties?.[TAG + "Kind"] !== "commit-record" ||
+            metadata.appProperties?.[TAG + "Transaction"] !== transactionId) {
+          fail("commit-record-metadata-mismatch", "The planned commit-record ID contains unexpected metadata.", { transactionId, fileId });
+        }
+        return { id: fileId, appProperties: metadata.appProperties };
+      };
 
-      const verifyCommit = async (transactionId, state, expectedCommitId = state.commit?.commitId) => {
-        const commitFile = findCommitFile(transactionId);
-        if (!commitFile) fail("missing-commit-record", "The transaction's immutable commit record is missing.", { transactionId });
+      const verifyCommit = async (transactionId, state, expectedCommitId, transactionEvents) => {
+        const commitFile = await findCommitFile(transactionId, transactionEvents);
         const record = await this.adapter.readJson(commitFile.id);
         const actualHash = await hashBytes(new TextEncoder().encode(canonicalizeJcs(record)), this.crypto);
         const metadataHash = commitFile.appProperties?.[TAG + "Hash"];
@@ -455,7 +464,7 @@ export class DriveTransactionEngine {
 
         if (decision.action === "already-terminal") {
           if (decision.outcome === "committed") {
-            const verified = await verifyCommit(transactionId, state);
+            const verified = await verifyCommit(transactionId, state, state.commit?.commitId, events);
             outcomes.push({ transactionId, action: "verified-committed", outcome: "committed", commitId: verified.record.commitId });
           } else {
             outcomes.push({ transactionId, ...decision });
@@ -468,7 +477,7 @@ export class DriveTransactionEngine {
           manifest.revision === state.publication.intendedRevision;
 
         if (intendedIsPublished) {
-          const verified = await verifyCommit(transactionId, state, state.publication.intendedCommitId);
+          const verified = await verifyCommit(transactionId, state, state.publication.intendedCommitId, events);
           if (state.status === "publishing") {
             state = await appendRecoveryEvent(transactionId, state, "manifest-published", {
               commitId: verified.record.commitId
@@ -490,23 +499,36 @@ export class DriveTransactionEngine {
           });
         }
 
-        if (!state.publication && (state.status === "staging" || state.status === "commit-staging")) {
-          const plannedCommit = events.find((event) => event.eventType === "commit-stage-planned")?.payload?.commitId;
-          const commitFile = findCommitFile(transactionId);
-          if (state.status === "commit-staging" && commitFile) {
-            const verified = await verifyCommit(transactionId, state, plannedCommit);
-            state = await appendRecoveryEvent(transactionId, state, "commit-staged", {
-              commitId: verified.record.commitId,
-              recordHash: verified.recordHash
-            });
-            state.commit = { commitId: verified.record.commitId, recordHash: verified.recordHash };
-          } else {
-            state = await appendRecoveryEvent(transactionId, state, "transaction-aborted", {
-              reason: "recovery-confirmed-manifest-remains-at-original-base-before-a-complete-commit"
-            });
-            outcomes.push({ transactionId, action: "aborted-at-base", outcome: "aborted", preservedEvidence: true });
-            continue;
+        if (!state.publication && state.status === "staging") {
+          const plannedObjects = events.filter((event) => event.eventType === "object-stage-planned");
+          for (const planned of plannedObjects) {
+            const { fileId, sha256 } = planned.payload;
+            const metadata = await this.adapter.waitForMetadata(fileId);
+            if (metadata.appProperties?.[TAG + "Kind"] !== "snapshot-object" ||
+                metadata.appProperties?.[TAG + "Transaction"] !== transactionId ||
+                metadata.appProperties?.[TAG + "Hash"] !== sha256) {
+              fail("staged-object-metadata-mismatch", "A planned staging object has unexpected metadata.", { transactionId, fileId });
+            }
+            const bytes = await this.adapter.readBytes(fileId);
+            if (await hashBytes(bytes, this.crypto) !== sha256) {
+              fail("staged-object-verification-failed", "A planned staging object failed exact hash verification.", { transactionId, fileId });
+            }
           }
+          state = await appendRecoveryEvent(transactionId, state, "transaction-aborted", {
+            reason: "recovery-confirmed-manifest-remains-at-original-base-before-commit-record-planning"
+          });
+          outcomes.push({ transactionId, action: "aborted-at-base", outcome: "aborted", preservedEvidence: true });
+          continue;
+        }
+
+        if (!state.publication && state.status === "commit-staging") {
+          const plannedCommit = events.find((event) => event.eventType === "commit-stage-planned")?.payload?.commitId;
+          const verified = await verifyCommit(transactionId, state, plannedCommit, events);
+          state = await appendRecoveryEvent(transactionId, state, "commit-staged", {
+            commitId: verified.record.commitId,
+            recordHash: verified.recordHash
+          });
+          state.commit = { commitId: verified.record.commitId, recordHash: verified.recordHash };
         }
 
         if (!state.publication && state.status === "ready-to-publish") {
@@ -541,7 +563,7 @@ export class DriveTransactionEngine {
 
         if (state.publication && manifestAtBase &&
             (decision.action === "revalidate-and-resume-publication" || state.status === "publishing")) {
-          const verified = await verifyCommit(transactionId, state, state.publication.intendedCommitId);
+          const verified = await verifyCommit(transactionId, state, state.publication.intendedCommitId, events);
           if (typeof makeManifest !== "function") {
             fail("recovery-manifest-builder-required", "Safe publication recovery requires the application's manifest builder.", { transactionId });
           }
