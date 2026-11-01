@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { webcrypto } from "node:crypto";
 import {
   createSnapshotTransaction,
@@ -50,4 +51,21 @@ test("dashboard snapshot validator rejects malformed and non-synthetic content",
     transactions: [{ id: "real", date: "2026-10-15", description: "CSV", amount: 1 }]
   }), false);
   assert.equal(isSyntheticDashboardSnapshot({ format: "wrong", syntheticOnly: true, transactions: [] }), false);
+});
+
+test("dashboard CSV import path remains local and cannot invoke Drive persistence", () => {
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  const importStart = app.indexOf("async function importFile(file)");
+  const renderStart = app.indexOf("function render()", importStart);
+  assert.notEqual(importStart, -1);
+  assert.notEqual(renderStart, -1);
+  const importFlow = app.slice(importStart, renderStart);
+  assert.equal(importFlow.includes("saveSyntheticSnapshot"), false);
+  assert.equal(importFlow.includes("clearSyntheticSnapshot"), false);
+  assert.match(importFlow, /CSV rows remain local and are never uploaded to Drive/);
+});
+
+test("empty synthetic snapshots are valid clear transactions", () => {
+  const transaction = createSnapshotTransaction({ manifest, transactions: [], cryptoImpl: webcrypto });
+  assert.deepEqual(JSON.parse(transaction.objects[0].content).transactions, []);
 });
