@@ -34,7 +34,8 @@ export class ApplicationStorageLifecycle {
       accessToken, makeManifest, fetchImpl = globalThis.fetch,
       cryptoImpl = globalThis.crypto, isOnline = () => globalThis.navigator?.onLine !== false,
       onStatus = () => {}, lifecycleTarget = globalThis,
-      setIntervalImpl = globalThis.setInterval, clearIntervalImpl = globalThis.clearInterval
+      setIntervalImpl = globalThis.setInterval, clearIntervalImpl = globalThis.clearInterval,
+      factories = {}
     } = options;
 
     if (syntheticOnly !== true || !/synthetic/i.test(folderName)) {
