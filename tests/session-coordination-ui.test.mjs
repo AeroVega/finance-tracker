@@ -46,3 +46,12 @@ test("session test page includes the two-device and browser-crash rehearsal", ()
   assert.match(source, /addEventListener\("offline"/);
   assert.match(source, /online: navigator\.onLine/);
 });
+
+test("a pending or superseded inspection cannot present an older marker as current", () => {
+  assert.match(source, /inspectionSequence: 0/);
+  assert.match(source, /const sequence = ++state\.inspectionSequence/);
+  assert.match(source, /setText\("marker-state", "Inspecting…"/);
+  assert.match(source, /state\.lastInspection = null/);
+  assert.match(source, /sequence !== state\.inspectionSequence/);
+  assert.match(source, /state\.inspectionSequence \+= 1/);
+});
