@@ -536,7 +536,7 @@ Persist the transaction-start event and its intended base revision/commit before
 
 After interruption, read and validate the manifest, transaction events, commit record, and all referenced objects:
 - If the manifest points to the intended commit and the complete snapshot verifies, record the transaction as committed.
-- If the manifest still points to the original base and the staged commit is complete, resume only if the original concurrency/fencing precondition is still provably valid; otherwise abort or require intervention.
+- If the manifest still points to the original base and the staged commit is complete, revalidate the same best-effort active session and exact base tuple, then resume under the accepted single-active-device operating model. If ownership or base state is uncertain, fail closed and require intervention. This is not server-enforced fencing; simultaneous starts and network partitions remain residual risks.
 - If the manifest or referenced state is inconsistent, mark outcome-unknown, degrade the copy, and block writes.
 
 Never infer success from an upload response alone.
@@ -553,9 +553,9 @@ Drive's native revision retention is not equivalent to the app's required indefi
 
 A backup captures one manifest-verified commit and copies every object referenced by its complete snapshot map, along with required commit, transaction, migration, and manifest metadata. It assigns a new copyId and storage binding, preserves logical database identity and lineage, and verifies every copied object's raw hash and structural relationships before reporting success. Source changes during backup cause retry or failure, never a mixed snapshot.
 
-### 102. Treat Google Drive concurrency enforcement as a hard production blocker
+### 102. Use best-effort session coordination under an explicit single-active-device constraint
 
-The Drive files resource exposes an output-only monotonically increasing file version, useful for detecting that a file changed. The reviewed files.update contract describes PATCH updates but does not establish an atomic compare-and-swap guarantee for our manifest publication. A read-version-then-update sequence is not assumed safe against a concurrent writer. Before production writes, demonstrate a server-enforced conditional update or an exclusive writer/fencing protocol that remains safe under two-device races, lost responses, retries, and authorization changes. If no such mechanism can be demonstrated within the $0 and least-privilege constraints, Drive remains read-only for the ledger or the storage architecture must be reconsidered. See Google's [File resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/files) and [files.update](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/update) references.
+The owner accepted Google Drive despite the absence of a demonstrated server-enforced compare-and-swap or mutex. The tested Drive v3 `files.update` path accepted a deliberately stale `If-Match` value; do not use that header as a lock or spend further effort trying to treat the tested path as atomic. Finance Tracker is single-user and single-active-device: simultaneous use on two devices is unsupported, and the owner will end the active session before switching devices and will not edit database files outside the app. The app must serialize its own writes, revalidate the same active session and exact base tuple before publication, refuse writes when another active session is detected, prohibit offline writes, and fail closed whenever ownership or outcome is uncertain. Session markers are best-effort detection, not server-enforced exclusion; simultaneous starts and network partitions remain residual risks. Production writes remain blocked until the app demonstrates these safeguards and crash recovery within this accepted operating constraint, followed by explicit owner acceptance. See Google's [File resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/files) and [files.update](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/update) references.
 
 ### 103. Initialize by publishing the initial manifest last
 
@@ -577,18 +577,9 @@ Do not assume Drive storage or API quota is unlimited. Estimate required staging
 
 IndexedDB stores only the known-copy inventory and narrowly scoped recovery diagnostics needed for user experience. It is not a second writable ledger, a silent offline queue, or a fallback primary. Clearing browser data must not alter Drive data. MVP1 does not perform offline financial writes.
 
-### 108. Complete a synthetic Drive feasibility spike before any persistence implementation
+### 108. Complete synthetic Drive feasibility and transaction validation before production persistence
 
-The next technical task is a focused, synthetic-only feasibility spike—not production persistence. It must establish:
-- Complete enough folder-child enumeration under the actual drive.file authorization path for safe empty-folder initialization.
-- Pre-generated ID creation and retry behavior under the deployed browser OAuth flow.
-- Immutable object upload, read-back, and raw-byte hash verification.
-- Manifest update behavior and whether a genuinely atomic stale-write exclusion mechanism exists.
-- Two-session/two-device races, lost responses, interrupted writes, read-after-write delays, token expiry/revocation, and recovery.
-- Backup snapshot copying and restore verification.
-- Actual API terms, quota, and $0 production-cost implications.
-
-The spike must use invented records and folders only. If atomic concurrency protection or sufficient folder visibility cannot be established, production ledger writes remain blocked. No ledger reads/writes or real financial data are authorized by this ADR.
+PR #20's synthetic feasibility spike established complete folder enumeration, pre-generated-ID retry behavior, and exact object hashing, and demonstrated that the tested stale-`If-Match` mechanism is not enforced. The owner then accepted single-user, single-active-device operation instead of requiring a server-enforced lock. PR #21 validates best-effort session coordination; PR #22 establishes the pure transaction protocol; PR #23 implements the durable Drive adapter and synthetic fault-injection/recovery tests; PR #24 integrates the engine with automatic application lifecycle behavior; PR #25 completes end-to-end acceptance and production-readiness review. These workstreams use invented records and a dedicated synthetic folder only. They do not authorize real ledger reads/writes or production financial-data storage.
 
 ## Initial manifest example — approved design contract
 
@@ -622,8 +613,8 @@ Health is derived by inspection and is not a manifest field. The manifest is a c
 ## Important limitations and safety boundaries
 
 1. **No global primary coordinator:** Per-folder manifests cannot guarantee a single primary across isolated or undiscoverable copies. Detection is limited to copies the app can access.
-2. **No assumed atomic Drive writes:** Drive is file storage, not a transactional database. The manifest pointer is the logical publication boundary, but safe concurrent publication still requires a demonstrated server-enforced compare-and-swap or writer-fencing mechanism.
-3. **Concurrency is a production blocker:** A monotonic Drive file version can detect changes but is not itself a lock or conditional write. A read-then-update race is not accepted.
+2. **No assumed atomic Drive writes:** Drive is file storage, not a transactional database. The manifest pointer is the logical publication boundary. The accepted operating model is single-active-device with best-effort app-level session detection and exact-base revalidation; it does not provide a server-enforced lock.
+3. **Concurrency limitation is explicit:** A monotonic Drive file version can detect changes but is not itself a lock or conditional write. Simultaneous device use is unsupported; simultaneous starts and network partitions can still defeat best-effort detection. The app must fail closed, and production use requires explicit owner acceptance of this residual risk after the safeguards are validated.
 4. **No Drive-revision backup assumption:** Native revision retention is not our indefinite commit/object history.
 5. **Manifest is not cryptographic:** A privileged actor can rewrite records and hashes. Integrity checks are not signatures.
 6. **Identity is not authorization:** Validate Google authorization and file access separately from manifest identity.
@@ -636,7 +627,7 @@ Health is derived by inspection and is not a manifest field. The manifest is a c
 
 These are not unresolved product decisions; they are engineering facts that must be demonstrated before implementation can be considered safe:
 
-- **Drive concurrency:** prove a server-enforced atomic stale-write exclusion mechanism under the existing OAuth scope. A client-side read/check/update sequence is insufficient.
+- **Drive session coordination:** demonstrate serialized in-app writes, same-session revalidation, refusal when another active session is detected, offline-write prohibition, exact-base rechecks, and crash recovery. Do not claim server-enforced exclusion; simultaneous multi-device use remains unsupported and residual race risks require explicit owner acceptance.
 - **Folder visibility:** prove complete child enumeration, pagination, and empty-folder checks under drive.file after Picker selection and after reauthorization.
 - **Immutable-object layout:** validate content-addressed naming, duplicate detection, exact raw-byte hashing, generated-ID retries, and object lookup across copies.
 - **Snapshot and restore:** prove one committed snapshot can be copied and verified without mixing revisions.
