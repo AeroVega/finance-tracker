@@ -55,6 +55,12 @@ Branch: `feat/durable-drive-transaction-engine`
 
 **Exit:** explicit owner acceptance of the evidence and risks. Production financial-data persistence remains disabled until the owner separately authorizes it.
 
+## Temporary prototype navigation and MVP1 cleanup
+
+A temporary [Prototype Tools hub](../prototype/) is available from the app footer during development. It indexes the browser-based Drive and session experiments so validation does not depend on memorizing URLs. This hub is developer-only and must not become a product feature.
+
+**MVP1 completion gate:** remove the app-footer entry point and exclude all browser prototype pages under `prototype/` from the user-facing GitHub Pages deployment. Keep automated tests and useful engineering documentation; do not ship prototype pages, test controls, or prototype navigation as part of the MVP1 app. Verify the deployed artifact contains no prototype hub or prototype HTML pages before calling MVP1 complete.
+
 ## Cross-cutting product requirement: session management is automatic
 
 Session claiming, heartbeats, ownership inspection, reconnect revalidation, stale-session recovery, and orderly release are internal application lifecycle behavior—not chores for the user. The app should perform them automatically and unobtrusively. Manual intervention is reserved for genuinely ambiguous or unsafe conditions, such as conflicting ownership, malformed/duplicate markers, authorization requiring sign-in, failed verification, or an unknown transaction outcome.
