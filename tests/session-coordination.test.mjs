@@ -341,13 +341,14 @@ test("authorization failure is reported as recoverable sign-in, not as a corrupt
   const now = { value: 10_000 };
   let authorized = false;
   const adapter = {
+    record: null,
     async read() {
       if (!authorized) {
         const error = new Error("Google authorization required");
         error.code = "authorization-required";
         throw error;
       }
-      return null;
+      return this.record ? structuredClone(this.record) : null;
     },
     async write(record) { this.record = structuredClone(record); }
   };
