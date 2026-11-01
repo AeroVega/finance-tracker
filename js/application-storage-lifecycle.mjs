@@ -292,6 +292,12 @@ export class ApplicationStorageLifecycle {
     this.acceptingWrites = false;
     this.publish("recovering", "Recovering the last transaction…");
     try {
+      if (!this.manifestFileId && this.initializeManifest) {
+        this.manifestFileId = await this.coordinator.withWrite(() =>
+          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId })
+        );
+      }
+      if (!this.manifestFileId) fail("manifest-unavailable", "A verified synthetic manifest is required before recovery.");
       const result = await this.coordinator.withWrite(() =>
         this.engine.recover({ manifestFileId: this.manifestFileId, makeManifest: this.makeManifest })
       );
