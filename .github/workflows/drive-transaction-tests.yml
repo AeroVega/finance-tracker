@@ -20,5 +20,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 26
+      - name: Check PR24 browser prototype module syntax
+        run: node --check prototype/application-storage-lifecycle-test.mjs
       - name: Run complete Node contract suite
         run: node --test tests/*.test.mjs
