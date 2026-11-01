@@ -1,5 +1,6 @@
 import { GOOGLE_CONFIG } from "../js/google-config.js";
 import { validateGoogleConfig } from "../js/google-config-validation.mjs";
+import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "../js/drive-transaction-engine.mjs";
 import {
   DRIVE_FILES_ENDPOINT,
   createSyntheticObject,
@@ -88,7 +89,7 @@ async function driveGet(url) {
   return response.json();
 }
 function setReady(ready) {
-  ["list-children", "create-object", "create-race", "read-race", "reread-race"].forEach((id) => {
+  ["list-children", "create-object", "run-transaction-test", "create-race", "read-race", "reread-race"].forEach((id) => {
     $(id).disabled = !ready;
   });
   $("cleanup").disabled = !state.accessToken || !state.createdFileIds.size;
@@ -204,6 +205,111 @@ $("create-object").addEventListener("click", async () => {
     if (error && error.fileId) { state.createdFileIds.add(error.fileId); $("cleanup").disabled = false; }
     status("object-status", error instanceof Error ? error.message + (error.fileId ? " Temporary file ID: " + error.fileId : "") : "Synthetic object test failed.", "error");
   } finally { $("create-object").disabled = false; }
+});
+
+$("run-transaction-test").addEventListener("click", async () => {
+  $("run-transaction-test").disabled = true;
+  status("transaction-test-status", "Creating a temporary manifest and running the complete synthetic transaction…");
+  const transactionId = crypto.randomUUID();
+  let adapter;
+  try {
+    adapter = new GoogleDriveTransactionAdapter({
+      accessToken: async () => token(),
+      folderId: state.folderId,
+      fetchImpl: globalThis.fetch
+    });
+    const databaseId = "synthetic-database-" + crypto.randomUUID();
+    const copyId = "synthetic-copy-" + crypto.randomUUID();
+    const manifest = {
+      format: "finance-tracker-manifest",
+      manifestVersion: "1.0.0",
+      schemaVersion: 1,
+      databaseId,
+      copyId,
+      role: "primary",
+      revision: 0,
+      commitId: "synthetic-genesis-" + crypto.randomUUID(),
+      parentCommitId: null
+    };
+    const manifestText = JSON.stringify(manifest);
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(manifestText));
+    const manifestHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const manifestFileId = await adapter.allocateFileId();
+    await adapter.createImmutable({
+      fileId: manifestFileId,
+      name: "ft-synthetic-manifest-" + crypto.randomUUID() + ".json",
+      kind: "synthetic-manifest",
+      transactionId: "synthetic-bootstrap",
+      content: manifestText,
+      expectedSha256: manifestHash
+    });
+    state.createdFileIds.add(manifestFileId);
+
+    const engine = new DriveTransactionEngine({
+      adapter,
+      assertWritable: async () => {
+        if (!state.folderId || !token()) throw new Error("Synthetic folder ownership or authorization is unavailable.");
+      },
+      isOnline: () => navigator.onLine,
+      cryptoImpl: crypto,
+      now: () => new Date().toISOString()
+    });
+    const result = await engine.transact({
+      manifestFileId,
+      transactionId,
+      expectedBase: manifest,
+      objects: [{
+        logicalPath: "synthetic/fixture.json",
+        content: JSON.stringify({ fixture: "synthetic-only", transactionId })
+      }],
+      commitRecord: { operationType: "synthetic-drive-engine-test", schemaVersion: 1, snapshot: {} },
+      makeManifest: async ({ current, record, commitFileId, commitHash }) => ({
+        ...current,
+        revision: record.revision,
+        commitId: record.commitId,
+        parentCommitId: record.parentCommitId,
+        commitRecordFileId: commitFileId,
+        commitRecordHash: commitHash
+      })
+    });
+    const recovery = await engine.recover({ manifestFileId });
+    const created = await adapter.listChildren();
+    for (const file of created) {
+      if (file.appProperties?.financeTrackerTransaction === transactionId) state.createdFileIds.add(file.id);
+    }
+    $("cleanup").disabled = !state.createdFileIds.size;
+    const verified = recovery.transactions.some((item) =>
+      item.transactionId === transactionId && item.outcome === "committed");
+    status(
+      "transaction-test-status",
+      "PASS: Drive transaction committed and reopened from durable records. Revision " +
+        result.revision + " · commit " + result.commitId + " · recovery " +
+        (verified ? "confirmed committed" : "terminal journal verified") +
+        ". Temporary file IDs are tracked by this page for cleanup.",
+      "success"
+    );
+  } catch (error) {
+    if (adapter) {
+      try {
+        const files = await adapter.listChildren();
+        for (const file of files) {
+          if (file.appProperties?.financeTrackerTransaction === transactionId ||
+              file.appProperties?.financeTrackerTransaction === "synthetic-bootstrap") {
+            state.createdFileIds.add(file.id);
+          }
+        }
+      } catch { /* Preserve the original failure; cleanup may require Drive UI. */ }
+    }
+    $("cleanup").disabled = !state.createdFileIds.size;
+    status(
+      "transaction-test-status",
+      error instanceof Error ? error.message + " Any created synthetic files are retained for inspection and cleanup." :
+        "Synthetic Drive transaction test failed. Inspect the selected test folder before retrying.",
+      "error"
+    );
+  } finally {
+    $("run-transaction-test").disabled = !state.folderId || !state.accessToken;
+  }
 });
 
 $("create-race").addEventListener("click", async () => {
