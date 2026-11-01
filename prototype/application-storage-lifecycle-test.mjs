@@ -43,7 +43,7 @@ function updateActions() {
   const lifecycle = state.lifecycle;
   const owned = Boolean(lifecycle?.coordinator?.canWrite);
   $("select-folder").disabled = !state.accessToken || state.busy;
-  $("start-lifecycle").disabled = !folder || state.busy || ready();
+  $("start-lifecycle").disabled = !folder || state.busy || ready() || Boolean(lifecycle?.started);
   $("recover-stale").disabled = !lifecycle || lifecycle.state !== "stale-session" || state.busy;
   $("simulate-crash").disabled = !lifecycle?.started || !lifecycle.coordinator?.canWrite || state.busy;
   $("recover-transaction").disabled = !lifecycle || lifecycle.state !== "recovery-required" || !owned || state.busy;
