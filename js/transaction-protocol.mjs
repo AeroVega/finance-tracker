@@ -271,7 +271,7 @@ export function classifyTransactionRecovery({ journalState, manifest }) {
     if (journalState.status === "published-unverified") {
       return { action: "stop", reason: "journal-says-published-manifest-still-at-base" };
     }
-    if (journalState.commit && journalState.status === "ready-to-publish") {
+    if (journalState.commit && (journalState.status === "ready-to-publish" || journalState.status === "publishing")) {
       return { action: "revalidate-and-resume-publication", commitId: journalState.commit.commitId };
     }
     return { action: "abort-after-verification", reason: "publication-not-started" };
