@@ -3,6 +3,8 @@ import { validateGoogleConfig } from "../js/google-config-validation.mjs";
 import { DRIVE_FILES_ENDPOINT } from "../js/drive-feasibility-spike.mjs";
 import { ApplicationStorageLifecycle } from "../js/application-storage-lifecycle.mjs";
 import { GoogleDriveTransactionAdapter } from "../js/drive-transaction-engine.mjs";
+import { createDriveSessionAdapter } from "../js/drive-session-adapter.mjs";
+import { SessionCoordinator } from "../js/session-coordination.mjs";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -375,10 +377,11 @@ async function recoverTransaction() {
 async function cleanupSyntheticFiles() {
   if (!state.folderId) throw new Error("Select the synthetic folder first.");
   if (state.lifecycle?.coordinator?.canWrite) throw new Error("Release this page's session before cleanup.");
-  if (state.lifecycle?.coordinator) {
-    const inspection = await state.lifecycle.coordinator.inspect();
-    if (inspection.status === "active") throw new Error("An active session marker exists. Cleanup is blocked while another page/device may be using this synthetic folder.");
-  }
+  const sessionCoordinator = state.lifecycle?.coordinator || new SessionCoordinator({
+    adapter: createDriveSessionAdapter({ accessToken: () => token(), folderId: state.folderId, fetchImpl: globalThis.fetch })
+  });
+  const inspection = await sessionCoordinator.inspect();
+  if (inspection.status === "active") throw new Error("An active session marker exists. Cleanup is blocked while another page/device may be using this synthetic folder.");
   const adapter = new GoogleDriveTransactionAdapter({
     accessToken: async () => token(), folderId: state.folderId, fetchImpl: globalThis.fetch, cryptoImpl: crypto
   });
