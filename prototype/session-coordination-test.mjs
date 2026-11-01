@@ -193,7 +193,9 @@ function describeInspection(result) {
   if (result.status === "active" && result.record) {
     const sameOwner = state.coordinator.session?.sessionId === result.record.sessionId;
     if (!sameOwner) state.coordinator.ownership = "unknown";
-    setText("owner-state", sameOwner && state.coordinator.canWrite ? "This page owns it" : "Another page/device");
+    setText("owner-state", sameOwner
+      ? (state.coordinator.canWrite ? "This page owns it" : "This page; ownership not verified")
+      : "Another page/device");
   } else {
     if (["unknown", "ambiguous", "stale", "released", "absent"].includes(result.status)) {
       state.coordinator.ownership = "unknown";
