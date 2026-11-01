@@ -1,6 +1,6 @@
 # Application storage lifecycle integration
 
-**Status:** PR #24 implementation in progress. Synthetic-only integration layer; not production persistence authorization.
+**Status:** PR #24 implementation integrated on the dashboard using synthetic fixtures only; not production persistence authorization.
 
 ## Purpose
 
@@ -30,7 +30,7 @@ js/application-storage-lifecycle.mjs composes the PR #21 session coordinator, Dr
 
 This PR's controller requires syntheticOnly: true and a folder name containing synthetic. This is an engineering integration harness, not an application production-storage switch.
 
-The existing dashboard still has no production database initialization or approved financial-ledger persistence path. PR #24 must not connect real CSV imports or real financial data to Drive. The permanent CSV import path remains available locally. Production ledger reads/writes remain disabled pending PR #25 and separate owner authorization.
+The dashboard now uses this lifecycle for its synthetic sample-data path: after explicit Google authorization and synthetic-folder selection, startup acquires the session, initializes/reuses a synthetic-only manifest, recovers, and reads the saved invented sample snapshot through manifest, metadata, and SHA-256 verification. The sample-data action commits only rows explicitly tagged `syntheticOnly: true`; the dashboard renders the verified read-back. Clear writes an empty synthetic snapshot through the same transaction boundary. CSV imports remain a separate local-only collection and are never passed to the Drive storage API. The real financial ledger has no Drive read/write path. Production ledger reads/writes remain disabled pending PR #25 and separate owner authorization.
 
 The controller's injected factories exist to make lifecycle behavior deterministic in tests. They are not runtime configuration for production storage.
 
