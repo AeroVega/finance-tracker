@@ -442,9 +442,11 @@ export class DriveTransactionEngine {
         const actualHash = await hashBytes(new TextEncoder().encode(canonicalizeJcs(record)), this.crypto);
         const metadataHash = commitFile.appProperties?.[TAG + "Hash"];
         const transactionBase = transactionEvents[0]?.payload || {};
-        if (!expectedCommitId || record.commitId !== expectedCommitId ||
-            record.transactionId !== transactionId || record.databaseId !== transactionBase.databaseId ||
-            record.copyId !== transactionBase.copyId || record.revision !== transactionBase.baseRevision + 1 ||
+        if (!expectedCommitId || record.format !== "finance-tracker-commit" || record.version !== 1 ||
+            !record.snapshot || typeof record.snapshot !== "object" || Array.isArray(record.snapshot) ||
+            record.commitId !== expectedCommitId || record.transactionId !== transactionId ||
+            record.databaseId !== transactionBase.databaseId || record.copyId !== transactionBase.copyId ||
+            record.revision !== transactionBase.baseRevision + 1 ||
             record.parentCommitId !== transactionBase.baseCommitId || metadataHash !== actualHash ||
             (state.commit?.recordHash && state.commit.recordHash !== actualHash)) {
           fail("commit-verification-failed", "The immutable commit record failed identity or hash verification.", { transactionId });
@@ -481,6 +483,11 @@ export class DriveTransactionEngine {
         if (decision.action === "already-terminal") {
           if (decision.outcome === "committed") {
             const verified = await verifyCommit(transactionId, state, state.commit?.commitId, events);
+            if (manifest.commitId === verified.record.commitId &&
+                (manifest.commitRecordFileId !== verified.commitFile.id ||
+                 manifest.commitRecordHash !== verified.recordHash)) {
+              fail("manifest-commit-pointer-mismatch", "The authoritative manifest does not reference the verified immutable commit record.", { transactionId });
+            }
             outcomes.push({ transactionId, action: "verified-committed", outcome: "committed", commitId: verified.record.commitId });
           } else {
             outcomes.push({ transactionId, ...decision });
@@ -495,6 +502,10 @@ export class DriveTransactionEngine {
 
         if (intendedIsPublished) {
           const verified = await verifyCommit(transactionId, state, state.publication.intendedCommitId, events);
+          if (manifest.commitRecordFileId !== verified.commitFile.id ||
+              manifest.commitRecordHash !== verified.recordHash) {
+            fail("manifest-commit-pointer-mismatch", "The published manifest does not reference the verified immutable commit record.", { transactionId });
+          }
           if (state.status === "publishing") {
             state = await appendRecoveryEvent(transactionId, state, "manifest-published", {
               commitId: verified.record.commitId
