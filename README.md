@@ -26,6 +26,10 @@ MVP1 uses user-provided CSV imports. Google Drive is the **selected private-stor
 - [Data model and reconciliation principles](docs/DATA_MODEL.md)
 - [Contributor and agent instructions](AGENTS.md)
 
+## Temporary prototype navigation
+
+During development, the app footer links to a temporary [Prototype Tools hub](prototype/), which indexes the browser-based Drive and session experiments. The hub and all browser prototype pages are development-only. **They are not MVP1 product features.** Before MVP1 completion, remove the app entry point and ensure the `prototype/` pages are excluded from the user-facing GitHub Pages deployment. Retain only the automated tests and engineering documentation needed to support the shipped product.
+
 ## Deploying a branch for experiments
 
 The GitHub Pages URL is a **single shared deployment**, not an isolated staging environment. The deployed page is public, and whichever branch is deployed is what every visitor sees.
