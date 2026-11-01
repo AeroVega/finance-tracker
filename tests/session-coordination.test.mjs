@@ -363,3 +363,32 @@ test("authorization failure is reported as recoverable sign-in, not as a corrupt
   assert.equal(acquired.sessionId, "new-session");
   assert.equal(session.canWrite, true);
 });
+
+
+test("same-session resume distinguishes expired authorization from lost ownership", async () => {
+  const now = { value: 10_000 };
+  let authorized = true;
+  const adapter = {
+    record: null,
+    async read() {
+      if (!authorized) {
+        const error = new Error("Google authorization required");
+        error.code = "authorization-required";
+        throw error;
+      }
+      return this.record ? structuredClone(this.record) : null;
+    },
+    async write(record) { this.record = structuredClone(record); }
+  };
+  const session = coordinator(adapter, now);
+  await session.start();
+  authorized = false;
+  await assert.rejects(session.resume(), (error) =>
+    error.code === "authorization-required" && /Reconnect to Google/.test(error.message)
+  );
+  assert.equal(session.canWrite, false);
+  authorized = true;
+  const resumed = await session.resume();
+  assert.equal(resumed.sessionId, "new-session");
+  assert.equal(session.canWrite, true);
+});
