@@ -404,7 +404,8 @@ export class DriveTransactionEngine {
           lastEventHash: event.eventHash,
           status: eventType === "manifest-published" ? "published-unverified" :
             eventType === "transaction-committed" ? "committed" :
-            eventType === "transaction-aborted" ? "aborted" : state.status
+            eventType === "transaction-aborted" ? "aborted" :
+            eventType === "commit-staged" ? "ready-to-publish" : state.status
         };
       };
 
@@ -498,6 +499,7 @@ export class DriveTransactionEngine {
               commitId: verified.record.commitId,
               recordHash: verified.recordHash
             });
+            state.commit = { commitId: verified.record.commitId, recordHash: verified.recordHash };
           } else {
             state = await appendRecoveryEvent(transactionId, state, "transaction-aborted", {
               reason: "recovery-confirmed-manifest-remains-at-original-base-before-a-complete-commit"
@@ -528,6 +530,7 @@ export class DriveTransactionEngine {
             intendedRevision: nextManifest.revision,
             intendedCommitId: verified.record.commitId
           });
+          state.status = "publishing";
           state.publication = {
             baseRevision: manifest.revision,
             baseCommitId: manifest.commitId,
