@@ -59,7 +59,13 @@ export function createDriveSessionAdapter(options) {
   let hasRead = false;
 
   async function read() {
-    const files = await listFolderChildren({ accessToken, folderId, fetchImpl });
+    const files = await listFolderChildren({
+      // listFolderChildren accepts a bearer-token string, unlike this adapter's
+      // other Drive requests which resolve the provider inside authHeaders().
+      accessToken: typeof accessToken === "function" ? accessToken() : accessToken,
+      folderId,
+      fetchImpl
+    });
     const candidates = files.filter((file) =>
       file && (file.name === SESSION_MARKER_NAME ||
         (file.appProperties && file.appProperties[SESSION_MARKER_PROPERTY] === "v1"))
