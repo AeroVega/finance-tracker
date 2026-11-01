@@ -66,6 +66,7 @@ function publishStatus(snapshot) {
   status("lifecycle-status", snapshot.message || snapshot.state, snapshot.state === "ready" || snapshot.state === "released" ? "success" :
     ["stale-session", "session-active", "offline", "recovery-required", "ownership-unknown", "release-unconfirmed"].includes(snapshot.state) ? "warning" : "info");
   if (snapshot.state === "ready") status("crash-status", "Storage recovered and ready. Session ID: " + (state.lifecycle?.coordinator?.session?.sessionId || "unavailable"), "success");
+  if (snapshot.state === "session-active") status("handoff-status", "PASS: Drive reported another active session. This page did not acquire ownership or enable writes. Release the first device, then retry Start here.", "success");
 }
 function waitFor(check, label) {
   return new Promise((resolve, reject) => {
@@ -150,8 +151,8 @@ async function verifyFolder(item) {
       status("connection-status", "Folder selection cancelled. No Drive files were accessed.", "warning");
       return;
     }
-    if (state.lifecycle?.coordinator?.canWrite) {
-      throw new Error("Release the current session before changing the selected test folder.");
+    if (state.lifecycle?.started || state.lifecycle?.coordinator?.canWrite) {
+      throw new Error("Release or explicitly abandon the current session before changing the selected test folder.");
     }
     state.folderId = metadata.id;
     state.folderName = name;
