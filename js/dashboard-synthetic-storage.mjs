@@ -278,7 +278,8 @@ export class DashboardSyntheticStorage {
       this.publish("ready", "Synthetic storage connected. CSV imports remain local to this page.", "success");
       return { folderName: this.folderName, snapshot };
     } catch (error) {
-      this.publish("error", error.message || "Synthetic storage could not be connected.", "error");
+      const lifecycleState = this.lifecycle?.state || "error";
+      this.publish(lifecycleState, error.message || "Synthetic storage could not be connected.", "error");
       throw error;
     } finally {
       this.busy = false;
