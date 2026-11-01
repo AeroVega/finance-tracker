@@ -164,6 +164,6 @@ test("recovery fails closed before publication and leaves all staged evidence in
 test("offline writes are refused before the first durable mutation", async () => {
   const { adapter, engine, transaction } = setup();
   engine.isOnline = () => false;
-  await assert.rejects(engine.transact(transaction), (error) => error.code === "transaction-unresolved");
+  await assert.rejects(engine.transact(transaction), (error) => error.code === "offline");
   assert.equal(adapter.mutations, 0);
 });
