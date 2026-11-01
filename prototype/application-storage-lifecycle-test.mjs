@@ -19,6 +19,7 @@ const state = {
   lifecycle: null,
   manifestFileId: "",
   manifestRevision: null,
+  initialHeartbeatAt: null,
   busy: false
 };
 const $ = (id) => document.getElementById(id);
@@ -49,6 +50,7 @@ function updateActions() {
   $("recover-stale").disabled = !lifecycle || lifecycle.state !== "stale-session" || state.busy;
   $("simulate-crash").disabled = !lifecycle?.started || !lifecycle.coordinator?.canWrite || state.busy;
   $("recover-transaction").disabled = !lifecycle || lifecycle.state !== "recovery-required" || !owned || state.busy;
+  $("verify-heartbeat").disabled = !lifecycle?.started || !owned || state.busy;
   $("run-transactions").disabled = !ready() || state.busy;
   $("simulate-offline").disabled = !ready() || state.busy;
   $("simulate-online").disabled = !lifecycle?.started || !lifecycle.coordinator?.session || state.busy || ready();
@@ -263,6 +265,7 @@ async function startLifecycle() {
   try {
     await state.lifecycle.start();
     state.manifestFileId = state.lifecycle.manifestFileId;
+    state.initialHeartbeatAt = state.lifecycle.coordinator.session.heartbeatAt;
     state.manifestRevision = (await state.lifecycle.readManifest()).revision;
     text("check-start", "Session acquisition + startup recovery: PASS");
     $("check-start").className = "pass";
@@ -343,7 +346,26 @@ async function runTransactions() {
 async function simulateOffline() {
   if (!state.lifecycle) throw new Error("Start the lifecycle first.");
   await state.lifecycle.handleOffline();
-  status("reconnect-status", "PASS: offline handler disabled writes and stopped heartbeats. This is a simulated event; repeat using device Airplane Mode for the real network test.", "warning");
+  let refused = false;
+  try { await state.lifecycle.transact({}); }
+  catch (error) { refused = error?.code === "storage-not-ready"; }
+  if (!refused) throw new Error("The application transaction API did not refuse a write attempt while offline.");
+  status("reconnect-status", "PASS: offline handler disabled writes, stopped heartbeats, and the application transaction API refused a write attempt. This is a simulated event; repeat using device Airplane Mode for the real network test.", "warning");
+}
+async function verifyHeartbeat() {
+  if (!state.lifecycle?.started || !state.lifecycle.coordinator?.canWrite) throw new Error("A verified active session is required.");
+  if (!state.initialHeartbeatAt) throw new Error("No startup heartbeat timestamp was captured.");
+  const marker = await state.lifecycle.sessionAdapter.read();
+  const sessionId = state.lifecycle.coordinator.session.sessionId;
+  if (!marker || marker.sessionId !== sessionId || marker.state !== "active" ||
+      marker.heartbeatAt <= state.initialHeartbeatAt) {
+    throw new Error("The Drive session marker has not advanced beyond the startup heartbeat. Wait at least 45 seconds after startup and retry.");
+  }
+  status("heartbeat-status", "PASS: the Drive marker heartbeat advanced from " +
+    new Date(state.initialHeartbeatAt).toLocaleTimeString() + " to " +
+    new Date(marker.heartbeatAt).toLocaleTimeString() + " for the same session ID.", "success");
+  text("check-heartbeat", "Automatic heartbeat: PASS");
+  $("check-heartbeat").className = "pass";
 }
 async function simulateOnline() {
   if (!state.lifecycle?.started) throw new Error("The previous session context is unavailable. Start the lifecycle again.");
@@ -370,6 +392,7 @@ async function recoverStale() {
   if (!window.confirm("Confirm takeover of the stale PR24 synthetic test session? This is explicit recovery, not automatic takeover. Continue only if you are certain the previous browser/device is no longer active.")) return;
   await state.lifecycle.recoverStaleSession({ confirm: true });
   state.manifestFileId = state.lifecycle.manifestFileId;
+  state.initialHeartbeatAt = state.lifecycle.coordinator.session.heartbeatAt;
   state.manifestRevision = (await state.lifecycle.readManifest()).revision;
   text("check-crash", "Crash / reload / stale recovery: PASS (owner-confirmed)");
   $("check-crash").className = "pass";
@@ -454,6 +477,7 @@ $("start-lifecycle").addEventListener("click", () => runBusy(async () => {
 $("recover-stale").addEventListener("click", () => runBusy(recoverStale));
 $("simulate-crash").addEventListener("click", () => runBusy(simulateCrash));
 $("recover-transaction").addEventListener("click", () => runBusy(recoverTransaction));
+$("verify-heartbeat").addEventListener("click", () => runBusy(verifyHeartbeat));
 $("run-transactions").addEventListener("click", () => runBusy(runTransactions));
 $("simulate-offline").addEventListener("click", () => runBusy(simulateOffline));
 $("simulate-online").addEventListener("click", () => runBusy(simulateOnline));
