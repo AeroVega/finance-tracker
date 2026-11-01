@@ -1,7 +1,8 @@
 (() => {
   "use strict";
 
-  const state = { transactions: [], importedFingerprints: new Set(), sourceFiles: [] };
+  const state = { transactions: [], syntheticTransactions: [], importedFingerprints: new Set(), sourceFiles: [] };
+  let syntheticStorage = null;
   const $ = (id) => document.getElementById(id);
   const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
   const dateFormatter = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
@@ -170,7 +171,7 @@
       render();
       const rejectedText = parsed.rejected.length ? ` ${parsed.rejected.length} row(s) need review and were not imported.` : "";
       const investmentText = parsed.isInvestmentActivity ? " Fidelity investment activity is listed separately and excluded from these simple cash-flow totals." : "";
-      setStatus(`${parsed.provider}: imported ${accepted.length} row(s).${rejectedText}${investmentText} Exact-file retry protection lasts only until this page is closed.`, "success");
+      setStatus(`${parsed.provider}: imported ${accepted.length} row(s).${rejectedText}${investmentText} CSV rows remain local and are never uploaded to Drive in PR #24. Exact-file retry protection lasts only until this page is closed.`, "success");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The file couldn't be parsed.", "error");
     } finally {
@@ -179,7 +180,7 @@
   }
 
   function render() {
-    const visible = state.transactions.slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    const visible = [...state.transactions, ...state.syntheticTransactions].slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
     const cashRows = visible.filter((t) => t.eligibleForCashFlow);
     const income = cashRows.reduce((sum, t) => sum + (t.amount > 0 ? t.amount : 0), 0);
     const expenses = cashRows.reduce((sum, t) => sum + (t.amount < 0 ? Math.abs(t.amount) : 0), 0);
@@ -213,26 +214,85 @@
     });
   }
 
-  function loadSample() {
+  async function loadSample() {
     const sample = [
-      { date: "2026-10-15", description: "Sample paycheck", amount: 2450, eligibleForCashFlow: true, provider: "Sample data", id: "sample-1" },
-      { date: "2026-10-14", description: "Sample grocery store", amount: -82.43, eligibleForCashFlow: true, provider: "Sample data", id: "sample-2" },
-      { date: "2026-10-12", description: "Sample electricity bill", amount: -64.18, eligibleForCashFlow: true, provider: "Sample data", id: "sample-3" },
-      { date: "2026-10-10", description: "Sample savings transfer", amount: -300, eligibleForCashFlow: true, provider: "Sample data", id: "sample-4" }
+      { date: "2026-10-15", description: "Sample paycheck", amount: 2450, eligibleForCashFlow: true, provider: "Sample data", id: "sample-1", syntheticOnly: true },
+      { date: "2026-10-14", description: "Sample grocery store", amount: -82.43, eligibleForCashFlow: true, provider: "Sample data", id: "sample-2", syntheticOnly: true },
+      { date: "2026-10-12", description: "Sample electricity bill", amount: -64.18, eligibleForCashFlow: true, provider: "Sample data", id: "sample-3", syntheticOnly: true },
+      { date: "2026-10-10", description: "Sample savings transfer", amount: -300, eligibleForCashFlow: true, provider: "Sample data", id: "sample-4", syntheticOnly: true }
     ];
-    state.transactions.push(...sample);
+    state.syntheticTransactions = sample;
     render();
-    setStatus("Loaded four invented sample rows. They are not saved and will disappear when this page is closed.", "success");
+    if (syntheticStorage?.lifecycle?.state === "ready") {
+      try {
+        await syntheticStorage.saveSyntheticSnapshot(sample);
+        setStatus("Loaded and verified four invented sample rows in the dedicated synthetic Drive folder.", "success");
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : "Synthetic sample data could not be saved.", "error");
+      }
+    } else {
+      setStatus("Loaded four invented sample rows in this page only. Connect a dedicated synthetic Drive folder to test persistence.", "success");
+    }
   }
 
   $("csv-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
+  $("connect-synthetic-storage").addEventListener("click", async () => {
+    const button = $("connect-synthetic-storage");
+    button.disabled = true;
+    $("storage-status").textContent = "Connecting and verifying synthetic storage…";
+    try {
+      const { DashboardSyntheticStorage } = await import("./dashboard-synthetic-storage.mjs");
+      syntheticStorage = new DashboardSyntheticStorage({
+        onStatus: ({ message, kind }) => {
+          $("storage-status").textContent = message;
+          $("storage-status").dataset.kind = kind || "info";
+        },
+        onSnapshot: (rows) => {
+          state.syntheticTransactions = rows;
+          render();
+        }
+      });
+      const result = await syntheticStorage.connect();
+      $("release-synthetic-storage").disabled = false;
+      $("storage-status").textContent = "Connected to " + result.folderName + ". " + result.snapshot.length + " synthetic row(s) restored. CSV imports remain local.";
+      $("storage-status").dataset.kind = "success";
+    } catch (error) {
+      $("storage-status").textContent = error instanceof Error ? error.message : "Synthetic storage connection failed.";
+      $("storage-status").dataset.kind = "error";
+      syntheticStorage = null;
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("release-synthetic-storage").addEventListener("click", async () => {
+    $("release-synthetic-storage").disabled = true;
+    try {
+      await syntheticStorage?.release();
+      syntheticStorage = null;
+      $("storage-status").textContent = "Synthetic storage session released. CSV imports remain local.";
+      $("storage-status").dataset.kind = "success";
+    } catch (error) {
+      $("storage-status").textContent = error instanceof Error ? error.message : "Storage release could not be verified.";
+      $("storage-status").dataset.kind = "error";
+      $("release-synthetic-storage").disabled = false;
+    }
+  });
   $("load-sample").addEventListener("click", loadSample);
   $("clear-data").addEventListener("click", () => {
     state.transactions = [];
+    state.syntheticTransactions = [];
     state.importedFingerprints.clear();
     state.sourceFiles = [];
     render();
-    setStatus("Session data cleared. Nothing was saved to disk.", "success");
+    if (syntheticStorage?.lifecycle?.state === "ready") {
+      void syntheticStorage.clearSyntheticSnapshot().then(() => {
+        setStatus("Local data cleared and the synthetic Drive snapshot was cleared and verified.", "success");
+      }).catch((error) => {
+        setStatus(error instanceof Error ? error.message : "Synthetic Drive snapshot could not be cleared.", "error");
+      });
+    } else {
+      setStatus("Session data cleared. Nothing was saved to disk.", "success");
+    }
   });
   render();
 })();
