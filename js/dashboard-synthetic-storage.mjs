@@ -265,6 +265,11 @@ export class DashboardSyntheticStorage {
       }
       if (this.lifecycle.coordinator?.canWrite && this.lifecycle.state === "recovery-required") {
         await this.lifecycle.recover();
+      } else if (this.lifecycle.coordinator?.session && this.lifecycle.started) {
+        await this.lifecycle.handleOnline();
+        if (this.lifecycle.state !== "ready") {
+          throw Object.assign(new Error("The existing storage session could not be revalidated. Writes remain disabled."), { code: "ownership-unknown" });
+        }
       } else {
         await this.lifecycle.start();
       }
@@ -308,6 +313,17 @@ export class DashboardSyntheticStorage {
   async clearSyntheticSnapshot() {
     if (!this.lifecycle || this.lifecycle.state !== "ready") throw new Error("Synthetic storage is not ready.");
     return this.saveSyntheticSnapshot([]);
+  }
+
+  async recoverStaleSession() {
+    if (!this.lifecycle || this.lifecycle.state !== "stale-session") {
+      throw new Error("There is no conclusively stale synthetic session to recover.");
+    }
+    await this.lifecycle.recoverStaleSession({ confirm: true });
+    const snapshot = await this.readSnapshot();
+    this.onSnapshot(snapshot);
+    this.publish("ready", "Stale session recovered and synthetic snapshot verified.", "success");
+    return snapshot;
   }
 
   async release() {
