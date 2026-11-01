@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#f5f5f7">
   <title>Finance Tracker</title>
   <link rel="stylesheet" href="styles.css">
+  <script async src="https://accounts.google.com/gsi/client"></script>
+  <script async src="https://apis.google.com/js/api.js"></script>
   <script src="js/app.js" defer></script>
   <script src="js/build-info.js" defer></script>
 </head>
@@ -22,6 +24,19 @@
     <section class="privacy-note" aria-label="Privacy status">
       <span class="status-dot" aria-hidden="true"></span>
       <p><strong>Private by default.</strong> Files are parsed in this browser. Nothing is uploaded or saved between sessions.</p>
+    </section>
+
+    <section class="panel" aria-label="Synthetic storage integration">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">DEVELOPMENT STORAGE TEST</p>
+          <h2>Google Drive · synthetic fixtures only</h2>
+        </div>
+      </div>
+      <p class="panel-copy">Connect only a dedicated folder whose name contains “synthetic”. This PR stores invented sample rows only. CSV imports always remain local and are never uploaded.</p>
+      <button id="connect-synthetic-storage" class="secondary-button" type="button">Connect synthetic Drive folder</button>
+      <button id="release-synthetic-storage" class="secondary-button" type="button" disabled>Release storage session</button>
+      <p id="storage-status" class="status-message" role="status" aria-live="polite">Not connected. CSV imports continue to work locally.</p>
     </section>
 
     <section class="metric-grid" aria-label="Cash flow summary">
@@ -56,7 +71,7 @@
       <p id="import-status" class="status-message" role="status" aria-live="polite">No file imported yet.</p>
       <details class="sample-details">
         <summary>Try sample data</summary>
-        <p>Loads deliberately invented transactions to explore the dashboard. Sample data stays in this page only.</p>
+        <p>Loads deliberately invented transactions to explore the dashboard. When synthetic Drive is connected, only these invented rows are saved there.</p>
         <button id="load-sample" class="secondary-button" type="button">Load sample transactions</button>
       </details>
     </section>
