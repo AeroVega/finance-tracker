@@ -147,6 +147,9 @@ export class SessionCoordinator {
     if (current.status === "stale") fail("stale-session", "A session appears stale. Automatic takeover is disabled; use the explicit stale-session recovery flow.");
     if (current.status === "ambiguous" || current.status === "unknown") {
       this.ownership = "unknown";
+      if (current.errorCode === "authorization-required") {
+        fail("authorization-required", "Google authorization is required to inspect the existing Drive session. Reconnect to Google; no session or stored data was changed. Writes remain disabled.");
+      }
       const detail = current.errorCode ? " Drive check failed (" + current.errorCode + ")." : "";
       fail("ownership-unknown", "The existing session state cannot be trusted. Writes are disabled." + detail);
     }
