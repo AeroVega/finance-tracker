@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-01  
 **Current workstream:** Workstream 1 — best-effort single-active-session coordination, branch `feat/single-active-session-coordination`  
-**Current phase:** PR #20 is merged. PR #21 is implementing best-effort single-active-session coordination using a synthetic-only Drive session marker and deterministic contract tests. Production financial-data storage is **not approved**.
+**Current phase:** PR #20 is merged. PR #21's best-effort single-active-session coordination implementation and synthetic browser harness have passed owner-operated live tests for acquisition, guarded no-op writes, heartbeat, offline refusal, reconnect revalidation, stale expiry/recovery, and read-back verification. Final-head CI for the latest UI reporting fix is pending. Production financial-data storage is **not approved**.
 
 This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/single-active-session-coordination`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
@@ -20,7 +20,7 @@ Scope:
 - Never take over a stale session automatically; require explicit confirmation and re-read before recovery.
 - Test stale sessions, network interruption, browser-crash expiry, lost responses, and orderly handoff using synthetic data only.
 
-The Drive marker adapter and state machine are implemented on the PR #21 branch. Final-head GitHub Actions run #134 passed 104/104 Node tests. A live session-marker test in a dedicated synthetic Drive folder remains outstanding. The tested Drive `If-Match` path is not an atomic lock; simultaneous starts and network partitions remain possible. This PR does not integrate session coordination into production ledger reads/writes and does not authorize production persistence.
+The Drive marker adapter, state machine, and browser harness are implemented on the PR #21 branch. The owner confirmed successful live synthetic-folder tests on 2026-11-01: session acquisition and guarded no-op write; automatic heartbeat; offline write refusal; explicit same-session revalidation after reconnect; stale-session detection after heartbeat expiry; explicit stale recovery with verified read-back. The UI now clears old marker status while a fresh inspection is pending, ignores superseded inspection results, and distinguishes an active marker from locally verified ownership. Earlier final-head CI run #136 passed 109/109 tests; the latest UI-fix CI result must be checked before merge. The tested Drive `If-Match` path is not an atomic lock; simultaneous starts and network partitions remain possible. This PR does not integrate session coordination into production ledger reads/writes and does not authorize production persistence.
 
 ## Completed checkpoints
 
