@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { DriveTransactionEngine } from "../js/drive-transaction-engine.mjs";
 
 const cryptoImpl = globalThis.crypto || webcrypto;
@@ -240,4 +242,11 @@ test("offline writes are refused before the first durable mutation", async () =>
   engine.isOnline = () => false;
   await assert.rejects(engine.transact(transaction), (error) => error.code === "offline");
   assert.equal(adapter.mutations, 0);
+});
+
+test("Drive transaction engine and browser smoke-test module have valid JavaScript syntax", () => {
+  const enginePath = fileURLToPath(new URL("../js/drive-transaction-engine.mjs", import.meta.url));
+  const browserPath = fileURLToPath(new URL("../prototype/drive-feasibility-spike.mjs", import.meta.url));
+  execFileSync(process.execPath, ["--check", enginePath], { stdio: "pipe" });
+  execFileSync(process.execPath, ["--check", browserPath], { stdio: "pipe" });
 });
