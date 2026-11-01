@@ -66,6 +66,11 @@ A temporary [Prototype Tools hub](../prototype/) is available from the app foote
 
 **MVP1 completion gate:** remove the app-footer entry point and exclude all browser prototype pages under `prototype/` from the user-facing GitHub Pages deployment. Keep automated tests and useful engineering documentation; do not ship prototype pages, test controls, or prototype navigation as part of the MVP1 app. Verify the deployed artifact contains no prototype hub or prototype HTML pages before calling MVP1 complete.
 
+## PR #24 integration lessons learned
+
+- **Google Drive session-adapter token providers must be synchronous.** The folder-enumeration helper builds its Authorization header synchronously. Passing an async token-provider wrapper produces a Promise where the bearer-token string is expected, which Drive rejects as an authorization failure. The dashboard must pass `() => this.token()`, not `async () => this.token()`. A regression test in `tests/dashboard-synthetic-storage.test.mjs` protects this boundary.
+- **Do not treat `authorization-required` as an empty folder or recover by writing.** Keep the existing session and data untouched, keep writes disabled, obtain a fresh Google token through the explicit user-initiated reconnect flow, and then re-inspect the existing marker before resuming.
+
 ## Cross-cutting product requirement: session management is automatic
 
 Session claiming, heartbeats, ownership inspection, reconnect revalidation, stale-session recovery, and orderly release are internal application lifecycle behavior—not chores for the user. The app should perform them automatically and unobtrusively. Manual intervention is reserved for genuinely ambiguous or unsafe conditions, such as conflicting ownership, malformed/duplicate markers, authorization requiring sign-in, failed verification, or an unknown transaction outcome.
