@@ -236,22 +236,30 @@
   }
 
   $("csv-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
-  $("connect-synthetic-storage").addEventListener("click", async () => {
-    const button = $("connect-synthetic-storage");
-    button.disabled = true;
+  const connectStorageButton = $("connect-synthetic-storage");
+  connectStorageButton.disabled = true;
+  void import("./dashboard-synthetic-storage.mjs").then(async ({ DashboardSyntheticStorage }) => {
+    syntheticStorage = new DashboardSyntheticStorage({
+      onStatus: ({ message, kind }) => {
+        $("storage-status").textContent = message;
+        $("storage-status").dataset.kind = kind || "info";
+      },
+      onSnapshot: (rows) => {
+        state.syntheticTransactions = rows;
+        render();
+      }
+    });
+    await syntheticStorage.prepare();
+    connectStorageButton.disabled = false;
+    $("storage-status").textContent = "Google services ready. Connect only a dedicated synthetic folder; CSV imports remain local.";
+  }).catch((error) => {
+    $("storage-status").textContent = error instanceof Error ? error.message : "Google services could not be prepared.";
+    $("storage-status").dataset.kind = "error";
+  });
+  connectStorageButton.addEventListener("click", async () => {
+    connectStorageButton.disabled = true;
     $("storage-status").textContent = "Connecting and verifying synthetic storage…";
     try {
-      const { DashboardSyntheticStorage } = await import("./dashboard-synthetic-storage.mjs");
-      syntheticStorage = new DashboardSyntheticStorage({
-        onStatus: ({ message, kind }) => {
-          $("storage-status").textContent = message;
-          $("storage-status").dataset.kind = kind || "info";
-        },
-        onSnapshot: (rows) => {
-          state.syntheticTransactions = rows;
-          render();
-        }
-      });
       const result = await syntheticStorage.connect();
       $("release-synthetic-storage").disabled = false;
       $("storage-status").textContent = "Connected to " + result.folderName + ". " + result.snapshot.length + " synthetic row(s) restored. CSV imports remain local.";
@@ -259,9 +267,8 @@
     } catch (error) {
       $("storage-status").textContent = error instanceof Error ? error.message : "Synthetic storage connection failed.";
       $("storage-status").dataset.kind = "error";
-      syntheticStorage = null;
     } finally {
-      button.disabled = false;
+      connectStorageButton.disabled = false;
     }
   });
   $("release-synthetic-storage").addEventListener("click", async () => {
