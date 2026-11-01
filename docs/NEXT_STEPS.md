@@ -1,41 +1,70 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-11-01  
-**Current workstream:** Transaction staging and crash recovery, branch `feat/transaction-staging-crash-recovery`  
-**Current phase:** PR #20 and PR #21 are merged. PR #21's owner-operated live synthetic tests passed for acquisition, guarded no-op writes, automatic heartbeat, offline refusal, reconnect revalidation, stale-session detection/recovery, and verified release. The transaction protocol core is now being implemented and tested independently of production financial data. Production persistence remains **not approved**.
+**Current phase:** Storage implementation, beginning with transaction staging and crash recovery. PR #21 is merged; PR #22 establishes the pure transaction protocol core and is awaiting owner merge. Production financial-data persistence remains **not approved**.
 
-This is the current pick-up point. PR #21's session coordinator is the baseline for the next workstream. Do not enable real ledger reads/writes or production financial-data persistence.
+## Current workstream and PR sequence
 
-## Current task: transaction staging and crash recovery
+The owner has selected Google Drive as the intended private storage provider, subject to completing all storage-readiness gates. The app remains hosted as public static content on GitHub Pages. The permanent CSV import path and $0 recurring-cost constraint remain mandatory.
 
-Branch: `feat/transaction-staging-crash-recovery`  
-Base: `main` at PR #21 merge commit `3dcf3719f2b75b6d02adb77a6007339dc7e87b50`.
+The next four PRs have deliberately separated responsibilities:
 
-The accepted staged-commit architecture is specified in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). The implementation workstream and owner-facing behavior requirements are in [Transaction Staging and Crash Recovery](TRANSACTION_STAGING_AND_RECOVERY.md).
+### PR #22 — Transaction protocol foundation (current PR)
 
-The owner has explicitly required session management to be background application behavior. The app—not the user—must acquire and verify the session, maintain heartbeats, revalidate after reconnect, perform safe stale-session recovery, serialize mutations, drain in-flight work, and release on orderly handoff. Routine lease management must not appear as manual controls in the everyday UI. Manual intervention is reserved for ambiguous ownership, failed verification, authorization requiring sign-in, or a transaction outcome that cannot be resolved safely.
+Branch: `feat/transaction-staging-crash-recovery`
 
-### Implementation sequence
+- Define transaction invariants, journal event format, commit ordering, recovery classifications, and acceptance criteria.
+- Implement the pure protocol core: canonical serialization, SHA-256 journal event creation, hash-chain and transition verification, and deterministic recovery classification.
+- Add synthetic tests for canonicalization, event integrity, invalid transitions, and recovery decisions.
+- Record the requirement that session management is automatic background behavior.
 
-1. Build and test a pure transaction protocol core: strict journal event validation, canonical hashing, append-only sequence/hash-chain verification, and deterministic recovery classification.
-2. Implement the Drive transaction adapter using pre-generated file IDs, immutable content-addressed objects, exact read-back, append-only journal events, immutable commit records, and manifest publication last.
-3. Implement idempotent recovery from the authoritative manifest and journal. Automatically resume/finalize only when evidence is conclusive; otherwise block writes and request intervention.
-4. Integrate the PR #21 session coordinator into the application lifecycle so acquisition, heartbeat, reconnect validation, recovery, and release are automatic.
-5. Add fault-injection coverage for every durable mutation boundary and live synthetic Drive validation on iPhone/iPad.
-6. Complete verified backup/restore, OAuth/security, retention/deletion, and $0 terms gates before any real financial data is stored.
+**Exit:** protocol core and tests reviewed and merged. This PR does not perform Drive persistence.
 
-### Current implementation checkpoint
+### PR #23 — Durable Google Drive transaction engine
 
-- [x] Create `docs/TRANSACTION_STAGING_AND_RECOVERY.md` with protocol invariants, commit ordering, recovery classifications, automatic session UX requirement, and acceptance criteria.
-- [x] Add `js/transaction-protocol.mjs` with JCS-style canonical serialization, SHA-256 journal event creation, hash-chain verification, transition validation, and recovery classification.
-- [x] Add synthetic Node tests for canonicalization, event integrity, invalid transitions, and recovery classification.
-- [ ] Run final-head CI and address any failures.
-- [ ] Implement the real Drive transaction adapter and recovery runner.
-- [ ] Integrate automatic session lifecycle with production storage operations.
-- [ ] Complete live synthetic crash/interruption rehearsal.
-- [ ] Keep production persistence disabled until all readiness gates pass.
+- Implement Drive adapter operations for durable append-only journal events, immutable content-addressed object staging, immutable commit records, and manifest publication last.
+- Use pre-generated Drive file IDs and exact read-back verification to make retries idempotent after lost responses.
+- Enforce expected base revision/commit checks, serialized mutations, and verified session ownership before every mutation and immediately before manifest publication.
+- Implement deterministic crash recovery from the authoritative manifest, journal, commit records, and referenced objects.
+- Add fault injection after every durable mutation boundary, including lost responses and delayed read-after-write visibility.
+- Use synthetic data and a dedicated synthetic Drive folder only.
 
-The transaction protocol core is not yet a complete persistence implementation. It does not yet write Drive objects, append durable journal events, publish manifests, or automatically recover a real Drive transaction.
+**Exit:** live synthetic Drive transactions and repeated recovery are verified; ambiguous outcomes fail closed and preserve evidence. No real financial data.
+
+### PR #24 — Application integration and automatic lifecycle
+
+- Integrate the transaction engine with the app's actual database initialization, import, ledger update, and read paths.
+- Automatically acquire and verify the session after authorization/database selection; maintain heartbeats while active; revalidate the same session after reconnect; safely recover stale sessions; and release during orderly handoff.
+- Keep routine session claiming, heartbeat, ownership inspection, and recovery out of the ordinary UI. Show concise connection/sync status. Ask the user only when ownership, authorization, or transaction outcome cannot be safely established.
+- Serialize all writes through one application storage queue; prohibit offline writes and block new writes while recovery is unresolved.
+- Keep the existing permanent CSV import workflow.
+
+**Exit:** integrated workflows pass synthetic end-to-end tests, including app reload/crash/reconnect and device handoff. No real financial data.
+
+### PR #25 — End-to-end acceptance and production-readiness gates
+
+- Complete comprehensive fault-injection and recovery rehearsals across every commit boundary.
+- Demonstrate verified backup, restore, and portability.
+- Complete OAuth expiry/revocation/wrong-account/permission-denial handling and security/privacy review.
+- Implement and verify the 540-day (18-month) original-source retention/deletion lifecycle, including backup behavior.
+- Verify current Google terms, quotas, OAuth requirements, and sustainable $0 recurring cost.
+- Review all failure modes, recovery instructions, data-integrity evidence, and limitations with the owner.
+
+**Exit:** explicit owner acceptance of the evidence and risks. Production financial-data persistence remains disabled until the owner separately authorizes it.
+
+## Cross-cutting product requirement: session management is automatic
+
+Session claiming, heartbeats, ownership inspection, reconnect revalidation, stale-session recovery, and orderly release are internal application lifecycle behavior—not chores for the user. The app should perform them automatically and unobtrusively. Manual intervention is reserved for genuinely ambiguous or unsafe conditions, such as conflicting ownership, malformed/duplicate markers, authorization requiring sign-in, failed verification, or an unknown transaction outcome.
+
+The accepted operating model is single-user/single-active-device. Simultaneous use on two devices is unsupported. Drive session coordination is best-effort detection, not a server-enforced mutex; simultaneous starts and network partitions remain limitations. The app must fail closed whenever it cannot verify ownership or transaction outcome.
+
+## Current handoff
+
+Work on PR #22 is on branch `feat/transaction-staging-crash-recovery`. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`.
+
+PR #22 is intentionally limited to protocol rules and the deterministic core. Do not add the Drive transaction adapter, durable writes, manifest publication, or application lifecycle integration to PR #22; those belong in PRs #23 and #24 as described above.
+
+Do not enable real ledger reads/writes or production financial-data persistence during these workstreams. Use invented fixtures and the dedicated synthetic Drive folder only.
 
 ## Completed checkpoints
 
