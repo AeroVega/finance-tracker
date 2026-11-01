@@ -1,4 +1,3 @@
-import { GOOGLE_CONFIG } from "../js/google-config.js";
 import { validateGoogleConfig } from "../js/google-config-validation.mjs";
 import { DRIVE_FILES_ENDPOINT } from "../js/drive-feasibility-spike.mjs";
 import { ApplicationStorageLifecycle } from "../js/application-storage-lifecycle.mjs";
@@ -11,6 +10,7 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
 const PRODUCTION_FOLDER_NAME = "finance-tracker-database";
 const MANIFEST_NAME = "ft-synthetic-pr24-manifest.json";
 const BOOTSTRAP_TRANSACTION = "pr24-bootstrap";
+let GOOGLE_CONFIG = null;
 const state = {
   accessToken: "",
   tokenExpiresAt: 0,
@@ -486,10 +486,21 @@ $("cleanup").addEventListener("click", () => runBusy(cleanupSyntheticFiles));
 
 $("connect-google").disabled = true;
 updateActions();
-loadGoogleLibraries().then(() => {
+async function loadDeploymentConfig() {
+  const response = await fetch("../js/google-config.json", { cache: "no-store" });
+  if (!response.ok) throw new Error("Google deployment configuration could not be loaded (HTTP " + response.status + ").");
+  const config = await response.json();
+  validateGoogleConfig(config);
+  return Object.freeze(config);
+}
+Promise.all([loadGoogleLibraries(), loadDeploymentConfig()]).then(([, config]) => {
+  GOOGLE_CONFIG = config;
   $("connect-google").disabled = false;
-  status("connection-status", "Google services loaded. Connect, then choose a dedicated synthetic test folder.");
-}).catch((error) => status("connection-status", error.message || "Google services could not load.", "error"));
+  status("connection-status", "Google services and deployment configuration loaded. Connect, then choose a dedicated synthetic test folder.");
+}).catch((error) => {
+  $("connect-google").disabled = true;
+  status("connection-status", error.message || "Google services or deployment configuration could not load.", "error");
+});
 window.addEventListener("online", () => {
   if (state.lifecycle) status("reconnect-status", "Browser reports online. The lifecycle controller is revalidating the prior session…");
 });
