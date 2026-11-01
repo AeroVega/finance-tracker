@@ -309,10 +309,15 @@
   });
   $("load-sample").addEventListener("click", loadSample);
   $("clear-data").addEventListener("click", async () => {
-    const previousSynthetic = state.syntheticTransactions;
+    const previousState = {
+      transactions: state.transactions,
+      syntheticTransactions: state.syntheticTransactions,
+      importedFingerprints: state.importedFingerprints,
+      sourceFiles: state.sourceFiles
+    };
     state.transactions = [];
     state.syntheticTransactions = [];
-    state.importedFingerprints.clear();
+    state.importedFingerprints = new Set();
     state.sourceFiles = [];
     render();
     if (syntheticStorage?.lifecycle?.state === "ready") {
@@ -320,9 +325,13 @@
         await syntheticStorage.clearSyntheticSnapshot();
         setStatus("Local data cleared and the synthetic Drive snapshot was cleared and verified.", "success");
       } catch (error) {
-        state.syntheticTransactions = previousSynthetic;
+        // A failed remote clear must not destroy the user's still-visible local imports.
+        state.transactions = previousState.transactions;
+        state.syntheticTransactions = previousState.syntheticTransactions;
+        state.importedFingerprints = previousState.importedFingerprints;
+        state.sourceFiles = previousState.sourceFiles;
         render();
-        setStatus(error instanceof Error ? error.message : "Synthetic Drive snapshot could not be cleared. The last verified synthetic rows were restored.", "error");
+        setStatus(error instanceof Error ? error.message : "Synthetic Drive snapshot could not be cleared. The previous local data was restored.", "error");
       }
     } else {
       setStatus("Session data cleared. Nothing was saved to disk.", "success");
