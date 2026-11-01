@@ -43,7 +43,7 @@ A successful live smoke test verifies the ordinary Drive create/read-back/publis
 ## Evidence classification
 
 - **Verified by automated tests:** deterministic in-memory state transitions and fault injection at all 11 mutation boundaries, once the CI run passes.
-- **Verified by live test:** only the exact synthetic Drive smoke test actually completed by the owner, with its result and date recorded.
+- **Verified by live test (owner-confirmed 2026-11-01):** complete folder enumeration; immutable-object same-ID retry after a deliberately discarded successful response, HTTP 409, and exact SHA-256 read-back; durable transaction commit, reopen, and recovery verification; cleanup of all synthetic files tracked by that browser session (deleted or already absent).
 - **Open:** live Drive interruption/reload rehearsals at each boundary, delayed visibility under real conditions, authorization loss/reconnect, automatic session lifecycle integration (PR #24), backup/restore, security review, 540-day source retention, current terms/quotas, and sustainable $0 recurring cost.
 
 Never place real financial data, account identifiers, tokens, or real Drive folder/file IDs in this repository, CI logs, or public issue/PR comments.
