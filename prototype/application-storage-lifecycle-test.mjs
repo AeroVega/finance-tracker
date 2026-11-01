@@ -9,7 +9,7 @@ const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const PRODUCTION_FOLDER_NAME = "finance-tracker-database";
 const MANIFEST_NAME = "ft-synthetic-pr24-manifest.json";
-const BOOTSTRAP_TRANSACTION = "7b8d2f41-9c63-4a70-8e15-2f6b3c9d1a84";
+const BOOTSTRAP_TRANSACTION = "pr24-bootstrap";
 let GOOGLE_CONFIG = null;
 const state = {
   accessToken: "",
