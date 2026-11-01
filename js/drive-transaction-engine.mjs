@@ -205,8 +205,9 @@ export class GoogleDriveTransactionAdapter {
     });
   }
 
-  async publishManifest(manifestFileId, manifest) {
+  async publishManifest(manifestFileId, manifest, { beforeMutation } = {}) {
     await this.readMetadata(manifestFileId);
+    await beforeMutation?.();
     const content = canonicalizeJcs(manifest);
     const bytes = new TextEncoder().encode(content);
     const boundary = `ft-manifest-${manifest.revision}`;
@@ -258,6 +259,11 @@ export class DriveTransactionEngine {
       await this.guard();
       if (!Array.isArray(objects) || !objects.length || typeof makeManifest !== "function") {
         fail("invalid-transaction", "A transaction requires changed objects and a manifest builder.");
+      }
+      const existingFiles = await this.adapter.listChildren();
+      if (existingFiles.some((file) => file.appProperties?.[TAG + "Kind"] === "journal-event" &&
+          file.appProperties?.[TAG + "Transaction"] === transactionId)) {
+        fail("transaction-already-exists", "This transaction ID already has durable journal evidence. Recover it before attempting another write.", { transactionId });
       }
       const current = await this.adapter.readJson(manifestFileId);
       if (current.revision !== expectedBase.revision || current.commitId !== expectedBase.commitId ||
@@ -346,16 +352,23 @@ export class DriveTransactionEngine {
         const nextManifest = await makeManifest({
           current, record, commitFileId, commitHash: recordHash, snapshot
         });
+        if (nextManifest.databaseId !== current.databaseId || nextManifest.copyId !== current.copyId ||
+            nextManifest.revision !== current.revision + 1 || nextManifest.commitId !== commitId ||
+            nextManifest.parentCommitId !== current.commitId) {
+          fail("invalid-next-manifest", "The manifest builder returned an identity, revision, or lineage that does not match the staged commit.");
+        }
         await addEvent("manifest-publication-planned", {
           baseRevision: current.revision, baseCommitId: current.commitId,
           intendedRevision: nextManifest.revision, intendedCommitId: commitId
         });
         await this.guard();
         const latest = await this.adapter.readJson(manifestFileId);
-        if (latest.revision !== current.revision || latest.commitId !== current.commitId) {
+        if (latest.databaseId !== current.databaseId || latest.copyId !== current.copyId ||
+            latest.revision !== current.revision || latest.commitId !== current.commitId) {
           fail("base-conflict", "The manifest changed before publication.");
         }
-        await this.adapter.publishManifest(manifestFileId, nextManifest);
+        await this.guard();
+        await this.adapter.publishManifest(manifestFileId, nextManifest, { beforeMutation: () => this.guard() });
         await addEvent("manifest-published", { commitId });
         await addEvent("transaction-committed", { commitId });
         return { transactionId, commitId, revision: nextManifest.revision, manifest: nextManifest };
@@ -585,7 +598,7 @@ export class DriveTransactionEngine {
             fail("recovery-base-changed", "The manifest base changed before recovery publication.", { transactionId });
           }
           await this.assertWritable();
-          await this.adapter.publishManifest(manifestFileId, nextManifest);
+          await this.adapter.publishManifest(manifestFileId, nextManifest, { beforeMutation: () => this.assertWritable() });
           const readBack = await this.adapter.readJson(manifestFileId);
           if (readBack.revision !== nextManifest.revision || readBack.commitId !== nextManifest.commitId) {
             fail("recovery-publication-unverified", "The recovered manifest did not read back with the intended revision and commit.", { transactionId });
