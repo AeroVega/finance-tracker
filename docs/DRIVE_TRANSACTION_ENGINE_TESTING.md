@@ -24,7 +24,7 @@ The new engine tests use an in-memory synthetic Drive implementation. They injec
 10. Manifest-published journal event.
 11. Terminal transaction-committed journal event.
 
-The suite verifies all 11 injected interruption points, preserves durable evidence, rejects stale serialized writers, refuses offline writes, safely aborts pre-commit staging when the authoritative manifest remains at the exact base, resumes a fully verified immutable commit when publication can safely continue, and repairs missing publication/terminal journal events after manifest read-back proves the commit.
+The suite verifies all 11 injected interruption points, preserves durable evidence, rejects stale serialized writers, refuses offline writes, aborts only after all known staged objects are independently visible and hash-verified, resumes a fully verified immutable commit when publication can safely continue, and repairs missing publication/terminal journal events after manifest read-back proves the commit. If a pre-generated ID is not visible within the retry window, recovery leaves the outcome unresolved and blocks further writes.
 
 ## Live Google Drive smoke test
 
