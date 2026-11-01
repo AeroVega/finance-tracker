@@ -12,4 +12,9 @@ test("prototype hub links to the PR24 application lifecycle harness", async () =
   assert.match(module, /syntheticOnly:\s*true/);
   assert.match(module, /finance-tracker-database/);
   assert.match(module, /startsWith\("pr24-"\)/);
+  assert.match(page, /id="simulate-crash"/);
+  assert.match(page, /id="handoff-status"/);
+  const referencedIds = [...module.matchAll(/\\$\\("([^"]+)"\\)/g)].map((match) => match[1]);
+  const pageIds = new Set([...page.matchAll(/\\bid="([^"]+)"/g)].map((match) => match[1]));
+  assert.deepEqual([...new Set(referencedIds)].filter((id) => !pageIds.has(id)), []);
 });
