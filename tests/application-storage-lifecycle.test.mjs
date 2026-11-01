@@ -128,6 +128,22 @@ test("pagehide makes a best-effort release attempt", async () => {
   assert.equal(sessionAdapter.record.state, "released");
 });
 
+test("session inspection preserves a safe Drive-read diagnostic while refusing ownership", async () => {
+  const { lifecycle } = setup();
+  lifecycle.factories.createSessionAdapter = () => ({
+    async read() { throw Object.assign(new Error("synthetic adapter failure"), { code: "ambiguous-session-record" }); },
+    async write() { throw new Error("write must not be attempted"); }
+  });
+  await assert.rejects(lifecycle.start(), (error) => {
+    assert.equal(error.code, "ownership-unknown");
+    assert.match(error.message, /ambiguous-session-record/);
+    return true;
+  });
+  assert.equal(lifecycle.state, "connection-error");
+  assert.equal(lifecycle.acceptingWrites, false);
+  assert.equal(lifecycle.coordinator.canWrite, false);
+});
+
 test("stale sessions are never taken over automatically and require explicit recovery", async () => {
   const now = Date.now();
   const staleRecord = {
