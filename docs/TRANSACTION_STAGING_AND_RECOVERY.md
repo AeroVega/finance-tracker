@@ -1,8 +1,8 @@
 # Transaction Staging and Crash Recovery
 
-**Status:** Implementation workstream opened after PR #21 merge; synthetic-only until the complete storage-readiness gates pass.  
-**Branch:** `feat/transaction-staging-crash-recovery`  
-**Scope:** Durable staged commits, append-only journal events, idempotent Drive object creation, manifest publication, deterministic recovery, and automatic session lifecycle integration.
+**Status:** Protocol core merged in PR #22; durable Drive transaction engine under implementation in PR #23. Synthetic-only until all storage-readiness gates pass.  
+**Branch:** `feat/durable-drive-transaction-engine`  
+**Scope:** Durable Drive adapter, staged commits, append-only journal events, idempotent immutable object creation, manifest publication, and conservative deterministic recovery. Application lifecycle integration is PR #24.
 
 ## Product requirement: session coordination is background behavior
 
@@ -78,12 +78,12 @@ Events contain no amounts, merchant descriptions, account numbers, balances, CSV
 
 ## Implementation slices
 
-1. **Protocol core:** pure deterministic transaction state machine and strict validation, independent of Google APIs; synthetic tests for event sequencing, hashes, idempotency, invalid transitions, and crash boundaries.
-2. **Drive transaction adapter:** complete folder enumeration, pre-generated IDs, immutable object creation/read-back, journal event persistence, commit record persistence, and manifest publication/read-back.
-3. **Recovery engine:** reconstruct state from durable events and authoritative manifest; resolve each interruption boundary automatically where evidence is conclusive; fail closed otherwise.
-4. **Application lifecycle integration:** automatically coordinate session acquisition/heartbeat/revalidation/recovery/release; serialize all storage mutations; keep user-facing session controls out of normal UI.
-5. **Fault-injection/live synthetic validation:** lose responses before/after every Drive mutation, close/reload the browser, interrupt network and authorization, delay read-after-write visibility, and verify recovery from the selected synthetic folder on iPhone/iPad.
-6. **Production readiness review:** backup/restore, security/privacy, 540-day source retention/deletion, OAuth behavior, current Google terms/quotas, and sustainable $0 operation remain separate gates.
+1. **Protocol core (PR #22, merged):** pure deterministic transaction state machine and strict validation, independent of Google APIs; synthetic tests for event sequencing, hashes, idempotency, invalid transitions, and recovery classification.
+2. **Drive transaction adapter (PR #23):** complete folder enumeration, pre-generated IDs, immutable object creation/read-back, journal event persistence, commit record persistence, and manifest publication/read-back.
+3. **Recovery engine (PR #23):** reconstruct state from durable events and authoritative manifest; resume/finalize only where evidence is conclusive; fail closed otherwise.
+4. **Application lifecycle integration (PR #24):** automatically coordinate session acquisition/heartbeat/revalidation/recovery/release; serialize all storage mutations; keep user-facing session controls out of normal UI.
+5. **Fault-injection/live synthetic validation (PR #23/24):** inject a lost response after every durable mutation in deterministic tests; rehearse live Drive publication/read-back, browser reload, authorization interruption, and delayed visibility with synthetic data.
+6. **Production readiness review (PR #25):** backup/restore, security/privacy, 540-day source retention/deletion, OAuth behavior, current Google terms/quotas, and sustainable $0 operation remain separate gates.
 
 ## Acceptance criteria
 
