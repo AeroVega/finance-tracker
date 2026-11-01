@@ -1,12 +1,12 @@
 # Database Identity and Lifecycle — Architecture Decision Record
 
-**Status:** Architecture decision record ready to merge in PR #19; implementation not authorized  
+**Status:** Accepted architecture baseline (PR #19); synthetic transaction-engine implementation is underway in PR #23. Production financial-data persistence remains unauthorized.  
 **Decision scope:** Database identity, manifest/schema versioning, physical copies, immutable storage, commit lineage, transaction journaling, initialization, migrations, backups, lifecycle, and recovery  
 **Storage direction:** Google Drive, subject to the existing production-readiness gates  
 **Target:** MVP1  
 **Related baseline:** `docs/PRIVATE_STORAGE_ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/DATA_MODEL.md`, and `docs/ARCHITECTURE_DECISIONS.md`
 
-> This record consolidates 108 accepted architecture decisions from the database identity, lifecycle, storage, transaction, recovery, and migration reviews. It is a design baseline, not permission to implement production persistence or enable real financial-data storage. Google Drive concurrency enforcement and other feasibility gates remain open and must pass before production writes.
+> This record consolidates 108 accepted architecture decisions from the database identity, lifecycle, storage, transaction, recovery, and migration reviews. PR #23 implements and validates the transaction protocol using synthetic data only. It does not authorize production persistence or real financial-data storage. The accepted single-active-device operating constraint and best-effort session detection supersede the earlier expectation of server-enforced concurrency protection.
 
 ## Context and constraints
 
@@ -277,9 +277,9 @@ The journal records transaction identity, intended changes, affected files, stag
 
 No uncertain transaction is silently replayed or discarded.
 
-### 37. Require optimistic concurrency protection
+### 37. Require expected-base validation under the accepted single-active-device model
 
-Every write captures the starting revision and commit ID and must prove that the primary is still at that exact state before publication. A stale transaction cannot publish. The enforcement mechanism is a production-readiness blocker until demonstrated with Google Drive; a read-then-write check alone is not accepted as atomic protection.
+Every write captures the starting database ID, copy ID, revision, and commit ID. The app re-reads and validates that exact base before staging and immediately before manifest publication, and revalidates the best-effort active session before every mutation. If the base changes, another session is detected, the session cannot be verified, or the outcome is uncertain, the app refuses publication and preserves evidence. The tested Drive v3 `files.update` path accepted a deliberately stale `If-Match` value, so this mechanism is not an atomic compare-and-swap and must not be described as one. The owner explicitly accepted single-user, single-active-device operation; simultaneous starts and network partitions remain residual risks. Production writes remain blocked until safe serialized operation, fail-closed session handling, and crash recovery are demonstrated within that operating constraint.
 
 ### 38. Re-evaluate conflicted imports instead of replaying stale work
 
