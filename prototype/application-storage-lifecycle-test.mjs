@@ -372,6 +372,8 @@ async function recoverStale() {
 }
 async function recoverTransaction() {
   await state.lifecycle.recover();
+  state.manifestFileId = state.lifecycle.manifestFileId;
+  state.manifestRevision = (await state.lifecycle.readManifest()).revision;
   status("transaction-status", "PASS: unresolved transaction recovery completed and storage returned to Ready.", "success");
 }
 async function cleanupSyntheticFiles() {
