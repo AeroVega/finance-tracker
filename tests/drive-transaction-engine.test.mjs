@@ -244,6 +244,22 @@ test("offline writes are refused before the first durable mutation", async () =>
   assert.equal(adapter.mutations, 0);
 });
 
+test("recovery rejects a manifest whose immutable commit-record pointer is inconsistent", async () => {
+  for (const field of ["commitRecordFileId", "commitRecordHash"]) {
+    const { adapter, engine, transaction } = setup();
+    await engine.transact(transaction);
+    const manifest = adapter.files.get("manifest").json;
+    manifest[field] = field === "commitRecordFileId" ? "synthetic-wrong-commit-file" : "0".repeat(64);
+    adapter.files.get("manifest").json = manifest;
+    adapter.files.get("manifest").bytes = new TextEncoder().encode(JSON.stringify(manifest));
+    await assert.rejects(
+      engine.recover({ manifestFileId: "manifest" }),
+      (error) => error.code === "manifest-commit-pointer-mismatch"
+    );
+    assert.equal(engine.recoveryRequired, true);
+  }
+});
+
 test("Drive transaction engine and browser smoke-test module have valid JavaScript syntax", () => {
   const enginePath = fileURLToPath(new URL("../js/drive-transaction-engine.mjs", import.meta.url));
   const browserPath = fileURLToPath(new URL("../prototype/drive-feasibility-spike.mjs", import.meta.url));
