@@ -206,6 +206,35 @@ test("recovery resumes a fully staged transaction when the manifest remains at i
   assert.equal(engine.recoveryRequired, false);
 });
 
+test("reusing a transaction ID is rejected before any new durable write", async () => {
+  const { adapter, engine, transaction } = setup();
+  const transactionId = cryptoImpl.randomUUID();
+  await engine.transact({ ...transaction, transactionId });
+  const mutations = adapter.mutations;
+  await assert.rejects(
+    engine.transact({ ...transaction, transactionId }),
+    (error) => error.code === "transaction-unresolved" && error.details.cause === "transaction-already-exists"
+  );
+  assert.equal(adapter.mutations, mutations);
+});
+
+test("a malformed manifest builder cannot publish a different revision or lineage", async () => {
+  const { adapter, engine, transaction } = setup();
+  await assert.rejects(
+    engine.transact({
+      ...transaction,
+      makeManifest: async ({ current, record }) => ({
+        ...current,
+        revision: record.revision + 10,
+        commitId: record.commitId,
+        parentCommitId: current.commitId
+      })
+    }),
+    (error) => error.code === "transaction-unresolved" && error.details.cause === "invalid-next-manifest"
+  );
+  assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
+});
+
 test("offline writes are refused before the first durable mutation", async () => {
   const { adapter, engine, transaction } = setup();
   engine.isOnline = () => false;
