@@ -87,8 +87,15 @@ export class SessionCoordinator {
     let record;
     try {
       record = await this.adapter.read();
-    } catch {
-      return { status: "unknown", record: null };
+    } catch (error) {
+      // Preserve a safe diagnostic so the UI can distinguish Drive read,
+      // malformed-marker, and authorization failures without weakening the
+      // fail-closed ownership decision.
+      return {
+        status: "unknown",
+        record: null,
+        errorCode: typeof error?.code === "string" ? error.code : "session-read-failed"
+      };
     }
     if (record === null) return { status: "absent", record: null };
     if (!validRecord(record)) return { status: "ambiguous", record: null };
@@ -140,7 +147,8 @@ export class SessionCoordinator {
     if (current.status === "stale") fail("stale-session", "A session appears stale. Automatic takeover is disabled; use the explicit stale-session recovery flow.");
     if (current.status === "ambiguous" || current.status === "unknown") {
       this.ownership = "unknown";
-      fail("ownership-unknown", "The existing session state cannot be trusted. Writes are disabled.");
+      const detail = current.errorCode ? " Drive check failed (" + current.errorCode + ")." : "";
+      fail("ownership-unknown", "The existing session state cannot be trusted. Writes are disabled." + detail);
     }
 
     const record = this.makeRecord(String(this.createSessionId()));
