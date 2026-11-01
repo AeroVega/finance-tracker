@@ -199,7 +199,7 @@ export class DashboardSyntheticStorage {
   }
 
   token() {
-    if (!this.accessToken || Date.now() >= this.tokenExpiresAt - 30000) {
+    if (!this.accessToken || Date.now() >= this.tokenExpiresAt - 5000) {
       this.accessToken = "";
       throw Object.assign(new Error("Google authorization expired. Reconnect before continuing."), { code: "authorization-required" });
     }
@@ -216,7 +216,12 @@ export class DashboardSyntheticStorage {
       const authorization = requestToken(config.clientId);
       const response = await authorization;
       this.accessToken = response.access_token;
-      this.tokenExpiresAt = Date.now() + Number(response.expires_in || 0) * 1000;
+      const expiresInSeconds = Number(response.expires_in);
+      // GIS normally supplies expires_in, but do not turn an omitted/malformed
+      // lifetime into an already-expired token. Let Drive report a 401 if needed.
+      this.tokenExpiresAt = Number.isFinite(expiresInSeconds) && expiresInSeconds > 0
+        ? Date.now() + expiresInSeconds * 1000
+        : Number.POSITIVE_INFINITY;
       await new Promise((resolve, reject) => {
         const view = new window.google.picker.DocsView(window.google.picker.ViewId.FOLDERS)
           .setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(FOLDER_MIME);
