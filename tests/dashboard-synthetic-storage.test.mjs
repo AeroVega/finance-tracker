@@ -78,3 +78,16 @@ test("empty synthetic snapshots are valid clear transactions", () => {
   const transaction = createSnapshotTransaction({ manifest, transactions: [], cryptoImpl: webcrypto });
   assert.deepEqual(JSON.parse(transaction.objects[0].content).transactions, []);
 });
+
+test("dashboard clear failure restores every local collection instead of losing CSV imports", () => {
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  const clearStart = app.indexOf('$("clear-data").addEventListener("click"');
+  const clearEnd = app.indexOf('  });', clearStart) + 5;
+  const clearFlow = app.slice(clearStart, clearEnd);
+  assert.match(clearFlow, /transactions: state\.transactions/);
+  assert.match(clearFlow, /importedFingerprints: state\.importedFingerprints/);
+  assert.match(clearFlow, /sourceFiles: state\.sourceFiles/);
+  assert.match(clearFlow, /state\.transactions = previousState\.transactions/);
+  assert.match(clearFlow, /state\.importedFingerprints = previousState\.importedFingerprints/);
+  assert.match(clearFlow, /state\.sourceFiles = previousState\.sourceFiles/);
+});
