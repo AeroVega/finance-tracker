@@ -68,6 +68,10 @@ jobs:
             process.exit(1);
           }
           writeFileSync(
+            "js/google-config.json",
+            JSON.stringify(config, null, 2) + "\n"
+          );
+          writeFileSync(
             "js/google-config.js",
             "export const GOOGLE_CONFIG = Object.freeze(" +
               JSON.stringify(config, null, 2) + ");\n"
