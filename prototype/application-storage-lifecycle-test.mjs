@@ -238,15 +238,13 @@ async function runBusy(action) {
 async function startLifecycle() {
   if (!hasFolder()) throw new Error("Connect to Google and select a dedicated synthetic folder first.");
   token();
-  const bootstrapAdapter = new GoogleDriveTransactionAdapter({
-    accessToken: async () => token(), folderId: state.folderId, fetchImpl: globalThis.fetch, cryptoImpl: crypto
-  });
-  state.manifestFileId = await findOrCreateManifest(bootstrapAdapter);
+  state.manifestFileId = "";
+  state.manifestRevision = null;
   state.lifecycle = new ApplicationStorageLifecycle({
     syntheticOnly: true,
     folderName: state.folderName,
     folderId: state.folderId,
-    manifestFileId: state.manifestFileId,
+    initializeManifest: ({ adapter }) => findOrCreateManifest(adapter),
     accessToken: () => token(),
     makeManifest: manifestBuilder,
     fetchImpl: globalThis.fetch,
@@ -256,6 +254,7 @@ async function startLifecycle() {
   });
   try {
     await state.lifecycle.start();
+    state.manifestFileId = state.lifecycle.manifestFileId;
     state.manifestRevision = (await state.lifecycle.readManifest()).revision;
     text("check-start", "Session acquisition + startup recovery: PASS");
     $("check-start").className = "pass";
@@ -362,6 +361,7 @@ async function recoverStale() {
   if (state.lifecycle?.state !== "stale-session") throw new Error("Drive has not reported a conclusively stale session.");
   if (!window.confirm("Confirm takeover of the stale PR24 synthetic test session? This is explicit recovery, not automatic takeover. Continue only if you are certain the previous browser/device is no longer active.")) return;
   await state.lifecycle.recoverStaleSession({ confirm: true });
+  state.manifestFileId = state.lifecycle.manifestFileId;
   state.manifestRevision = (await state.lifecycle.readManifest()).revision;
   text("check-crash", "Crash / reload / stale recovery: PASS (owner-confirmed)");
   $("check-crash").className = "pass";
