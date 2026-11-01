@@ -206,6 +206,7 @@ export class GoogleDriveTransactionAdapter {
   }
 
   async publishManifest(manifestFileId, manifest) {
+    await this.readMetadata(manifestFileId);
     const content = canonicalizeJcs(manifest);
     const bytes = new TextEncoder().encode(content);
     const boundary = `ft-manifest-${manifest.revision}`;
@@ -264,7 +265,12 @@ export class DriveTransactionEngine {
         fail("base-conflict", "The database manifest no longer matches the expected base revision and commit.");
       }
       const planned = [];
+      const logicalPaths = new Set();
       for (const object of objects) {
+        if (!object || typeof object.logicalPath !== "string" || !object.logicalPath || logicalPaths.has(object.logicalPath)) {
+          fail("invalid-logical-path", "Changed objects require unique, non-empty logical paths.");
+        }
+        logicalPaths.add(object.logicalPath);
         const bytes = bytesOf(object.content);
         planned.push({
           ...object,
