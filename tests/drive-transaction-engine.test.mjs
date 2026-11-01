@@ -59,7 +59,7 @@ class SyntheticDrive {
     this.mutate();
     return { fileId };
   }
-  async createImmutable({ fileId, name, kind, transactionId, content }) {
+  async createImmutable({ fileId, name, kind, transactionId, content, expectedSha256 }) {
     const bytes = content instanceof Uint8Array ? content : new TextEncoder().encode(content);
     const json = typeof content === "string" ? JSON.parse(content) : null;
     this.files.set(fileId, {
