@@ -99,7 +99,13 @@
   </section>
 
   <section class="panel">
-    <h2>6. Test crash / reload recovery</h2>
+    <h2>6. Test active-session refusal and device handoff</h2>
+    <p class="fine">Keep device A connected and Ready. On device B, open this same page, connect, select the exact same synthetic folder, and press Start. B must report that another active session exists and must not enable writes. Release on A, then retry Start on B; B should acquire successfully.</p>
+    <p id="handoff-status" class="status" role="status" aria-live="polite">Not tested.</p>
+  </section>
+
+  <section class="panel">
+    <h2>7. Test crash / reload recovery</h2>
     <ol class="result-list">
       <li>Start the lifecycle and confirm it reaches Ready.</li>
       <li>Close this tab or reload it <strong>without</strong> pressing Release.</li>
