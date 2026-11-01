@@ -118,14 +118,14 @@ function manifestBuilder({ current, record, commitFileId, commitHash, snapshot }
 
 async function findOrCreateManifest(adapter) {
   const files = await adapter.listChildren();
-  const matches = files.filter((file) =>
-    file.name === MANIFEST_NAME &&
-    file.appProperties?.financeTrackerKind === MANIFEST_KIND &&
-    file.appProperties?.financeTrackerTransaction === BOOTSTRAP_TRANSACTION
-  );
-  if (matches.length > 1) throw new Error("Multiple synthetic dashboard manifests exist. Stop and inspect the test folder; no files were changed.");
-  if (matches.length === 1) {
-    const file = matches[0];
+  const named = files.filter((file) => file.name === MANIFEST_NAME);
+  if (named.length > 1) throw new Error("Multiple dashboard manifest candidates exist. Stop and inspect the test folder; no files were changed.");
+  if (named.length === 1) {
+    const file = named[0];
+    if (file.appProperties?.financeTrackerKind !== MANIFEST_KIND ||
+        file.appProperties?.financeTrackerTransaction !== BOOTSTRAP_TRANSACTION) {
+      throw new Error("A file uses the synthetic dashboard manifest name but has unexpected metadata. No files were changed.");
+    }
     const manifest = await adapter.readJson(file.id);
     if (manifest.format !== "finance-tracker-manifest" || manifest.syntheticOnly !== true ||
         !manifest.databaseId || !manifest.copyId || !Number.isSafeInteger(manifest.revision) ||
