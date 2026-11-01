@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
 import { ApplicationStorageLifecycle } from "../js/application-storage-lifecycle.mjs";
+import { SessionCoordinator } from "../js/session-coordination.mjs";
 
 class MemorySessionAdapter {
   constructor(record = null) { this.record = record; }
@@ -45,21 +46,13 @@ function setup({ recoveryFailures = 0, initialRecord = null } = {}) {
     onStatus: (status) => statuses.push(status),
     factories: {
       createSessionAdapter: () => sessionAdapter,
-      createCoordinator: ({ adapter }) => {
-        const { SessionCoordinator } = globalThis.__sessionModule || {};
-        return new (SessionCoordinator || class {})({ adapter });
-      },
+      createCoordinator: ({ adapter }) => new SessionCoordinator({ adapter }),
       createTransactionAdapter: () => transactionAdapter,
       createEngine: () => engine
     }
   });
   return { lifecycle, statuses, sessionAdapter, calls, target, engine };
 }
-
-// Inject the real state machine into the test factory without exposing a test-only
-// production branch in the application module.
-import { SessionCoordinator } from "../js/session-coordination.mjs";
-globalThis.__sessionModule = { SessionCoordinator };
 
 test("refuses a non-synthetic folder before constructing storage adapters", () => {
   assert.throws(() => new ApplicationStorageLifecycle({
