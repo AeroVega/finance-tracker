@@ -70,3 +70,7 @@ These tests verify client logic, including lost create/update responses resolved
 - Device clocks may differ; future-dated records are treated as ambiguous.
 - Heartbeat timing must be conservative and tuned against iOS Safari background suspension.
 - Do not enable production financial-data writes based solely on this prototype.
+
+## Browser harness reporting behavior
+
+The session test page clears the previously displayed marker classification while a fresh Drive inspection is pending. It renders the marker classification and inspection details only from the latest completed inspection; a late result cannot overwrite a newer inspection or a successful acquire, recovery, or release action. The page keeps the separate local-ownership indicator conservative: an active Drive marker does not imply this page owns it.
