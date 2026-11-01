@@ -221,16 +221,19 @@
       { date: "2026-10-12", description: "Sample electricity bill", amount: -64.18, eligibleForCashFlow: true, provider: "Sample data", id: "sample-3", syntheticOnly: true },
       { date: "2026-10-10", description: "Sample savings transfer", amount: -300, eligibleForCashFlow: true, provider: "Sample data", id: "sample-4", syntheticOnly: true }
     ];
-    state.syntheticTransactions = sample;
-    render();
     if (syntheticStorage?.lifecycle?.state === "ready") {
+      const previous = state.syntheticTransactions;
       try {
         await syntheticStorage.saveSyntheticSnapshot(sample);
         setStatus("Loaded and verified four invented sample rows in the dedicated synthetic Drive folder.", "success");
       } catch (error) {
+        state.syntheticTransactions = previous;
+        render();
         setStatus(error instanceof Error ? error.message : "Synthetic sample data could not be saved.", "error");
       }
     } else {
+      state.syntheticTransactions = sample;
+      render();
       setStatus("Loaded four invented sample rows in this page only. Connect a dedicated synthetic Drive folder to test persistence.", "success");
     }
   }
@@ -305,18 +308,22 @@
     }
   });
   $("load-sample").addEventListener("click", loadSample);
-  $("clear-data").addEventListener("click", () => {
+  $("clear-data").addEventListener("click", async () => {
+    const previousSynthetic = state.syntheticTransactions;
     state.transactions = [];
     state.syntheticTransactions = [];
     state.importedFingerprints.clear();
     state.sourceFiles = [];
     render();
     if (syntheticStorage?.lifecycle?.state === "ready") {
-      void syntheticStorage.clearSyntheticSnapshot().then(() => {
+      try {
+        await syntheticStorage.clearSyntheticSnapshot();
         setStatus("Local data cleared and the synthetic Drive snapshot was cleared and verified.", "success");
-      }).catch((error) => {
-        setStatus(error instanceof Error ? error.message : "Synthetic Drive snapshot could not be cleared.", "error");
-      });
+      } catch (error) {
+        state.syntheticTransactions = previousSynthetic;
+        render();
+        setStatus(error instanceof Error ? error.message : "Synthetic Drive snapshot could not be cleared. The last verified synthetic rows were restored.", "error");
+      }
     } else {
       setStatus("Session data cleared. Nothing was saved to disk.", "success");
     }
