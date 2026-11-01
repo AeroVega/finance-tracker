@@ -38,19 +38,16 @@ Branch: `feat/durable-drive-transaction-engine`
 
 Branch: feat/application-storage-integration
 
-- Added the synthetic-only application storage lifecycle controller in js/application-storage-lifecycle.mjs. It composes session acquisition, session-gated synthetic manifest initialization, transaction recovery, heartbeat, reconnect revalidation, transaction queueing, verified snapshot reads, and orderly release.
-- Added deterministic lifecycle tests and expanded the Node contract workflow to run the complete tests/*.test.mjs suite.
-- Added prototype/application-storage-lifecycle-test.html under the Prototype Tools hub. It exercises the real PR #24 controller against a dedicated synthetic Drive folder: startup recovery, automatic heartbeat verification, serialized writes, hash-verified reads, offline write refusal/reconnect, orderly release, two-device active-session refusal, and explicit stale-session recovery. It includes a controlled crash simulation that stops heartbeats without writing a release marker; wait the full two-minute lease before attempting recovery. The page and module syntax are checked in CI.
-- Kept the controller explicitly synthetic-only; it is not a production storage switch and does not connect real financial records.
-- Remaining PR #24 work: integrate safe controller lifecycle into the actual application initialization/import/read flows using invented fixtures; add full end-to-end tests for reload/crash/reconnect and sequential device handoff; run owner-confirmed live synthetic Drive interruption/reload rehearsals using the new browser harness.
+- Added the synthetic-only application storage lifecycle controller in `js/application-storage-lifecycle.mjs`. It composes session acquisition, session-gated manifest initialization, transaction recovery, heartbeat, reconnect revalidation, serialized transactions, verified snapshot reads, and orderly release.
+- Wired the actual dashboard through `js/dashboard-synthetic-storage.mjs`: explicit Google authorization and dedicated synthetic-folder selection, lifecycle startup/recovery, manifest initialization, verified snapshot load, sample-fixture commit/read-back, and clear via an empty synthetic snapshot.
+- CSV imports remain a separate local-only collection and are never uploaded to Drive. The storage API rejects rows that are not explicitly marked `syntheticOnly: true`. No production ledger read/write path is enabled.
+- The dashboard preloads Google libraries and deployment configuration before enabling the connect control, so the OAuth request can be initiated directly from the user's click.
+- Added deterministic lifecycle and dashboard-boundary tests; the Node contract workflow runs the complete `tests/*.test.mjs` suite.
+- Added the synthetic lifecycle browser harness under Prototype Tools. Owner-confirmed live tests passed for startup recovery, heartbeat, serialized writes and SHA-256 read-back, offline refusal/reconnect, orderly release, active-session refusal/sequential handoff, explicit stale-session recovery after simulated crash, and synthetic-file cleanup.
 
-- Integrate the transaction engine with the app's actual database initialization, import, ledger update, and read paths.
-- Automatically acquire and verify the session after authorization/database selection; maintain heartbeats while active; revalidate the same session after reconnect; safely recover stale sessions; and release during orderly handoff.
-- Keep routine session claiming, heartbeat, ownership inspection, and recovery out of the ordinary UI. Show concise connection/sync status. Ask the user only when ownership, authorization, or transaction outcome cannot be safely established.
-- Serialize all writes through one application storage queue; prohibit offline writes and block new writes while recovery is unresolved.
-- Keep the existing permanent CSV import workflow.
+**Remaining PR #24 work:** run the newly wired dashboard UI end-to-end on the deployed feature branch using only the dedicated synthetic folder. Verify connect/startup read, sample fixture write/read-back, reload restoration, clear, and orderly release. Resolve any defects before merge.
 
-**Exit:** integrated workflows pass synthetic end-to-end tests, including app reload/crash/reconnect and device handoff. No real financial data.
+**Exit:** the actual dashboard's synthetic fixture workflow passes live owner testing and automated tests; the permanent CSV workflow remains local and functional. No real financial data.
 
 ### PR #25 — End-to-end acceptance and production-readiness gates
 
