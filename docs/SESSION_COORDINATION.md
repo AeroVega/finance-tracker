@@ -32,7 +32,7 @@ The re-read-before-write pattern narrows races but is not atomic. It must never 
 
 ## Heartbeats, crashes, and handoff
 
-The active page uses `SessionCoordinator.startHeartbeat()` to refresh `heartbeatAt` and `expiresAt` on a regular cadence (default: one third of the expiry window). A heartbeat first verifies the current owner, then writes and reads back the refreshed record. Going offline or encountering a failed/unverifiable heartbeat immediately disables writes and stops the timer. Browser background suspension may delay timers; every write still performs a fresh ownership read, so an expired lease blocks writes on resume. Reconnection requires a fresh ownership check.
+The active page uses `SessionCoordinator.startHeartbeat()` to refresh `heartbeatAt` and `expiresAt` on a regular cadence (default: one third of the expiry window). A heartbeat first verifies the current owner, then writes and reads back the refreshed record. Going offline or encountering a failed/unverifiable heartbeat immediately disables writes and stops the timer. Browser background suspension may delay timers; every write still performs a fresh ownership read, so an expired lease blocks writes on resume. After a transient interruption, the same page may call `SessionCoordinator.resume()`; it regains ownership only if the exact prior session ID is still active. If the lease has expired, explicit stale-session recovery is required. If another ID owns the marker or the marker is ambiguous, writes remain disabled.
 
 Orderly device handoff is:
 1. Stop accepting new writes.

@@ -117,6 +117,19 @@ test("network interruption while reading fails closed", async () => {
   assert.equal(session.canWrite, false);
 });
 
+test("a lost claim response can be resolved by revalidating the same session ID", async () => {
+  const now = { value: 10_000 };
+  const adapter = new MemorySessionAdapter();
+  adapter.afterWrite = async () => { throw new Error("synthetic response lost after persisted claim"); };
+  const session = coordinator(adapter, now);
+  await expectCode(session.start(), "ownership-unknown");
+  assert.equal(session.canWrite, false);
+  adapter.afterWrite = null;
+  const resumed = await session.resume();
+  assert.equal(resumed.sessionId, "new-session");
+  assert.equal(session.canWrite, true);
+});
+
 test("network interruption while claiming cannot enable writes", async () => {
   const now = { value: 10_000 };
   const adapter = new MemorySessionAdapter();
@@ -135,6 +148,20 @@ test("lost ownership during heartbeat blocks all subsequent writes", async () =>
   await expectCode(session.heartbeat(), "ownership-unknown");
   await expectCode(session.assertCanWrite(), "not-owner");
   assert.equal(session.canWrite, false);
+});
+
+test("ownership can be revalidated after a transient network interruption", async () => {
+  const now = { value: 10_000 };
+  const adapter = new MemorySessionAdapter();
+  const session = coordinator(adapter, now);
+  await session.start();
+  adapter.failReads = true;
+  await expectCode(session.assertCanWrite(), "ownership-lost");
+  assert.equal(session.canWrite, false);
+  adapter.failReads = false;
+  const resumed = await session.resume();
+  assert.equal(resumed.sessionId, "new-session");
+  assert.equal(session.canWrite, true);
 });
 
 test("network interruption during ownership verification fails closed", async () => {

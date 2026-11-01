@@ -125,12 +125,10 @@ export class SessionCoordinator {
       actual = await this.adapter.read();
     } catch {
       this.ownership = "unknown";
-      this.session = null;
       fail(failureCode, "Session ownership could not be verified after the write. All writes are disabled.");
     }
     if (!sameRecord(actual, expected)) {
       this.ownership = "unknown";
-      this.session = null;
       fail(failureCode, "The session record changed or could not be verified. All writes are disabled.");
     }
   }
@@ -146,6 +144,8 @@ export class SessionCoordinator {
     }
 
     const record = this.makeRecord(String(this.createSessionId()));
+    this.session = record;
+    this.ownership = "unknown";
     try {
       await this.adapter.write(record);
     } catch {
@@ -186,6 +186,8 @@ export class SessionCoordinator {
     }
 
     const record = this.makeRecord(String(this.createSessionId()));
+    this.session = record;
+    this.ownership = "unknown";
     try {
       await this.adapter.write(record);
     } catch {
@@ -199,6 +201,29 @@ export class SessionCoordinator {
     return record;
   }
 
+  async resume() {
+    if (!this.session) fail("no-session-context", "This page has no prior session identity to revalidate.");
+    const expectedSessionId = this.session.sessionId;
+    const current = await this.inspect();
+    if (current.status === "active" && current.record.sessionId === expectedSessionId) {
+      this.session = current.record;
+      this.ownership = "owned";
+      this.releasing = false;
+      return this.session;
+    }
+    if (current.status === "stale" && current.record.sessionId === expectedSessionId) {
+      this.ownership = "unknown";
+      fail("stale-session", "This session's heartbeat expired. Use explicit stale-session recovery before writing.");
+    }
+    if (current.status === "released" && current.record.sessionId === expectedSessionId) {
+      this.session = null;
+      this.ownership = "released";
+      fail("session-released", "This session has already been released.");
+    }
+    this.ownership = "unknown";
+    fail("ownership-lost", "The prior session identity could not be revalidated. Writes remain disabled.");
+  }
+
   async heartbeat() {
     if (!this.canWrite || this.releasing) fail("not-owner", "This session does not own an available active session record.");
     const run = this.writeQueue.then(async () => {
@@ -206,7 +231,6 @@ export class SessionCoordinator {
     const current = await this.inspect();
     if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
-      this.session = null;
       fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.");
     }
 
@@ -221,7 +245,6 @@ export class SessionCoordinator {
       await this.adapter.write(record);
     } catch {
       this.ownership = "unknown";
-      this.session = null;
       fail("ownership-unknown", "The heartbeat could not be confirmed. Writes are disabled until ownership is re-established.");
     }
     await this.verifyWrittenRecord(record, "ownership-unknown");
@@ -254,7 +277,6 @@ export class SessionCoordinator {
       if (stopped) return;
       if (!isOnline()) {
         this.ownership = "unknown";
-        this.session = null;
         stopped = true;
         clearIntervalImpl(timer);
         this.heartbeatStop = null;
@@ -282,14 +304,12 @@ export class SessionCoordinator {
   async assertCanWrite(options) {
     if (options && options.online === false) {
       this.ownership = "unknown";
-      this.session = null;
       fail("offline", "Offline writes are prohibited. Reconnect and re-establish the session before writing.");
     }
     if (!this.canWrite || this.releasing) fail("not-owner", "No verified active session is available to this page.");
     const current = await this.inspect();
     if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
-      this.session = null;
       fail("ownership-lost", "The active session could not be verified. Writes are disabled.");
     }
     return true;
@@ -318,7 +338,6 @@ export class SessionCoordinator {
     const current = await this.inspect();
     if (!this.session || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
-      this.session = null;
       fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.");
     }
 
@@ -331,7 +350,6 @@ export class SessionCoordinator {
       await this.adapter.write(record);
     } catch {
       this.ownership = "unknown";
-      this.session = null;
       fail("release-unconfirmed", "Session release could not be confirmed. Do not switch devices yet.");
     }
     await this.verifyWrittenRecord(record, "release-unconfirmed");
