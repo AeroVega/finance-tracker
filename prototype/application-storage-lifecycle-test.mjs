@@ -399,10 +399,41 @@ async function recoverStale() {
   status("crash-status", "PASS: stale-session takeover required explicit confirmation, a new session ID was acquired, and transaction recovery completed.", "success");
 }
 async function recoverTransaction() {
-  await state.lifecycle.recover();
-  state.manifestFileId = state.lifecycle.manifestFileId;
-  state.manifestRevision = (await state.lifecycle.readManifest()).revision;
-  status("transaction-status", "PASS: unresolved transaction recovery completed and storage returned to Ready.", "success");
+  const lifecycle = state.lifecycle;
+  if (!lifecycle?.coordinator?.canWrite || !lifecycle.engine?.recoveryRequired) {
+    throw new Error("Transaction recovery requires an owned session with an unresolved transaction.");
+  }
+  try {
+    const recoveryResult = await lifecycle.recover();
+    const manifest = await lifecycle.readManifest();
+    const verifiedReady = lifecycle.state === "ready" &&
+      lifecycle.acceptingWrites === true &&
+      lifecycle.coordinator.canWrite === true &&
+      lifecycle.engine.recoveryRequired === false &&
+      Number.isSafeInteger(manifest.revision) &&
+      manifest.format === "finance-tracker-manifest" &&
+      manifest.syntheticOnly === true;
+    state.manifestFileId = lifecycle.manifestFileId;
+    state.manifestRevision = Number.isSafeInteger(manifest.revision) ? manifest.revision : null;
+    renderLifecycle({ state: lifecycle.state });
+    if (!verifiedReady) {
+      throw new Error("Recovery returned, but final verification failed: lifecycle=" + lifecycle.state +
+        ", acceptingWrites=" + lifecycle.acceptingWrites +
+        ", ownsSession=" + lifecycle.coordinator.canWrite +
+        ", engineRecoveryRequired=" + lifecycle.engine.recoveryRequired +
+        ", manifestRevision=" + manifest.revision + ".");
+    }
+    status("transaction-status",
+      "PASS: recovery verified; lifecycle is Ready, writes are enabled, session ownership is intact, and manifest revision " +
+      manifest.revision + " was read back." +
+      (recoveryResult?.status ? " Recovery result: " + recoveryResult.status + "." : ""),
+      "success");
+  } catch (error) {
+    renderLifecycle({ state: lifecycle.state });
+    const detail = error instanceof Error ? error.message : String(error);
+    status("transaction-status", "Recovery did not pass final verification. " + detail, "error");
+    throw error;
+  }
 }
 async function cleanupSyntheticFiles() {
   if (!state.folderId) throw new Error("Select the synthetic folder first.");
