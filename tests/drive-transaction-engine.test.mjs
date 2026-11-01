@@ -45,6 +45,7 @@ class SyntheticDrive {
     if (!file) throw new Error("not found");
     return { id, parents: ["synthetic-folder"], appProperties: file.appProperties || {} };
   }
+  async waitForMetadata(id) { return this.readMetadata(id); }
   async readBytes(id) {
     const file = this.files.get(id);
     if (!file) throw new Error("not found");
@@ -146,14 +147,22 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
       makeManifest: transaction.makeManifest
     });
     const outcome = recovered.transactions[0];
-    if (boundary <= 5) {
+    if (boundary === 1 || boundary === 3 || boundary === 4) {
       assert.equal(outcome.outcome, "aborted", `boundary ${boundary} safely aborts at the original base`);
       assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
+      assert.equal(engine.recoveryRequired, false);
+    } else if (boundary === 2 || boundary === 5) {
+      await assert.rejects(
+        engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest }),
+        (error) => error.code === "not-found"
+      );
+      assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
+      assert.equal(engine.recoveryRequired, true);
     } else {
       assert.equal(outcome.outcome, "committed", `boundary ${boundary} resumes or verifies the commit`);
       assert.equal(adapter.files.get("manifest").json.revision, 4);
+      assert.equal(engine.recoveryRequired, false);
     }
-    assert.equal(engine.recoveryRequired, false);
   }
 });
 
