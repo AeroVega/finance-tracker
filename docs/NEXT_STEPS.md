@@ -1,26 +1,41 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-11-01  
-**Current workstream:** Workstream 1 — best-effort single-active-session coordination, branch `feat/single-active-session-coordination`  
-**Current phase:** PR #20 is merged. PR #21's best-effort single-active-session coordination implementation and synthetic browser harness have passed owner-operated live tests for acquisition, guarded no-op writes, heartbeat, offline refusal, reconnect revalidation, stale expiry/recovery, and read-back verification. Final-head CI for the latest UI reporting fix is pending. Production financial-data storage is **not approved**.
+**Current workstream:** Transaction staging and crash recovery, branch `feat/transaction-staging-crash-recovery`  
+**Current phase:** PR #20 and PR #21 are merged. PR #21's owner-operated live synthetic tests passed for acquisition, guarded no-op writes, automatic heartbeat, offline refusal, reconnect revalidation, stale-session detection/recovery, and verified release. The transaction protocol core is now being implemented and tested independently of production financial data. Production persistence remains **not approved**.
 
-This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/single-active-session-coordination`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
+This is the current pick-up point. PR #21's session coordinator is the baseline for the next workstream. Do not enable real ledger reads/writes or production financial-data persistence.
 
-## Current task: PR #21 — best-effort single-active-session coordination and live browser validation
+## Current task: transaction staging and crash recovery
 
-Branch: `feat/single-active-session-coordination`  
-Base: `main` at PR #20 merge commit `1e4fc1f86948f2892b5ab88a85d6f73d632719b8`.
+Branch: `feat/transaction-staging-crash-recovery`  
+Base: `main` at PR #21 merge commit `3dcf3719f2b75b6d02adb77a6007339dc7e87b50`.
 
-Scope:
-- Detect an existing active session and refuse a second session.
-- Require verified ownership before each serialized write.
-- Fail closed on incomplete folder enumeration, duplicate/malformed marker records, network errors, future-dated state, or uncertain read-back.
-- Refresh and verify a heartbeat while the page is active/online.
-- Release explicitly and verify release before device handoff.
-- Never take over a stale session automatically; require explicit confirmation and re-read before recovery.
-- Test stale sessions, network interruption, browser-crash expiry, lost responses, and orderly handoff using synthetic data only.
+The accepted staged-commit architecture is specified in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). The implementation workstream and owner-facing behavior requirements are in [Transaction Staging and Crash Recovery](TRANSACTION_STAGING_AND_RECOVERY.md).
 
-The Drive marker adapter, state machine, and browser harness are implemented on the PR #21 branch. The owner confirmed successful live synthetic-folder tests on 2026-11-01: session acquisition and guarded no-op write; automatic heartbeat; offline write refusal; explicit same-session revalidation after reconnect; stale-session detection after heartbeat expiry; explicit stale recovery with verified read-back. The UI now clears old marker status while a fresh inspection is pending, ignores superseded inspection results, and distinguishes an active marker from locally verified ownership. Final-head GitHub Actions run #141 passed 110/110 tests on commit `3bfaff6df0b74033ac504b8dc58a27b7c1b73014`, including the new inspection-freshness regression check. The tested Drive `If-Match` path is not an atomic lock; simultaneous starts and network partitions remain possible. This PR does not integrate session coordination into production ledger reads/writes and does not authorize production persistence.
+The owner has explicitly required session management to be background application behavior. The app—not the user—must acquire and verify the session, maintain heartbeats, revalidate after reconnect, perform safe stale-session recovery, serialize mutations, drain in-flight work, and release on orderly handoff. Routine lease management must not appear as manual controls in the everyday UI. Manual intervention is reserved for ambiguous ownership, failed verification, authorization requiring sign-in, or a transaction outcome that cannot be resolved safely.
+
+### Implementation sequence
+
+1. Build and test a pure transaction protocol core: strict journal event validation, canonical hashing, append-only sequence/hash-chain verification, and deterministic recovery classification.
+2. Implement the Drive transaction adapter using pre-generated file IDs, immutable content-addressed objects, exact read-back, append-only journal events, immutable commit records, and manifest publication last.
+3. Implement idempotent recovery from the authoritative manifest and journal. Automatically resume/finalize only when evidence is conclusive; otherwise block writes and request intervention.
+4. Integrate the PR #21 session coordinator into the application lifecycle so acquisition, heartbeat, reconnect validation, recovery, and release are automatic.
+5. Add fault-injection coverage for every durable mutation boundary and live synthetic Drive validation on iPhone/iPad.
+6. Complete verified backup/restore, OAuth/security, retention/deletion, and $0 terms gates before any real financial data is stored.
+
+### Current implementation checkpoint
+
+- [x] Create `docs/TRANSACTION_STAGING_AND_RECOVERY.md` with protocol invariants, commit ordering, recovery classifications, automatic session UX requirement, and acceptance criteria.
+- [x] Add `js/transaction-protocol.mjs` with JCS-style canonical serialization, SHA-256 journal event creation, hash-chain verification, transition validation, and recovery classification.
+- [x] Add synthetic Node tests for canonicalization, event integrity, invalid transitions, and recovery classification.
+- [ ] Run final-head CI and address any failures.
+- [ ] Implement the real Drive transaction adapter and recovery runner.
+- [ ] Integrate automatic session lifecycle with production storage operations.
+- [ ] Complete live synthetic crash/interruption rehearsal.
+- [ ] Keep production persistence disabled until all readiness gates pass.
+
+The transaction protocol core is not yet a complete persistence implementation. It does not yet write Drive objects, append durable journal events, publish manifests, or automatically recover a real Drive transaction.
 
 ## Completed checkpoints
 
