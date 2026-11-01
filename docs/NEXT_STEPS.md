@@ -1,26 +1,70 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-11-01  
-**Current workstream:** Workstream 1 — best-effort single-active-session coordination, branch `feat/single-active-session-coordination`  
-**Current phase:** PR #20 is merged. PR #21's best-effort single-active-session coordination implementation and synthetic browser harness have passed owner-operated live tests for acquisition, guarded no-op writes, heartbeat, offline refusal, reconnect revalidation, stale expiry/recovery, and read-back verification. Final-head CI for the latest UI reporting fix is pending. Production financial-data storage is **not approved**.
+**Current phase:** Storage implementation, beginning with transaction staging and crash recovery. PR #21 is merged; PR #22 establishes the pure transaction protocol core and is awaiting owner merge. Production financial-data persistence remains **not approved**.
 
-This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/single-active-session-coordination`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
+## Current workstream and PR sequence
 
-## Current task: PR #21 — best-effort single-active-session coordination and live browser validation
+The owner has selected Google Drive as the intended private storage provider, subject to completing all storage-readiness gates. The app remains hosted as public static content on GitHub Pages. The permanent CSV import path and $0 recurring-cost constraint remain mandatory.
 
-Branch: `feat/single-active-session-coordination`  
-Base: `main` at PR #20 merge commit `1e4fc1f86948f2892b5ab88a85d6f73d632719b8`.
+The next four PRs have deliberately separated responsibilities:
 
-Scope:
-- Detect an existing active session and refuse a second session.
-- Require verified ownership before each serialized write.
-- Fail closed on incomplete folder enumeration, duplicate/malformed marker records, network errors, future-dated state, or uncertain read-back.
-- Refresh and verify a heartbeat while the page is active/online.
-- Release explicitly and verify release before device handoff.
-- Never take over a stale session automatically; require explicit confirmation and re-read before recovery.
-- Test stale sessions, network interruption, browser-crash expiry, lost responses, and orderly handoff using synthetic data only.
+### PR #22 — Transaction protocol foundation (current PR)
 
-The Drive marker adapter, state machine, and browser harness are implemented on the PR #21 branch. The owner confirmed successful live synthetic-folder tests on 2026-11-01: session acquisition and guarded no-op write; automatic heartbeat; offline write refusal; explicit same-session revalidation after reconnect; stale-session detection after heartbeat expiry; explicit stale recovery with verified read-back. The UI now clears old marker status while a fresh inspection is pending, ignores superseded inspection results, and distinguishes an active marker from locally verified ownership. Final-head GitHub Actions run #141 passed 110/110 tests on commit `3bfaff6df0b74033ac504b8dc58a27b7c1b73014`, including the new inspection-freshness regression check. The tested Drive `If-Match` path is not an atomic lock; simultaneous starts and network partitions remain possible. This PR does not integrate session coordination into production ledger reads/writes and does not authorize production persistence.
+Branch: `feat/transaction-staging-crash-recovery`
+
+- Define transaction invariants, journal event format, commit ordering, recovery classifications, and acceptance criteria.
+- Implement the pure protocol core: canonical serialization, SHA-256 journal event creation, hash-chain and transition verification, and deterministic recovery classification.
+- Add synthetic tests for canonicalization, event integrity, invalid transitions, and recovery decisions.
+- Record the requirement that session management is automatic background behavior.
+
+**Exit:** protocol core and tests reviewed and merged. This PR does not perform Drive persistence.
+
+### PR #23 — Durable Google Drive transaction engine
+
+- Implement Drive adapter operations for durable append-only journal events, immutable content-addressed object staging, immutable commit records, and manifest publication last.
+- Use pre-generated Drive file IDs and exact read-back verification to make retries idempotent after lost responses.
+- Enforce expected base revision/commit checks, serialized mutations, and verified session ownership before every mutation and immediately before manifest publication.
+- Implement deterministic crash recovery from the authoritative manifest, journal, commit records, and referenced objects.
+- Add fault injection after every durable mutation boundary, including lost responses and delayed read-after-write visibility.
+- Use synthetic data and a dedicated synthetic Drive folder only.
+
+**Exit:** live synthetic Drive transactions and repeated recovery are verified; ambiguous outcomes fail closed and preserve evidence. No real financial data.
+
+### PR #24 — Application integration and automatic lifecycle
+
+- Integrate the transaction engine with the app's actual database initialization, import, ledger update, and read paths.
+- Automatically acquire and verify the session after authorization/database selection; maintain heartbeats while active; revalidate the same session after reconnect; safely recover stale sessions; and release during orderly handoff.
+- Keep routine session claiming, heartbeat, ownership inspection, and recovery out of the ordinary UI. Show concise connection/sync status. Ask the user only when ownership, authorization, or transaction outcome cannot be safely established.
+- Serialize all writes through one application storage queue; prohibit offline writes and block new writes while recovery is unresolved.
+- Keep the existing permanent CSV import workflow.
+
+**Exit:** integrated workflows pass synthetic end-to-end tests, including app reload/crash/reconnect and device handoff. No real financial data.
+
+### PR #25 — End-to-end acceptance and production-readiness gates
+
+- Complete comprehensive fault-injection and recovery rehearsals across every commit boundary.
+- Demonstrate verified backup, restore, and portability.
+- Complete OAuth expiry/revocation/wrong-account/permission-denial handling and security/privacy review.
+- Implement and verify the 540-day (18-month) original-source retention/deletion lifecycle, including backup behavior.
+- Verify current Google terms, quotas, OAuth requirements, and sustainable $0 recurring cost.
+- Review all failure modes, recovery instructions, data-integrity evidence, and limitations with the owner.
+
+**Exit:** explicit owner acceptance of the evidence and risks. Production financial-data persistence remains disabled until the owner separately authorizes it.
+
+## Cross-cutting product requirement: session management is automatic
+
+Session claiming, heartbeats, ownership inspection, reconnect revalidation, stale-session recovery, and orderly release are internal application lifecycle behavior—not chores for the user. The app should perform them automatically and unobtrusively. Manual intervention is reserved for genuinely ambiguous or unsafe conditions, such as conflicting ownership, malformed/duplicate markers, authorization requiring sign-in, failed verification, or an unknown transaction outcome.
+
+The accepted operating model is single-user/single-active-device. Simultaneous use on two devices is unsupported. Drive session coordination is best-effort detection, not a server-enforced mutex; simultaneous starts and network partitions remain limitations. The app must fail closed whenever it cannot verify ownership or transaction outcome.
+
+## Current handoff
+
+Work on PR #22 is on branch `feat/transaction-staging-crash-recovery`. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`.
+
+PR #22 is intentionally limited to protocol rules and the deterministic core. Do not add the Drive transaction adapter, durable writes, manifest publication, or application lifecycle integration to PR #22; those belong in PRs #23 and #24 as described above.
+
+Do not enable real ledger reads/writes or production financial-data persistence during these workstreams. Use invented fixtures and the dedicated synthetic Drive folder only.
 
 ## Completed checkpoints
 
