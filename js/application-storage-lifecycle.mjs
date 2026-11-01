@@ -70,7 +70,7 @@ export class ApplicationStorageLifecycle {
     this.acceptingWrites = false;
     this._onOffline = () => this.handleOffline();
     this._onOnline = () => { void this.handleOnline(); };
-    this._onPageHide = () => { void this.release({ reason: "pagehide" }); };
+    this._onPageHide = () => { void this.release({ reason: "pagehide" }).catch(() => {}); };
   }
 
   publish(state, message, code = null) {
