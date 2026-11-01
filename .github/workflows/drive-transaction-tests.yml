@@ -1,4 +1,4 @@
-name: Drive transaction contract tests
+name: Finance Tracker contract tests
 
 on:
   pull_request:
@@ -20,5 +20,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 26
-      - name: Run transaction protocol and fault-injection tests
-        run: node --test tests/transaction-protocol.test.mjs tests/drive-transaction-engine.test.mjs
+      - name: Run complete Node contract suite
+        run: node --test tests/*.test.mjs
