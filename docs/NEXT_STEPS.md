@@ -28,10 +28,11 @@ Branch: `feat/durable-drive-transaction-engine`
 - Use pre-generated Drive file IDs and exact read-back verification to make retries idempotent after lost responses.
 - Enforce expected base revision/commit checks, serialized mutations, and verified session ownership before every mutation and immediately before manifest publication.
 - Implement deterministic crash recovery from the authoritative manifest, journal, commit records, and referenced objects.
-- Add fault injection after every durable mutation boundary, including lost responses and delayed read-after-write visibility.
-- Use synthetic data and a dedicated synthetic Drive folder only.
+- Add deterministic lost-response injection after all 11 durable mutation boundaries, including manifest publication and terminal journal append.
+- Provide a browser-driven synthetic Drive transaction smoke test in the existing feasibility page and a concise owner test guide.
+- Use synthetic data and a dedicated synthetic Drive folder only; never inspect or modify the canonical manifest or ledger.
 
-**Exit:** live synthetic Drive transactions and repeated recovery are verified; ambiguous outcomes fail closed and preserve evidence. No real financial data.
+**Exit:** Node fault-injection CI passes; the owner completes the live synthetic Drive smoke test and records evidence; repeated recovery and ambiguous-outcome preservation are verified. No real financial data.
 
 ### PR #24 — Application integration and automatic lifecycle
 
@@ -62,7 +63,7 @@ The accepted operating model is single-user/single-active-device. Simultaneous u
 
 ## Current handoff
 
-PR #22 merged on 2026-11-01. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`.
+PR #22 merged on 2026-11-01. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`. PR #23 adds `js/drive-transaction-engine.mjs`, `tests/drive-transaction-engine.test.mjs`, and `docs/DRIVE_TRANSACTION_ENGINE_TESTING.md`; the Drive feasibility page includes a live synthetic transaction smoke test.
 
 PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation. PR #24 owns application integration and automatic session lifecycle. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
 
