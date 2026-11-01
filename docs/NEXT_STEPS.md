@@ -4,7 +4,7 @@
 **Current workstream:** Workstream 1 — best-effort single-active-session coordination, branch `feat/single-active-session-coordination`  
 **Current phase:** PR #20 is merged. PR #21 is implementing best-effort single-active-session coordination using a synthetic-only Drive session marker and deterministic contract tests. Production financial-data storage is **not approved**.
 
-This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/drive-feasibility-spike`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
+This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/single-active-session-coordination`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
 ## Current task: PR #21 — best-effort single-active-session coordination
 
@@ -20,7 +20,7 @@ Scope:
 - Never take over a stale session automatically; require explicit confirmation and re-read before recovery.
 - Test stale sessions, network interruption, browser-crash expiry, lost responses, and orderly handoff using synthetic data only.
 
-The Drive marker adapter is best-effort. The tested Drive `If-Match` path is not an atomic lock; simultaneous starts and network partitions remain possible. This PR does not integrate session coordination into production ledger reads/writes and does not authorize production persistence.
+The Drive marker adapter and state machine are implemented on the PR #21 branch. Final-head GitHub Actions run #134 passed 104/104 Node tests. A live session-marker test in a dedicated synthetic Drive folder remains outstanding. The tested Drive `If-Match` path is not an atomic lock; simultaneous starts and network partitions remain possible. This PR does not integrate session coordination into production ledger reads/writes and does not authorize production persistence.
 
 ## Completed checkpoints
 
@@ -48,7 +48,7 @@ The design now specifies:
 
 ## Completed task: synthetic-only Google Drive feasibility spike ([PR #20](https://github.com/AeroVega/finance-tracker/pull/20))
 
-See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20's owner-confirmed live synthetic checks are complete. Final-head Node contract tests passed in GitHub Actions run #129 (73/73); the PR is ready for merge as a prototype feasibility record only.
+See [Drive Feasibility Spike](DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20's owner-confirmed live synthetic checks are complete. Final-head Node contract tests passed in GitHub Actions run #129 (73/73), and PR #20 merged to `main` at `1e4fc1f86948f2892b5ab88a85d6f73d632719b8`.
 
 The merged PR #20 adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 

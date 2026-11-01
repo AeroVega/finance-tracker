@@ -59,7 +59,7 @@ A browser crash cannot reliably execute release. Its record ages into the stale 
 
 `js/session-coordination.mjs` is a storage-adapter-independent state machine. `tests/session-coordination.test.mjs` uses a deterministic in-memory adapter and covers active-session refusal, stale recovery, malformed/future records, network interruptions, ownership loss, offline refusal, local write serialization, orderly release, release failure, and browser-crash staleness.
 
-These tests verify client logic, including lost create/update responses resolved only by exact read-back, not Google Drive's live consistency, multi-device mutual exclusion, background timer behavior on iOS Safari, or production integration. The next integration step must use only synthetic files in a dedicated Drive test folder, with a Drive adapter that fails closed on incomplete folder enumeration and ambiguous marker discovery. No production manifest, ledger, or CSV data may be accessed.
+These tests verify client logic, including lost create/update responses resolved only by exact read-back, not Google Drive's live consistency, multi-device mutual exclusion, background timer behavior on iOS Safari, or production integration. The next validation step must exercise the implemented Drive adapter only with synthetic files in a dedicated Drive test folder; it must continue to fail closed on incomplete folder enumeration and ambiguous marker discovery. No production manifest, ledger, or CSV data may be accessed.
 
 ## Explicit limitations
 
