@@ -504,6 +504,7 @@ async function cleanupSyntheticFiles() {
     state.manifestFileId = "";
     state.manifestRevision = null;
   }
+}
 async function simulateCrash() {
   if (!state.lifecycle?.coordinator?.canWrite) throw new Error("An active session is required to simulate a crash.");
   if (!window.confirm("Stop this page's heartbeat and discard its in-memory session context WITHOUT writing a release marker? Wait at least two minutes before attempting stale recovery. Continue?")) return;
