@@ -9,7 +9,7 @@ const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const PRODUCTION_FOLDER_NAME = "finance-tracker-database";
 const MANIFEST_NAME = "ft-synthetic-pr24-manifest.json";
-const BOOTSTRAP_TRANSACTION = "pr24-bootstrap";
+const BOOTSTRAP_TRANSACTION = "7b8d2f41-9c63-4a70-8e15-2f6b3c9d1a84";
 let GOOGLE_CONFIG = null;
 const state = {
   accessToken: "",
@@ -215,7 +215,7 @@ async function findOrCreateManifest(adapter) {
     copyId: "pr24-synthetic-copy-" + crypto.randomUUID(),
     role: "primary",
     revision: 0,
-    commitId: "pr24-synthetic-genesis-" + crypto.randomUUID(),
+    commitId: crypto.randomUUID(),
     parentCommitId: null,
     snapshot: {}
   };
@@ -283,7 +283,7 @@ async function runTransactions() {
   const lifecycle = state.lifecycle;
   if (!ready()) throw new Error("Storage must be Ready before running transactions.");
   const firstBase = await lifecycle.readManifest();
-  const firstId = "pr24-" + crypto.randomUUID();
+  const firstId = crypto.randomUUID();
   const firstPath = "synthetic/pr24-first-" + crypto.randomUUID() + ".json";
   const firstPayload = { test: "PR24", sequence: 1, syntheticOnly: true, marker: "invented fixture" };
   const first = await lifecycle.transact({
@@ -298,7 +298,7 @@ async function runTransactions() {
   // Start two writes from the same base. The serialized engine must allow one
   // commit and reject the stale-base contender rather than silently overwrite it.
   const sharedBase = await lifecycle.readManifest();
-  const raceIds = ["pr24-" + crypto.randomUUID(), "pr24-" + crypto.randomUUID()];
+  const raceIds = [crypto.randomUUID(), crypto.randomUUID()];
   const racePaths = raceIds.map((id) => "synthetic/" + id + ".json");
   const racePromises = raceIds.map((id, index) => lifecycle.transact({
     manifestFileId: state.manifestFileId,
@@ -316,7 +316,7 @@ async function runTransactions() {
       raceResults.map((result) => result.status === "fulfilled" ? "committed" : result.error?.code || "failed").join(", "));
   }
   const retryBase = await lifecycle.readManifest();
-  const retryId = raceIds[loser.index] + "-retry";
+  const retryId = crypto.randomUUID();
   const retryPath = racePaths[loser.index] + ".retry";
   const retry = await lifecycle.transact({
     manifestFileId: state.manifestFileId,
