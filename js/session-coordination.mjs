@@ -231,6 +231,10 @@ export class SessionCoordinator {
       this.ownership = "released";
       fail("session-released", "This session has already been released.");
     }
+    if (current.status === "unknown" && current.errorCode === "authorization-required") {
+      this.ownership = "unknown";
+      fail("authorization-required", "Google authorization is required to revalidate this Drive session. Reconnect to Google; the existing session and stored data were not changed. Writes remain disabled.");
+    }
     this.ownership = "unknown";
     fail("ownership-lost", "The prior session identity could not be revalidated. Writes remain disabled.");
   }
