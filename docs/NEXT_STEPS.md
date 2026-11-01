@@ -1,7 +1,7 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-11-01  
-**Current phase:** Storage implementation, beginning with transaction staging and crash recovery. PR #21 is merged; PR #22 establishes the pure transaction protocol core and is awaiting owner merge. Production financial-data persistence remains **not approved**.
+**Current phase:** PR #22's pure transaction protocol foundation is merged. PR #23 is implementing the durable Google Drive transaction engine and synthetic crash-recovery tests. Production financial-data persistence remains **not approved**.
 
 ## Current workstream and PR sequence
 
@@ -9,7 +9,7 @@ The owner has selected Google Drive as the intended private storage provider, su
 
 The next four PRs have deliberately separated responsibilities:
 
-### PR #22 — Transaction protocol foundation (current PR)
+### PR #22 — Transaction protocol foundation (merged 2026-11-01)
 
 Branch: `feat/transaction-staging-crash-recovery`
 
@@ -18,9 +18,11 @@ Branch: `feat/transaction-staging-crash-recovery`
 - Add synthetic tests for canonicalization, event integrity, invalid transitions, and recovery decisions.
 - Record the requirement that session management is automatic background behavior.
 
-**Exit:** protocol core and tests reviewed and merged. This PR does not perform Drive persistence.
+**Exit:** merged to `main` on 2026-11-01. The protocol core and tests do not perform Drive persistence.
 
-### PR #23 — Durable Google Drive transaction engine
+### PR #23 — Durable Google Drive transaction engine (current work)
+
+Branch: `feat/durable-drive-transaction-engine`
 
 - Implement Drive adapter operations for durable append-only journal events, immutable content-addressed object staging, immutable commit records, and manifest publication last.
 - Use pre-generated Drive file IDs and exact read-back verification to make retries idempotent after lost responses.
@@ -60,9 +62,9 @@ The accepted operating model is single-user/single-active-device. Simultaneous u
 
 ## Current handoff
 
-Work on PR #22 is on branch `feat/transaction-staging-crash-recovery`. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`.
+PR #22 merged on 2026-11-01. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`.
 
-PR #22 is intentionally limited to protocol rules and the deterministic core. Do not add the Drive transaction adapter, durable writes, manifest publication, or application lifecycle integration to PR #22; those belong in PRs #23 and #24 as described above.
+PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation. PR #24 owns application integration and automatic session lifecycle. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
 
 Do not enable real ledger reads/writes or production financial-data persistence during these workstreams. Use invented fixtures and the dedicated synthetic Drive folder only.
 
