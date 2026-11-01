@@ -150,6 +150,22 @@ test("recovery verifies a manifest published before its response was lost", asyn
   assert.equal(engine.recoveryRequired, false);
 });
 
+test("recovery verifies publication when the manifest-published journal response is lost", async () => {
+  const { engine, transaction } = setup(10);
+  await assert.rejects(engine.transact(transaction), (error) => error.code === "transaction-unresolved");
+  const recovered = await engine.recover({ manifestFileId: "manifest" });
+  assert.equal(recovered.transactions[0].action, "verified-committed");
+  assert.equal(recovered.transactions[0].outcome, "committed");
+});
+
+test("recovery verifies a terminal commit when the final journal response is lost", async () => {
+  const { engine, transaction } = setup(11);
+  await assert.rejects(engine.transact(transaction), (error) => error.code === "transaction-unresolved");
+  const recovered = await engine.recover({ manifestFileId: "manifest" });
+  assert.equal(recovered.transactions[0].action, "verified-committed");
+  assert.equal(recovered.transactions[0].outcome, "committed");
+});
+
 test("recovery fails closed before publication and leaves all staged evidence intact", async () => {
   const { adapter, engine, transaction } = setup(8);
   await assert.rejects(engine.transact(transaction), (error) => error.code === "transaction-unresolved");
