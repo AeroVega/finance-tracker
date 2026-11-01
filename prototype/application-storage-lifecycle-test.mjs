@@ -16,6 +16,7 @@ const state = {
   folderName: "",
   lifecycle: null,
   manifestFileId: "",
+  manifestRevision: null,
   busy: false
 };
 const $ = (id) => document.getElementById(id);
@@ -43,7 +44,8 @@ function updateActions() {
   const owned = Boolean(lifecycle?.coordinator?.canWrite);
   $("select-folder").disabled = !state.accessToken || state.busy;
   $("start-lifecycle").disabled = !folder || state.busy || ready();
-  $("recover-stale").disabled = !lifecycle || lifecycle.state !== "stale-session" || state.busy;\n  $("simulate-crash").disabled = !lifecycle?.started || !lifecycle.coordinator?.canWrite || state.busy;
+  $("recover-stale").disabled = !lifecycle || lifecycle.state !== "stale-session" || state.busy;
+  $("simulate-crash").disabled = !lifecycle?.started || !lifecycle.coordinator?.canWrite || state.busy;
   $("recover-transaction").disabled = !lifecycle || lifecycle.state !== "recovery-required" || !owned || state.busy;
   $("run-transactions").disabled = !ready() || state.busy;
   $("simulate-offline").disabled = !ready() || state.busy;
@@ -56,11 +58,7 @@ function renderLifecycle(snapshot) {
   text("lifecycle-state", snapshot?.state || lifecycle?.state || "Disconnected");
   text("write-state", lifecycle?.acceptingWrites ? "Enabled" : "Disabled");
   text("session-state", lifecycle?.coordinator?.session?.sessionId || "None");
-  if (state.manifestFileId && lifecycle?.transactionAdapter) {
-    void lifecycle.transactionAdapter.readJson(state.manifestFileId)
-      .then((manifest) => text("revision-state", String(manifest.revision)))
-      .catch(() => text("revision-state", "Unavailable"));
-  }
+  text("revision-state", Number.isSafeInteger(state.manifestRevision) ? String(state.manifestRevision) : "Not loaded");
   updateActions();
 }
 function publishStatus(snapshot) {
@@ -159,6 +157,7 @@ async function verifyFolder(item) {
     state.folderName = name;
     state.lifecycle = null;
     state.manifestFileId = "";
+    state.manifestRevision = null;
     text("folder-state", name);
     status("connection-status", "Dedicated synthetic folder verified. Ready to initialize the PR24 test harness.", "success");
     text("check-connect", "Connect + dedicated synthetic folder: PASS");
@@ -257,6 +256,7 @@ async function startLifecycle() {
   });
   try {
     await state.lifecycle.start();
+    state.manifestRevision = (await state.lifecycle.readManifest()).revision;
     text("check-start", "Session acquisition + startup recovery: PASS");
     $("check-start").className = "pass";
     status("crash-status", "Lifecycle started. To test a crash, terminate the browser without allowing pagehide; then wait for the two-minute lease to expire.", "success");
@@ -323,6 +323,7 @@ async function runTransactions() {
     throw new Error("One or more synthetic objects did not pass exact manifest/hash read-back.");
   }
   const finalManifest = await lifecycle.readManifest();
+  state.manifestRevision = finalManifest.revision;
   text("revision-state", String(finalManifest.revision));
   status("transaction-status",
     "PASS: first transaction committed at revision " + first.revision +
@@ -361,7 +362,8 @@ async function recoverStale() {
   if (state.lifecycle?.state !== "stale-session") throw new Error("Drive has not reported a conclusively stale session.");
   if (!window.confirm("Confirm takeover of the stale PR24 synthetic test session? This is explicit recovery, not automatic takeover. Continue only if you are certain the previous browser/device is no longer active.")) return;
   await state.lifecycle.recoverStaleSession({ confirm: true });
-  state.manifestRevision = (await state.lifecycle.readManifest()).revision;\n  text("check-crash", "Crash / reload / stale recovery: PASS (owner-confirmed)");
+  state.manifestRevision = (await state.lifecycle.readManifest()).revision;
+  text("check-crash", "Crash / reload / stale recovery: PASS (owner-confirmed)");
   $("check-crash").className = "pass";
   status("crash-status", "PASS: stale-session takeover required explicit confirmation, a new session ID was acquired, and transaction recovery completed.", "success");
 }
@@ -407,6 +409,17 @@ async function cleanupSyntheticFiles() {
     : "PASS: all PR24 synthetic transaction files were deleted. The session marker was retained.",
   failures.length ? "warning" : "success");
   state.manifestFileId = "";
+  state.manifestRevision = null;
+}
+async function simulateCrash() {
+  if (!state.lifecycle?.coordinator?.canWrite) throw new Error("An active session is required to simulate a crash.");
+  if (!window.confirm("Stop this page's heartbeat and discard its in-memory session context WITHOUT writing a release marker? Wait at least two minutes before attempting stale recovery. Continue?")) return;
+  state.lifecycle.heartbeatStop?.();
+  state.lifecycle.heartbeatStop = null;
+  state.lifecycle.detachLifecycleListeners();
+  state.lifecycle = null;
+  status("crash-status", "SIMULATED CRASH: heartbeat stopped and session context discarded without release. Wait at least two minutes, then press Start / recover application storage. Automatic takeover should be refused until you explicitly confirm stale recovery.", "warning");
+  updateActions();
 }
 $("connect-google").addEventListener("click", () => runBusy(async () => {
   validateGoogleConfig(GOOGLE_CONFIG);
@@ -427,7 +440,8 @@ $("start-lifecycle").addEventListener("click", () => runBusy(async () => {
   await startLifecycle();
   status("lifecycle-status", "PASS: session acquired, transaction recovery completed before Ready, and automatic heartbeat started.", "success");
 }));
-$("recover-stale").addEventListener("click", () => runBusy(recoverStale));\n$("simulate-crash").addEventListener("click", () => runBusy(simulateCrash));
+$("recover-stale").addEventListener("click", () => runBusy(recoverStale));
+$("simulate-crash").addEventListener("click", () => runBusy(simulateCrash));
 $("recover-transaction").addEventListener("click", () => runBusy(recoverTransaction));
 $("run-transactions").addEventListener("click", () => runBusy(runTransactions));
 $("simulate-offline").addEventListener("click", () => runBusy(simulateOffline));
