@@ -351,6 +351,9 @@ async function runTransactions() {
       "Code: " + (error?.code || "unknown"),
       "Underlying cause: " + cause,
       details.causeMessage ? "Cause detail: " + details.causeMessage : "",
+      Number.isInteger(details.causeDetails?.status) ? "Drive HTTP status: " + details.causeDetails.status : "",
+      typeof details.causeDetails?.body === "string" ? "Drive response: " + details.causeDetails.body.slice(0, 300) : "",
+      typeof details.causeDetails?.fileId === "string" ? "Affected file ID: " + details.causeDetails.fileId : "",
       details.transactionId ? "Transaction ID: " + details.transactionId : "",
       Number.isInteger(details.journalEventCount) ? "Journal events written: " + details.journalEventCount : ""
     ].filter(Boolean).join(" ");
