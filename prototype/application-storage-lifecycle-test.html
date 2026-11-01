@@ -72,6 +72,8 @@
       <button id="recover-transaction" class="secondary" type="button" disabled>Retry transaction recovery</button>
     </div>
     <p class="fine">Stale-session takeover is never automatic. The recovery button appears only after Drive reports a conclusively stale marker and asks for explicit confirmation.</p>
+    <button id="verify-heartbeat" class="secondary" type="button" disabled>Verify automatic heartbeat</button>
+    <p id="heartbeat-status" class="status" role="status" aria-live="polite">Wait at least 45 seconds after startup before checking the heartbeat.</p>
   </section>
 
   <section class="panel">
@@ -130,6 +132,7 @@
     <ul class="result-list" id="checklist">
       <li id="check-connect">Connect + dedicated synthetic folder: pending</li>
       <li id="check-start">Session acquisition + startup recovery: pending</li>
+      <li id="check-heartbeat">Automatic heartbeat: owner test required</li>
       <li id="check-transaction">Serialized writes + SHA-256 read-back: pending</li>
       <li id="check-reconnect">Offline refusal + same-session reconnect: pending</li>
       <li id="check-release">Verified orderly release: pending</li>
