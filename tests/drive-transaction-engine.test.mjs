@@ -215,7 +215,7 @@ test("reusing a transaction ID is rejected before any new durable write", async 
   const mutations = adapter.mutations;
   await assert.rejects(
     engine.transact({ ...transaction, transactionId }),
-    (error) => error.code === "transaction-unresolved" && error.details.cause === "transaction-already-exists"
+    (error) => error.code === "transaction-already-exists"
   );
   assert.equal(adapter.mutations, mutations);
 });
