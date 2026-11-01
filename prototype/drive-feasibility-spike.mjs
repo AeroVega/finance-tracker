@@ -114,6 +114,9 @@ async function verifyFolder(item) {
       DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(item.id) + "?fields=id,name,mimeType"
     );
     if (metadata.mimeType !== FOLDER_MIME) throw new Error("Select a Drive folder, not a file.");
+    if (!/synthetic/i.test(metadata.name || "")) {
+      throw new Error("For safety, choose a dedicated Drive folder whose name includes “synthetic”.");
+    }
     if (!window.confirm("Confirm that “" + (metadata.name || item.name || "this folder") + "” is a dedicated synthetic test folder containing no personal financial data. Continue?")) {
       state.folderId = "";
       setReady(false);
@@ -123,7 +126,7 @@ async function verifyFolder(item) {
     state.folderId = metadata.id;
     state.folderName = metadata.name || item.name || "Selected test folder";
     setReady(true);
-    status("connection-status", "Selected test folder: " + state.folderName, "success");
+    status("connection-status", "Selected synthetic test folder: " + state.folderName, "success");
   } catch (error) {
     state.folderId = "";
     setReady(false);
