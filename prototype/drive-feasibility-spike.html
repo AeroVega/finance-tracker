@@ -63,7 +63,7 @@
       <button id="create-object" type="button" disabled>Run object and lost-response test</button>
       <p id="object-status" class="status" role="status" aria-live="polite">Not tested.</p>
     </section>
-    <section class="panel">
+    <section class="panel" id="durable-transaction-test">
       <h2>3. Durable transaction and recovery test</h2>
       <p class="fine">Creates a disposable synthetic manifest, stages an invented object, writes the append-only journal and immutable commit record, publishes the manifest last, then reopens the transaction from Drive and verifies the committed snapshot. This does not access the canonical database. It uses a temporary manifest and synthetic records only.</p>
       <button id="run-transaction-test" type="button" disabled>Run synthetic Drive transaction test</button>
