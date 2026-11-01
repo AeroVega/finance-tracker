@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { webcrypto } from "node:crypto";
 import {
+  classifyPickerAction,
   createSnapshotTransaction,
   isSyntheticDashboardSnapshot
 } from "../js/dashboard-synthetic-storage.mjs";
@@ -13,6 +14,14 @@ const manifest = {
   revision: 2,
   snapshot: { "prior/object.json": { fileId: "drive-id", sha256: "a".repeat(64) } }
 };
+
+test("Google Picker load event waits for the user's folder choice instead of treating it as cancellation", () => {
+  const actions = { LOADED: "loaded", PICKED: "picked", CANCEL: "cancel" };
+  assert.equal(classifyPickerAction(actions.LOADED, actions), "pending");
+  assert.equal(classifyPickerAction("unknown-event", actions), "pending");
+  assert.equal(classifyPickerAction(actions.PICKED, actions), "picked");
+  assert.equal(classifyPickerAction(actions.CANCEL, actions), "cancelled");
+});
 
 test("dashboard snapshot transaction contains only invented rows and uses a UUID v4", () => {
   const rows = [{
