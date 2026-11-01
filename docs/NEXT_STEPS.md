@@ -6,7 +6,7 @@
 
 This is the current pick-up point. PRs #17 and #19 are complete and merged. Workstream 1 is in progress on `feat/single-active-session-coordination`. Keep the sequence below; do not skip ahead to real ledger reads or writes.
 
-## Current task: PR #21 — best-effort single-active-session coordination
+## Current task: PR #21 — best-effort single-active-session coordination and live browser validation
 
 Branch: `feat/single-active-session-coordination`  
 Base: `main` at PR #20 merge commit `1e4fc1f86948f2892b5ab88a85d6f73d632719b8`.

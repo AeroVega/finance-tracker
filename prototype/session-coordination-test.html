@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f5f7">
+  <title>Finance Tracker · Session coordination test</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #102018; background: #f5f5f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px 48px; }
+    main { width: min(820px, 100%); margin: 0 auto; }
+    h1 { margin: 4px 0 18px; font-size: clamp(2rem, 7vw, 3.1rem); letter-spacing: -.05em; }
+    h2 { margin: 0 0 10px; font-size: 1.12rem; }
+    p { line-height: 1.5; }
+    .eyebrow { color: #547064; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .panel { margin: 16px 0; padding: 20px; border: 1px solid #e3e6e5; border-radius: 18px; background: #fff; box-shadow: 0 6px 24px #17251d0a; }
+    .notice { border-color: #e6c77e; background: #fff9e9; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+    .metric { padding: 12px; border-radius: 12px; background: #f5f7f6; min-width: 0; }
+    .metric strong { display: block; font-size: .76rem; color: #56635d; margin-bottom: 5px; }
+    .metric span { display: block; overflow-wrap: anywhere; font-weight: 650; }
+    button { margin: 10px 8px 0 0; padding: 11px 14px; border: 1px solid #1e5d4b; border-radius: 10px; color: #fff; background: #1e5d4b; font: inherit; font-weight: 650; cursor: pointer; }
+    button.secondary { color: #1e5d4b; background: #fff; }
+    button.danger { color: #8b2929; border-color: #c77; background: #fff; }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    .status { min-height: 1.5em; margin: 10px 0 0; color: #35453d; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .status[data-kind="success"] { color: #087b55; }
+    .status[data-kind="warning"] { color: #805700; }
+    .status[data-kind="error"] { color: #a12c2c; }
+    .fine { color: #56635d; font-size: .86rem; }
+    code { overflow-wrap: anywhere; }
+    ol { padding-left: 1.3rem; line-height: 1.55; }
+    footer { margin-top: 24px; text-align: center; color: #6b756f; font-size: .78rem; }
+    @media (max-width: 540px) { body { padding: 14px 10px 32px; } .panel { padding: 16px; } button { width: 100%; margin-right: 0; } .grid { grid-template-columns: 1fr 1fr; } }
+  </style>
+  <script async src="https://accounts.google.com/gsi/client"></script>
+  <script async src="https://apis.google.com/js/api.js"></script>
+  <script type="module" src="session-coordination-test.mjs"></script>
+  <script src="../js/build-info.js" defer></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Finance Tracker · PR #21 · Synthetic only</p>
+    <h1>Session coordination test</h1>
+
+    <section class="panel notice">
+      <strong>Safety boundary</strong>
+      <p>This page exercises the actual PR #21 session coordinator and Google Drive marker adapter. It writes only one coordination file named <code>finance-tracker-active-session.json</code> in the dedicated synthetic test folder you select.</p>
+      <p class="fine">Do not select the production folder <code>finance-tracker-database</code>. No ledger, manifest, CSV, or transaction files are read or changed. The marker is retained after release so another device can acquire it; it is safe to leave in the test folder.</p>
+    </section>
+
+    <section class="panel">
+      <h2>1. Connect and select the synthetic folder</h2>
+      <p class="fine">Uses the existing Finance Tracker Google OAuth client, drive.file scope, Google Picker, and deployment-injected configuration. Access tokens stay in page memory.</p>
+      <button id="connect-google" type="button" disabled>Connect Google Drive</button>
+      <button id="select-folder" class="secondary" type="button" disabled>Choose synthetic test folder</button>
+      <div class="grid">
+        <div class="metric"><strong>Google</strong><span id="auth-state">Not connected</span></div>
+        <div class="metric"><strong>Selected folder</strong><span id="folder-state">None</span></div>
+      </div>
+      <p id="connection-status" class="status" role="status" aria-live="polite">Loading Google services…</p>
+    </section>
+
+    <section class="panel">
+      <h2>2. Inspect session ownership</h2>
+      <p class="fine">Reads the complete folder listing and marker through the real Drive adapter. An absent, active, stale, released, or ambiguous result is reported distinctly.</p>
+      <button id="inspect-session" type="button" disabled>Inspect Drive session</button>
+      <div class="grid">
+        <div class="metric"><strong>Drive marker</strong><span id="marker-state">Not inspected</span></div>
+        <div class="metric"><strong>This page</strong><span id="owner-state">Unowned</span></div>
+      </div>
+      <p id="inspect-status" class="status" role="status" aria-live="polite">Not tested.</p>
+    </section>
+
+    <section class="panel">
+      <h2>3. Acquire and exercise the write gate</h2>
+      <p class="fine">Acquire creates or replaces a released marker only after verification. The guarded test is a no-op operation: it proves the coordinator permits a write operation only after a fresh ownership check, without creating unrelated test data.</p>
+      <button id="acquire-session" type="button" disabled>Acquire this device's session</button>
+      <button id="guarded-write" class="secondary" type="button" disabled>Run guarded no-op write</button>
+      <p id="acquire-status" class="status" role="status" aria-live="polite">No session acquired.</p>
+    </section>
+
+    <section class="panel">
+      <h2>4. Heartbeat and interruption recovery</h2>
+      <p class="fine">The default heartbeat interval is one third of the two-minute lease (about 40 seconds). Going offline disables the write gate. After reconnecting, explicitly revalidate this page's exact session ID.</p>
+      <button id="heartbeat-once" type="button" disabled>Send heartbeat now</button>
+      <button id="heartbeat-start" class="secondary" type="button" disabled>Start automatic heartbeat</button>
+      <button id="heartbeat-stop" class="secondary" type="button" disabled>Stop automatic heartbeat</button>
+      <button id="resume-session" class="secondary" type="button" disabled>Revalidate after reconnect</button>
+      <p id="heartbeat-status" class="status" role="status" aria-live="polite">Heartbeat not started.</p>
+    </section>
+
+    <section class="panel">
+      <h2>5. Stale-session recovery</h2>
+      <p class="fine">A crashed or closed browser cannot reliably release its marker. Wait for the lease to expire (two minutes without a heartbeat), inspect again, then explicitly confirm recovery. No automatic takeover occurs.</p>
+      <button id="recover-session" class="danger" type="button" disabled>Review and recover stale session</button>
+      <p id="recovery-status" class="status" role="status" aria-live="polite">No stale session detected.</p>
+    </section>
+
+    <section class="panel">
+      <h2>6. Release and device handoff</h2>
+      <p class="fine">Release stops heartbeats, drains in-flight guarded operations, writes the released state, and verifies it by reading the marker back. Only switch devices after a successful release.</p>
+      <button id="release-session" class="secondary" type="button" disabled>Release this device's session</button>
+      <p id="release-status" class="status" role="status" aria-live="polite">No session to release.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Two-device test sequence</h2>
+      <ol>
+        <li>On device A, connect, select the same dedicated synthetic folder, inspect, and acquire.</li>
+        <li>On device B, connect and select that same folder. Inspect should report A's active session; acquire must be refused.</li>
+        <li>On device A, release and wait for the verified success result.</li>
+        <li>On device B, inspect again and acquire. B should now own the session.</li>
+        <li>To simulate a browser crash, close a page without releasing. Wait at least two minutes, inspect on the other device, then use explicit stale recovery.</li>
+      </ol>
+      <p class="fine">This is best-effort coordination, not a server-enforced lock. Simultaneous starts and network partitions can still race. Keep the single-active-device operating rule.</p>
+    </section>
+
+    <footer>Source commit <code id="build-sha">development (not deployed)</code></footer>
+  </main>
+</body>
+</html>
