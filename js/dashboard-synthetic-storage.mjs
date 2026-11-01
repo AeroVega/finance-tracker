@@ -10,6 +10,14 @@ const BOOTSTRAP_TRANSACTION = "dashboard-synthetic-bootstrap";
 const SNAPSHOT_PATH = "synthetic/dashboard-transactions.json";
 const PRODUCTION_FOLDER_NAME = "finance-tracker-database";
 
+export function classifyPickerAction(action, pickerActions) {
+  if (action === pickerActions.PICKED) return "picked";
+  if (action === pickerActions.CANCEL) return "cancelled";
+  // Google Picker emits LOADED before the user chooses a folder. It is not a
+  // terminal result; keep the picker open and wait for PICKED or CANCEL.
+  return "pending";
+}
+
 export function isSyntheticDashboardSnapshot(value) {
   return Boolean(value && value.format === "finance-tracker-dashboard-snapshot" &&
     value.syntheticOnly === true && Array.isArray(value.transactions) &&
@@ -220,7 +228,9 @@ export class DashboardSyntheticStorage {
           .setOrigin(window.location.origin)
           .setTitle("Choose a dedicated synthetic test folder")
           .setCallback(async (data) => {
-            if (data?.action !== window.google.picker.Action.PICKED) return reject(new Error("No synthetic folder was selected."));
+            const pickerResult = classifyPickerAction(data?.action, window.google.picker.Action);
+            if (pickerResult === "pending") return;
+            if (pickerResult === "cancelled") return reject(new Error("Folder selection cancelled."));
             const item = data.docs?.[0];
             if (!item?.id) return reject(new Error("Google Picker returned no folder."));
             try {
