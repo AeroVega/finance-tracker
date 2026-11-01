@@ -43,6 +43,20 @@ test("Drive adapter treats a complete empty folder as no active marker", async (
   assert.equal(await adapter.read(), null);
 });
 
+test("Drive adapter resolves a token-provider function before folder enumeration", async () => {
+  let providerCalls = 0;
+  const adapter = createDriveSessionAdapter({
+    accessToken: () => { providerCalls++; return "synthetic-token"; },
+    folderId: "folder-1",
+    fetchImpl: async (_url, init = {}) => {
+      assert.equal(init.headers.Authorization, "Bearer synthetic-token");
+      return jsonResponse({ files: [], incompleteSearch: false });
+    }
+  });
+  assert.equal(await adapter.read(), null);
+  assert.equal(providerCalls, 1);
+});
+
 test("Drive adapter rejects incomplete enumeration instead of claiming no session", async () => {
   const adapter = createDriveSessionAdapter({
     accessToken: "synthetic-token",
