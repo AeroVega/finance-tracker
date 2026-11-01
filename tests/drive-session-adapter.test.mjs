@@ -198,3 +198,24 @@ async function extractMultipartJson(blob) {
   const sections = raw.split(/Content-Type: application\/json; charset=UTF-8\r\n\r\n/);
   return sections[2].split(/\r\n--/)[0];
 }
+
+test("Drive session adapter uses a newly authorized token on the next ownership check", async () => {
+  let accessToken = "expired-token";
+  let attempts = 0;
+  const adapter = createDriveSessionAdapter({
+    accessToken: () => accessToken,
+    folderId: "folder-1",
+    fetchImpl: async (_url, init = {}) => {
+      attempts++;
+      if (init.headers.Authorization === "Bearer expired-token") {
+        return jsonResponse({ error: { message: "Invalid Credentials" } }, 401);
+      }
+      assert.equal(init.headers.Authorization, "Bearer refreshed-token");
+      return jsonResponse({ files: [], incompleteSearch: false });
+    }
+  });
+  await assert.rejects(adapter.read(), (error) => error.code === "authorization-required");
+  accessToken = "refreshed-token";
+  assert.equal(await adapter.read(), null);
+  assert.equal(attempts, 2);
+});
