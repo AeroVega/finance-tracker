@@ -109,12 +109,12 @@
     <button id="simulate-crash" class="danger" type="button" disabled>Simulate crash (stop heartbeat without release)</button>
     <ol class="result-list">
       <li>Start the lifecycle and confirm it reaches Ready.</li>
-      <li>Close this tab or reload it <strong>without</strong> pressing Release.</li>
-      <li>Wait at least two minutes for the session lease to expire.</li>
-      <li>Reopen this page, reconnect, select the same synthetic folder, and start storage. It should refuse automatic takeover and report Stale session.</li>
+      <li>For a controlled simulation, press <strong>Simulate crash</strong>. This stops the heartbeat and discards the in-memory session without writing a release marker.</li>
+      <li>Wait at least 2 minutes 10 seconds for the two-minute lease to expire.</li>
+      <li>Press Start / recover application storage. It should refuse automatic takeover and report Stale session.</li>
       <li>Use the explicit stale-session recovery button. Recovery should acquire a new session ID, run transaction recovery, and return to Ready.</li>
     </ol>
-    <p class="fine">A normal pagehide release may run when closing a tab. If it does, the marker will be Released rather than Stale, which is also safe: the next page can acquire normally. For a crash simulation, terminate the browser process or use a browser test harness that bypasses pagehide.</p>
+    <p class="fine">The controlled simulation is the reliable way to test the stale lease in this harness. A normal pagehide release may run when closing or reloading a tab; in that case the marker becomes Released and the next page can acquire normally, which is safe but does not exercise stale recovery.</p>
     <p id="crash-status" class="status" role="status" aria-live="polite">Not tested.</p>
   </section>
 
