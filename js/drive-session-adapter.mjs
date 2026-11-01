@@ -9,8 +9,9 @@ function error(code, message) {
 }
 
 function authHeaders(accessToken) {
-  if (!accessToken) throw error("authorization-required", "A Google Drive access token is required.");
-  return { Authorization: "Bearer " + accessToken };
+  const token = typeof accessToken === "function" ? accessToken() : accessToken;
+  if (!token) throw error("authorization-required", "A Google Drive access token is required.");
+  return { Authorization: "Bearer " + token };
 }
 
 function sameRecord(left, right) {
