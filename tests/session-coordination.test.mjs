@@ -335,3 +335,31 @@ test("a changed record during stale recovery causes a fail-closed result", async
   await expectCode(session.recoverStale({ confirm: true }), "ownership-unknown");
   assert.equal(session.canWrite, false);
 });
+
+
+test("authorization failure is reported as recoverable sign-in, not as a corrupt or conflicting session", async () => {
+  const now = { value: 10_000 };
+  let authorized = false;
+  const adapter = {
+    async read() {
+      if (!authorized) {
+        const error = new Error("Google authorization required");
+        error.code = "authorization-required";
+        throw error;
+      }
+      return null;
+    },
+    async write(record) { this.record = structuredClone(record); }
+  };
+  const session = coordinator(adapter, now);
+  await assert.rejects(session.start(), (error) =>
+    error.code === "authorization-required" &&
+    /Reconnect to Google/.test(error.message) &&
+    /no session or stored data was changed/.test(error.message)
+  );
+  assert.equal(session.canWrite, false);
+  authorized = true;
+  const acquired = await session.start();
+  assert.equal(acquired.sessionId, "new-session");
+  assert.equal(session.canWrite, true);
+});
