@@ -64,7 +64,13 @@
       <p id="object-status" class="status" role="status" aria-live="polite">Not tested.</p>
     </section>
     <section class="panel">
-      <h2>3. Two-session conditional-write test</h2>
+      <h2>3. Durable transaction and recovery test</h2>
+      <p class="fine">Creates a disposable synthetic manifest, stages an invented object, writes the append-only journal and immutable commit record, publishes the manifest last, then reopens the transaction from Drive and verifies the committed snapshot. This does not access the canonical database. It uses a temporary manifest and synthetic records only.</p>
+      <button id="run-transaction-test" type="button" disabled>Run synthetic Drive transaction test</button>
+      <p id="transaction-test-status" class="status" role="status" aria-live="polite">Not tested.</p>
+    </section>
+    <section class="panel">
+      <h2>4. Two-session conditional-write test</h2>
       <p class="fine">Session A creates a temporary race-test file. Copy its file ID into Session B. Both sessions select the same test folder, read the same baseline ETag/version, then attempt a conditional update at nearly the same time. This changes only the disposable race-test file's description.</p>
       <button id="create-race" type="button" disabled>Create race-test file (Session A)</button>
       <label for="race-file-id">Shared synthetic race-test file ID</label>
