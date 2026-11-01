@@ -160,19 +160,25 @@ export class GoogleDriveTransactionAdapter {
     const metadata = {
       id: fileId,
       name,
-      mimeType: "application/json",
+      mimeType: "application/octet-stream",
       parents: [this.folderId],
       appProperties: { [TAG + "Kind"]: kind, [TAG + "Transaction"]: transactionId, [TAG + "Hash"]: actualHash }
     };
-    const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${MIME_JSON}\r\n\r\n`);
+    const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
     const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
     const body = joinBytes([head, bytes, tail]);
     const url = `${UPLOAD}/files?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`;
-    const response = await this.request(url, {
-      method: "POST",
-      headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-      body
-    }, { allowStatuses: [409] });
+    try {
+      await this.request(url, {
+        method: "POST",
+        headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+        body
+      }, { allowStatuses: [409] });
+    } catch (error) {
+      // A transport failure may mean Drive committed the create but the response was lost.
+      // Resolve only by inspecting the same pre-generated ID and exact expected bytes.
+      if (error.code === "authorization-required") throw error;
+    }
 
     // A 409, a lost response, or a successful response all resolve through the same
     // exact-ID read-back path. Never allocate a replacement ID for a retry.
@@ -278,6 +284,7 @@ export class DriveTransactionEngine {
           eventType, timestamp: this.now(), payload, previousEventHash, cryptoImpl: this.crypto
         });
         const eventFileId = await this.adapter.allocateFileId();
+        await this.guard();
         await this.adapter.appendJournal(event, eventFileId);
         events.push(event);
         eventFileIds.push(eventFileId);
@@ -302,7 +309,10 @@ export class DriveTransactionEngine {
           });
           await addEvent("object-staged", { fileId: item.fileId, sha256: item.sha256 });
         }
-        const snapshot = { ...(commitRecord.snapshot || {}) };
+        if (!commitRecord.snapshot || typeof commitRecord.snapshot !== "object" || Array.isArray(commitRecord.snapshot)) {
+          fail("incomplete-snapshot", "The commit record must provide the complete resulting logical snapshot map.");
+        }
+        const snapshot = { ...commitRecord.snapshot };
         for (const item of planned) snapshot[item.logicalPath] = { fileId: item.fileId, sha256: item.sha256 };
         const record = {
           ...commitRecord,
