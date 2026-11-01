@@ -57,6 +57,7 @@ export class ApplicationStorageLifecycle {
     this.lifecycleTarget = lifecycleTarget;
     this.setIntervalImpl = setIntervalImpl;
     this.clearIntervalImpl = clearIntervalImpl;
+    this.factories = factories;
     this.state = "disconnected";
     this.sessionAdapter = null;
     this.coordinator = null;
@@ -77,19 +78,19 @@ export class ApplicationStorageLifecycle {
   }
 
   createComponents() {
-    this.sessionAdapter = createDriveSessionAdapter({
+    this.sessionAdapter = (this.factories.createSessionAdapter || createDriveSessionAdapter)({
       accessToken: () => this.accessToken(),
       folderId: this.folderId,
       fetchImpl: this.fetchImpl
     });
-    this.coordinator = new SessionCoordinator({ adapter: this.sessionAdapter });
-    this.transactionAdapter = new GoogleDriveTransactionAdapter({
+    this.coordinator = (this.factories.createCoordinator || ((options) => new SessionCoordinator(options)))({ adapter: this.sessionAdapter });
+    this.transactionAdapter = (this.factories.createTransactionAdapter || ((options) => new GoogleDriveTransactionAdapter(options)))({
       accessToken: this.accessToken,
       folderId: this.folderId,
       fetchImpl: this.fetchImpl,
       cryptoImpl: this.crypto
     });
-    this.engine = new DriveTransactionEngine({
+    this.engine = (this.factories.createEngine || ((options) => new DriveTransactionEngine(options)))({
       adapter: this.transactionAdapter,
       cryptoImpl: this.crypto,
       isOnline: this.isOnline,
@@ -145,17 +146,25 @@ export class ApplicationStorageLifecycle {
     if (this.started && this.state === "ready") return;
     if (!this.isOnline()) fail("offline", "Connect to the internet before opening the database.");
     this.publish("connecting", "Connecting to private storage…");
-    this.createComponents();
+    if (!this.coordinator) this.createComponents();
+    let acquired = false;
     try {
       await this.coordinator.start();
+      acquired = true;
       await this.recoverBeforeUse();
       this.startHeartbeat();
       this.attachLifecycleListeners();
       this.started = true;
     } catch (error) {
       this.acceptingWrites = false;
+      if (acquired || this.coordinator?.canWrite) {
+        this.started = true;
+        this.startHeartbeat();
+        this.attachLifecycleListeners();
+      }
       const state = error?.code === "stale-session" ? "stale-session" :
-        error?.code === "session-active" ? "session-active" : "connection-error";
+        error?.code === "session-active" ? "session-active" :
+        (acquired || this.coordinator?.canWrite) ? "recovery-required" : "connection-error";
       this.publish(state, error?.message || "Storage connection could not be verified.", error?.code || "unknown");
       throw error;
     }
