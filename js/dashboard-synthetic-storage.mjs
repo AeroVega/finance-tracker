@@ -329,6 +329,9 @@ export class DashboardSyntheticStorage {
   async release() {
     if (!this.lifecycle) return { released: false };
     const result = await this.lifecycle.release({ reason: "dashboard-handoff" });
+    if (result.released !== true) {
+      throw Object.assign(new Error("Storage release could not be verified. Keep this device selected and resolve the session before switching devices."), { code: "release-unconfirmed" });
+    }
     this.lifecycle = null;
     this.publish("disconnected", "Synthetic storage session released.", "success");
     return result;
