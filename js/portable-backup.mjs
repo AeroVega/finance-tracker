@@ -54,7 +54,7 @@ function validateManifest(manifest) {
 
 function validateCommit(manifest, commitRecord) {
   if (!commitRecord || commitRecord.format !== "finance-tracker-commit" || commitRecord.version !== 1 ||
-      commitRecord.databaseId !== manifest.databaseId || commitRecord.copyId !== manifest.copyId ||
+      commitRecord.databaseId !== manifest.databaseId ||
       commitRecord.commitId !== manifest.commitId || commitRecord.revision !== manifest.revision ||
       !commitRecord.snapshot || typeof commitRecord.snapshot !== "object" || Array.isArray(commitRecord.snapshot)) {
     fail("commit-identity-mismatch", "The commit record does not match the backup manifest identity and revision.");
@@ -161,4 +161,132 @@ export async function planPortableRestore(archive, { newCopyId, newStorageBindin
     restoredFromCopyId: archive.sourceCopyId
   };
   return { verified, manifest };
+}
+
+
+/**
+ * Create a verified immutable snapshot in a separately prepared destination folder.
+ * Adapters must be scoped to their respective folders. The manifest is written last;
+ * failures are quarantined through the supplied callback and never clean up evidence.
+ */
+export async function createVerifiedSnapshotBackup({
+  sourceAdapter, targetAdapter, sourceManifestFileId, newCopyId, newStorageBinding,
+  transactionId = globalThis.crypto?.randomUUID?.(), now = new Date().toISOString(),
+  validateStructure = async () => true, quarantine = async () => {}, cryptoImpl = globalThis.crypto
+}) {
+  if (!sourceAdapter || !targetAdapter || typeof sourceManifestFileId !== "string" ||
+      typeof newCopyId !== "string" || !newCopyId.trim() || typeof newStorageBinding !== "string" ||
+      !newStorageBinding.trim() || typeof transactionId !== "string" || !transactionId.trim()) {
+    fail("invalid-backup-config", "Source and destination adapters, source manifest, new copy identity, storage binding, and transaction ID are required.");
+  }
+  let manifestWritten = false;
+  try {
+    const sourceManifest = await sourceAdapter.readJson(sourceManifestFileId);
+    if (!sourceManifest || sourceManifest.role !== "primary" || sourceManifest.lifecycleStatus !== "active" ||
+        !sourceManifest.databaseId || !sourceManifest.copyId || !sourceManifest.commitRecordFileId ||
+        !/^[0-9a-f]{64}$/.test(String(sourceManifest.commitRecordHash || ""))) {
+      fail("invalid-backup-source", "Backup requires an active primary with a verifiable committed manifest.");
+    }
+    if (newCopyId === sourceManifest.copyId) fail("invalid-backup-copy-id", "A backup must have a new physical copy ID.");
+    const sourceCommit = await sourceAdapter.readJson(sourceManifest.commitRecordFileId);
+    const sourceCommitText = canonicalizeJcs(sourceCommit);
+    const sourceCommitHash = await sha256(new TextEncoder().encode(sourceCommitText), cryptoImpl);
+    if (sourceCommitHash !== sourceManifest.commitRecordHash ||
+        sourceCommit.databaseId !== sourceManifest.databaseId ||
+        sourceCommit.commitId !== sourceManifest.commitId ||
+        sourceCommit.revision !== sourceManifest.revision ||
+        !sourceCommit.snapshot || typeof sourceCommit.snapshot !== "object" || Array.isArray(sourceCommit.snapshot)) {
+      fail("source-commit-invalid", "The primary commit record does not match its manifest or hash.");
+    }
+
+    const copiedSnapshot = {};
+    for (const logicalPath of Object.keys(sourceCommit.snapshot).sort()) {
+      const reference = sourceCommit.snapshot[logicalPath];
+      if (!reference?.fileId || !/^[0-9a-f]{64}$/.test(String(reference.sha256 || ""))) {
+        fail("invalid-snapshot-reference", `The primary snapshot reference is invalid for ${logicalPath}.`);
+      }
+      const bytes = toBytes(await sourceAdapter.readBytes(reference.fileId));
+      if (await sha256(bytes, cryptoImpl) !== reference.sha256) {
+        fail("source-object-hash-mismatch", `The primary snapshot object failed verification for ${logicalPath}.`);
+      }
+      const fileId = await targetAdapter.allocateFileId();
+      await targetAdapter.createImmutable({
+        fileId, name: `ft-object-${reference.sha256}.bin`, kind: "snapshot-object",
+        transactionId, content: bytes, expectedSha256: reference.sha256
+      });
+      const readBack = toBytes(await targetAdapter.readBytes(fileId));
+      if (await sha256(readBack, cryptoImpl) !== reference.sha256) {
+        fail("backup-object-readback-failed", `The backup object failed read-back verification for ${logicalPath}.`);
+      }
+      copiedSnapshot[logicalPath] = { fileId, sha256: reference.sha256 };
+    }
+
+    // Ensure the source remained on the exact committed state while its objects were copied.
+    const sourceManifestAfter = await sourceAdapter.readJson(sourceManifestFileId);
+    if (canonicalizeJcs(sourceManifestAfter) !== canonicalizeJcs(sourceManifest)) {
+      fail("source-changed-during-backup", "The primary manifest changed during backup; the partial copy is not a valid snapshot.");
+    }
+
+    const backupCommit = {
+      ...sourceCommit,
+      snapshot: copiedSnapshot
+    };
+    const backupCommitText = canonicalizeJcs(backupCommit);
+    const backupCommitHash = await sha256(new TextEncoder().encode(backupCommitText), cryptoImpl);
+    const backupCommitFileId = await targetAdapter.allocateFileId();
+    await targetAdapter.createImmutable({
+      fileId: backupCommitFileId, name: `ft-commit-${sourceManifest.commitId}.json`,
+      kind: "commit-record", transactionId, content: backupCommitText, expectedSha256: backupCommitHash
+    });
+    const backupCommitReadBack = await targetAdapter.readJson(backupCommitFileId);
+    if (canonicalizeJcs(backupCommitReadBack) !== backupCommitText) {
+      fail("backup-commit-readback-failed", "The backup commit record did not read back exactly.");
+    }
+
+    const backupManifest = {
+      ...sourceManifest,
+      copyId: newCopyId,
+      role: "backup",
+      lifecycleStatus: "active",
+      storageBinding: newStorageBinding,
+      copyCreatedAt: now,
+      commitRecordFileId: backupCommitFileId,
+      commitRecordHash: backupCommitHash
+    };
+    const structuralResult = await validateStructure({
+      manifest: backupManifest, commitRecord: backupCommitReadBack,
+      readObject: async (logicalPath) => {
+        const reference = copiedSnapshot[logicalPath];
+        return reference ? targetAdapter.readBytes(reference.fileId) : null;
+      }
+    });
+    if (structuralResult !== true) fail("backup-structure-invalid", "The copied snapshot failed structural validation.");
+
+    const manifestFileId = await targetAdapter.allocateFileId();
+    const manifestText = canonicalizeJcs(backupManifest);
+    const manifestHash = await sha256(new TextEncoder().encode(manifestText), cryptoImpl);
+    await targetAdapter.createImmutable({
+      fileId: manifestFileId, name: "finance-tracker-manifest.json",
+      kind: "database-manifest", transactionId, content: manifestText, expectedSha256: manifestHash
+    });
+    manifestWritten = true;
+    if (canonicalizeJcs(await targetAdapter.readJson(manifestFileId)) !== manifestText) {
+      fail("backup-manifest-readback-failed", "The backup manifest did not read back exactly.");
+    }
+    return {
+      verified: true, databaseId: sourceManifest.databaseId, sourceCopyId: sourceManifest.copyId,
+      backupCopyId: newCopyId, revision: sourceManifest.revision, commitId: sourceManifest.commitId,
+      manifestFileId, objectCount: Object.keys(copiedSnapshot).length, commitRecordFileId: backupCommitFileId
+    };
+  } catch (error) {
+    let quarantined = false;
+    try {
+      await quarantine({ errorCode: error.code || "unknown", manifestWritten, transactionId, newCopyId });
+      quarantined = true;
+    } catch { /* retain the original failure; the destination remains unusable */ }
+    throw new PortableBackupError(
+      "backup-quarantined",
+      `Backup did not complete and must not be used. Original cause: ${error.code || error.name || "unknown"}. Quarantine recorded: ${quarantined}.`
+    );
+  }
 }
