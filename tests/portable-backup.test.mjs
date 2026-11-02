@@ -118,8 +118,12 @@ test("restore requires a new copy ID and explicit destination binding", async ()
 
 
 class MemoryAdapter {
-  constructor(folderId, files = new Map()) { this.folderId = folderId; this.files = files; this.next = 0; }
+  constructor(folderId, files = new Map()) { this.folderId = folderId; this.files = files; this.metadata = new Map(); this.next = 0; }
   async allocateFileId() { this.next += 1; return `${this.folderId}-file-${this.next}`; }
+  async readMetadata(id) {
+    if (!this.files.has(id)) throw Object.assign(new Error("missing"), { code: "not-found" });
+    return { id, parents: [this.folderId], appProperties: this.metadata.get(id) || {} };
+  }
   async readJson(id) {
     const value = this.files.get(id);
     if (!value) throw Object.assign(new Error("missing"), { code: "not-found" });
@@ -130,10 +134,15 @@ class MemoryAdapter {
     if (!value) throw Object.assign(new Error("missing"), { code: "not-found" });
     return value;
   }
-  async createImmutable({ fileId, content, expectedSha256 }) {
+  async createImmutable({ fileId, content, expectedSha256, kind, transactionId }) {
     const bytes = content instanceof Uint8Array ? content : encoder.encode(content);
     assert.equal(await hash(bytes), expectedSha256);
     this.files.set(fileId, bytes);
+    this.metadata.set(fileId, {
+      financeTrackerKind: kind,
+      financeTrackerTransaction: transactionId,
+      financeTrackerHash: expectedSha256
+    });
   }
 }
 
