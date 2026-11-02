@@ -93,6 +93,8 @@ Branch: `feat/production-readiness-acceptance`
 
 - **Owner decision recorded (2026-11-02):** publish locator catalogs copy-on-write and manifest-last: create and verify the complete new immutable catalog before updating the authoritative manifest pointer. A crash before publication leaves the prior manifest/catalog authoritative.
 
+- **Owner confirmation recorded (2026-11-02):** the locator catalog is a per-copy lookup index from logical object identity (path plus SHA-256) to physical Drive location. The owner recognizes that a verified catalog can avoid repeated Drive searches and may improve latency/API efficiency; this is an expected benefit, not a measured result. Exact schema and cache/invalidation rules remain open.
+
 - **Owner decision recorded (2026-11-02): preserve ADR §81.** Redesign commit snapshots as logicalPath → SHA-256 only; resolve Drive IDs separately per physical copy. Next choose the durable per-copy locator representation and publication/recovery contract, then update the PR #23 transaction engine, recovery verifier, backup/restore flow, and synthetic fault-injection suite together. The current PR #25 helper's fileId-plus-hash compatibility shape is transitional and not ADR-compliant.
 - Obtain explicit owner acceptance of evidence and remaining limitations.
 
