@@ -52,6 +52,7 @@ code { font-size: .85em; background: #f1f1f4; border-radius: 5px; padding: 2px 5
 .secondary-button:hover { border-color: #aaaab4; }
 .count-pill { display: inline-grid; place-items: center; min-width: 25px; height: 25px; padding: 0 7px; background: #f1f1f4; border-radius: 999px; color: var(--muted); font-size: .72rem; vertical-align: 2px; }
 .text-button { border: 0; background: transparent; color: var(--muted); padding: 8px; cursor: pointer; font-size: .84rem; }
+.ledger-actions { display: flex; align-items: center; gap: 8px; }
 .text-button:disabled { opacity: .35; cursor: default; }
 .empty-state { text-align: center; padding: 30px 12px 22px; color: var(--muted); }
 .empty-state p { font-size: .86rem; margin: 10px 0 0; }
