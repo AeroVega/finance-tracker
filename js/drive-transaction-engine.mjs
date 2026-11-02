@@ -185,6 +185,7 @@ export class GoogleDriveTransactionAdapter {
     const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
     const body = joinBytes([head, bytes, tail]);
     const url = `${UPLOAD}/files?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`;
+    let ambiguousCreateFailure = null;
     try {
       await this.request(url, {
         method: "POST",
@@ -192,14 +193,40 @@ export class GoogleDriveTransactionAdapter {
         body
       }, { allowStatuses: [409] });
     } catch (error) {
-      // A transport failure may mean Drive committed the create but the response was lost.
-      // Resolve only by inspecting the same pre-generated ID and exact expected bytes.
-      if (error.code === "authorization-required") throw error;
+      // A network failure or server-side 5xx may have happened after Drive committed
+      // the create. Resolve those ambiguous outcomes using the same pre-generated ID.
+      // Definitive client errors (including 400/404) prove the request was rejected;
+      // do not disguise them as a later metadata-visibility timeout.
+      const status = error.details?.status;
+      const ambiguousHttpFailure = Number.isInteger(status) &&
+        (status === 408 || status === 429 || status >= 500);
+      const transportFailure = !Number.isInteger(status) && error.code !== "authorization-required";
+      if (error.code === "authorization-required" || (!ambiguousHttpFailure && !transportFailure)) {
+        throw error;
+      }
+      ambiguousCreateFailure = {
+        code: error.code || error.name || "unknown",
+        message: error.message || String(error),
+        status: Number.isInteger(status) ? status : null,
+        body: typeof error.details?.body === "string" ? error.details.body : null
+      };
     }
 
-    // A 409, a lost response, or a successful response all resolve through the same
-    // exact-ID read-back path. Never allocate a replacement ID for a retry.
-    const metadataAfter = await this.waitForMetadata(fileId);
+    // A 409, an ambiguous transport/server failure, or a successful response all
+    // resolve through the same exact-ID read-back path. Never allocate a replacement
+    // ID for a retry.
+    let metadataAfter;
+    try {
+      metadataAfter = await this.waitForMetadata(fileId);
+    } catch (error) {
+      if (ambiguousCreateFailure && error instanceof DriveTransactionError) {
+        error.details = { ...error.details, createRequest: ambiguousCreateFailure };
+        error.message = ambiguousCreateFailure.status
+          ? `Drive create returned HTTP ${ambiguousCreateFailure.status}; the same file ID remained unavailable during read-back. Preserve transaction evidence and run recovery before retrying.`
+          : "Drive create had no confirmed response; the same file ID remained unavailable during read-back. Preserve transaction evidence and run recovery before retrying.";
+      }
+      throw error;
+    }
     if (metadataAfter.appProperties?.[TAG + "Kind"] !== kind ||
         metadataAfter.appProperties?.[TAG + "Transaction"] !== transactionId ||
         metadataAfter.appProperties?.[TAG + "Hash"] !== actualHash) {
