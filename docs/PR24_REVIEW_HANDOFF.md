@@ -59,3 +59,14 @@ The new expandable dashboard diagnostic panel contains a bounded, in-memory allo
 6. Browser automation was unavailable in the review environment: Chromium launch failed under its sandbox setup. Node behavioral UI tests passed, but no mobile rendering claim follows from them.
 
 This document and the PR explanation are the discoverable handoff for a continuing coding assistant. They do not imply that another assistant has read or accepted them.
+
+
+## Follow-up: explicit dashboard Save and recoverable Clear controls (2026-11-02)
+
+**Implemented on the PR #24 feature branch:** the ledger now has an explicit **Save** action. It persists only the current `syntheticTransactions` snapshot through the existing transaction engine and requires the normal verified read-back before reporting success. CSV-imported rows, source-file metadata and fingerprints are not included. Save remains disabled unless the existing synthetic storage lifecycle is `ready` and no synthetic mutation is in flight. Saving an empty synthetic snapshot is valid, allowing an explicit persisted-empty state.
+
+**Implemented:** lifecycle status changes immediately refresh ledger action availability. Clear is disabled while an existing storage lifecycle is not `ready`, and its handler independently refuses the action in that state rather than silently clearing only the browser copy. Once ready, Clear continues to commit an empty synthetic snapshot before removing the captured local selection; on failure it preserves local rows and provenance. CSV imports remain available during remote operations and remain local-only.
+
+**Regression coverage added:** explicit Save writes only synthetic rows while retaining local CSV rows; Save/Clear availability follows lifecycle state transitions; direct Clear invocation during uncertain ownership is refused without removing rows. These new tests supplement the existing clear/import race tests.
+
+**Not yet verified:** exact-head GitHub Actions results and live iOS Safari/Drive behavior. This code change does not resolve the separately documented Drive metadata 404 or the Pages deployment/configuration discrepancy. Do not use the new Save button as a reason to retry a transaction while recovery or ownership is uncertain; recover first, then Save or Clear when the lifecycle returns to `ready`.
