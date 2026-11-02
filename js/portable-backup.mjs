@@ -204,12 +204,13 @@ export async function planPortableRestore(archive, { newCopyId, newStorageBindin
 async function performVerifiedSnapshotBackup({
   sourceAdapter, targetAdapter, sourceManifestFileId, newCopyId, newStorageBinding,
   transactionId = globalThis.crypto?.randomUUID?.(), now = new Date().toISOString(),
-  validateStructure = async () => true, quarantine = async () => {}, cryptoImpl = globalThis.crypto
+  validateStructure = async () => true, quarantine, cryptoImpl = globalThis.crypto
 }) {
   if (!sourceAdapter || !targetAdapter || typeof sourceManifestFileId !== "string" ||
       typeof newCopyId !== "string" || !newCopyId.trim() || typeof newStorageBinding !== "string" ||
-      !newStorageBinding.trim() || typeof transactionId !== "string" || !transactionId.trim()) {
-    fail("invalid-backup-config", "Source and destination adapters, source manifest, new copy identity, storage binding, and transaction ID are required.");
+      !newStorageBinding.trim() || typeof transactionId !== "string" || !transactionId.trim() ||
+      typeof quarantine !== "function") {
+    fail("invalid-backup-config", "Source and destination adapters, source manifest, new copy identity, storage binding, transaction ID, and quarantine handler are required.");
   }
   let manifestWritten = false;
   try {
