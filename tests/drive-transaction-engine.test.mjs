@@ -380,6 +380,46 @@ test("Drive immutable create surfaces definitive client errors without polling",
   assert.equal(requests, 1, "a definitive create rejection must not trigger metadata polling");
 });
 
+test("successful Drive create response is preserved when exact-ID metadata read-back remains unavailable", async () => {
+  let requests = 0;
+  const adapter = new GoogleDriveTransactionAdapter({
+    accessToken: () => "synthetic-token",
+    folderId: "synthetic-folder",
+    visibilityAttempts: 2,
+    visibilityDelayMs: 1,
+    visibilityMaxDelayMs: 1,
+    fetchImpl: async () => {
+      requests += 1;
+      if (requests === 1) {
+        return new Response(JSON.stringify({
+          id: "generated-file-id",
+          name: "synthetic-object",
+          mimeType: "application/octet-stream",
+          parents: ["synthetic-folder"]
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response("not visible", { status: 404 });
+    }
+  });
+
+  const content = '{"synthetic":true}';
+  await assert.rejects(adapter.createImmutable({
+    fileId: "generated-file-id",
+    name: "synthetic-object",
+    kind: "snapshot-object",
+    transactionId: cryptoImpl.randomUUID(),
+    content,
+    expectedSha256: await sha256Hex(content)
+  }), (error) =>
+    error.code === "visibility-timeout" &&
+    error.details.createRequest?.status === 200 &&
+    error.details.createRequest?.returnedId === "generated-file-id" &&
+    error.details.lastStatus === 404 &&
+    /create outcome: HTTP 200/.test(error.message) &&
+    /returned ID generated-file-id/.test(error.message));
+  assert.equal(requests, 3, "one successful create plus two exact-ID metadata checks");
+});
+
 test("ambiguous Drive create server errors retain their original diagnostics if read-back times out", async () => {
   let requests = 0;
   const adapter = new GoogleDriveTransactionAdapter({
