@@ -4,6 +4,7 @@ import { webcrypto } from "node:crypto";
 import { createPortableBackup, verifyPortableBackup, planPortableRestore, createVerifiedSnapshotBackup } from "../js/portable-backup.mjs";
 
 const cryptoImpl = globalThis.crypto || webcrypto;
+const validateStructure = async () => true;
 const encoder = new TextEncoder();
 const hash = async (bytes) => {
   const digest = await cryptoImpl.subtle.digest("SHA-256", bytes);
@@ -52,7 +53,7 @@ test("exports a portable snapshot and verifies its envelope, object hash, and st
 
 test("plans restore with a new copy identity while preserving logical database and commit lineage", async () => {
   const plan = await planPortableRestore(await archive(), {
-    newCopyId: "synthetic-restored-copy",
+    newCopyId: "synthetic-restored-copy", validateStructure,
     newStorageBinding: { provider: "google-drive", folderId: "synthetic-restored-folder" },
     now: "2026-11-02T21:00:00.000Z",
     cryptoImpl
@@ -70,7 +71,7 @@ test("plans restore with a new copy identity while preserving logical database a
 test("rejects archive tampering before exposing restored objects", async () => {
   const changed = await archive();
   changed.objects[0].contentBase64 = btoa("tampered");
-  await assert.rejects(verifyPortableBackup(changed, { cryptoImpl }), (error) =>
+  await assert.rejects(verifyPortableBackup(changed, { cryptoImpl, validateStructure }), (error) =>
     error.code === "archive-hash-mismatch");
 });
 
@@ -78,7 +79,7 @@ test("rejects missing, extra, duplicate, or hash-mismatched snapshot objects", a
   const good = await archive();
   const missing = { ...good, objects: [] };
   // Re-signing is intentionally not exposed; envelope tampering is caught first.
-  await assert.rejects(verifyPortableBackup(missing, { cryptoImpl }), (error) => error.code === "archive-hash-mismatch");
+  await assert.rejects(verifyPortableBackup(missing, { cryptoImpl, validateStructure }), (error) => error.code === "archive-hash-mismatch");
   await assert.rejects(createPortableBackup({
     manifest, commitRecord, objects: [], cryptoImpl
   }), (error) => error.code === "snapshot-object-set-mismatch");
@@ -213,7 +214,7 @@ test("quarantines an incomplete backup and never changes the primary", async () 
     sourceAdapter: primary, targetAdapter: brokenTarget, sourceManifestFileId: "primary-manifest",
     newCopyId: "failed-backup-copy", newStorageBinding: { provider: "google-drive", folderId: "failed-backup-folder" },
     transactionId: "synthetic-failed-backup", cryptoImpl, withSourceLock: async (operation) => operation(),
-    quarantine: async (evidence) => { quarantineEvidence = evidence; }
+    validateStructure, quarantine: async (evidence) => { quarantineEvidence = evidence; }
   }), (error) => error.code === "backup-quarantined");
   assert.ok(quarantineEvidence);
   assert.equal(new TextDecoder().decode(primary.files.get("primary-manifest")), before);
@@ -247,7 +248,7 @@ test("backup resolves lost responses at each destination create by exact-ID hash
       sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
       newCopyId: `backup-copy-${boundary}`, newStorageBinding: { provider: "google-drive", folderId: `backup-folder-${boundary}` },
       transactionId: `backup-transaction-${boundary}`, cryptoImpl, withSourceLock: async (operation) => operation(),
-      quarantine: async () => {}
+      validateStructure, quarantine: async () => {}
     });
     assert.equal(result.verified, true);
     assert.equal((await target.readJson(result.manifestFileId)).role, "backup");
@@ -289,7 +290,7 @@ test("source revision change during backup quarantines the partial copy", async 
     sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
     newCopyId: "backup-copy-after-source-change", newStorageBinding: { provider: "google-drive", folderId: "backup-folder-after-source-change" },
     transactionId: "source-change-test", cryptoImpl,
-    withSourceLock: async (operation) => operation(),
+    withSourceLock: async (operation) => operation(), validateStructure,
     quarantine: async () => { quarantineCalled = true; }
   }), (error) => error.code === "backup-quarantined");
   assert.equal(quarantineCalled, true);
