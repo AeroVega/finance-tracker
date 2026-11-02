@@ -33,7 +33,7 @@ export class ApplicationStorageLifecycle {
       syntheticOnly = false, folderName = "", folderId, manifestFileId,
       initializeManifest, accessToken, makeManifest, fetchImpl = globalThis.fetch,
       cryptoImpl = globalThis.crypto, isOnline = () => globalThis.navigator?.onLine !== false,
-      onStatus = () => {}, lifecycleTarget = globalThis,
+      onStatus = () => {}, onDiagnostic = () => {}, lifecycleTarget = globalThis,
       setIntervalImpl = globalThis.setInterval, clearIntervalImpl = globalThis.clearInterval,
       factories = {}
     } = options;
@@ -56,6 +56,8 @@ export class ApplicationStorageLifecycle {
     this.crypto = cryptoImpl;
     this.isOnline = isOnline;
     this.onStatus = onStatus;
+    this.onDiagnostic = onDiagnostic;
+    this.releasePending = false;
     this.lifecycleTarget = lifecycleTarget;
     this.setIntervalImpl = setIntervalImpl;
     this.clearIntervalImpl = clearIntervalImpl;
@@ -71,7 +73,16 @@ export class ApplicationStorageLifecycle {
     this.acceptingWrites = false;
     this._onOffline = () => this.handleOffline();
     this._onOnline = () => { void this.handleOnline(); };
-    this._onPageHide = () => { void this.release({ reason: "pagehide" }).catch(() => {}); };
+    this._onPageHide = (event) => {
+      this.diagnostic("pagehide", { isTrusted: event?.isTrusted === true, persisted: event?.persisted === true,
+        visibility: this.lifecycleTarget?.document?.visibilityState });
+      void this.release({ reason: "pagehide" }).catch(() => {});
+    };
+  }
+
+  diagnostic(event, details = {}) {
+    // Diagnostic observers must never affect ownership or transaction behavior.
+    try { this.onDiagnostic({ event, state: this.state, ...details }); } catch { /* observational only */ }
   }
 
   publish(state, message, code = null) {
@@ -133,18 +144,23 @@ export class ApplicationStorageLifecycle {
   async recoverBeforeUse() {
     this.acceptingWrites = false;
     this.publish("recovering", "Checking Drive transaction state…");
-    const result = await this.coordinator.withWrite(() =>
-      this.engine.recover({
+    const result = await this.coordinator.withWrite(async () => {
+      const recovered = await this.engine.recover({
         manifestFileId: this.manifestFileId,
         makeManifest: this.makeManifest
-      })
-    );
-    this.acceptingWrites = true;
-    this.publish("ready", "Connected and synchronized.");
+      });
+      await this.coordinator.assertCanWrite({ online: this.isOnline() });
+      return recovered;
+    });
+    if (!this.releasePending) {
+      this.acceptingWrites = true;
+      this.publish("ready", "Connected and synchronized.");
+    }
     return result;
   }
 
   async start() {
+    if (this.releasePending) fail("release-unconfirmed", "Session handoff is still in progress.");
     if (this.started && this.state === "ready") return;
     if (!this.isOnline()) fail("offline", "Connect to the internet before opening the database.");
     this.publish("connecting", "Connecting to private storage…");
@@ -153,6 +169,7 @@ export class ApplicationStorageLifecycle {
     try {
       await this.coordinator.start();
       acquired = true;
+      this.startHeartbeat();
       if (!this.manifestFileId && this.initializeManifest) {
         this.manifestFileId = await this.coordinator.withWrite(() =>
           this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId })
@@ -167,23 +184,26 @@ export class ApplicationStorageLifecycle {
       this.acceptingWrites = false;
       if (acquired || this.coordinator?.canWrite) {
         this.started = true;
-        this.startHeartbeat();
+        if (this.coordinator?.canWrite) this.startHeartbeat();
         this.attachLifecycleListeners();
       }
       const state = error?.code === "stale-session" ? "stale-session" :
         error?.code === "session-active" ? "session-active" :
-        (acquired || this.coordinator?.canWrite) ? "recovery-required" : "connection-error";
+        this.coordinator?.canWrite || this.engine?.recoveryRequired ? "recovery-required" :
+        acquired ? "ownership-unknown" : "connection-error";
       this.publish(state, error?.message || "Storage connection could not be verified.", error?.code || "unknown");
       throw error;
     }
   }
 
   async recoverStaleSession({ confirm = false } = {}) {
+    if (this.releasePending) fail("release-unconfirmed", "Session handoff is still in progress.");
     if (!this.coordinator) this.createComponents();
     if (!this.isOnline()) fail("offline", "Reconnect before recovering a stale session.");
     this.publish("recovering-session", "Verifying stale session…");
     try {
       await this.coordinator.recoverStale({ confirm });
+      this.startHeartbeat();
       if (!this.manifestFileId && this.initializeManifest) {
         this.manifestFileId = await this.coordinator.withWrite(() =>
           this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId })
@@ -219,11 +239,12 @@ export class ApplicationStorageLifecycle {
   }
 
   async handleOnline() {
-    if (!this.started || !this.coordinator?.session) return;
+    if (this.releasePending || !this.started || !this.coordinator?.session) return;
     this.acceptingWrites = false;
     this.publish("reconnecting", "Rechecking the existing session…");
     try {
       await this.coordinator.resume();
+      this.startHeartbeat();
       await this.recoverBeforeUse();
       this.startHeartbeat();
     } catch (error) {
@@ -273,7 +294,11 @@ export class ApplicationStorageLifecycle {
     await this.requireReady();
     try {
       const result = await this.coordinator.withWrite(() => this.engine.transact(transaction));
-      this.publish("ready", "Changes synchronized.");
+      // A committed transaction is not proof that ownership survived its final
+      // read-back. Preserve a concurrent heartbeat/offline failure status.
+      if (!this.releasePending && this.acceptingWrites && this.coordinator.canWrite && this.isOnline()) {
+        this.publish("ready", "Changes synchronized.");
+      }
       return result;
     } catch (error) {
       if (error?.code === "transaction-unresolved" || this.engine.recoveryRequired) {
@@ -288,6 +313,7 @@ export class ApplicationStorageLifecycle {
   }
 
   async recover() {
+    if (this.releasePending) fail("release-unconfirmed", "Session handoff is still in progress.");
     if (!this.coordinator?.canWrite || !this.isOnline()) fail("storage-not-ready", "A verified online session is required for recovery.");
     this.acceptingWrites = false;
     this.publish("recovering", "Recovering the last transaction…");
@@ -298,11 +324,15 @@ export class ApplicationStorageLifecycle {
         );
       }
       if (!this.manifestFileId) fail("manifest-unavailable", "A verified synthetic manifest is required before recovery.");
-      const result = await this.coordinator.withWrite(() =>
-        this.engine.recover({ manifestFileId: this.manifestFileId, makeManifest: this.makeManifest })
-      );
-      this.acceptingWrites = true;
-      this.publish("ready", "Recovery verified. Storage is ready.");
+      const result = await this.coordinator.withWrite(async () => {
+        const recovered = await this.engine.recover({ manifestFileId: this.manifestFileId, makeManifest: this.makeManifest });
+        await this.coordinator.assertCanWrite({ online: this.isOnline() });
+        return recovered;
+      });
+      if (!this.releasePending) {
+        this.acceptingWrites = true;
+        this.publish("ready", "Recovery verified. Storage is ready.");
+      }
       return result;
     } catch (error) {
       this.publish("recovery-required", "Recovery remains unresolved. No further writes are allowed.", error?.code || "recovery-required");
@@ -311,28 +341,45 @@ export class ApplicationStorageLifecycle {
   }
 
   async release({ reason = "handoff" } = {}) {
-    // Do not relinquish ownership while a transaction still needs recovery.
-    if (this.state === "recovery-required" || this.engine?.recoveryRequired) {
-      fail("recovery-required", "Storage ownership cannot be released while a transaction is unresolved. Recover and verify the transaction before handing off this device.");
+    this.diagnostic("release-request", { reason });
+    const requireResolved = () => {
+      if (this.state === "recovery-required" || this.engine?.recoveryRequired) {
+        fail("recovery-required", "Storage ownership cannot be released while a transaction is unresolved. Recover and verify the transaction before handing off this device.");
+      }
+    };
+    try {
+      requireResolved();
+      if (this.releasePending || !this.coordinator?.canWrite) {
+        fail("release-unconfirmed", "This page cannot verify an available session for handoff. Reconnect and recover before switching devices.");
+      }
+    } catch (error) {
+      this.diagnostic("release-refused", { reason });
+      throw error;
     }
-    // An uncertain/non-owner state is not a successful release. Preserve the
-    // lifecycle and heartbeat so this page does not silently abandon a claim.
-    if (!this.coordinator?.canWrite) {
-      fail("release-unconfirmed", "This page cannot verify session ownership, so no release was attempted. Reconnect and recover before switching devices.");
-    }
+    this.releasePending = true;
     this.acceptingWrites = false;
-    this.heartbeatStop?.();
-    this.heartbeatStop = null;
     this.publish("releasing", "Finishing storage handoff…");
     try {
-      const result = await this.coordinator.release();
+      // Keep renewal alive while admitted writes drain. Recheck their outcome
+      // before relinquishing ownership: a save may fail during this wait.
+      const result = await this.coordinator.release({ beforeRelease: requireResolved });
+      this.heartbeatStop?.();
+      this.heartbeatStop = null;
       this.detachLifecycleListeners();
       this.started = false;
       this.publish("released", "Storage session released.");
+      this.diagnostic("release-complete", { reason });
       return { ...result, reason };
     } catch (error) {
-      this.publish("release-unconfirmed", "Session release could not be verified. Do not switch devices yet.", error?.code || "release-unconfirmed");
+      if (this.engine?.recoveryRequired || error?.code === "recovery-required") {
+        this.publish("recovery-required", "A save needs recovery before more changes can be made.", "recovery-required");
+      } else {
+        this.publish("release-unconfirmed", "Session release could not be verified. Do not switch devices yet.", error?.code || "release-unconfirmed");
+      }
+      this.diagnostic("release-refused", { reason });
       throw error;
+    } finally {
+      this.releasePending = false;
     }
   }
 }

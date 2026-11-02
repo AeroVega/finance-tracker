@@ -216,3 +216,138 @@ test("manifest initialization is gated behind verified session acquisition", asy
   assert.equal(lifecycle.manifestFileId, "synthetic-manifest-created-under-session");
   assert.equal(lifecycle.state, "ready");
 });
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+test("release drains a guard-bearing save without revoking its ownership", async () => {
+  const { lifecycle, engine, sessionAdapter, statuses } = setup();
+  await lifecycle.start();
+  const entered = deferred(), proceed = deferred();
+  engine.transact = async () => {
+    entered.resolve();
+    await proceed.promise;
+    await lifecycle.coordinator.assertCanWrite();
+    return { committed: true };
+  };
+  const saving = lifecycle.transact({});
+  await entered.promise;
+  const releasing = lifecycle.release();
+  assert.equal(typeof lifecycle.heartbeatStop, "function");
+  await assert.rejects(lifecycle.transact({}), (error) => error.code === "storage-not-ready");
+  proceed.resolve();
+  assert.deepEqual(await saving, { committed: true });
+  assert.equal((await releasing).released, true);
+  assert.equal(sessionAdapter.record.state, "released");
+  const drainStatuses = statuses.slice(statuses.findIndex((entry) => entry.state === "releasing"));
+  assert.deepEqual(drainStatuses.map((entry) => entry.state), ["releasing", "released"]);
+});
+
+test("a save that becomes unresolved during release keeps ownership and cannot turn green", async () => {
+  const { lifecycle, engine, sessionAdapter, statuses } = setup();
+  await lifecycle.start();
+  const entered = deferred(), proceed = deferred();
+  engine.transact = async () => {
+    entered.resolve();
+    await proceed.promise;
+    engine.recoveryRequired = true;
+    throw Object.assign(new Error("invented failed save"), { code: "transaction-unresolved" });
+  };
+  const saving = lifecycle.transact({});
+  await entered.promise;
+  const releasing = lifecycle.release();
+  const results = Promise.allSettled([saving, releasing]);
+  proceed.resolve();
+  const [saved, released] = await results;
+  assert.equal(saved.reason.code, "transaction-unresolved");
+  assert.equal(released.reason.code, "recovery-required");
+  assert.equal(sessionAdapter.record.state, "active");
+  assert.equal(lifecycle.state, "recovery-required");
+  assert.equal(lifecycle.coordinator.releasing, false);
+  assert.equal(typeof lifecycle.heartbeatStop, "function");
+  assert.equal(statuses.some((entry) => entry.state === "released"), false);
+});
+
+test("automatic pagehide cannot erase a save failure during its drain", async () => {
+  const { lifecycle, engine, target, sessionAdapter, statuses } = setup();
+  const diagnosticEvents = [];
+  lifecycle.onDiagnostic = (event) => diagnosticEvents.push(event);
+  await lifecycle.start();
+  const entered = deferred(), proceed = deferred();
+  engine.transact = async () => {
+    entered.resolve();
+    await proceed.promise;
+    engine.recoveryRequired = true;
+    throw Object.assign(new Error("invented failed save"), { code: "transaction-unresolved" });
+  };
+  const saving = lifecycle.transact({});
+  await entered.promise;
+  target.dispatchEvent(new Event("pagehide"));
+  proceed.resolve();
+  await assert.rejects(saving);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(sessionAdapter.record.state, "active");
+  assert.equal(lifecycle.state, "recovery-required");
+  assert.equal(statuses.some((entry) => entry.state === "released"), false);
+  assert.equal(diagnosticEvents.some((entry) => entry.event === "release-request" && entry.reason === "pagehide"), true);
+  assert.equal(diagnosticEvents.some((entry) => entry.event === "release-refused"), true);
+});
+
+test("renewal starts before lengthy startup recovery and survives more than one lease", async () => {
+  let now = 1_000_000, tick;
+  const entered = deferred(), proceed = deferred();
+  const sessionAdapter = new MemorySessionAdapter();
+  const lifecycle = new ApplicationStorageLifecycle({
+    syntheticOnly: true, folderName: "synthetic", folderId: "synthetic-folder", manifestFileId: "synthetic-manifest",
+    accessToken: () => "invented-token", makeManifest: () => ({}), lifecycleTarget: null,
+    setIntervalImpl: (callback) => { tick = callback; return 1; }, clearIntervalImpl: () => {},
+    factories: {
+      createSessionAdapter: () => sessionAdapter,
+      createCoordinator: ({ adapter }) => new SessionCoordinator({ adapter, now: () => now }),
+      createTransactionAdapter: () => ({}),
+      createEngine: ({ assertWritable }) => ({
+        async recover() { entered.resolve(); await proceed.promise; await assertWritable(); }
+      })
+    }
+  });
+  const starting = lifecycle.start();
+  await entered.promise;
+  assert.equal(typeof tick, "function");
+  for (let step = 0; step < 4; step++) { now += 40_000; await tick(); }
+  proceed.resolve();
+  await starting;
+  assert.equal(lifecycle.state, "ready");
+  assert.equal(sessionAdapter.record.heartbeatAt, now);
+  await lifecycle.release();
+});
+
+test("startup retains the original ownership failure if early renewal loses the session", async () => {
+  const { lifecycle, engine, statuses } = setup();
+  engine.recover = async () => {
+    lifecycle.coordinator.ownership = "unknown";
+    throw Object.assign(new Error("invented original failure"), { code: "ownership-lost" });
+  };
+  await assert.rejects(lifecycle.start(), (error) => error.code === "ownership-lost");
+  assert.equal(lifecycle.state, "ownership-unknown");
+  assert.equal(lifecycle.acceptingWrites, false);
+  assert.equal(lifecycle.listenersAttached, true);
+  assert.equal(statuses.at(-1).code, "ownership-lost");
+});
+
+test("a committed save does not erase ownership loss during its final read-back", async () => {
+  const { lifecycle, engine, statuses } = setup();
+  await lifecycle.start();
+  engine.transact = async () => {
+    lifecycle.coordinator.ownership = "unknown";
+    lifecycle.acceptingWrites = false;
+    lifecycle.publish("ownership-unknown", "Connection could not be verified.", "ownership-lost");
+    return { committed: true };
+  };
+  assert.deepEqual(await lifecycle.transact({}), { committed: true });
+  assert.equal(lifecycle.state, "ownership-unknown");
+  assert.equal(statuses.at(-1).state, "ownership-unknown");
+  assert.equal(engine.recoveryRequired, false);
+});

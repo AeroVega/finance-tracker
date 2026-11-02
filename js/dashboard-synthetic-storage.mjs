@@ -171,9 +171,10 @@ async function findOrCreateManifest(adapter) {
 }
 
 export class DashboardSyntheticStorage {
-  constructor({ onStatus = () => {}, onSnapshot = () => {} } = {}) {
+  constructor({ onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {} } = {}) {
     this.onStatus = onStatus;
     this.onSnapshot = onSnapshot;
+    this.onDiagnostic = onDiagnostic;
     this.accessToken = "";
     this.tokenExpiresAt = 0;
     this.config = null;
@@ -277,7 +278,8 @@ export class DashboardSyntheticStorage {
           // Keep this provider synchronous; an async wrapper becomes Bearer [object Promise].
           accessToken: () => this.token(),
           makeManifest: manifestBuilder,
-          onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info")
+          onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info"),
+          onDiagnostic: (entry) => this.onDiagnostic(entry)
         });
       }
       if (this.lifecycle.coordinator?.canWrite && this.lifecycle.state === "recovery-required") {
@@ -345,13 +347,35 @@ export class DashboardSyntheticStorage {
   }
 
   async release() {
-    if (!this.lifecycle) return { released: false };
-    const result = await this.lifecycle.release({ reason: "dashboard-handoff" });
-    if (result.released !== true) {
+    const lifecycle = this.lifecycle;
+    if (!lifecycle) {
+      throw Object.assign(new Error("There is no active storage session to release."), { code: "release-unconfirmed" });
+    }
+    const result = await lifecycle.release({ reason: "dashboard-handoff" });
+    // An older completion must not erase a newer lifecycle or recovery failure.
+    if (result?.released !== true || this.lifecycle !== lifecycle ||
+        lifecycle.state !== "released" || lifecycle.engine?.recoveryRequired) {
       throw Object.assign(new Error("Storage release could not be verified. Keep this device selected and resolve the session before switching devices."), { code: "release-unconfirmed" });
     }
     this.lifecycle = null;
     this.publish("disconnected", "Synthetic storage session released.", "success");
     return result;
   }
+}
+
+/** UI handoff has no independent success writer: only verified storage status may announce success. */
+export function createDashboardReleaseHandler({ getStorage, setPending, onError, onDiagnostic = () => {} }) {
+  return async (event) => {
+    try { onDiagnostic({ event: "release-click", isTrusted: event?.isTrusted === true }); } catch { /* observational only */ }
+    setPending(true);
+    try {
+      const storage = getStorage();
+      if (!storage) throw new Error("Storage is not ready. No session release was attempted.");
+      const result = await storage.release();
+      if (result?.released !== true) throw new Error("Storage release could not be verified.");
+    } catch (error) {
+      onError(error);
+      setPending(false);
+    }
+  };
 }

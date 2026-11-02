@@ -38,6 +38,11 @@
       <button id="release-synthetic-storage" class="secondary-button" type="button" disabled>Release storage session</button>
       <button id="recover-stale-storage" class="secondary-button" type="button" hidden>Confirm stale-session recovery</button>
       <p id="storage-status" class="status-message" role="status" aria-live="polite">Not connected. CSV imports continue to work locally.</p>
+      <details id="storage-diagnostics-panel" class="sample-details">
+        <summary>Storage diagnostics (this page only)</summary>
+        <p>Recent lifecycle events only; no tokens, file IDs, folder names or transaction data. This trace is never uploaded or saved. Share this trace with the visible error and source commit when reporting a problem.</p>
+        <pre id="storage-diagnostics" style="white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem;">No storage events recorded.</pre>
+      </details>
     </section>
 
     <section class="metric-grid" aria-label="Cash flow summary">

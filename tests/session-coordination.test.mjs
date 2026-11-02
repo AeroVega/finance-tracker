@@ -393,3 +393,150 @@ test("same-session resume distinguishes expired authorization from lost ownershi
   assert.equal(resumed.sessionId, "new-session");
   assert.equal(session.canWrite, true);
 });
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+test("handoff preserves guards of admitted writes and rechecks after they finish", async () => {
+  const adapter = new MemorySessionAdapter();
+  const session = coordinator(adapter, { value: 10_000 });
+  await session.start();
+  const entered = deferred();
+  const finish = deferred();
+  const events = [];
+  const write = session.withWrite(async () => {
+    entered.resolve();
+    await finish.promise;
+    await session.assertCanWrite();
+    events.push("write-finished");
+  });
+  await entered.promise;
+  const release = session.release({ beforeRelease: () => events.push("release-check") });
+  await expectCode(session.withWrite(() => assert.fail("new write admitted")), "not-owner");
+  finish.resolve();
+  await write;
+  await release;
+  assert.deepEqual(events, ["write-finished", "release-check"]);
+  assert.equal(adapter.record.state, "released");
+});
+
+test("a rejected post-drain check retains the active marker and heartbeat", async () => {
+  const adapter = new MemorySessionAdapter();
+  const now = { value: 10_000 };
+  const session = coordinator(adapter, now);
+  await session.start();
+  let stopped = false;
+  session.startHeartbeat({ setIntervalImpl: () => 1, clearIntervalImpl: () => { stopped = true; } });
+  await assert.rejects(session.release({ beforeRelease: () => {
+    throw Object.assign(new Error("Synthetic unresolved transaction"), { code: "recovery-required" });
+  } }), { code: "recovery-required" });
+  assert.equal(stopped, false);
+  assert.equal(session.releasing, false);
+  assert.equal(session.canWrite, true);
+  now.value += 500;
+  await session.heartbeat();
+  assert.equal(adapter.record.state, "active");
+  assert.equal(adapter.record.heartbeatAt, now.value);
+  await session.release();
+});
+
+test("heartbeats renew during a transaction and handoff lasting longer than the default lease", async () => {
+  const adapter = new MemorySessionAdapter();
+  const now = { value: 1_000_000 };
+  const session = new SessionCoordinator({ adapter, now: () => now.value, createSessionId: () => "synthetic-long-write" });
+  await session.start();
+  const entered = deferred();
+  const finish = deferred();
+  const write = session.withWrite(async () => {
+    entered.resolve();
+    await finish.promise;
+    await session.assertCanWrite();
+  });
+  await entered.promise;
+  const release = session.release();
+  for (let i = 0; i < 4; i++) {
+    now.value += 40_000;
+    await session.heartbeat();
+    assert.equal(adapter.record.heartbeatAt, now.value);
+    assert.equal(adapter.record.state, "active");
+  }
+  finish.resolve();
+  await write;
+  await release;
+  assert.equal(adapter.record.state, "released");
+  await expectCode(session.heartbeat(), "not-owner");
+  assert.equal(adapter.record.state, "released");
+});
+
+test("release serializes after an in-flight heartbeat and late scheduled ticks cannot resurrect it", async () => {
+  const adapter = new MemorySessionAdapter();
+  const now = { value: 10_000 };
+  const session = coordinator(adapter, now);
+  await session.start();
+  const entered = deferred();
+  const finish = deferred();
+  adapter.afterWrite = async () => { entered.resolve(); await finish.promise; };
+  let tick;
+  const errors = [];
+  session.startHeartbeat({ setIntervalImpl: (fn) => { tick = fn; return 1; }, clearIntervalImpl: () => {}, onError: (e) => errors.push(e.code) });
+  now.value += 500;
+  const heartbeat = tick();
+  await entered.promise;
+  const release = session.release();
+  // Queue another tick while the first heartbeat is still awaiting read-back.
+  const late = tick();
+  finish.resolve();
+  await Promise.all([heartbeat, release, late]);
+  assert.equal(adapter.record.state, "released");
+  assert.equal(session.canWrite, false);
+  assert.deepEqual(errors, []);
+  await tick();
+  assert.equal(adapter.record.state, "released");
+});
+
+test("heartbeat cannot restore ownership invalidated by an offline event during read-back", async () => {
+  const adapter = new MemorySessionAdapter();
+  const session = coordinator(adapter, { value: 10_000 });
+  await session.start();
+  adapter.afterWrite = async () => { await expectCode(session.assertCanWrite({ online: false }), "offline"); };
+  await expectCode(session.heartbeat(), "ownership-unknown");
+  assert.equal(session.canWrite, false);
+});
+
+test("a stale lease is not silently renewed by the independent heartbeat queue", async () => {
+  const now = { value: 10_000 };
+  const adapter = new MemorySessionAdapter();
+  const session = coordinator(adapter, now);
+  await session.start();
+  const original = structuredClone(adapter.record);
+  now.value += 2_000;
+  await expectCode(session.heartbeat(), "ownership-lost");
+  assert.deepEqual(adapter.record, original);
+});
+
+test("a resume already checking ownership cannot reopen admission during release", async () => {
+  const adapter = new MemorySessionAdapter();
+  const session = coordinator(adapter, { value: 10_000 });
+  await session.start();
+  const entered = deferred();
+  const finish = deferred();
+  const originalRead = adapter.read.bind(adapter);
+  let hold = true;
+  adapter.read = async () => {
+    if (hold) { hold = false; entered.resolve(); await finish.promise; }
+    return originalRead();
+  };
+  const resume = session.resume();
+  await entered.promise;
+  const release = session.release();
+  await expectCode(session.start(), "not-owner");
+  await expectCode(session.resume(), "not-owner");
+  finish.resolve();
+  await resume;
+  await expectCode(session.withWrite(() => assert.fail("write entered during release")), "not-owner");
+  await release;
+  assert.equal(adapter.record.state, "released");
+});

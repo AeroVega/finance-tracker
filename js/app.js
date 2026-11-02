@@ -241,14 +241,34 @@
   $("csv-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
   const connectStorageButton = $("connect-synthetic-storage");
   connectStorageButton.disabled = true;
-  void import("./dashboard-synthetic-storage.mjs").then(async ({ DashboardSyntheticStorage }) => {
+  void Promise.all([import("./dashboard-synthetic-storage.mjs"), import("./storage-diagnostics.mjs")]).then(async ([{ DashboardSyntheticStorage, createDashboardReleaseHandler }, { createStorageDiagnostics }]) => {
+    const diagnostics = createStorageDiagnostics();
+    const recordDiagnostic = (entry) => {
+      diagnostics.record(entry);
+      $("storage-diagnostics").textContent = diagnostics.format($("build-sha")?.textContent);
+    };
+    $("storage-diagnostics-panel").addEventListener("toggle", () => {
+      $("storage-diagnostics").textContent = diagnostics.format($("build-sha")?.textContent);
+    });
+    $("release-synthetic-storage").addEventListener("click", createDashboardReleaseHandler({
+      getStorage: () => syntheticStorage,
+      setPending: (pending) => { $("release-synthetic-storage").disabled = pending || syntheticStorage?.lifecycle?.state !== "ready"; },
+      onDiagnostic: recordDiagnostic,
+      onError: (error) => {
+        $("storage-status").textContent = error instanceof Error ? error.message : "Storage release could not be verified.";
+        $("storage-status").dataset.kind = "error";
+      }
+    }));
     syntheticStorage = new DashboardSyntheticStorage({
+      onDiagnostic: recordDiagnostic,
       onStatus: ({ state: lifecycleState, message, kind }) => {
+        recordDiagnostic({ event: "status", state: lifecycleState });
         $("storage-status").textContent = message;
         $("storage-status").dataset.kind = kind || "info";
         $("recover-stale-storage").hidden = lifecycleState !== "stale-session";
-        if (lifecycleState === "ready") connectStorageButton.disabled = true;
-        else if (lifecycleState !== "connecting" && lifecycleState !== "recovering" && lifecycleState !== "reconnecting") connectStorageButton.disabled = false;
+        $("release-synthetic-storage").disabled = lifecycleState !== "ready";
+        if (["ready", "connecting", "recovering", "reconnecting", "recovering-session", "releasing"].includes(lifecycleState)) connectStorageButton.disabled = true;
+        else connectStorageButton.disabled = false;
       },
       onSnapshot: (rows) => {
         state.syntheticTransactions = rows;
@@ -292,19 +312,6 @@
       $("storage-status").textContent = error instanceof Error ? error.message : "Stale-session recovery failed.";
       $("storage-status").dataset.kind = "error";
       $("recover-stale-storage").disabled = false;
-    }
-  });
-  $("release-synthetic-storage").addEventListener("click", async () => {
-    $("release-synthetic-storage").disabled = true;
-    try {
-      await syntheticStorage?.release();
-      $("storage-status").textContent = "Synthetic storage session released. You can reconnect or switch devices now; CSV imports remain local."; 
-      connectStorageButton.disabled = false;
-      $("storage-status").dataset.kind = "success";
-    } catch (error) {
-      $("storage-status").textContent = error instanceof Error ? error.message : "Storage release could not be verified.";
-      $("storage-status").dataset.kind = "error";
-      $("release-synthetic-storage").disabled = false;
     }
   });
   $("load-sample").addEventListener("click", loadSample);

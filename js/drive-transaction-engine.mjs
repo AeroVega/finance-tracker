@@ -455,13 +455,42 @@ export class DriveTransactionEngine {
       if (!this.isOnline()) fail("offline", "Recovery requires an online Drive connection.");
       this.recoveryRequired = true;
       const manifest = await this.adapter.readJson(manifestFileId);
+      const hasIdentity = (value) => typeof value?.databaseId === "string" && value.databaseId.trim() !== "" &&
+        typeof value?.copyId === "string" && value.copyId.trim() !== "";
+      if (!hasIdentity(manifest)) {
+        fail("invalid-recovery-identity", "The selected manifest has no unambiguous database and copy identity.");
+      }
       const files = await this.adapter.listChildren();
       const journalFiles = files.filter((file) => file.appProperties?.[TAG + "Kind"] === "journal-event");
       const groups = new Map();
       for (const file of journalFiles) {
         const event = await this.adapter.readJson(file.id);
+        if (!event || typeof event.transactionId !== "string" || !event.transactionId) {
+          fail("journal-identity-mismatch", "A journal event has no transaction identity.");
+        }
         if (!groups.has(event.transactionId)) groups.set(event.transactionId, []);
         groups.get(event.transactionId).push(event);
+      }
+
+      // A synthetic folder can contain journals from several harness manifests.
+      // Establish identity from verified chains, never filenames or unverified tags.
+      // Preflight every group before mutating any: unidentified/corrupt evidence
+      // cannot safely be dismissed as belonging to another database.
+      const scopedGroups = [];
+      for (const [transactionId, events] of groups) {
+        events.sort((a, b) => a.sequence - b.sequence);
+        const state = await verifyJournal(events, { cryptoImpl: this.crypto });
+        if (state.transactionId !== transactionId) fail("journal-identity-mismatch", "A journal group contains inconsistent transaction IDs.");
+        const base = events[0].payload;
+        if (!hasIdentity(base)) {
+          fail("invalid-recovery-identity", "A transaction start has no unambiguous database and copy identity.", { transactionId });
+        }
+        if (base.copyId === manifest.copyId && base.databaseId !== manifest.databaseId) {
+          fail("journal-identity-mismatch", "The same copy identity is associated with different databases.", { transactionId });
+        }
+        if (base.databaseId === manifest.databaseId && base.copyId === manifest.copyId) {
+          scopedGroups.push({ transactionId, events, state, base });
+        }
       }
 
       const appendRecoveryEvent = async (transactionId, state, eventType, payload) => {
@@ -537,12 +566,9 @@ export class DriveTransactionEngine {
       };
 
       const outcomes = [];
-      for (const [transactionId, events] of groups) {
-        events.sort((a, b) => a.sequence - b.sequence);
-        let state = await verifyJournal(events, { cryptoImpl: this.crypto });
-        if (state.transactionId !== transactionId) fail("journal-identity-mismatch", "A journal group contains inconsistent transaction IDs.");
-        const startEvent = events[0];
-        const base = startEvent.payload || {};
+      for (const group of scopedGroups) {
+        const { transactionId, events, base } = group;
+        let { state } = group;
         const manifestAtBase = manifest.databaseId === base.databaseId &&
           manifest.copyId === base.copyId &&
           manifest.revision === base.baseRevision &&

@@ -5,6 +5,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { DriveTransactionEngine, GoogleDriveTransactionAdapter } from "../js/drive-transaction-engine.mjs";
 
+import { createJournalEvent } from "../js/transaction-protocol.mjs";
+
 const cryptoImpl = globalThis.crypto || webcrypto;
 const BASE = {
   databaseId: "synthetic-database",
@@ -464,3 +466,147 @@ test("ambiguous Drive create server errors retain their original diagnostics if 
     /create outcome: HTTP 500/.test(error.message));
   assert.equal(requests, 3, "one create plus two metadata checks");
 });
+
+async function addSyntheticStart(adapter, payload) {
+  const event = await createJournalEvent({
+    transactionId: cryptoImpl.randomUUID(), eventId: cryptoImpl.randomUUID(),
+    sequence: 0, eventType: "transaction-started", timestamp: "2026-11-01T19:00:00.000Z",
+    payload, previousEventHash: null, cryptoImpl
+  });
+  const id = await adapter.allocateFileId();
+  await adapter.appendJournal(event, id);
+  return { id, event };
+}
+
+const recoveryBase = (overrides = {}) => ({
+  databaseId: BASE.databaseId, copyId: BASE.copyId,
+  baseRevision: BASE.revision, baseCommitId: BASE.commitId, ...overrides
+});
+
+test("recovery leaves other verified database/copy journals untouched at every interruption boundary", async () => {
+  for (const foreignIdentity of [
+    { databaseId: "another-synthetic-db", copyId: "another-synthetic-copy" },
+    { databaseId: BASE.databaseId, copyId: "another-synthetic-copy" }
+  ]) {
+    for (let boundary = 1; boundary <= 11; boundary += 1) {
+      const { adapter, engine, transaction } = setup(boundary);
+      await assert.rejects(engine.transact(transaction), { code: "transaction-unresolved" });
+      adapter.files.set("selected-manifest", { json: { ...BASE, ...foreignIdentity } });
+      const before = structuredClone([...adapter.files]);
+      const mutations = adapter.mutations;
+      const result = await engine.recover({ manifestFileId: "selected-manifest", makeManifest: transaction.makeManifest });
+      assert.deepEqual(result.transactions, []);
+      assert.equal(engine.recoveryRequired, false);
+      assert.equal(adapter.mutations, mutations);
+      assert.deepEqual([...adapter.files], before);
+    }
+  }
+});
+
+test("recovery resolves the selected copy but preserves a foreign nonterminal journal", async () => {
+  const { adapter, engine, transaction } = setup();
+  const foreign = await addSyntheticStart(adapter, recoveryBase({ databaseId: "foreign-db", copyId: "foreign-copy" }));
+  const own = await addSyntheticStart(adapter, recoveryBase());
+  const before = structuredClone(adapter.files.get(foreign.id));
+  const result = await engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest });
+  assert.equal(result.transactions.length, 1);
+  assert.equal(result.transactions[0].transactionId, own.event.transactionId);
+  assert.equal(result.transactions[0].outcome, "aborted");
+  assert.deepEqual(adapter.files.get(foreign.id), before);
+  assert.equal([...adapter.files.values()].filter(file => file.json?.transactionId === foreign.event.transactionId).length, 1);
+});
+
+test("unscopable or conflicting journal identities block before any recovery mutation", async () => {
+  for (const identity of [
+    { databaseId: undefined, copyId: "foreign-copy" },
+    { databaseId: "foreign-db", copyId: "" },
+    { databaseId: "foreign-db", copyId: BASE.copyId }
+  ]) {
+    const { adapter, engine, transaction } = setup();
+    await addSyntheticStart(adapter, recoveryBase()); // Would otherwise be aborted first.
+    const payload = recoveryBase(identity);
+    for (const key of Object.keys(payload)) if (payload[key] === undefined) delete payload[key];
+    await addSyntheticStart(adapter, payload);
+    const before = structuredClone([...adapter.files]);
+    const mutations = adapter.mutations;
+    await assert.rejects(engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest }),
+      error => ["invalid-recovery-identity", "journal-identity-mismatch"].includes(error.code));
+    assert.equal(engine.recoveryRequired, true);
+    assert.equal(adapter.mutations, mutations);
+    assert.deepEqual([...adapter.files], before);
+  }
+});
+
+test("an apparently foreign journal must pass hash verification before it can be excluded", async () => {
+  const { adapter, engine, transaction } = setup();
+  await addSyntheticStart(adapter, recoveryBase());
+  const foreign = await addSyntheticStart(adapter, recoveryBase({ databaseId: "foreign-db", copyId: "foreign-copy" }));
+  adapter.files.get(foreign.id).json.payload.copyId = "tampered-copy";
+  const mutations = adapter.mutations;
+  await assert.rejects(engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest }),
+    { code: "event-hash-mismatch" });
+  assert.equal(adapter.mutations, mutations);
+  assert.equal(engine.recoveryRequired, true);
+});
+
+test("recovery refuses a manifest without a database/copy identity", async () => {
+  const { adapter, engine, transaction } = setup();
+  adapter.files.get("manifest").json.copyId = null;
+  await assert.rejects(engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest }),
+    { code: "invalid-recovery-identity" });
+  assert.equal(adapter.mutations, 0);
+  assert.equal(engine.recoveryRequired, true);
+});
+
+for (const failUpload of [false, true]) {
+  test(`real engine and lifecycle drain a long ${failUpload ? "failed" : "successful"} synthetic upload safely`, async () => {
+    const { ApplicationStorageLifecycle } = await import("../js/application-storage-lifecycle.mjs");
+    const { SessionCoordinator } = await import("../js/session-coordination.mjs");
+    const { adapter, transaction } = setup();
+    let now = 1_000_000, tick, marker = null, entered, resume;
+    const begun = new Promise((resolve) => { entered = resolve; });
+    const pause = new Promise((resolve) => { resume = resolve; });
+    const create = adapter.createImmutable.bind(adapter);
+    adapter.createImmutable = async (input) => {
+      if (input.kind === "snapshot-object") {
+        entered();
+        await pause;
+        if (failUpload) throw Object.assign(new Error("invented upload failure"), { code: "drive-request-failed" });
+      }
+      return create(input);
+    };
+    const statuses = [];
+    const lifecycle = new ApplicationStorageLifecycle({
+      syntheticOnly: true, folderName: "synthetic", folderId: "synthetic-folder", manifestFileId: "manifest",
+      accessToken: () => "invented-token", makeManifest: transaction.makeManifest, cryptoImpl, lifecycleTarget: null,
+      onStatus: (status) => statuses.push(status.state),
+      setIntervalImpl: (callback) => { tick = callback; return 1; }, clearIntervalImpl: () => {},
+      factories: {
+        createSessionAdapter: () => ({ async read() { return structuredClone(marker); }, async write(record) { marker = structuredClone(record); } }),
+        createCoordinator: ({ adapter }) => new SessionCoordinator({ adapter, now: () => now }),
+        createTransactionAdapter: () => adapter
+      }
+    });
+    await lifecycle.start();
+    const saving = lifecycle.transact(transaction);
+    await begun;
+    const releasing = lifecycle.release();
+    const finished = Promise.allSettled([saving, releasing]);
+    for (let step = 0; step < 4; step++) { now += 40_000; await tick(); }
+    resume();
+    const [saved, released] = await finished;
+    if (failUpload) {
+      assert.equal(saved.reason.code, "transaction-unresolved");
+      assert.equal(released.reason.code, "recovery-required");
+      assert.equal(marker.state, "active");
+      assert.equal(lifecycle.state, "recovery-required");
+      assert.equal(statuses.includes("released"), false);
+      assert.equal(adapter.files.get("manifest").json.revision, BASE.revision);
+    } else {
+      assert.equal(saved.value.revision, BASE.revision + 1);
+      assert.equal(released.value.released, true);
+      assert.equal(marker.state, "released");
+      assert.equal(lifecycle.engine.recoveryRequired, false);
+    }
+  });
+}
