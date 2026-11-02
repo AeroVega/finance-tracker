@@ -73,10 +73,11 @@ function fromBase64(value) {
 
 function validateManifest(manifest, { portable = false } = {}) {
   const required = ["format", "manifestVersion", "schemaVersion", "databaseId", "copyId", "role",
-    "lifecycleStatus", "revision", "commitId", "parentCommitId", "storageBinding"];
+    "lifecycleStatus", "revision", "commitId", "storageBinding"];
   if (!manifest || required.some((key) => manifest[key] === undefined || manifest[key] === null)) {
     fail("invalid-manifest", "The backup manifest is missing required identity or revision fields.");
   }
+  if (!Object.hasOwn(manifest, "parentCommitId")) fail("invalid-manifest", "The backup manifest must explicitly declare its parent commit, including null for a genesis commit.");
   if (manifest.format !== "finance-tracker-manifest" || typeof manifest.manifestVersion !== "string" ||
       !manifest.manifestVersion.trim() || manifest.schemaVersion === null || manifest.schemaVersion === undefined) {
     fail("invalid-manifest", "The backup manifest format and version fields are invalid.");
