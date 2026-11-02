@@ -1,19 +1,23 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-11-02
-**Current phase:** PR #22's pure transaction protocol foundation and PR #23's durable Google Drive transaction engine are merged. The owner-confirmed live Drive transaction/reopen/recovery smoke test and temporary-file cleanup passed. PR #24 application lifecycle integration is underway on feat/application-storage-integration. Production financial-data persistence remains **not approved**.
+**Current phase:** PR #22's transaction protocol foundation and PR #23's durable Google Drive transaction engine are merged. PR #24's synthetic-only application integration has passed exact-head CI and owner-confirmed live dashboard acceptance. Production financial-data persistence remains **not approved** and is not enabled by PR #24.
 
-## Latest PR #24 review handoff
+## Latest PR #24 status — ready for merge review
 
-**Verified:** corrective commit `2d572dc56ecb978210abbc350ac715fdb5a77c00` fixes reproduced handoff/lease/status/recovery-scope defects. All 192 tests passed on its fetched published tree and exact-SHA contract CI passed. Read [PR24_REVIEW_HANDOFF.md](PR24_REVIEW_HANDOFF.md) before continuing; it explains the changed invariants, regression evidence, unresolved symptoms and deployment discrepancy.
+**Branch:** `feat/application-storage-integration`  
+**Reviewed source head before this documentation cleanup:** `102f6cee6536ada070f0aec88519462c20004db9`  
+**Live dashboard acceptance source:** `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`
 
-**Verified follow-up:** the dashboard Clear rollback could discard CSV imports that arrived during a failed remote clear. The follow-up preserves newer imports, gates overlapping synthetic actions, and replaces a source-pattern assertion with five actual-handler regression tests; the local suite now passes 196 tests. See the review handoff for details.
+**Verified CI:** both PR workflows passed on the reviewed source head. The complete Node contract suite reported **199 passed, 0 failed**; dashboard/browser module syntax checks passed. The workflow action pins are being updated from the Node-20-runtime v4 actions to current Node-24-runtime v7 releases to remove the deprecation warning; the resulting head must receive fresh CI before merge.
 
-**Follow-up implemented 2026-11-02:** PR #24 now exposes an explicit Save action for the current synthetic-only snapshot, with transaction read-back verification. Save/Clear controls follow lifecycle readiness; Clear refuses an uncertain existing session instead of silently clearing only the local copy. New behavioral tests cover synthetic-only saving, CSV isolation, lifecycle-driven enablement, and unsafe Clear refusal. Exact-head CI and live browser/Drive acceptance remain to be verified.
+**Owner-confirmed live acceptance:** four synthetic rows were saved and verified; release/reconnect restored all four; Clear plus an empty-snapshot Save succeeded; a second release/reconnect restored zero rows. CSV imports remained local. The diagnostic trace showed successful recovery to `ready` and two completed trusted dashboard handoffs.
 
-**Open:** original Drive metadata 404 and the initiating event behind the unsolicited release remain unproven. The green status overwrite was a demonstrated defect, not proof of a deliberate user click. Earlier successful prototype smoke tests below are historical evidence, not acceptance of the failing dashboard integration.
+**Performance baseline:** initial recovery approximately 50 seconds; subsequent recoveries approximately 53–55 seconds; orderly release approximately 4 seconds. Investigate latency separately using request-level timings. Do not weaken transaction verification, session ownership or recovery guarantees.
 
-**Verified deployment blocker:** built-in branch Pages publication served corrected source assets but omitted generated Google configuration and source stamping. Resolve the publishing-mode/configuration prerequisite with appropriate deployment authority before requesting further live testing. Do not equate its successful workflow with a configured app, or confuse its missing configuration-file 404 with the original Drive-file 404. No merge, manual deployment, settings change or live Drive operation was performed for this review.
+**Residual investigations:** the original Drive metadata HTTP 404 and the initiating event behind an earlier unsolicited-release symptom do not have definitive root causes. Neither was reproduced in the final owner-confirmed acceptance cycle. Keep both documented as residual risks; do not claim they are conclusively explained. The historical unconfigured dynamic Pages artifact was not the build used for final live acceptance, which was stamped with the tested source SHA. Future branch deployments still require the configured artifact workflow and explicit deployment authorization.
+
+**PR #24 exit criteria met:** actual dashboard synthetic fixture save/read-back/reconnect/clear/reconnect passed; CSV import isolation is covered by tests and owner observation; exact-head CI passed. PR #24 remains synthetic-only and does not authorize production ledger reads/writes.
 
 ## Current workstream and PR sequence
 
@@ -47,20 +51,18 @@ Branch: `feat/durable-drive-transaction-engine`
 
 **Exit:** Node fault-injection CI passes; the owner-confirmed live synthetic Drive transaction/reopen/recovery smoke test and cleanup passed on 2026-11-01; repeated recovery and ambiguous-outcome preservation are covered by synthetic tests. Real Drive interruption/reload rehearsals at every boundary remain open. No real financial data.
 
-### PR #24 — Application integration and automatic lifecycle (in progress)
+### PR #24 — Application integration and automatic lifecycle (ready for merge review)
 
-Branch: feat/application-storage-integration
+Branch: `feat/application-storage-integration`
 
-- Added the synthetic-only application storage lifecycle controller in `js/application-storage-lifecycle.mjs`. It composes session acquisition, session-gated manifest initialization, transaction recovery, heartbeat, reconnect revalidation, serialized transactions, verified snapshot reads, and orderly release.
-- Wired the actual dashboard through `js/dashboard-synthetic-storage.mjs`: explicit Google authorization and dedicated synthetic-folder selection, lifecycle startup/recovery, manifest initialization, verified snapshot load, sample-fixture commit/read-back, and clear via an empty synthetic snapshot.
-- CSV imports remain a separate local-only collection and are never uploaded to Drive. The storage API rejects rows that are not explicitly marked `syntheticOnly: true`. No production ledger read/write path is enabled.
-- The dashboard preloads Google libraries and deployment configuration before enabling the connect control, so the OAuth request can be initiated directly from the user's click.
-- Added deterministic lifecycle and dashboard-boundary tests; the Node contract workflow runs the complete `tests/*.test.mjs` suite.
-- Added the synthetic lifecycle browser harness under Prototype Tools. Owner-confirmed live tests passed for startup recovery, heartbeat, serialized writes and SHA-256 read-back, offline refusal/reconnect, orderly release, active-session refusal/sequential handoff, explicit stale-session recovery after simulated crash, and synthetic-file cleanup.
+- Integrates the session coordinator, Drive session adapter and durable transaction engine behind a synthetic-only application storage lifecycle controller.
+- Wires the actual dashboard for dedicated synthetic-folder connection, startup recovery, heartbeat, reconnect revalidation, verified snapshot reads, synthetic sample writes, explicit Save, Clear via a verified empty snapshot, and orderly release.
+- Preserves local-only CSV imports. Only invented rows explicitly tagged `syntheticOnly: true` can be written to Drive. No production ledger read/write path is enabled.
+- Adds deterministic lifecycle, transaction, diagnostics and dashboard-handler regression tests; PR CI runs the complete Node contract suite.
+- Owner-confirmed live dashboard cycle passed: save four rows, release/reconnect and restore four, clear and save empty, release/reconnect and restore zero.
+- Exact-head CI passed with 199/199 Node tests and dashboard/browser syntax checks. Final CI must be rerun after the last workflow/documentation commits.
 
-**Remaining PR #24 work:** first resolve the deployment/configuration prerequisite and remaining review findings described in the latest handoff. Then run the corrected dashboard UI end-to-end on a verified configured feature build using only the dedicated synthetic folder. Verify connect/startup read, sample fixture write/read-back, reload restoration, clear, and orderly release. Resolve any defects before merge.
-
-**Exit:** the actual dashboard's synthetic fixture workflow passes live owner testing and automated tests; the permanent CSV workflow remains local and functional. No real financial data.
+**Exit:** met for PR #24's synthetic-only application integration. Residual historical 404/release-event root-cause investigations and performance profiling remain documented follow-ups; they do not authorize production persistence or expand PR #24's scope.
 
 ### PR #25 — End-to-end acceptance and production-readiness gates
 
