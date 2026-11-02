@@ -338,3 +338,77 @@ test("Drive metadata visibility does not retry authorization failures", async ()
     error.code === "authorization-required");
   assert.equal(requests, 1);
 });
+
+
+async function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await cryptoImpl.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (part) => part.toString(16).padStart(2, "0")).join("");
+}
+
+test("Drive immutable create surfaces definitive client errors without polling", async () => {
+  let requests = 0;
+  const adapter = new GoogleDriveTransactionAdapter({
+    accessToken: () => "synthetic-token",
+    folderId: "synthetic-folder",
+    visibilityAttempts: 3,
+    visibilityDelayMs: 1,
+    visibilityMaxDelayMs: 2,
+    fetchImpl: async () => {
+      requests += 1;
+      return new Response(JSON.stringify({ error: { message: "Invalid request metadata" } }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+  });
+
+  const content = '{"synthetic":true}';
+  await assert.rejects(adapter.createImmutable({
+    fileId: "generated-file-id",
+    name: "synthetic-object",
+    kind: "snapshot-object",
+    transactionId: cryptoImpl.randomUUID(),
+    content,
+    expectedSha256: await sha256Hex(content)
+  }), (error) =>
+    error.code === "drive-request-failed" &&
+    error.details.status === 400 &&
+    /HTTP 400/.test(error.message));
+  assert.equal(requests, 1, "a definitive create rejection must not trigger metadata polling");
+});
+
+test("ambiguous Drive create server errors retain their original diagnostics if read-back times out", async () => {
+  let requests = 0;
+  const adapter = new GoogleDriveTransactionAdapter({
+    accessToken: () => "synthetic-token",
+    folderId: "synthetic-folder",
+    visibilityAttempts: 2,
+    visibilityDelayMs: 1,
+    visibilityMaxDelayMs: 1,
+    fetchImpl: async () => {
+      requests += 1;
+      if (requests === 1) {
+        return new Response(JSON.stringify({ error: { message: "Backend error" } }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      return new Response("not visible", { status: 404 });
+    }
+  });
+
+  const content = '{"synthetic":true}';
+  await assert.rejects(adapter.createImmutable({
+    fileId: "generated-file-id",
+    name: "synthetic-object",
+    kind: "snapshot-object",
+    transactionId: cryptoImpl.randomUUID(),
+    content,
+    expectedSha256: await sha256Hex(content)
+  }), (error) =>
+    error.code === "visibility-timeout" &&
+    error.details.createRequest?.status === 500 &&
+    /create returned HTTP 500/.test(error.message));
+  assert.equal(requests, 3, "one create plus two metadata checks");
+});
