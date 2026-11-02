@@ -201,7 +201,7 @@ export async function planPortableRestore(archive, { newCopyId, newStorageBindin
  * Adapters must be scoped to their respective folders. The manifest is written last;
  * failures are quarantined through the supplied callback and never clean up evidence.
  */
-export async function createVerifiedSnapshotBackup({
+async function performVerifiedSnapshotBackup({
   sourceAdapter, targetAdapter, sourceManifestFileId, newCopyId, newStorageBinding,
   transactionId = globalThis.crypto?.randomUUID?.(), now = new Date().toISOString(),
   validateStructure = async () => true, quarantine = async () => {}, cryptoImpl = globalThis.crypto
@@ -317,4 +317,17 @@ export async function createVerifiedSnapshotBackup({
       `Backup did not complete and must not be used. Original cause: ${error.code || error.name || "unknown"}. Quarantine recorded: ${quarantined}.`
     );
   }
+}
+
+
+/**
+ * Run the complete snapshot operation inside the caller's serialized, verified
+ * source-session gate. The gate must remain held until the destination manifest
+ * has been read back or the partial destination has been quarantined.
+ */
+export async function createVerifiedSnapshotBackup(options = {}) {
+  if (typeof options.withSourceLock !== "function") {
+    fail("source-lock-required", "Backup must run inside the active session's serialized source-operation gate.");
+  }
+  return options.withSourceLock(() => performVerifiedSnapshotBackup(options));
 }
