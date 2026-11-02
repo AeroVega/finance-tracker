@@ -160,7 +160,7 @@ test("creates a verified backup copy, copies immutable objects, and publishes it
     sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
     newCopyId: "synthetic-backup-copy", newStorageBinding: "synthetic-backup-folder",
     transactionId: "synthetic-backup-transaction", now: "2026-11-02T20:00:00.000Z",
-    cryptoImpl, withSourceLock: async (operation) => operation(),
+    cryptoImpl, withSourceLock: async (operation) => operation(), quarantine: async () => {},
     validateStructure: async ({ manifest: backupManifest, commitRecord: backupCommit, readObject }) => {
       assert.equal(backupManifest.role, "backup");
       assert.equal(backupManifest.copyId, "synthetic-backup-copy");
@@ -237,7 +237,8 @@ test("backup resolves lost responses at each destination create by exact-ID hash
     const result = await createVerifiedSnapshotBackup({
       sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
       newCopyId: `backup-copy-${boundary}`, newStorageBinding: `backup-folder-${boundary}`,
-      transactionId: `backup-transaction-${boundary}`, cryptoImpl, withSourceLock: async (operation) => operation()
+      transactionId: `backup-transaction-${boundary}`, cryptoImpl, withSourceLock: async (operation) => operation(),
+      quarantine: async () => {}
     });
     assert.equal(result.verified, true);
     assert.equal((await target.readJson(result.manifestFileId)).role, "backup");
