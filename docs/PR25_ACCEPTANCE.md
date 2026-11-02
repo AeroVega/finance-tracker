@@ -19,7 +19,8 @@ This record separates code implemented in PR #25 from tests that can run in CI, 
 - Assigns a new physical `copyId`, backup role, and explicit destination storage binding.
 - Re-reads the source manifest after copying; if it changed, the backup is not accepted.
 - Writes the backup manifest last and verifies its exact read-back.
-- Calls a quarantine callback on any failure. Partial copies must not be classified as backups, restored, or promoted. No cleanup is attempted because partial files are evidence.
+- Requires the caller to hold the active session's serialized source-operation gate for the entire copy, and requires an explicit quarantine callback. Partial copies must not be classified as backups, restored, or promoted. No cleanup is attempted because partial files are evidence.
+- Resolves ambiguous destination create responses only by exact pre-generated-ID read-back and SHA-256 verification.
 
 **Boundary:** the helper is adapter-driven and covered by in-memory synthetic tests. It is not yet wired into the dashboard lifecycle or exercised against live Google Drive. Destination folder creation and durable quarantine marking must be provided by the caller/adapter.
 
