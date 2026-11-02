@@ -26,15 +26,15 @@ This record separates code implemented in PR #25 from tests that can run in CI, 
 
 
 
-### Architecture reconciliation required before accepting Drive backup/restore
+### Architecture reconciliation — owner decision recorded
 
-**Open — critical mismatch found during PR #25 review:** accepted [Database Identity and Lifecycle ADR §81](DATABASE_IDENTITY_AND_LIFECYCLE.md) requires commit records to identify logical relative paths and SHA-256 hashes, not Google Drive file IDs. The current PR #23 transaction engine stores `fileId` alongside `sha256` in each snapshot reference, and the PR #25 Drive snapshot-copy helper currently follows that implemented shape so it can be exercised against the existing engine.
+**Decision (2026-11-02): preserve accepted ADR §81 and redesign physical object resolution.** Do not revise the ADR to accommodate the current PR #23 implementation.
 
-These contracts are not equivalent. Copy-specific Drive locators in commit history reduce portability and conflict with the accepted ADR. PR #25 must not claim the Drive backup implementation is architecture-complete until this is resolved. The owner must review either:
-- update the transaction engine/recovery/object-resolution design so immutable commit records contain only logical paths and hashes, with per-copy Drive locators resolved separately; or
-- explicitly revise the ADR and record the portability/integrity trade-offs of retaining copy-specific IDs.
+The current PR #23 engine stores `fileId` alongside `sha256` in each commit snapshot reference. That is a mismatch, not the desired contract. The target commit snapshot is a complete logical map of `logicalPath -> sha256`; Drive IDs remain copy-specific physical locators and must be resolved outside immutable commit records.
 
-Do not silently change the accepted data model inside this backup helper. The current helper is a synthetic implementation against the current engine shape, not production acceptance evidence.
+Implementation must update the transaction engine, recovery verifier, backup/restore flow, and synthetic fault-injection tests together. A backup must retain byte-identical logical commit history while using its own physical object locators. Recovery must resolve each logical path/hash against the active copy's locator data and fail closed for missing, duplicate, mismatched, or ambiguous mappings.
+
+**Still open:** choose and specify the durable per-copy locator representation and its publication/recovery contract before changing the engine. Until that design is accepted and implemented, the PR #25 backup helper's current `fileId + sha256` compatibility shape is transitional and must not be described as ADR-compliant or production-ready.
 
 ### Portable export and restore planning
 
