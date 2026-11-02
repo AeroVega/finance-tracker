@@ -311,6 +311,12 @@ export class ApplicationStorageLifecycle {
   }
 
   async release({ reason = "handoff" } = {}) {
+    // An unresolved transaction must retain its ownership claim and heartbeat.
+    // Releasing here could let another device take over before recovery has
+    // determined whether the pending transaction committed.
+    if (this.state === "recovery-required" || this.engine?.recoveryRequired) {
+      fail("recovery-required", "Storage ownership cannot be released while a transaction is unresolved. Recover and verify the transaction before handing off this device.");
+    }
     this.acceptingWrites = false;
     this.heartbeatStop?.();
     this.heartbeatStop = null;
