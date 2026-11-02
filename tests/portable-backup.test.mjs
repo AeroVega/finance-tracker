@@ -43,6 +43,11 @@ test("exports a portable snapshot and verifies its envelope, object hash, and st
   assert.equal(result.valid, true);
   assert.equal(result.objectCount, 1);
   assert.equal(new TextDecoder().decode(result.objects["ledger/synthetic.json"]), new TextDecoder().decode(sourceBytes));
+  const exported = await archive();
+  assert.equal(exported.manifest.storageBinding, "portable-archive");
+  assert.equal(exported.manifest.commitRecordFileId, null);
+  assert.deepEqual(exported.commitRecord.snapshot["ledger/synthetic.json"], { sha256: sourceHash });
+  assert.equal(Object.hasOwn(exported.commitRecord.snapshot["ledger/synthetic.json"], "fileId"), false);
 });
 
 test("plans restore with a new copy identity while preserving logical database and commit lineage", async () => {
@@ -58,6 +63,8 @@ test("plans restore with a new copy identity while preserving logical database a
   assert.equal(plan.manifest.commitId, manifest.commitId);
   assert.equal(plan.manifest.parentCommitId, manifest.parentCommitId);
   assert.equal(plan.manifest.storageBinding, "synthetic-restored-folder");
+  assert.equal(plan.commitRecord.snapshot["ledger/synthetic.json"].fileId, undefined);
+  assert.deepEqual(plan.objects["ledger/synthetic.json"], sourceBytes);
 });
 
 test("rejects archive tampering before exposing restored objects", async () => {
