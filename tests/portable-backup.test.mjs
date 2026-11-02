@@ -249,7 +249,7 @@ test("backup resolves lost responses at each destination create by exact-ID hash
 test("refuses to start a backup without the serialized source-operation gate", async () => {
   await assert.rejects(createVerifiedSnapshotBackup({
     sourceAdapter: {}, targetAdapter: {}, sourceManifestFileId: "manifest",
-    newCopyId: "backup-copy", newStorageBinding: { provider: "google-drive", folderId: "backup-folder" }, cryptoImpl
+    newCopyId: "backup-copy", newStorageBinding: { provider: "google-drive", folderId: "backup-folder-after-source-change" }, cryptoImpl
   }), (error) => error.code === "source-lock-required");
 });
 
@@ -260,7 +260,7 @@ test("source revision change during backup quarantines the partial copy", async 
     snapshot: { "ledger/synthetic.json": { fileId: "primary-object", sha256: sourceHash } } };
   const primaryManifest = {
     ...manifest, copyId: "synthetic-primary-copy", role: "primary",
-    storageBinding: "synthetic-primary-folder", commitRecordFileId: "primary-commit",
+    storageBinding: { provider: "google-drive", folderId: "synthetic-primary-folder" }, commitRecordFileId: "primary-commit",
     commitRecordHash: await hash(encoder.encode(canonicalizeJcs(sourceCommit)))
   };
   const primary = new MemoryAdapter("primary");
