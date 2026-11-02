@@ -71,6 +71,7 @@ A temporary [Prototype Tools hub](../prototype/) is available from the app foote
 
 - **Google Drive session-adapter token providers must be synchronous.** The folder-enumeration helper builds its Authorization header synchronously. Passing an async token-provider wrapper produces a Promise where the bearer-token string is expected, which Drive rejects as an authorization failure. The dashboard must pass `() => this.token()`, not `async () => this.token()`. A regression test in `tests/dashboard-synthetic-storage.test.mjs` protects this boundary.
 - **Do not treat `authorization-required` as an empty folder or recover by writing.** Keep the existing session and data untouched, keep writes disabled, obtain a fresh Google token through the explicit user-initiated reconnect flow, and then re-inspect the existing marker before resuming.
+- **A journaled file ID is an intent, not proof that the Drive object was created.** If recovery finds the manifest still at its verified base and no publication intent exists, a planned object or commit record that remains 404 after the bounded visibility window can be treated as absent: append a terminal abort, retain all journal evidence and unavailable IDs, and leave any late-arriving object untouched as an orphan. Once the commit is recorded as staged or publication is planned, missing data remains unresolved and writes stay disabled. Regression coverage exercises interruption immediately after object-stage-planned and commit-stage-planned.
 
 ## Cross-cutting product requirement: session management is automatic
 
