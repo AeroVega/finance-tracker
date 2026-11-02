@@ -31,10 +31,15 @@ test("does not make an original eligible one millisecond before expiry", () => {
 
 test("a backup preserves the original retention clock and locator", () => {
   const created = record();
-  const copied = copyOriginalRetentionForBackup(created);
+  const copied = copyOriginalRetentionForBackup(created, {
+    backupFileId: "synthetic-backup-source-file",
+    now: "2026-02-01T00:00:00.000Z"
+  });
   assert.equal(copied.retainedAt, created.retainedAt);
   assert.equal(copied.expiresAt, created.expiresAt);
-  assert.equal(copied.sourceFileId, created.sourceFileId);
+  assert.equal(copied.sourceFileId, "synthetic-backup-source-file");
+  assert.notEqual(copied.sourceFileId, created.sourceFileId);
+  assert.equal(copyOriginalRetentionForBackup(created, { backupFileId: "late-backup-file", now: expiry }), null);
 });
 
 test("a failed eligible deletion remains visible and retryable", () => {
