@@ -18,6 +18,28 @@ async function sha256(bytes, cryptoImpl) {
   return Array.from(new Uint8Array(digest), (part) => part.toString(16).padStart(2, "0")).join("");
 }
 
+async function createAndVerifyImmutable(adapter, input, cryptoImpl) {
+  let createError = null;
+  try {
+    await adapter.createImmutable(input);
+  } catch (error) {
+    createError = error;
+  }
+  // Resolve a lost create response only by reading the exact pre-generated ID
+  // and proving that its bytes match the intended content hash.
+  let readBack;
+  try {
+    readBack = toBytes(await adapter.readBytes(input.fileId));
+  } catch {
+    if (createError) throw createError;
+    fail("backup-object-not-visible", "A newly created backup object could not be read back.");
+  }
+  if (await sha256(readBack, cryptoImpl) !== input.expectedSha256) {
+    fail("backup-object-readback-failed", "A destination object does not match its planned SHA-256.");
+  }
+  return { fileId: input.fileId, sha256: input.expectedSha256, recoveredLostResponse: Boolean(createError) };
+}
+
 function toBytes(value) {
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
@@ -220,14 +242,10 @@ export async function createVerifiedSnapshotBackup({
         fail("source-object-hash-mismatch", `The primary snapshot object failed verification for ${logicalPath}.`);
       }
       const fileId = await targetAdapter.allocateFileId();
-      await targetAdapter.createImmutable({
+      await createAndVerifyImmutable(targetAdapter, {
         fileId, name: `ft-object-${reference.sha256}.bin`, kind: "snapshot-object",
         transactionId, content: bytes, expectedSha256: reference.sha256
-      });
-      const readBack = toBytes(await targetAdapter.readBytes(fileId));
-      if (await sha256(readBack, cryptoImpl) !== reference.sha256) {
-        fail("backup-object-readback-failed", `The backup object failed read-back verification for ${logicalPath}.`);
-      }
+      }, cryptoImpl);
       copiedSnapshot[logicalPath] = { fileId, sha256: reference.sha256 };
     }
 
@@ -244,10 +262,10 @@ export async function createVerifiedSnapshotBackup({
     const backupCommitText = canonicalizeJcs(backupCommit);
     const backupCommitHash = await sha256(new TextEncoder().encode(backupCommitText), cryptoImpl);
     const backupCommitFileId = await targetAdapter.allocateFileId();
-    await targetAdapter.createImmutable({
+    await createAndVerifyImmutable(targetAdapter, {
       fileId: backupCommitFileId, name: `ft-commit-${sourceManifest.commitId}.json`,
       kind: "commit-record", transactionId, content: backupCommitText, expectedSha256: backupCommitHash
-    });
+    }, cryptoImpl);
     const backupCommitReadBack = await targetAdapter.readJson(backupCommitFileId);
     if (canonicalizeJcs(backupCommitReadBack) !== backupCommitText) {
       fail("backup-commit-readback-failed", "The backup commit record did not read back exactly.");
@@ -275,10 +293,10 @@ export async function createVerifiedSnapshotBackup({
     const manifestFileId = await targetAdapter.allocateFileId();
     const manifestText = canonicalizeJcs(backupManifest);
     const manifestHash = await sha256(new TextEncoder().encode(manifestText), cryptoImpl);
-    await targetAdapter.createImmutable({
+    await createAndVerifyImmutable(targetAdapter, {
       fileId: manifestFileId, name: "finance-tracker-manifest.json",
       kind: "database-manifest", transactionId, content: manifestText, expectedSha256: manifestHash
-    });
+    }, cryptoImpl);
     manifestWritten = true;
     if (canonicalizeJcs(await targetAdapter.readJson(manifestFileId)) !== manifestText) {
       fail("backup-manifest-readback-failed", "The backup manifest did not read back exactly.");
