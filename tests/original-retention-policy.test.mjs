@@ -41,6 +41,7 @@ test("a failed eligible deletion remains visible and retryable", () => {
   const failed = recordOriginalDeletionFailure(record(), { attemptedAt: expiry, failureCode: "provider-unavailable" });
   assert.equal(failed.state, "deletion-failed");
   assert.equal(failed.sourceFileId, "synthetic-source-file");
+  assert.equal(failed.lastDeletionAttemptAt, expiry);
   assert.equal(assessOriginalRetention(failed, expiry).deletionEligible, true);
 });
 
