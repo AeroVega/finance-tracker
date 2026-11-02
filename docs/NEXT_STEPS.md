@@ -28,6 +28,7 @@ Branch: `feat/durable-drive-transaction-engine`
 - Use pre-generated Drive file IDs and exact read-back verification to make retries idempotent after lost responses.
 - Enforce expected base revision/commit checks, serialized mutations, and verified session ownership before every mutation and immediately before manifest publication.
 - Implement deterministic crash recovery from the authoritative manifest, journal, commit records, and referenced objects.
+- Retry transient HTTP 404 responses when a newly created Drive file's metadata is not yet visible, using a bounded ~22.5-second default window; preserve immediate failure for authorization and integrity errors and include timeout diagnostics.
 - Add deterministic lost-response injection after all 11 durable mutation boundaries, including manifest publication and terminal journal append.
 - Provide a browser-driven synthetic Drive transaction smoke test in the existing feasibility page and a concise owner test guide.
 - Use synthetic data and a dedicated synthetic Drive folder only; never inspect or modify the canonical manifest or ledger.
