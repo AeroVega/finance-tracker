@@ -15,7 +15,7 @@ const manifest = {
   format: "finance-tracker-manifest", manifestVersion: "1.0.0", schemaVersion: 1,
   databaseId: "synthetic-database", copyId: "synthetic-backup-copy", role: "backup",
   lifecycleStatus: "active", revision: 7, commitId: "synthetic-commit-7",
-  parentCommitId: "synthetic-commit-6", storageBinding: "synthetic-backup-folder"
+  parentCommitId: "synthetic-commit-6", storageBinding: { provider: "google-drive", folderId: "synthetic-backup-folder" }
 };
 const commitRecord = {
   format: "finance-tracker-commit", version: 1, databaseId: manifest.databaseId,
@@ -44,7 +44,7 @@ test("exports a portable snapshot and verifies its envelope, object hash, and st
   assert.equal(result.objectCount, 1);
   assert.equal(new TextDecoder().decode(result.objects["ledger/synthetic.json"]), new TextDecoder().decode(sourceBytes));
   const exported = await archive();
-  assert.equal(exported.manifest.storageBinding, "portable-archive");
+  assert.deepEqual(exported.manifest.storageBinding, { provider: "portable-archive", folderId: null });
   assert.equal(exported.manifest.commitRecordFileId, null);
   assert.deepEqual(exported.commitRecord.snapshot["ledger/synthetic.json"], { sha256: sourceHash });
   assert.equal(Object.hasOwn(exported.commitRecord.snapshot["ledger/synthetic.json"], "fileId"), false);
@@ -53,7 +53,7 @@ test("exports a portable snapshot and verifies its envelope, object hash, and st
 test("plans restore with a new copy identity while preserving logical database and commit lineage", async () => {
   const plan = await planPortableRestore(await archive(), {
     newCopyId: "synthetic-restored-copy",
-    newStorageBinding: "synthetic-restored-folder",
+    newStorageBinding: { provider: "google-drive", folderId: "synthetic-restored-folder" },
     now: "2026-11-02T21:00:00.000Z",
     cryptoImpl
   });
@@ -62,7 +62,7 @@ test("plans restore with a new copy identity while preserving logical database a
   assert.equal(plan.manifest.role, "primary");
   assert.equal(plan.manifest.commitId, manifest.commitId);
   assert.equal(plan.manifest.parentCommitId, manifest.parentCommitId);
-  assert.equal(plan.manifest.storageBinding, "synthetic-restored-folder");
+  assert.deepEqual(plan.manifest.storageBinding, { provider: "google-drive", folderId: "synthetic-restored-folder" });
   assert.equal(plan.commitRecord.snapshot["ledger/synthetic.json"].fileId, undefined);
   assert.deepEqual(plan.objects["ledger/synthetic.json"], sourceBytes);
 });
@@ -112,7 +112,7 @@ test("restore requires a new copy ID and explicit destination binding", async ()
     newCopyId: manifest.copyId, newStorageBinding: "destination", cryptoImpl
   }), (error) => error.code === "invalid-restore-copy-id");
   await assert.rejects(planPortableRestore(await archive(), {
-    newCopyId: "new-copy", newStorageBinding: "", cryptoImpl
+    newCopyId: "new-copy", newStorageBinding: { provider: "google-drive", folderId: "" }, cryptoImpl
   }), (error) => error.code === "invalid-storage-binding");
 });
 
@@ -140,14 +140,14 @@ class MemoryAdapter {
 test("creates a verified backup copy, copies immutable objects, and publishes its manifest last", async () => {
   const primaryManifest = {
     ...manifest, copyId: "synthetic-primary-copy", role: "primary",
-    storageBinding: "synthetic-primary-folder",
+    storageBinding: { provider: "google-drive", folderId: "synthetic-primary-folder" },
     commitRecordFileId: "primary-commit",
     commitRecordHash: await hash(encoder.encode(JSON.stringify(commitRecord)))
   };
   // Canonical JSON sorts keys; store the hash over the same canonical serialization used by the engine.
   const { canonicalizeJcs } = await import("../js/transaction-protocol.mjs");
   primaryManifest.commitRecordHash = await hash(encoder.encode(canonicalizeJcs(commitRecord)));
-  const primary = new MemoryAdapter("primary");
+  const primary = new MemoryAdapter("synthetic-primary-folder");
   primary.files.set("primary-manifest", encoder.encode(canonicalizeJcs(primaryManifest)));
   primary.files.set("primary-commit", encoder.encode(canonicalizeJcs(commitRecord)));
   primary.files.set("primary-object", sourceBytes);
@@ -155,10 +155,10 @@ test("creates a verified backup copy, copies immutable objects, and publishes it
   primary.files.set("primary-commit", encoder.encode(canonicalizeJcs(sourceCommit)));
   primaryManifest.commitRecordHash = await hash(encoder.encode(canonicalizeJcs(sourceCommit)));
   primary.files.set("primary-manifest", encoder.encode(canonicalizeJcs(primaryManifest)));
-  const target = new MemoryAdapter("backup");
+  const target = new MemoryAdapter("synthetic-backup-folder");
   const result = await createVerifiedSnapshotBackup({
     sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
-    newCopyId: "synthetic-backup-copy", newStorageBinding: "synthetic-backup-folder",
+    newCopyId: "synthetic-backup-copy", newStorageBinding: { provider: "google-drive", folderId: "synthetic-backup-folder" },
     transactionId: "synthetic-backup-transaction", now: "2026-11-02T20:00:00.000Z",
     cryptoImpl, withSourceLock: async (operation) => operation(), quarantine: async () => {},
     validateStructure: async ({ manifest: backupManifest, commitRecord: backupCommit, readObject }) => {
@@ -202,7 +202,7 @@ test("quarantines an incomplete backup and never changes the primary", async () 
   };
   await assert.rejects(createVerifiedSnapshotBackup({
     sourceAdapter: primary, targetAdapter: brokenTarget, sourceManifestFileId: "primary-manifest",
-    newCopyId: "failed-backup-copy", newStorageBinding: "failed-backup-folder",
+    newCopyId: "failed-backup-copy", newStorageBinding: { provider: "google-drive", folderId: "failed-backup-folder" },
     transactionId: "synthetic-failed-backup", cryptoImpl, withSourceLock: async (operation) => operation(),
     quarantine: async (evidence) => { quarantineEvidence = evidence; }
   }), (error) => error.code === "backup-quarantined");
@@ -226,7 +226,7 @@ test("backup resolves lost responses at each destination create by exact-ID hash
   primary.files.set("primary-object", sourceBytes);
 
   for (let boundary = 1; boundary <= 3; boundary += 1) {
-    const target = new MemoryAdapter(`backup-${boundary}`);
+    const target = new MemoryAdapter(`backup-folder-${boundary}`);
     const create = target.createImmutable.bind(target);
     let calls = 0;
     target.createImmutable = async (input) => {
@@ -236,7 +236,7 @@ test("backup resolves lost responses at each destination create by exact-ID hash
     };
     const result = await createVerifiedSnapshotBackup({
       sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
-      newCopyId: `backup-copy-${boundary}`, newStorageBinding: `backup-folder-${boundary}`,
+      newCopyId: `backup-copy-${boundary}`, newStorageBinding: { provider: "google-drive", folderId: `backup-folder-${boundary}` },
       transactionId: `backup-transaction-${boundary}`, cryptoImpl, withSourceLock: async (operation) => operation(),
       quarantine: async () => {}
     });
@@ -249,7 +249,7 @@ test("backup resolves lost responses at each destination create by exact-ID hash
 test("refuses to start a backup without the serialized source-operation gate", async () => {
   await assert.rejects(createVerifiedSnapshotBackup({
     sourceAdapter: {}, targetAdapter: {}, sourceManifestFileId: "manifest",
-    newCopyId: "backup-copy", newStorageBinding: "backup-folder", cryptoImpl
+    newCopyId: "backup-copy", newStorageBinding: { provider: "google-drive", folderId: "backup-folder" }, cryptoImpl
   }), (error) => error.code === "source-lock-required");
 });
 
@@ -278,7 +278,7 @@ test("source revision change during backup quarantines the partial copy", async 
   let quarantineCalled = false;
   await assert.rejects(createVerifiedSnapshotBackup({
     sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
-    newCopyId: "backup-copy-after-source-change", newStorageBinding: "backup-folder",
+    newCopyId: "backup-copy-after-source-change", newStorageBinding: { provider: "google-drive", folderId: "backup-folder" },
     transactionId: "source-change-test", cryptoImpl,
     withSourceLock: async (operation) => operation(),
     quarantine: async () => { quarantineCalled = true; }
