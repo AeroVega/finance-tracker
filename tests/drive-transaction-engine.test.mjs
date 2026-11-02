@@ -451,6 +451,6 @@ test("ambiguous Drive create server errors retain their original diagnostics if 
   }), (error) =>
     error.code === "visibility-timeout" &&
     error.details.createRequest?.status === 500 &&
-    /create returned HTTP 500/.test(error.message));
+    /create outcome: HTTP 500/.test(error.message));
   assert.equal(requests, 3, "one create plus two metadata checks");
 });
