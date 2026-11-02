@@ -189,7 +189,9 @@
     $("expense-total").textContent = money.format(expenses);
     $("net-total").textContent = money.format(income - expenses);
     $("transaction-count").textContent = String(visible.length);
-    $("clear-data").disabled = syntheticMutationPending || visible.length === 0;
+    const storageSessionUnready = Boolean(syntheticStorage?.lifecycle && syntheticStorage.lifecycle.state !== "ready");
+    $("clear-data").disabled = syntheticMutationPending || visible.length === 0 || storageSessionUnready;
+    $("save-data").disabled = syntheticMutationPending || syntheticStorage?.lifecycle?.state !== "ready";
     $("load-sample").disabled = syntheticMutationPending;
     $("release-synthetic-storage").disabled = syntheticMutationPending || syntheticStorage?.lifecycle?.state !== "ready";
     $("empty-state").hidden = visible.length > 0;
@@ -326,6 +328,25 @@
     }
   });
   $("load-sample").addEventListener("click", loadSample);
+  $("save-data").addEventListener("click", async () => {
+    if (syntheticMutationPending) return;
+    if (syntheticStorage?.lifecycle?.state !== "ready") {
+      setStatus("Connect and verify the dedicated synthetic Drive session before saving. CSV imports remain local.", "error");
+      return;
+    }
+    syntheticMutationPending = true;
+    const snapshot = state.syntheticTransactions.slice();
+    render();
+    try {
+      await syntheticStorage.saveSyntheticSnapshot(snapshot);
+      setStatus(`Saved and verified ${snapshot.length} synthetic row(s) in the dedicated Drive folder. CSV imports remain local and were not uploaded.`, "success");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Synthetic data could not be saved and verified.", "error");
+    } finally {
+      syntheticMutationPending = false;
+      render();
+    }
+  });
   $("clear-data").addEventListener("click", async () => {
     if (syntheticMutationPending) return;
     syntheticMutationPending = true;
