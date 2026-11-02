@@ -195,9 +195,9 @@ test("quarantines an incomplete backup and never changes the primary", async () 
   const before = new TextDecoder().decode(primary.files.get("primary-manifest"));
   const target = new MemoryAdapter("backup");
   let quarantineEvidence = null;
-  const brokenTarget = {
-    ...target,
-    async createImmutable() { throw Object.assign(new Error("synthetic write failure"), { code: "synthetic-write-failure" }); }
+  const brokenTarget = Object.create(target);
+  brokenTarget.createImmutable = async () => {
+    throw Object.assign(new Error("synthetic write failure"), { code: "synthetic-write-failure" });
   };
   await assert.rejects(createVerifiedSnapshotBackup({
     sourceAdapter: primary, targetAdapter: brokenTarget, sourceManifestFileId: "primary-manifest",
@@ -207,4 +207,38 @@ test("quarantines an incomplete backup and never changes the primary", async () 
   }), (error) => error.code === "backup-quarantined");
   assert.ok(quarantineEvidence);
   assert.equal(new TextDecoder().decode(primary.files.get("primary-manifest")), before);
+});
+
+
+test("backup resolves lost responses at each destination create by exact-ID hash read-back", async () => {
+  const { canonicalizeJcs } = await import("../js/transaction-protocol.mjs");
+  const sourceCommit = { ...commitRecord, copyId: "synthetic-primary-copy",
+    snapshot: { "ledger/synthetic.json": { fileId: "primary-object", sha256: sourceHash } } };
+  const primaryManifest = {
+    ...manifest, copyId: "synthetic-primary-copy", role: "primary",
+    storageBinding: "synthetic-primary-folder", commitRecordFileId: "primary-commit",
+    commitRecordHash: await hash(encoder.encode(canonicalizeJcs(sourceCommit)))
+  };
+  const primary = new MemoryAdapter("primary");
+  primary.files.set("primary-manifest", encoder.encode(canonicalizeJcs(primaryManifest)));
+  primary.files.set("primary-commit", encoder.encode(canonicalizeJcs(sourceCommit)));
+  primary.files.set("primary-object", sourceBytes);
+
+  for (let boundary = 1; boundary <= 3; boundary += 1) {
+    const target = new MemoryAdapter(`backup-${boundary}`);
+    const create = target.createImmutable.bind(target);
+    let calls = 0;
+    target.createImmutable = async (input) => {
+      await create(input);
+      calls += 1;
+      if (calls === boundary) throw Object.assign(new Error("lost synthetic create response"), { code: "transport-lost-response" });
+    };
+    const result = await createVerifiedSnapshotBackup({
+      sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
+      newCopyId: `backup-copy-${boundary}`, newStorageBinding: `backup-folder-${boundary}`,
+      transactionId: `backup-transaction-${boundary}`, cryptoImpl
+    });
+    assert.equal(result.verified, true);
+    assert.equal((await target.readJson(result.manifestFileId)).role, "backup");
+  }
 });
