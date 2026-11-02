@@ -115,6 +115,9 @@ test("restore requires a new copy ID and explicit destination binding", async ()
     newCopyId: manifest.copyId, newStorageBinding: { provider: "google-drive", folderId: "destination" }, cryptoImpl
   }), (error) => error.code === "invalid-restore-copy-id");
   await assert.rejects(planPortableRestore(await archive(), {
+    newCopyId: "synthetic-primary-copy", newStorageBinding: { provider: "google-drive", folderId: "destination" }, cryptoImpl
+  }), (error) => error.code === "invalid-restore-copy-id");
+  await assert.rejects(planPortableRestore(await archive(), {
     newCopyId: "new-copy", newStorageBinding: { provider: "google-drive", folderId: "" }, cryptoImpl
   }), (error) => error.code === "invalid-storage-binding");
 });
