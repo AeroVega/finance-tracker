@@ -37,6 +37,9 @@ Implementation must update the transaction engine, recovery verifier, backup/res
 
 **Owner decision (2026-11-02):** the database's logical history describes what the data is (logical paths and content hashes); a separate per-copy mapping describes where those objects are physically stored. This principle is accepted. The concrete locator-catalog format and publication protocol are not yet approved.
 
+
+**Owner decision (2026-11-02):** each per-copy locator catalog must cover every physical object required by the copy's retained commit history, not only the latest snapshot. Historical commits remain resolvable and verifiable through that copy's catalog.
+
 **Still open:** choose and specify the durable per-copy locator representation and its publication/recovery contract before changing the engine. Until that design is accepted and implemented, the PR #25 backup helper's current `fileId + sha256` compatibility shape is transitional and must not be described as ADR-compliant or production-ready.
 
 ### Portable export and restore planning
