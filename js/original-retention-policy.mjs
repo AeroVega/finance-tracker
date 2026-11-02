@@ -95,9 +95,12 @@ export function recordOriginalDeletionFailure(record, { attemptedAt, failureCode
 }
 
 /** Backup copies carry the original clock unchanged; backup creation never restarts retention. */
-export function copyOriginalRetentionForBackup(record) {
-  assessOriginalRetention(record, record.expiresAt);
-  return Object.freeze({ ...record });
+export function copyOriginalRetentionForBackup(record, { backupFileId, now = new Date().toISOString() } = {}) {
+  if (!originalMayBeRestored(record, now)) return null;
+  if (typeof backupFileId !== "string" || !backupFileId.trim() || backupFileId === record.sourceFileId) {
+    fail("invalid-backup-source-locator", "A backup retention record requires the copied source object's new private file ID.");
+  }
+  return Object.freeze({ ...record, sourceFileId: backupFileId });
 }
 
 /** Expired/deleted originals are intentionally omitted from restored copies. */
