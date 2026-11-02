@@ -160,7 +160,8 @@ test("creates a verified backup copy, copies immutable objects, and publishes it
     sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
     newCopyId: "synthetic-backup-copy", newStorageBinding: "synthetic-backup-folder",
     transactionId: "synthetic-backup-transaction", now: "2026-11-02T20:00:00.000Z",
-    cryptoImpl, validateStructure: async ({ manifest: backupManifest, commitRecord: backupCommit, readObject }) => {
+    cryptoImpl, withSourceLock: async (operation) => operation(),
+    validateStructure: async ({ manifest: backupManifest, commitRecord: backupCommit, readObject }) => {
       assert.equal(backupManifest.role, "backup");
       assert.equal(backupManifest.copyId, "synthetic-backup-copy");
       assert.equal(backupCommit.commitId, sourceCommit.commitId);
@@ -202,7 +203,7 @@ test("quarantines an incomplete backup and never changes the primary", async () 
   await assert.rejects(createVerifiedSnapshotBackup({
     sourceAdapter: primary, targetAdapter: brokenTarget, sourceManifestFileId: "primary-manifest",
     newCopyId: "failed-backup-copy", newStorageBinding: "failed-backup-folder",
-    transactionId: "synthetic-failed-backup", cryptoImpl,
+    transactionId: "synthetic-failed-backup", cryptoImpl, withSourceLock: async (operation) => operation(),
     quarantine: async (evidence) => { quarantineEvidence = evidence; }
   }), (error) => error.code === "backup-quarantined");
   assert.ok(quarantineEvidence);
@@ -236,9 +237,17 @@ test("backup resolves lost responses at each destination create by exact-ID hash
     const result = await createVerifiedSnapshotBackup({
       sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
       newCopyId: `backup-copy-${boundary}`, newStorageBinding: `backup-folder-${boundary}`,
-      transactionId: `backup-transaction-${boundary}`, cryptoImpl
+      transactionId: `backup-transaction-${boundary}`, cryptoImpl, withSourceLock: async (operation) => operation()
     });
     assert.equal(result.verified, true);
     assert.equal((await target.readJson(result.manifestFileId)).role, "backup");
   }
+});
+
+
+test("refuses to start a backup without the serialized source-operation gate", async () => {
+  await assert.rejects(createVerifiedSnapshotBackup({
+    sourceAdapter: {}, targetAdapter: {}, sourceManifestFileId: "manifest",
+    newCopyId: "backup-copy", newStorageBinding: "backup-folder", cryptoImpl
+  }), (error) => error.code === "source-lock-required");
 });
