@@ -78,7 +78,7 @@ Branch: `feat/production-readiness-acceptance`
 - `docs/PR25_ACCEPTANCE.md`: current Google OAuth/quota/cost review, evidence labels, and owner-run acceptance protocol.
 
 **Still required before PR #25 can close:**
-- Run the exact-head complete Node contract suite and inspect all results.
+- **Verified:** exact-head GitHub Actions passed on Node.js 26 (Finance Tracker contract tests run #224; Node contract tests run #338); complete Node suite reported 222 passed, 0 failed. Rerun after any subsequent code change.
 - Wire retention state into original-import metadata and actual Drive deletion/read-back; the current state machine is not an end-to-end deletion worker.
 - Wire the backup helper to the actual Drive adapters and complete live synthetic backup, quarantine, portability, and restore rehearsals. Restore planning alone is not a completed restore.
 - Perform browser termination/reload rehearsals against live Drive at all transaction boundaries; existing PR #23's 11-boundary in-memory suite remains the automated baseline.
