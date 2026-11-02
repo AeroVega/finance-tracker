@@ -133,9 +133,17 @@ export async function processOriginalRetentionBatch(records, {
       outcomes.push({ importId: record.importId, outcome: record.state === "deleted" ? "already-deleted" : "not-eligible" });
       continue;
     }
+    let deleteError = null;
     try {
       await deleteFile(record.sourceFileId);
+    } catch (error) {
+      deleteError = error;
+    }
+    try {
+      // Independent metadata absence is authoritative, including an idempotent
+      // retry where Drive reports that the file was already deleted.
       if (await confirmAbsent(record.sourceFileId) !== true) {
+        if (deleteError) throw deleteError;
         fail("deletion-not-confirmed", "The provider did not confirm that the expired original is absent.");
       }
       updatedRecords.push(confirmOriginalDeletion(record, { confirmedAt: now, providerConfirmedAbsent: true }));
