@@ -109,7 +109,7 @@ test("rejects a primary, quarantined, or identity-mismatched manifest", async ()
 
 test("restore requires a new copy ID and explicit destination binding", async () => {
   await assert.rejects(planPortableRestore(await archive(), {
-    newCopyId: manifest.copyId, newStorageBinding: "destination", cryptoImpl
+    newCopyId: manifest.copyId, newStorageBinding: { provider: "google-drive", folderId: "destination" }, cryptoImpl
   }), (error) => error.code === "invalid-restore-copy-id");
   await assert.rejects(planPortableRestore(await archive(), {
     newCopyId: "new-copy", newStorageBinding: { provider: "google-drive", folderId: "" }, cryptoImpl
@@ -217,10 +217,10 @@ test("backup resolves lost responses at each destination create by exact-ID hash
     snapshot: { "ledger/synthetic.json": { fileId: "primary-object", sha256: sourceHash } } };
   const primaryManifest = {
     ...manifest, copyId: "synthetic-primary-copy", role: "primary",
-    storageBinding: "synthetic-primary-folder", commitRecordFileId: "primary-commit",
+    storageBinding: { provider: "google-drive", folderId: "synthetic-primary-folder" }, commitRecordFileId: "primary-commit",
     commitRecordHash: await hash(encoder.encode(canonicalizeJcs(sourceCommit)))
   };
-  const primary = new MemoryAdapter("primary");
+  const primary = new MemoryAdapter("synthetic-primary-folder");
   primary.files.set("primary-manifest", encoder.encode(canonicalizeJcs(primaryManifest)));
   primary.files.set("primary-commit", encoder.encode(canonicalizeJcs(sourceCommit)));
   primary.files.set("primary-object", sourceBytes);
