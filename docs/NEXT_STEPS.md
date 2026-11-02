@@ -6,7 +6,7 @@
 ## Latest PR #24 status — ready for merge review
 
 **Branch:** `feat/application-storage-integration`  
-**Final review head:** `b2b86d901fa98d5b90ecccd836b97ed348653e1a`  
+**Final review head before this handoff refresh:** `d9fb3092a1a6f06601bb1f41b5dab5a9e92c9855`  
 **Live dashboard acceptance source:** `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`
 
 **Verified CI:** both PR workflows passed on the reviewed source head. The complete Node contract suite reported **199 passed, 0 failed**; dashboard/browser module syntax checks passed. The CI workflow action pins were upgraded from the Node-20-runtime v4 actions to Node-24-runtime v7 releases. Both workflows passed again on final review head `b2b86d901fa98d5b90ecccd836b97ed348653e1a`, with 199/199 tests and no Node 20 action-runtime deprecation warning.
