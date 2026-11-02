@@ -37,6 +37,14 @@ async function createAndVerifyImmutable(adapter, input, cryptoImpl) {
   if (await sha256(readBack, cryptoImpl) !== input.expectedSha256) {
     fail("backup-object-readback-failed", "A destination object does not match its planned SHA-256.");
   }
+  if (typeof adapter.readMetadata !== "function") fail("backup-metadata-unavailable", "Destination metadata verification is required.");
+  const metadata = await adapter.readMetadata(input.fileId);
+  if (metadata?.id !== input.fileId || !metadata.parents?.includes(adapter.folderId) ||
+      metadata.appProperties?.financeTrackerKind !== input.kind ||
+      metadata.appProperties?.financeTrackerTransaction !== input.transactionId ||
+      metadata.appProperties?.financeTrackerHash !== input.expectedSha256) {
+    fail("backup-metadata-mismatch", "A destination object has an unexpected ID, folder, transaction, or content-hash binding.");
+  }
   return { fileId: input.fileId, sha256: input.expectedSha256, recoveredLostResponse: Boolean(createError) };
 }
 
