@@ -4,9 +4,9 @@
 
 ## Current baseline
 
-**Verified:** the final reviewed feature branch is `feat/application-storage-integration`, currently at `102f6cee6536ada070f0aec88519462c20004db9` (documentation-only follow-ups may advance the head). The live dashboard acceptance was performed against source commit `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`; the code under test is unchanged at the current head.
+**Verified:** the final reviewed feature branch is `feat/application-storage-integration`, at final review head `b2b86d901fa98d5b90ecccd836b97ed348653e1a`. The live dashboard acceptance was performed against source commit `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`; the code under test is unchanged at the current head.
 
-**Verified:** both exact-head GitHub Actions workflows passed on `102f6cee6536ada070f0aec88519462c20004db9`: Node contract tests and Finance Tracker contract tests. The complete Node suite reports **199 passed, 0 failed**; dashboard/browser syntax checks also passed. The owner subsequently completed the full live synthetic dashboard save/reconnect/clear/reconnect acceptance cycle described below. Browser automation remains unavailable in the review environment, so no independent automated iOS rendering claim is made.
+**Verified:** both exact-head GitHub Actions workflows passed on `b2b86d901fa98d5b90ecccd836b97ed348653e1a`: Node contract tests (run #296) and Finance Tracker contract tests (run #183). The complete Node suite reports **199 passed, 0 failed**; dashboard/browser syntax checks also passed. CI now uses Node-24-compatible v7 actions and no longer emits the Node 20 action-runtime deprecation warning. The owner subsequently completed the full live synthetic dashboard save/reconnect/clear/reconnect acceptance cycle described below. Browser automation remains unavailable in the review environment, so no independent automated iOS rendering claim is made.
 
 ## Demonstrated mistakes and their corrections
 
@@ -88,7 +88,7 @@ This owner-confirmed live cycle supersedes the earlier statement above that live
 
 ## Final review disposition (2026-11-02)
 
-**Ready for merge review:** PR #24's intended synthetic-only application integration has passed exact-head CI and owner-confirmed live dashboard acceptance. The latest full Node suite reports 199/199 passing; both PR workflows passed. No unresolved code defect was identified in this final pass. The historical Drive metadata 404 root cause and earlier unsolicited-release initiating event remain unproven but were not reproduced in the successful final acceptance cycle; retain them as residual investigation items rather than silently claiming root-cause closure.
+**Ready for merge review:** PR #24's intended synthetic-only application integration has passed exact-head CI and owner-confirmed live dashboard acceptance. Final review head `b2b86d901fa98d5b90ecccd836b97ed348653e1a` passed both PR workflows; the full Node suite reports 199/199 passing. No unresolved code defect was identified in this final pass. The historical Drive metadata 404 root cause and earlier unsolicited-release initiating event remain unproven but were not reproduced in the successful final acceptance cycle; retain them as residual investigation items rather than silently claiming root-cause closure.
 
 **Scope guardrails remain:** synthetic fixtures only, dedicated folder name containing `synthetic`, CSV imports local-only, fail-closed ownership/recovery, no production ledger persistence. PR #25 still owns the remaining fault-injection/live interruption rehearsals, backup/restore/portability, OAuth/security, 540-day retention/deletion, current terms/quotas/$0-cost review, and explicit owner acceptance.
 
