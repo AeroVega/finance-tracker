@@ -34,6 +34,9 @@ The current PR #23 engine stores `fileId` alongside `sha256` in each commit snap
 
 Implementation must update the transaction engine, recovery verifier, backup/restore flow, and synthetic fault-injection tests together. A backup must retain byte-identical logical commit history while using its own physical object locators. Recovery must resolve each logical path/hash against the active copy's locator data and fail closed for missing, duplicate, mismatched, or ambiguous mappings.
 
+
+**Owner decision (2026-11-02):** the database's logical history describes what the data is (logical paths and content hashes); a separate per-copy mapping describes where those objects are physically stored. This principle is accepted. The concrete locator-catalog format and publication protocol are not yet approved.
+
 **Still open:** choose and specify the durable per-copy locator representation and its publication/recovery contract before changing the engine. Until that design is accepted and implemented, the PR #25 backup helper's current `fileId + sha256` compatibility shape is transitional and must not be described as ADR-compliant or production-ready.
 
 ### Portable export and restore planning
