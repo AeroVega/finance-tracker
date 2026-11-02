@@ -9,6 +9,8 @@
 
 **Verified follow-up:** the dashboard Clear rollback could discard CSV imports that arrived during a failed remote clear. The follow-up preserves newer imports, gates overlapping synthetic actions, and replaces a source-pattern assertion with five actual-handler regression tests; the local suite now passes 196 tests. See the review handoff for details.
 
+**Follow-up implemented 2026-11-02:** PR #24 now exposes an explicit Save action for the current synthetic-only snapshot, with transaction read-back verification. Save/Clear controls follow lifecycle readiness; Clear refuses an uncertain existing session instead of silently clearing only the local copy. New behavioral tests cover synthetic-only saving, CSV isolation, lifecycle-driven enablement, and unsafe Clear refusal. Exact-head CI and live browser/Drive acceptance remain to be verified.
+
 **Open:** original Drive metadata 404 and the initiating event behind the unsolicited release remain unproven. The green status overwrite was a demonstrated defect, not proof of a deliberate user click. Earlier successful prototype smoke tests below are historical evidence, not acceptance of the failing dashboard integration.
 
 **Verified deployment blocker:** built-in branch Pages publication served corrected source assets but omitted generated Google configuration and source stamping. Resolve the publishing-mode/configuration prerequisite with appropriate deployment authority before requesting further live testing. Do not equate its successful workflow with a configured app, or confuse its missing configuration-file 404 with the original Drive-file 404. No merge, manual deployment, settings change or live Drive operation was performed for this review.
