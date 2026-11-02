@@ -64,6 +64,16 @@ Do not silently change the accepted data model inside this backup helper. The cu
 
 PR #23's transaction-engine suite injects lost responses after all 11 durable mutation boundaries and exercises deterministic recovery against the in-memory synthetic Drive. This coverage remains useful and must stay green. It is not a substitute for real browser termination/reload rehearsals against Drive.
 
+## Automated CI evidence
+
+**Verified on the PR head:** both GitHub Actions workflows completed successfully on Node.js 26.
+
+- Finance Tracker contract tests — run #224; dashboard/browser syntax checks and complete Node contract suite passed.
+- Node contract tests — run #338.
+- Complete Node suite: **222 passed, 0 failed**.
+
+Any subsequent code change requires a fresh exact-head run before review/merge. These automated synthetic tests do not replace live Google Drive or iOS Safari acceptance.
+
 ## Current Google authorization, quota, and cost review
 
 **Verified from current official documentation on 2026-11-02:**
