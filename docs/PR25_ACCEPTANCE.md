@@ -24,6 +24,18 @@ This record separates code implemented in PR #25 from tests that can run in CI, 
 
 **Boundary:** the helper is adapter-driven and covered by in-memory synthetic tests. It is not yet wired into the dashboard lifecycle or exercised against live Google Drive. Destination folder creation and durable quarantine marking must be provided by the caller/adapter.
 
+
+
+### Architecture reconciliation required before accepting Drive backup/restore
+
+**Open — critical mismatch found during PR #25 review:** accepted [Database Identity and Lifecycle ADR §81](DATABASE_IDENTITY_AND_LIFECYCLE.md) requires commit records to identify logical relative paths and SHA-256 hashes, not Google Drive file IDs. The current PR #23 transaction engine stores `fileId` alongside `sha256` in each snapshot reference, and the PR #25 Drive snapshot-copy helper currently follows that implemented shape so it can be exercised against the existing engine.
+
+These contracts are not equivalent. Copy-specific Drive locators in commit history reduce portability and conflict with the accepted ADR. PR #25 must not claim the Drive backup implementation is architecture-complete until this is resolved. The owner must review either:
+- update the transaction engine/recovery/object-resolution design so immutable commit records contain only logical paths and hashes, with per-copy Drive locators resolved separately; or
+- explicitly revise the ADR and record the portability/integrity trade-offs of retaining copy-specific IDs.
+
+Do not silently change the accepted data model inside this backup helper. The current helper is a synthetic implementation against the current engine shape, not production acceptance evidence.
+
 ### Portable export and restore planning
 
 `createPortableBackup`, `verifyPortableBackup`, and `planPortableRestore` provide a versioned JSON archive contract.
