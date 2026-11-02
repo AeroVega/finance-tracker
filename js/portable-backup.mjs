@@ -77,13 +77,23 @@ export async function createPortableBackup({ manifest, commitRecord, objects, ex
     fail("snapshot-object-set-mismatch", "The portable backup must contain exactly the objects referenced by the committed snapshot.");
   }
   const archivedObjects = [];
+  const portableSnapshot = {};
   for (const logicalPath of expectedPaths) {
     const reference = commitRecord.snapshot[logicalPath];
     const bytes = supplied.get(logicalPath);
     const actualHash = await sha256(bytes, cryptoImpl);
     if (!reference || actualHash !== reference.sha256) fail("object-hash-mismatch", `Snapshot object verification failed for ${logicalPath}.`);
+    portableSnapshot[logicalPath] = { sha256: actualHash };
     archivedObjects.push({ logicalPath, sha256: actualHash, contentBase64: toBase64(bytes) });
   }
+  const portableCommitRecord = { ...commitRecord, snapshot: portableSnapshot };
+  const portableCommitHash = await sha256(new TextEncoder().encode(canonicalizeJcs(portableCommitRecord)), cryptoImpl);
+  const portableManifest = {
+    ...manifest,
+    storageBinding: "portable-archive",
+    commitRecordFileId: null,
+    commitRecordHash: portableCommitHash
+  };
   const archive = {
     format: "finance-tracker-portable-backup",
     version: 1,
@@ -92,8 +102,8 @@ export async function createPortableBackup({ manifest, commitRecord, objects, ex
     sourceCopyId: manifest.copyId,
     revision: manifest.revision,
     commitId: manifest.commitId,
-    manifest,
-    commitRecord,
+    manifest: portableManifest,
+    commitRecord: portableCommitRecord,
     objects: archivedObjects
   };
   archive.archiveSha256 = await sha256(new TextEncoder().encode(canonicalizeJcs(archive)), cryptoImpl);
@@ -160,7 +170,7 @@ export async function planPortableRestore(archive, { newCopyId, newStorageBindin
     restoredAt: now,
     restoredFromCopyId: archive.sourceCopyId
   };
-  return { verified, manifest };
+  return { verified, manifest, commitRecord: archive.commitRecord, objects: verified.objects };
 }
 
 
