@@ -597,10 +597,27 @@ export class DriveTransactionEngine {
         }
 
         if (!state.publication && state.status === "staging") {
+          // The manifest is still at the verified base and no commit record has
+          // been planned. A planned object may be absent because the page stopped
+          // after journaling its ID but before Drive accepted the upload. Verify
+          // every object that is visible, but do not let an uncreated/unavailable
+          // unreferenced object strand recovery forever. Aborting leaves any late
+          // or already-created objects as harmless orphan evidence; it never
+          // publishes them or deletes them.
           const plannedObjects = events.filter((event) => event.eventType === "object-stage-planned");
+          const unavailableObjects = [];
           for (const planned of plannedObjects) {
             const { fileId, sha256 } = planned.payload;
-            const metadata = await this.adapter.waitForMetadata(fileId);
+            let metadata;
+            try {
+              metadata = await this.adapter.waitForMetadata(fileId);
+            } catch (error) {
+              if (error.code === "visibility-timeout" && error.details?.lastStatus === 404) {
+                unavailableObjects.push(fileId);
+                continue;
+              }
+              throw error;
+            }
             if (metadata.appProperties?.[TAG + "Kind"] !== "snapshot-object" ||
                 metadata.appProperties?.[TAG + "Transaction"] !== transactionId ||
                 metadata.appProperties?.[TAG + "Hash"] !== sha256) {
@@ -612,14 +629,37 @@ export class DriveTransactionEngine {
             }
           }
           state = await appendRecoveryEvent(transactionId, state, "transaction-aborted", {
-            reason: "recovery-confirmed-manifest-remains-at-original-base-before-commit-record-planning"
+            reason: "recovery-confirmed-manifest-remains-at-original-base-before-commit-record-planning",
+            unavailablePlannedObjectIds: unavailableObjects
           });
-          outcomes.push({ transactionId, action: "aborted-at-base", outcome: "aborted", preservedEvidence: true });
+          outcomes.push({ transactionId, action: "aborted-at-base", outcome: "aborted", preservedEvidence: true,
+            unavailablePlannedObjectIds: unavailableObjects });
           continue;
         }
 
         if (!state.publication && state.status === "commit-staging") {
-          const plannedCommit = events.find((event) => event.eventType === "commit-stage-planned")?.payload?.commitId;
+          const plannedCommitEvent = events.find((event) => event.eventType === "commit-stage-planned");
+          const plannedCommit = plannedCommitEvent?.payload?.commitId;
+          const plannedCommitFileId = plannedCommitEvent?.payload?.fileId;
+          if (!plannedCommit || !plannedCommitFileId) {
+            fail("missing-commit-file-id", "The journal does not identify the planned immutable commit record.", { transactionId });
+          }
+          try {
+            await this.adapter.waitForMetadata(plannedCommitFileId);
+          } catch (error) {
+            // With the manifest still at its verified base and no publication
+            // intent, a commit record that remains absent after the adapter's
+            // bounded 404 window cannot be authoritative. Abort and retain all
+            // journal evidence; a late file is merely an unreferenced orphan.
+            if (error.code !== "visibility-timeout" || error.details?.lastStatus !== 404) throw error;
+            state = await appendRecoveryEvent(transactionId, state, "transaction-aborted", {
+              reason: "commit-record-not-visible-after-bounded-verification-before-publication",
+              unavailableCommitRecordFileId: plannedCommitFileId
+            });
+            outcomes.push({ transactionId, action: "aborted-at-base", outcome: "aborted", preservedEvidence: true,
+              unavailableCommitRecordFileId: plannedCommitFileId });
+            continue;
+          }
           const verified = await verifyCommit(transactionId, state, plannedCommit, events);
           state = await appendRecoveryEvent(transactionId, state, "commit-staged", {
             commitId: verified.record.commitId,
