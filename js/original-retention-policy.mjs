@@ -112,3 +112,39 @@ export function prepareOriginalRestore(record, { now = new Date().toISOString(),
   if (typeof restoredFileId !== "string" || !restoredFileId.trim()) fail("missing-restored-locator", "A live restored original requires a new private file locator.");
   return Object.freeze({ ...record, sourceFileId: restoredFileId });
 }
+
+
+/**
+ * Apply expiry to a supplied metadata batch. The caller owns persistence of the
+ * returned records; a provider delete response alone is not treated as proof.
+ */
+export async function processOriginalRetentionBatch(records, {
+  now = new Date().toISOString(), deleteFile, confirmAbsent
+} = {}) {
+  if (!Array.isArray(records) || typeof deleteFile !== "function" || typeof confirmAbsent !== "function") {
+    fail("invalid-retention-adapter", "A retention record array, delete operation, and absence-verification operation are required.");
+  }
+  const updatedRecords = [];
+  const outcomes = [];
+  for (const record of records) {
+    const assessment = assessOriginalRetention(record, now);
+    if (!assessment.deletionEligible || record.state === "deleted") {
+      updatedRecords.push(record);
+      outcomes.push({ importId: record.importId, outcome: record.state === "deleted" ? "already-deleted" : "not-eligible" });
+      continue;
+    }
+    try {
+      await deleteFile(record.sourceFileId);
+      if (await confirmAbsent(record.sourceFileId) !== true) {
+        fail("deletion-not-confirmed", "The provider did not confirm that the expired original is absent.");
+      }
+      updatedRecords.push(confirmOriginalDeletion(record, { confirmedAt: now, providerConfirmedAbsent: true }));
+      outcomes.push({ importId: record.importId, outcome: "deleted" });
+    } catch (error) {
+      const failureCode = typeof error?.code === "string" && error.code.trim() ? error.code : "provider-delete-failed";
+      updatedRecords.push(recordOriginalDeletionFailure(record, { attemptedAt: now, failureCode }));
+      outcomes.push({ importId: record.importId, outcome: "retryable-failure", failureCode });
+    }
+  }
+  return { records: updatedRecords, outcomes };
+}
