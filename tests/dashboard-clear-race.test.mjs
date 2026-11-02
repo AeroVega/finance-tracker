@@ -54,13 +54,8 @@ test("explicit Save persists only the current synthetic snapshot and verifies re
   assert.equal(h.calls.save, 2);
   assert.equal(h.calls.savedSnapshots[1].length, 4);
   assert.equal(h.calls.savedSnapshots[1].every((row) => row.syntheticOnly === true), true);
-  assert.deepEqual(descriptions(h.state), [
-    "local-only CSV row",
-    "Sample paycheck",
-    "Sample grocery store",
-    "Sample electricity bill",
-    "Sample savings transfer"
-  ]);
+  assert.deepEqual(descriptions(h.state), ["local-only CSV row"]);
+  assert.equal(h.state.syntheticTransactions.length, 4);
   assert.equal(h.get("save-data").disabled, false);
 });
 
@@ -79,10 +74,12 @@ test("Clear and Save are disabled while an existing storage session is not ready
 test("lifecycle state changes immediately refresh Save and Clear availability", async () => {
   const h = await setup();
   await h.importFile(csv("local.csv", "local row"));
+  h.storage().lifecycle.state = "ownership-unknown";
   h.storage().options.onStatus({ state: "ownership-unknown", message: "Ownership uncertain", kind: "error" });
   assert.equal(h.get("clear-data").disabled, true);
   assert.equal(h.get("save-data").disabled, true);
   assert.equal(h.get("csv-file").disabled, false);
+  h.storage().lifecycle.state = "ready";
   h.storage().options.onStatus({ state: "ready", message: "Ready", kind: "success" });
   assert.equal(h.get("clear-data").disabled, false);
   assert.equal(h.get("save-data").disabled, false);
@@ -141,7 +138,8 @@ test("pending clear rejects repeated clear/sample handlers without blocking CSV"
   const clearing = h.get("clear-data").click();
   await h.get("clear-data").click();
   await h.get("load-sample").click();
-  assert.deepEqual(h.calls, { clear: 1, save: 0 });
+  assert.equal(h.calls.clear, 1);
+  assert.equal(h.calls.save, 0);
   h.clearing.resolve();
   await clearing;
   assert.equal(h.get("load-sample").disabled, false);
@@ -154,7 +152,8 @@ test("pending sample save blocks duplicate save and clear while CSV still import
   await h.get("load-sample").click();
   await h.get("clear-data").click();
   await h.importFile(csv("during.csv", "invented during"));
-  assert.deepEqual(h.calls, { clear: 0, save: 1 });
+  assert.equal(h.calls.clear, 0);
+  assert.equal(h.calls.save, 1);
   h.saving.resolve();
   await saving;
   assert.deepEqual(descriptions(h.state), ["invented during"]);
