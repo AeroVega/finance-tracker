@@ -101,6 +101,8 @@ Branch: `feat/production-readiness-acceptance`
 
 
 **Owner decision recorded (2026-11-02):** make history retention configurable. Support explicit, auditable compaction that replaces older detailed events with a verifiable checkpoint of the database state, allowing the represented events to be discarded. Retention duration, checkpoint format and integrity contract, compaction procedure, and backup/recovery implications remain open. This is a design decision only; it does not authorize pruning history.
+**Owner decision recorded (2026-11-02):** the compacted checkpoint becomes the new historical baseline. Preserve monthly income and expense totals, category totals, account balances, and investment summaries so long-term trends remain useful even after old transaction details are discarded. Retain the reporting semantics needed for valid comparisons across compaction boundaries, including currency, period boundaries, historical account/category identity, and consistent treatment of transfers, pending activity, refunds, reversals, corrections, and investment activity. Keep newer events detailed after the checkpoint and cryptographically link the checkpoint to the history it replaces. Discard represented detailed events only after checkpoint verification and required backup safeguards. This does not authorize implementation of deletion or production persistence.
+
 - Obtain explicit owner acceptance of evidence and remaining limitations.
 
 **Exit:** all evidence reviewed and explicit owner acceptance recorded. Production financial-data persistence remains disabled until the owner separately authorizes it.
