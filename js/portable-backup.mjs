@@ -239,8 +239,12 @@ async function performVerifiedSnapshotBackup({
   let manifestWritten = false;
   try {
     const sourceManifest = await sourceAdapter.readJson(sourceManifestFileId);
-    if (!sourceManifest || sourceManifest.role !== "primary" || sourceManifest.lifecycleStatus !== "active" ||
-        !sourceManifest.databaseId || !sourceManifest.copyId || !sourceManifest.commitRecordFileId ||
+    if (!sourceManifest || sourceManifest.format !== "finance-tracker-manifest" ||
+        typeof sourceManifest.manifestVersion !== "string" || sourceManifest.schemaVersion === undefined ||
+        sourceManifest.role !== "primary" || sourceManifest.lifecycleStatus !== "active" ||
+        !sourceManifest.databaseId || !sourceManifest.copyId || !Object.hasOwn(sourceManifest, "parentCommitId") ||
+        !Number.isSafeInteger(sourceManifest.revision) || sourceManifest.revision < 0 ||
+        !sourceManifest.commitId || !sourceManifest.commitRecordFileId ||
         !/^[0-9a-f]{64}$/.test(String(sourceManifest.commitRecordHash || ""))) {
       fail("invalid-backup-source", "Backup requires an active primary with a verifiable committed manifest.");
     }
