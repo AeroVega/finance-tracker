@@ -1,12 +1,13 @@
 # Finance Tracker — next steps and handoff
 
 **Last updated:** 2026-11-02
-**Current phase:** PR #22's transaction protocol foundation and PR #23's durable Google Drive transaction engine are merged. PR #24's synthetic-only application integration has passed exact-head CI and owner-confirmed live dashboard acceptance. Production financial-data persistence remains **not approved** and is not enabled by PR #24.
+**Current phase:** PRs #22–#24 are merged. PR #25 is active on `feat/production-readiness-acceptance`, adding synthetic-only backup/restore portability and 540-day retention primitives plus an explicit acceptance record. Production financial-data persistence remains **not approved**.
 
-## Latest PR #24 status — ready for merge review
+## PR #24 status — merged 2026-11-02
 
 **Branch:** `feat/application-storage-integration`  
-**Final review head before this handoff refresh:** `d9fb3092a1a6f06601bb1f41b5dab5a9e92c9855`  
+**Merge commit:** `fed48fb2f4863c3be6715f4951b17dedf6b7904d`  
+**Final review head:** `0c514fd39a13537adc21a648f4d031ad36088318`  
 **Live dashboard acceptance source:** `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`
 
 **Verified CI:** both PR workflows passed on the reviewed source head. The complete Node contract suite reported **199 passed, 0 failed**; dashboard/browser module syntax checks passed. The CI workflow action pins were upgraded from the Node-20-runtime v4 actions to Node-24-runtime v7 releases. Both workflows passed again on final review head `b2b86d901fa98d5b90ecccd836b97ed348653e1a`, with 199/199 tests and no Node 20 action-runtime deprecation warning.
@@ -51,7 +52,7 @@ Branch: `feat/durable-drive-transaction-engine`
 
 **Exit:** Node fault-injection CI passes; the owner-confirmed live synthetic Drive transaction/reopen/recovery smoke test and cleanup passed on 2026-11-01; repeated recovery and ambiguous-outcome preservation are covered by synthetic tests. Real Drive interruption/reload rehearsals at every boundary remain open. No real financial data.
 
-### PR #24 — Application integration and automatic lifecycle (ready for merge review)
+### PR #24 — Application integration and automatic lifecycle (merged 2026-11-02)
 
 Branch: `feat/application-storage-integration`
 
@@ -60,20 +61,31 @@ Branch: `feat/application-storage-integration`
 - Preserves local-only CSV imports. Only invented rows explicitly tagged `syntheticOnly: true` can be written to Drive. No production ledger read/write path is enabled.
 - Adds deterministic lifecycle, transaction, diagnostics and dashboard-handler regression tests; PR CI runs the complete Node contract suite.
 - Owner-confirmed live dashboard cycle passed: save four rows, release/reconnect and restore four, clear and save empty, release/reconnect and restore zero.
-- Exact-head CI passed with 199/199 Node tests and dashboard/browser syntax checks. Final CI must be rerun after the last workflow/documentation commits.
+- Exact-head CI passed with 199/199 Node tests and dashboard/browser syntax checks.
 
 **Exit:** met for PR #24's synthetic-only application integration. Residual historical 404/release-event root-cause investigations and performance profiling remain documented follow-ups; they do not authorize production persistence or expand PR #24's scope.
 
-### PR #25 — End-to-end acceptance and production-readiness gates
+### PR #25 — End-to-end acceptance and production-readiness gates (active)
 
-- Complete comprehensive fault-injection and recovery rehearsals across every commit boundary.
-- Demonstrate verified backup, restore, and portability.
-- Complete OAuth expiry/revocation/wrong-account/permission-denial handling and security/privacy review.
-- Implement and verify the 540-day (18-month) original-source retention/deletion lifecycle, including backup behavior.
-- Verify current Google terms, quotas, OAuth requirements, and sustainable $0 recurring cost.
-- Review all failure modes, recovery instructions, data-integrity evidence, and limitations with the owner.
+Branch: `feat/production-readiness-acceptance`
 
-**Exit:** explicit owner acceptance of the evidence and risks. Production financial-data persistence remains disabled until the owner separately authorizes it.
+**Implemented in the current branch:**
+- `js/portable-backup.mjs`: immutable snapshot-copy helper with source-stability check, object/commit/manifest read-back verification, new backup identity, manifest-last publication, and quarantine callback.
+- `js/portable-backup.mjs`: portable archive envelope, SHA-256 verification, exact snapshot-object set, structural-validation hook, provider-independent export without Drive file locators, and inert restore planning.
+- `js/original-retention-policy.mjs`: exact 540-day clock, deletion eligibility versus confirmed deletion, retryable failures, and backup/restore rules that do not restart or resurrect expired originals.
+- Synthetic tests in `tests/portable-backup.test.mjs` and `tests/original-retention-policy.test.mjs`.
+- `docs/PR25_ACCEPTANCE.md`: current Google OAuth/quota/cost review, evidence labels, and owner-run acceptance protocol.
+
+**Still required before PR #25 can close:**
+- Run the exact-head complete Node contract suite and inspect all results.
+- Wire retention state into original-import metadata and actual Drive deletion/read-back; the current state machine is not an end-to-end deletion worker.
+- Wire the backup helper to the actual Drive adapters and complete live synthetic backup, quarantine, portability, and restore rehearsals. Restore planning alone is not a completed restore.
+- Perform browser termination/reload rehearsals against live Drive at all transaction boundaries; existing PR #23's 11-boundary in-memory suite remains the automated baseline.
+- Test OAuth expiry, revocation, wrong account, permission denial, and reconnect live.
+- Inspect the actual Cloud project's OAuth publishing status, scope declarations, API restrictions, quotas, usage, and billing configuration. Recheck Google's announced 2026 quota/billing changes.
+- Obtain explicit owner acceptance of evidence and remaining limitations.
+
+**Exit:** all evidence reviewed and explicit owner acceptance recorded. Production financial-data persistence remains disabled until the owner separately authorizes it.
 
 ## Temporary prototype navigation and MVP1 cleanup
 
