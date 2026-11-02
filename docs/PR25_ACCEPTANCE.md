@@ -72,7 +72,7 @@ PR #23's transaction-engine suite injects lost responses after all 11 durable mu
 - Node contract tests — run #338.
 - That tested head reported **222 passed, 0 failed**.
 
-Two additional edge-case tests were added afterward (genesis commit with a null parent; restore copy-ID collision), along with their corresponding validation changes. The current branch therefore contains **224 tests**, but needs a fresh run before it can be called green. Trigger the existing `Finance Tracker contract tests` workflow manually from the Actions tab if the latest PR synchronization did not start a run. These automated synthetic tests do not replace live Google Drive or iOS Safari acceptance.
+One additional edge-case test was added afterward (genesis commit with a null parent), alongside a restore copy-ID collision assertion and corresponding validation changes. The current branch therefore contains **223 tests**, but needs a fresh run before it can be called green. Trigger the existing `Finance Tracker contract tests` workflow manually from the Actions tab if the latest PR synchronization did not start a run. These automated synthetic tests do not replace live Google Drive or iOS Safari acceptance.
 
 ## Current Google authorization, quota, and cost review
 
