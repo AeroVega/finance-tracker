@@ -72,6 +72,8 @@ test("Clear and Save are disabled while an existing storage session is not ready
   assert.equal(h.get("clear-data").disabled, true);
   assert.equal(h.get("save-data").disabled, true);
   assert.equal(h.get("csv-file").disabled, false);
+  await h.get("clear-data").click();
+  assert.deepEqual(descriptions(h.state), ["local row", "newer local row"]);
 });
 
 test("failed remote clear preserves both prior and newer CSV imports and provenance", async () => {
