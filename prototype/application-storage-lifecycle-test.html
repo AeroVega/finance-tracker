@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f5f7">
+  <title>Finance Tracker · PR 24 integration test</title>
+  <style>
+    :root{color-scheme:light;--ink:#1d1d1f;--muted:#6e6e73;--line:#e5e5ea;--surface:#fff;--canvas:#f5f5f7;--blue:#06c;--green:#16845b;--amber:#8a5a00;--red:#b3261e}
+    *{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(820px,100% - 28px);margin:0 auto;padding:28px 0 48px}
+    h1{margin:2px 0 10px;font-size:clamp(2rem,7vw,2.8rem);letter-spacing:-.045em;line-height:1.08}
+    h2{margin:0 0 8px;font-size:1.05rem}.eyebrow{margin:0 0 7px;color:var(--muted);font-size:.74rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+    p{margin:8px 0;line-height:1.5}.intro,.fine{color:var(--muted)}.intro{margin:0 0 18px;max-width:65ch}.fine{font-size:.86rem}
+    .panel{margin:13px 0;padding:17px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+    .notice{border-color:#e4d7a7;background:#fff9e8}.row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+    button{min-height:44px;margin:8px 7px 0 0;padding:10px 14px;border:1px solid #1d1d1f;border-radius:10px;background:#1d1d1f;color:#fff;font:inherit;font-weight:650;cursor:pointer}
+    button.secondary{background:#fff;color:#1d1d1f;border-color:#c8c8ce}button.danger{background:#fff;color:var(--red);border-color:#d99}
+    button:disabled{opacity:.42;cursor:not-allowed}button:focus-visible,a:focus-visible{outline:3px solid #80b7ff;outline-offset:3px}
+    .status{min-height:1.5em;margin:10px 0 0;overflow-wrap:anywhere;white-space:pre-wrap}.status[data-kind=success]{color:var(--green)}.status[data-kind=warning]{color:var(--amber)}.status[data-kind=error]{color:var(--red)}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}.metric{min-width:0;padding:11px;border-radius:11px;background:#f5f5f7}
+    .metric strong{display:block;color:var(--muted);font-size:.75rem;font-weight:600}.metric span{display:block;margin-top:3px;font-weight:650;overflow-wrap:anywhere}
+    .steps{display:grid;gap:9px}.step{display:flex;gap:10px;align-items:flex-start}.number{display:grid;place-items:center;flex:0 0 26px;height:26px;border-radius:50%;background:#eee;font-size:.8rem;font-weight:700}
+    code{overflow-wrap:anywhere}.result-list{margin:10px 0 0;padding-left:20px}.result-list li{margin:5px 0}.pass{color:var(--green)}.back{display:inline-block;margin-top:18px;color:var(--blue);text-decoration:none}
+    footer{margin-top:24px;color:var(--muted);font-size:.78rem;text-align:center}
+    @media(max-width:540px){main{padding-top:20px}.panel{padding:14px}button{width:100%;margin-right:0}.grid{grid-template-columns:1fr 1fr}}
+  </style>
+  <script async src="https://accounts.google.com/gsi/client"></script>
+  <script async src="https://apis.google.com/js/api.js"></script>
+  <script type="module" src="application-storage-lifecycle-test.mjs"></script>
+  <script src="../js/build-info.js" defer></script>
+</head>
+<body>
+<main>
+  <p class="eyebrow">Finance Tracker · PR #24 · Synthetic only</p>
+  <h1>Application storage integration</h1>
+  <p class="intro">Exercise the actual PR #24 application lifecycle controller against a dedicated synthetic Google Drive folder. Run each test, then send screenshots of the results.</p>
+
+  <section class="panel notice">
+    <strong>Strict safety boundary</strong>
+    <p>This page is restricted to a Drive folder whose name contains “synthetic”. The production folder name <code>finance-tracker-database</code> is explicitly blocked. It creates or updates only a dedicated PR24 synthetic manifest, synthetic transaction objects, journal events, commit records, and the session marker.</p>
+    <p class="fine">Never select a folder containing personal financial records. Tokens remain in page memory. No CSV import, production ledger, or real financial data is used. Session coordination is best-effort detection, not a server-enforced lock.</p>
+  </section>
+
+  <section class="panel">
+    <h2>1. Connect and select the synthetic folder</h2>
+    <p class="fine">Uses the existing Google OAuth client, drive.file scope, and Picker configuration injected during Pages deployment.</p>
+    <div class="row">
+      <button id="connect-google" type="button" disabled>Connect Google Drive</button>
+      <button id="select-folder" class="secondary" type="button" disabled>Choose synthetic folder</button>
+    </div>
+    <div class="grid">
+      <div class="metric"><strong>Google authorization</strong><span id="auth-state">Not connected</span></div>
+      <div class="metric"><strong>Selected folder</strong><span id="folder-state">None</span></div>
+    </div>
+    <p id="connection-status" class="status" role="status" aria-live="polite">Loading Google services…</p>
+  </section>
+
+  <section class="panel">
+    <h2>2. Start the integrated lifecycle</h2>
+    <p class="fine">Creates or reuses one synthetic manifest, acquires this page's Drive session, runs transaction recovery before becoming ready, and starts automatic heartbeats.</p>
+    <button id="start-lifecycle" type="button" disabled>Start / recover application storage</button>
+    <div class="grid">
+      <div class="metric"><strong>Lifecycle state</strong><span id="lifecycle-state">Disconnected</span></div>
+      <div class="metric"><strong>Write permission</strong><span id="write-state">Disabled</span></div>
+      <div class="metric"><strong>Session identity</strong><span id="session-state">None</span></div>
+      <div class="metric"><strong>Manifest revision</strong><span id="revision-state">Not loaded</span></div>
+    </div>
+    <p id="lifecycle-status" class="status" role="status" aria-live="polite">Not started.</p>
+    <div class="row">
+      <button id="recover-stale" class="danger" type="button" disabled>Confirm stale-session recovery</button>
+      <button id="recover-transaction" class="secondary" type="button" disabled>Retry transaction recovery</button>
+    </div>
+    <p class="fine">Stale-session takeover is never automatic. The recovery button appears only after Drive reports a conclusively stale marker and asks for explicit confirmation.</p>
+    <button id="verify-heartbeat" class="secondary" type="button" disabled>Verify automatic heartbeat</button>
+    <p id="heartbeat-status" class="status" role="status" aria-live="polite">Wait at least 45 seconds after startup before checking the heartbeat.</p>
+  </section>
+
+  <section class="panel">
+    <h2>3. Run real synthetic transactions</h2>
+    <p class="fine">Writes two invented objects through the PR #24 controller. Both transactions are submitted concurrently to exercise the application write queue and transaction queue. Then each object is read back and checked against the manifest and SHA-256.</p>
+    <button id="run-transactions" type="button" disabled>Run serialized transaction and read-back test</button>
+    <p id="transaction-status" class="status" role="status" aria-live="polite">Not tested.</p>
+  </section>
+
+  <section class="panel">
+    <h2>4. Test interruption and reconnect</h2>
+    <p class="fine">The simulated buttons call the same lifecycle handlers as browser online/offline events. For the real device test, enable Airplane Mode or otherwise disconnect networking, confirm writes are paused, then reconnect and verify the same session ID is restored before storage returns to ready.</p>
+    <div class="row">
+      <button id="simulate-offline" class="secondary" type="button" disabled>Simulate offline event</button>
+      <button id="simulate-online" class="secondary" type="button" disabled>Simulate online / revalidate</button>
+    </div>
+    <p id="reconnect-status" class="status" role="status" aria-live="polite">Not tested.</p>
+  </section>
+
+  <section class="panel">
+    <h2>5. Test orderly handoff</h2>
+    <p class="fine">Stops the heartbeat, drains queued writes, writes the released session marker, and verifies the released marker by reading it back. Only switch devices after release is confirmed.</p>
+    <button id="release-session" class="secondary" type="button" disabled>Release this session</button>
+    <p id="release-status" class="status" role="status" aria-live="polite">No session to release.</p>
+  </section>
+
+  <section class="panel">
+    <h2>6. Test active-session refusal and device handoff</h2>
+    <p class="fine">Keep device A connected and Ready. On device B, open this same page, connect, select the exact same synthetic folder, and press Start. B must report that another active session exists and must not enable writes. Release on A, then retry Start on B; B should acquire successfully.</p>
+    <p id="handoff-status" class="status" role="status" aria-live="polite">Not tested.</p>
+  </section>
+
+  <section class="panel">
+    <h2>7. Test crash / reload recovery</h2>
+    <button id="simulate-crash" class="danger" type="button" disabled>Simulate crash (stop heartbeat without release)</button>
+    <ol class="result-list">
+      <li>Start the lifecycle and confirm it reaches Ready.</li>
+      <li>For a controlled simulation, press <strong>Simulate crash</strong>. This stops the heartbeat and discards the in-memory session without writing a release marker.</li>
+      <li>Wait at least 2 minutes 10 seconds for the two-minute lease to expire.</li>
+      <li>Press Start / recover application storage. It should refuse automatic takeover and report Stale session.</li>
+      <li>Use the explicit stale-session recovery button. Recovery should acquire a new session ID, run transaction recovery, and return to Ready.</li>
+    </ol>
+    <p class="fine">The controlled simulation is the reliable way to test the stale lease in this harness. A normal pagehide release may run when closing or reloading a tab; in that case the marker becomes Released and the next page can acquire normally, which is safe but does not exercise stale recovery.</p>
+    <p id="crash-status" class="status" role="status" aria-live="polite">Not tested.</p>
+  </section>
+
+  <section class="panel">
+    <h2>8. Clean up synthetic transaction files</h2>
+    <p class="fine">Deletes only files carrying this page's dedicated PR24 synthetic transaction tags, plus its exact named synthetic manifest. The session marker is intentionally retained in Released state for safe future acquisition. Cleanup requires confirmation.</p>
+    <button id="cleanup" class="danger" type="button" disabled>Review and delete PR24 synthetic files</button>
+    <p id="cleanup-status" class="status" role="status" aria-live="polite">No cleanup performed.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Test checklist</h2>
+    <ul class="result-list" id="checklist">
+      <li id="check-connect">Connect + dedicated synthetic folder: pending</li>
+      <li id="check-start">Session acquisition + startup recovery: pending</li>
+      <li id="check-heartbeat">Automatic heartbeat: owner test required</li>
+      <li id="check-transaction">Serialized writes + SHA-256 read-back: pending</li>
+      <li id="check-reconnect">Offline refusal + same-session reconnect: pending</li>
+      <li id="check-release">Verified orderly release: pending</li>
+      <li id="check-handoff">Active-session refusal + sequential device handoff: owner test required</li>
+      <li id="check-crash">Crash / reload / stale recovery: pending</li>
+    </ul>
+  </section>
+
+  <a class="back" href="./index.html">‹ Back to prototype tools</a>
+  <footer>Source commit <code id="build-sha">development (not deployed)</code></footer>
+</main>
+</body>
+</html>

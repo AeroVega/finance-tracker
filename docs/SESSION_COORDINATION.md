@@ -74,3 +74,11 @@ These tests verify client logic, including lost create/update responses resolved
 ## Browser harness reporting behavior
 
 The session test page clears the previously displayed marker classification while a fresh Drive inspection is pending. It renders the marker classification and inspection details only from the latest completed inspection; a late result cannot overwrite a newer inspection or a successful acquire, recovery, or release action. The page keeps the separate local-ownership indicator conservative: an active Drive marker does not imply this page owns it.
+
+## Independent renewal and safe drain (PR #24)
+
+**Verified (local deterministic tests):** transaction admission/drain and session-marker mutation use separate queues. Heartbeat, acquisition, same-session resume, stale recovery, and final release serialize their marker operations. Long transaction I/O no longer blocks heartbeat renewal.
+
+Orderly release closes new admission while admitted writes retain their guards. Heartbeats continue during that drain. The optional `beforeRelease` callback runs after drain, before the final marker write; the application uses it to reject unresolved transaction state. This callback must inspect state only, not await another coordinator session operation on the same queue. A rejected callback retains the active marker and renewal. Final release verifies current ownership, stops renewal, writes the released marker, and verifies it by read-back. Late queued timer failures cannot replace the completed status or revive the session.
+
+This is still best-effort ownership. Background suspension can prevent renewal; stale or unverifiable sessions do not renew themselves automatically. Explicit stale-session recovery and all existing ownership guards remain required.

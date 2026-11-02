@@ -48,16 +48,29 @@ jobs:
       - name: Stamp public Google configuration
         shell: bash
         env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_PICKER_API_KEY: ${{ vars.GOOGLE_PICKER_API_KEY }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID || secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_PICKER_API_KEY: ${{ vars.GOOGLE_PICKER_API_KEY || secrets.GOOGLE_PICKER_API_KEY }}
         run: |
           node --input-type=module <<'NODE'
           import { writeFileSync } from "node:fs";
           const config = {
-            clientId: process.env.GOOGLE_OAUTH_CLIENT_ID || "",
-            apiKey: process.env.GOOGLE_PICKER_API_KEY || "",
+            clientId: (process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim(),
+            apiKey: (process.env.GOOGLE_PICKER_API_KEY || "").trim(),
             projectNumber: "863907870950"
           };
+          const missing = Object.entries({
+            GOOGLE_OAUTH_CLIENT_ID: config.clientId,
+            GOOGLE_PICKER_API_KEY: config.apiKey
+          }).filter(([, value]) => !value).map(([name]) => name);
+          if (missing.length) {
+            console.error("Missing required GitHub Actions variable/secret(s): " + missing.join(", "));
+            console.error("Configure them for the github-pages environment or repository before deploying.");
+            process.exit(1);
+          }
+          writeFileSync(
+            "js/google-config.json",
+            JSON.stringify(config, null, 2) + "\n"
+          );
           writeFileSync(
             "js/google-config.js",
             "export const GOOGLE_CONFIG = Object.freeze(" +

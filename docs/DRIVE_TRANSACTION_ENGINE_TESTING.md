@@ -24,7 +24,7 @@ The new engine tests use an in-memory synthetic Drive implementation. They injec
 10. Manifest-published journal event.
 11. Terminal transaction-committed journal event.
 
-The suite verifies all 11 injected interruption points, preserves durable evidence, rejects stale serialized writers, refuses offline writes, aborts only after all known staged objects are independently visible and hash-verified, resumes a fully verified immutable commit when publication can safely continue, and repairs missing publication/terminal journal events after manifest read-back proves the commit. If a pre-generated ID is not visible within the retry window, recovery leaves the outcome unresolved and blocks further writes.
+The suite verifies all 11 injected interruption points, preserves durable evidence, rejects stale serialized writers, and refuses offline writes. If the manifest is still at the verified base and publication has not been planned, recovery can safely append an abort when a planned object or commit record remains unavailable after the bounded 404 window. Visible staged objects are still hash-verified; unavailable IDs are retained in the abort journal event, and no files are deleted. A late-arriving file is an unreferenced orphan, not an authoritative ledger object. Once a commit record has been journaled as staged or publication has been planned, missing or unverifiable data remains unresolved and blocks further writes. Recovery also resumes a fully verified immutable commit when publication can safely continue and repairs missing publication/terminal journal events after manifest read-back proves the commit. The live adapter retries only HTTP 404 metadata-visibility responses up to eight attempts, with exponential delays capped at five seconds (about 22.5 seconds total by default). Authorization failures, permission errors, malformed metadata, and location mismatches are not retried. A final timeout records the file ID, attempt count, elapsed time, and last HTTP status so the owner can identify the missing object without discarding transaction evidence.
 
 ## Live Google Drive smoke test
 
@@ -47,3 +47,19 @@ A successful live smoke test verifies the ordinary Drive create/read-back/publis
 - **Open:** live Drive interruption/reload rehearsals at each boundary, delayed visibility under real conditions, authorization loss/reconnect, automatic session lifecycle integration (PR #24), backup/restore, security review, 540-day source retention, current terms/quotas, and sustainable $0 recurring cost.
 
 Never place real financial data, account identifiers, tokens, or real Drive folder/file IDs in this repository, CI logs, or public issue/PR comments.
+
+## PR #24 recovery scope and diagnostic follow-up
+
+**Verified (local synthetic tests):** a selected folder can contain journals from separate synthetic harness manifests. Recovery preflights all journal hash chains and start identities before any recovery mutation, then processes only the selected manifest's exact database/copy pair. Verified foreign histories remain untouched. Missing identities, corrupt chains, or conflicting reuse of one copy identity still block recovery; they are not silently ignored. Tests cover foreign histories at all supported interruption boundaries and a current pending transaction alongside foreign evidence. Never delete journals to bypass this check.
+
+**Open — live metadata 404:** a read returning 404 does not establish whether a create succeeded, whether the requested ID is accessible, or whether a recovery plan refers to a file never created. The current create path reports its HTTP outcome and returned ID alongside the requested ID. A generic visibility-timeout message can instead come from recovery or an older browser build. Do not increase retries as a substitute for tracing the outcome.
+
+Safe reproduction after the patch is deployed:
+
+1. Confirm the footer's source commit is the intended build. Use invented fixtures in the dedicated synthetic folder only; do not delete existing evidence or use real CSV data.
+2. Expand the storage diagnostics before reproducing. Record which action fails: Connect/recovery, sample save, clear, or release. Do not start another action while the result is pending.
+3. If the error recurs, retain the diagnostic event sequence and error text, including CREATE HTTP status if present. Privately compare requested and returned file IDs; omit IDs from public issues. Never share authorization headers, tokens, full network exports, folder names, or financial contents.
+4. An unresolved transaction must stay recovery-required and must not become a green handoff success. Reconnect/recover through the existing flow; confirm stale takeover only when appropriate. If recovery still fails, preserve evidence and stop retrying writes.
+5. Reopen and verify the expected invented rows after a successful save/release/reconnect. A passing unit suite or a green deployment is not proof of this live result.
+
+Provider references: [Drive generated IDs](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/generateIds), [multipart uploads](https://developers.google.com/workspace/drive/api/guides/manage-uploads), [Drive 404 errors](https://developers.google.com/workspace/drive/api/guides/handle-errors#notFound). These were checked for this review; the selected ordinary Drive folder uses `space=drive`, not `appDataFolder`.

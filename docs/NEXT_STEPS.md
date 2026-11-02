@@ -1,7 +1,23 @@
 # Finance Tracker — next steps and handoff
 
-**Last updated:** 2026-11-01  
-**Current phase:** PR #22's pure transaction protocol foundation is merged. PR #23's durable Google Drive transaction engine and synthetic crash-recovery tests are complete; the owner-confirmed live Drive transaction/reopen/recovery smoke test and temporary-file cleanup passed. Production financial-data persistence remains **not approved**.
+**Last updated:** 2026-11-02
+**Current phase:** PR #22's transaction protocol foundation and PR #23's durable Google Drive transaction engine are merged. PR #24's synthetic-only application integration has passed exact-head CI and owner-confirmed live dashboard acceptance. Production financial-data persistence remains **not approved** and is not enabled by PR #24.
+
+## Latest PR #24 status — ready for merge review
+
+**Branch:** `feat/application-storage-integration`  
+**Final review head before this handoff refresh:** `d9fb3092a1a6f06601bb1f41b5dab5a9e92c9855`  
+**Live dashboard acceptance source:** `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`
+
+**Verified CI:** both PR workflows passed on the reviewed source head. The complete Node contract suite reported **199 passed, 0 failed**; dashboard/browser module syntax checks passed. The CI workflow action pins were upgraded from the Node-20-runtime v4 actions to Node-24-runtime v7 releases. Both workflows passed again on final review head `b2b86d901fa98d5b90ecccd836b97ed348653e1a`, with 199/199 tests and no Node 20 action-runtime deprecation warning.
+
+**Owner-confirmed live acceptance:** four synthetic rows were saved and verified; release/reconnect restored all four; Clear plus an empty-snapshot Save succeeded; a second release/reconnect restored zero rows. CSV imports remained local. The diagnostic trace showed successful recovery to `ready` and two completed trusted dashboard handoffs.
+
+**Performance baseline:** initial recovery approximately 50 seconds; subsequent recoveries approximately 53–55 seconds; orderly release approximately 4 seconds. Investigate latency separately using request-level timings. Do not weaken transaction verification, session ownership or recovery guarantees.
+
+**Residual investigations:** the original Drive metadata HTTP 404 and the initiating event behind an earlier unsolicited-release symptom do not have definitive root causes. Neither was reproduced in the final owner-confirmed acceptance cycle. Keep both documented as residual risks; do not claim they are conclusively explained. The historical unconfigured dynamic Pages artifact was not the build used for final live acceptance, which was stamped with the tested source SHA. Future branch deployments still require the configured artifact workflow and explicit deployment authorization.
+
+**PR #24 exit criteria met:** actual dashboard synthetic fixture save/read-back/reconnect/clear/reconnect passed; CSV import isolation is covered by tests and owner observation; exact-head CI passed. PR #24 remains synthetic-only and does not authorize production ledger reads/writes.
 
 ## Current workstream and PR sequence
 
@@ -20,7 +36,7 @@ Branch: `feat/transaction-staging-crash-recovery`
 
 **Exit:** merged to `main` on 2026-11-01. The protocol core and tests do not perform Drive persistence.
 
-### PR #23 — Durable Google Drive transaction engine (current work)
+### PR #23 — Durable Google Drive transaction engine (merged 2026-11-01)
 
 Branch: `feat/durable-drive-transaction-engine`
 
@@ -28,21 +44,25 @@ Branch: `feat/durable-drive-transaction-engine`
 - Use pre-generated Drive file IDs and exact read-back verification to make retries idempotent after lost responses.
 - Enforce expected base revision/commit checks, serialized mutations, and verified session ownership before every mutation and immediately before manifest publication.
 - Implement deterministic crash recovery from the authoritative manifest, journal, commit records, and referenced objects.
+- Retry transient HTTP 404 responses when a newly created Drive file's metadata is not yet visible, using a bounded ~22.5-second default window; preserve immediate failure for authorization and integrity errors and include timeout diagnostics.
 - Add deterministic lost-response injection after all 11 durable mutation boundaries, including manifest publication and terminal journal append.
 - Provide a browser-driven synthetic Drive transaction smoke test in the existing feasibility page and a concise owner test guide.
 - Use synthetic data and a dedicated synthetic Drive folder only; never inspect or modify the canonical manifest or ledger.
 
 **Exit:** Node fault-injection CI passes; the owner-confirmed live synthetic Drive transaction/reopen/recovery smoke test and cleanup passed on 2026-11-01; repeated recovery and ambiguous-outcome preservation are covered by synthetic tests. Real Drive interruption/reload rehearsals at every boundary remain open. No real financial data.
 
-### PR #24 — Application integration and automatic lifecycle
+### PR #24 — Application integration and automatic lifecycle (ready for merge review)
 
-- Integrate the transaction engine with the app's actual database initialization, import, ledger update, and read paths.
-- Automatically acquire and verify the session after authorization/database selection; maintain heartbeats while active; revalidate the same session after reconnect; safely recover stale sessions; and release during orderly handoff.
-- Keep routine session claiming, heartbeat, ownership inspection, and recovery out of the ordinary UI. Show concise connection/sync status. Ask the user only when ownership, authorization, or transaction outcome cannot be safely established.
-- Serialize all writes through one application storage queue; prohibit offline writes and block new writes while recovery is unresolved.
-- Keep the existing permanent CSV import workflow.
+Branch: `feat/application-storage-integration`
 
-**Exit:** integrated workflows pass synthetic end-to-end tests, including app reload/crash/reconnect and device handoff. No real financial data.
+- Integrates the session coordinator, Drive session adapter and durable transaction engine behind a synthetic-only application storage lifecycle controller.
+- Wires the actual dashboard for dedicated synthetic-folder connection, startup recovery, heartbeat, reconnect revalidation, verified snapshot reads, synthetic sample writes, explicit Save, Clear via a verified empty snapshot, and orderly release.
+- Preserves local-only CSV imports. Only invented rows explicitly tagged `syntheticOnly: true` can be written to Drive. No production ledger read/write path is enabled.
+- Adds deterministic lifecycle, transaction, diagnostics and dashboard-handler regression tests; PR CI runs the complete Node contract suite.
+- Owner-confirmed live dashboard cycle passed: save four rows, release/reconnect and restore four, clear and save empty, release/reconnect and restore zero.
+- Exact-head CI passed with 199/199 Node tests and dashboard/browser syntax checks. Final CI must be rerun after the last workflow/documentation commits.
+
+**Exit:** met for PR #24's synthetic-only application integration. Residual historical 404/release-event root-cause investigations and performance profiling remain documented follow-ups; they do not authorize production persistence or expand PR #24's scope.
 
 ### PR #25 — End-to-end acceptance and production-readiness gates
 
@@ -61,6 +81,12 @@ A temporary [Prototype Tools hub](../prototype/) is available from the app foote
 
 **MVP1 completion gate:** remove the app-footer entry point and exclude all browser prototype pages under `prototype/` from the user-facing GitHub Pages deployment. Keep automated tests and useful engineering documentation; do not ship prototype pages, test controls, or prototype navigation as part of the MVP1 app. Verify the deployed artifact contains no prototype hub or prototype HTML pages before calling MVP1 complete.
 
+## PR #24 integration lessons learned
+
+- **Google Drive session-adapter token providers must be synchronous.** The folder-enumeration helper builds its Authorization header synchronously. Passing an async token-provider wrapper produces a Promise where the bearer-token string is expected, which Drive rejects as an authorization failure. The dashboard must pass `() => this.token()`, not `async () => this.token()`. A regression test in `tests/dashboard-synthetic-storage.test.mjs` protects this boundary.
+- **Do not treat `authorization-required` as an empty folder or recover by writing.** Keep the existing session and data untouched, keep writes disabled, obtain a fresh Google token through the explicit user-initiated reconnect flow, and then re-inspect the existing marker before resuming.
+- **A journaled file ID is an intent, not proof that the Drive object was created.** If recovery finds the manifest still at its verified base and no publication intent exists, a planned object or commit record that remains 404 after the bounded visibility window can be treated as absent: append a terminal abort, retain all journal evidence and unavailable IDs, and leave any late-arriving object untouched as an orphan. Once the commit is recorded as staged or publication is planned, missing data remains unresolved and writes stay disabled. Regression coverage exercises interruption immediately after object-stage-planned and commit-stage-planned.
+
 ## Cross-cutting product requirement: session management is automatic
 
 Session claiming, heartbeats, ownership inspection, reconnect revalidation, stale-session recovery, and orderly release are internal application lifecycle behavior—not chores for the user. The app should perform them automatically and unobtrusively. Manual intervention is reserved for genuinely ambiguous or unsafe conditions, such as conflicting ownership, malformed/duplicate markers, authorization requiring sign-in, failed verification, or an unknown transaction outcome.
@@ -71,7 +97,7 @@ The accepted operating model is single-user/single-active-device. Simultaneous u
 
 PR #22 merged on 2026-11-01. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`. PR #23 adds `js/drive-transaction-engine.mjs`, `tests/drive-transaction-engine.test.mjs`, and `docs/DRIVE_TRANSACTION_ENGINE_TESTING.md`; the Drive feasibility page includes a live synthetic transaction smoke test.
 
-PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation; its automated suites and owner-run live synthetic smoke test/cleanup have passed. PR #24 owns application integration and automatic session lifecycle. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
+PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation; its automated suites and owner-run live synthetic smoke test/cleanup have passed. PR #24 owns application integration and automatic session lifecycle; its synthetic-only lifecycle controller and dashboard are implemented, with corrective review changes and remaining live acceptance tracked in `PR24_REVIEW_HANDOFF.md`. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
 
 Do not enable real ledger reads/writes or production financial-data persistence during these workstreams. Use invented fixtures and the dedicated synthetic Drive folder only.
 

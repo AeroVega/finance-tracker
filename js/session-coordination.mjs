@@ -77,6 +77,9 @@ export class SessionCoordinator {
     this.ownership = "unowned";
     this.releasing = false;
     this.writeQueue = Promise.resolve();
+    this.sessionQueue = Promise.resolve();
+    this.activeWrites = 0;
+    this.releaseFinalizing = false;
   }
 
   get canWrite() {
@@ -87,8 +90,15 @@ export class SessionCoordinator {
     let record;
     try {
       record = await this.adapter.read();
-    } catch {
-      return { status: "unknown", record: null };
+    } catch (error) {
+      // Preserve a safe diagnostic so the UI can distinguish Drive read,
+      // malformed-marker, and authorization failures without weakening the
+      // fail-closed ownership decision.
+      return {
+        status: "unknown",
+        record: null,
+        errorCode: typeof error?.code === "string" ? error.code : "session-read-failed"
+      };
     }
     if (record === null) return { status: "absent", record: null };
     if (!validRecord(record)) return { status: "ambiguous", record: null };
@@ -133,14 +143,32 @@ export class SessionCoordinator {
     }
   }
 
-  async start() {
+  // Session-marker operations must serialize with each other, not with the
+  // full transaction queue: a slow upload must not starve its own heartbeat.
+  withSessionOperation(operation) {
+    const run = this.sessionQueue.then(operation);
+    this.sessionQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  start() {
+    if (this.releasing) return Promise.reject(new SessionCoordinationError("not-owner", "Session handoff is in progress."));
+    return this.withSessionOperation(() => this._start());
+  }
+
+  async _start() {
+    if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (this.canWrite) return this.session;
     const current = await this.inspect();
     if (current.status === "active") fail("session-active", "Another active session is already registered. End that session before switching devices.");
     if (current.status === "stale") fail("stale-session", "A session appears stale. Automatic takeover is disabled; use the explicit stale-session recovery flow.");
     if (current.status === "ambiguous" || current.status === "unknown") {
       this.ownership = "unknown";
-      fail("ownership-unknown", "The existing session state cannot be trusted. Writes are disabled.");
+      if (current.errorCode === "authorization-required") {
+        fail("authorization-required", "Google authorization is required to inspect the existing Drive session. Reconnect to Google; no session or stored data was changed. Writes remain disabled.");
+      }
+      const detail = current.errorCode ? " Drive check failed (" + current.errorCode + ")." : "";
+      fail("ownership-unknown", "The existing session state cannot be trusted. Writes are disabled." + detail);
     }
 
     const record = this.makeRecord(String(this.createSessionId()));
@@ -155,11 +183,16 @@ export class SessionCoordinator {
     await this.verifyWrittenRecord(record, "ownership-unknown");
     this.session = record;
     this.ownership = "owned";
-    this.releasing = false;
     return record;
   }
 
-  async recoverStale(options) {
+  recoverStale(options) {
+    if (this.releasing) return Promise.reject(new SessionCoordinationError("not-owner", "Session handoff is in progress."));
+    return this.withSessionOperation(() => this._recoverStale(options));
+  }
+
+  async _recoverStale(options) {
+    if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (!options || options.confirm !== true) {
       fail("confirmation-required", "Explicit confirmation is required to recover a stale session.");
     }
@@ -197,18 +230,22 @@ export class SessionCoordinator {
     await this.verifyWrittenRecord(record, "ownership-unknown");
     this.session = record;
     this.ownership = "owned";
-    this.releasing = false;
     return record;
   }
 
-  async resume() {
+  resume() {
+    if (this.releasing) return Promise.reject(new SessionCoordinationError("not-owner", "Session handoff is in progress."));
+    return this.withSessionOperation(() => this._resume());
+  }
+
+  async _resume() {
+    if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (!this.session) fail("no-session-context", "This page has no prior session identity to revalidate.");
     const expectedSessionId = this.session.sessionId;
     const current = await this.inspect();
     if (current.status === "active" && current.record.sessionId === expectedSessionId) {
       this.session = current.record;
       this.ownership = "owned";
-      this.releasing = false;
       return this.session;
     }
     if (current.status === "stale" && current.record.sessionId === expectedSessionId) {
@@ -220,40 +257,42 @@ export class SessionCoordinator {
       this.ownership = "released";
       fail("session-released", "This session has already been released.");
     }
+    if (current.status === "unknown" && current.errorCode === "authorization-required") {
+      this.ownership = "unknown";
+      fail("authorization-required", "Google authorization is required to revalidate this Drive session. Reconnect to Google; the existing session and stored data were not changed. Writes remain disabled.");
+    }
     this.ownership = "unknown";
     fail("ownership-lost", "The prior session identity could not be revalidated. Writes remain disabled.");
   }
 
   async heartbeat() {
-    if (!this.canWrite || this.releasing) fail("not-owner", "This session does not own an available active session record.");
-    const run = this.writeQueue.then(async () => {
-    if (!this.canWrite || this.releasing) fail("not-owner", "This session does not own an available active session record.");
-    const current = await this.inspect();
-    if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
-      this.ownership = "unknown";
-      fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.");
-    }
+    return this.withSessionOperation(async () => {
+      if (!this.canWrite || this.releaseFinalizing) fail("not-owner", "This session does not own an available active session record.");
+      const current = await this.inspect();
+      if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
+        this.ownership = "unknown";
+        fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.");
+      }
 
-    const heartbeatAt = this.now();
-    const record = {
-      ...this.session,
-      heartbeatAt,
-      expiresAt: heartbeatAt + this.staleAfterMs,
-      releasedAt: null
-    };
-    try {
-      await this.adapter.write(record);
-    } catch {
-      this.ownership = "unknown";
-      fail("ownership-unknown", "The heartbeat could not be confirmed. Writes are disabled until ownership is re-established.");
-    }
-    await this.verifyWrittenRecord(record, "ownership-unknown");
-    this.session = record;
-    this.ownership = "owned";
-    return record;
+      if (!this.canWrite) fail("ownership-unknown", "Ownership was lost while checking the heartbeat.");
+      const heartbeatAt = this.now();
+      const record = {
+        ...this.session,
+        heartbeatAt,
+        expiresAt: heartbeatAt + this.staleAfterMs,
+        releasedAt: null
+      };
+      try {
+        await this.adapter.write(record);
+      } catch {
+        this.ownership = "unknown";
+        fail("ownership-unknown", "The heartbeat could not be confirmed. Writes are disabled until ownership is re-established.");
+      }
+      await this.verifyWrittenRecord(record, "ownership-unknown");
+      if (!this.canWrite) fail("ownership-unknown", "Ownership was lost while verifying the heartbeat.");
+      this.session = record;
+      return record;
     });
-    this.writeQueue = run.catch(() => undefined);
-    return run;
   }
 
   startHeartbeat(options) {
@@ -286,6 +325,9 @@ export class SessionCoordinator {
       try {
         await this.heartbeat();
       } catch (error) {
+        // A tick already queued when orderly release stopped the timer must
+        // not overwrite the successful released status with a late error.
+        if (stopped) return;
         stopped = true;
         clearIntervalImpl(timer);
         this.heartbeatStop = null;
@@ -306,9 +348,11 @@ export class SessionCoordinator {
       this.ownership = "unknown";
       fail("offline", "Offline writes are prohibited. Reconnect and re-establish the session before writing.");
     }
-    if (!this.canWrite || this.releasing) fail("not-owner", "No verified active session is available to this page.");
+    if (!this.canWrite || this.releaseFinalizing || (this.releasing && this.activeWrites === 0)) {
+      fail("not-owner", "No verified active session is available to this page.");
+    }
     const current = await this.inspect();
-    if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
+    if (!this.canWrite || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
       fail("ownership-lost", "The active session could not be verified. Writes are disabled.");
     }
@@ -323,39 +367,54 @@ export class SessionCoordinator {
       return Promise.reject(new SessionCoordinationError("invalid-operation", "A write operation is required."));
     }
     const run = this.writeQueue.then(async () => {
-      await this.assertCanWrite(options);
-      return operation();
+      this.activeWrites++;
+      try {
+        await this.assertCanWrite(options);
+        return await operation();
+      } finally {
+        this.activeWrites--;
+      }
     });
     this.writeQueue = run.catch(() => undefined);
     return run;
   }
 
-  async release() {
+  async release({ beforeRelease = () => {} } = {}) {
+    if (typeof beforeRelease !== "function") fail("invalid-operation", "A release verification callback is required.");
     if (!this.canWrite || this.releasing) fail("not-owner", "This page does not own a releasable session.");
-    if (this.heartbeatStop) this.heartbeatStop();
+    // Close admission, but keep admitted transaction guards and heartbeats
+    // alive until the transaction queue has drained.
     this.releasing = true;
-    await this.writeQueue;
-    const current = await this.inspect();
-    if (!this.session || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
-      this.ownership = "unknown";
-      fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.");
-    }
-
-    const record = {
-      ...this.session,
-      state: "released",
-      releasedAt: this.now()
-    };
     try {
-      await this.adapter.write(record);
-    } catch {
-      this.ownership = "unknown";
-      fail("release-unconfirmed", "Session release could not be confirmed. Do not switch devices yet.");
+      await this.writeQueue;
+      return await this.withSessionOperation(async () => {
+        await beforeRelease();
+        this.releaseFinalizing = true;
+        const current = await this.inspect();
+        if (!this.canWrite || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
+          this.ownership = "unknown";
+          fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.");
+        }
+        if (this.heartbeatStop) this.heartbeatStop();
+        const record = {
+          ...this.session,
+          state: "released",
+          releasedAt: this.now()
+        };
+        try {
+          await this.adapter.write(record);
+        } catch {
+          this.ownership = "unknown";
+          fail("release-unconfirmed", "Session release could not be confirmed. Do not switch devices yet.");
+        }
+        await this.verifyWrittenRecord(record, "release-unconfirmed");
+        this.session = null;
+        this.ownership = "released";
+        return { released: true };
+      });
+    } finally {
+      this.releasing = false;
+      this.releaseFinalizing = false;
     }
-    await this.verifyWrittenRecord(record, "release-unconfirmed");
-    this.session = null;
-    this.ownership = "released";
-    this.releasing = false;
-    return { released: true };
   }
 }

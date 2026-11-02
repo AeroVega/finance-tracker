@@ -1,4 +1,4 @@
-name: Drive transaction contract tests
+name: Finance Tracker contract tests
 
 on:
   pull_request:
@@ -15,10 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Node.js 26
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 26
-      - name: Run transaction protocol and fault-injection tests
-        run: node --test tests/transaction-protocol.test.mjs tests/drive-transaction-engine.test.mjs
+      - name: Check PR24 browser and dashboard module syntax
+        run: node --check js/app.js && node --check js/dashboard-synthetic-storage.mjs && node --check prototype/application-storage-lifecycle-test.mjs
+      - name: Run complete Node contract suite
+        run: node --test tests/*.test.mjs

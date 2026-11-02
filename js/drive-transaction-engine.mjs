@@ -50,7 +50,7 @@ function joinBytes(parts) {
 
 export class GoogleDriveTransactionAdapter {
   constructor({ accessToken, folderId, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
-    onRequest = null, visibilityAttempts = 5, visibilityDelayMs = 250 }) {
+    onRequest = null, visibilityAttempts = 8, visibilityDelayMs = 500, visibilityMaxDelayMs = 5000 }) {
     if (typeof accessToken !== "function" || !folderId || typeof fetchImpl !== "function") {
       fail("invalid-adapter-config", "An access-token provider, selected folder, and fetch implementation are required.");
     }
@@ -59,8 +59,14 @@ export class GoogleDriveTransactionAdapter {
     this.fetch = (...args) => fetchImpl.apply(globalThis, args);
     this.crypto = cryptoImpl;
     this.onRequest = onRequest;
+    if (!Number.isInteger(visibilityAttempts) || visibilityAttempts < 1 ||
+        !Number.isFinite(visibilityDelayMs) || visibilityDelayMs < 0 ||
+        !Number.isFinite(visibilityMaxDelayMs) || visibilityMaxDelayMs < visibilityDelayMs) {
+      fail("invalid-visibility-retry-config", "Drive visibility retry settings must be positive, bounded values.");
+    }
     this.visibilityAttempts = visibilityAttempts;
     this.visibilityDelayMs = visibilityDelayMs;
+    this.visibilityMaxDelayMs = visibilityMaxDelayMs;
   }
 
   async request(url, options = {}, { allowStatuses = [] } = {}) {
@@ -138,18 +144,37 @@ export class GoogleDriveTransactionAdapter {
 
   async waitForMetadata(fileId) {
     let lastError;
+    const startedAt = Date.now();
     for (let attempt = 0; attempt < this.visibilityAttempts; attempt += 1) {
       try {
         return await this.readMetadata(fileId);
       } catch (error) {
         lastError = error;
+        // Drive may briefly return 404 for a just-created file while its metadata
+        // becomes visible. Retry only that precise condition; auth, permission,
+        // malformed-response, and location errors must fail immediately.
         if (error.code !== "drive-request-failed" || error.details?.status !== 404) throw error;
-        if (attempt + 1 < this.visibilityAttempts) await sleep(this.visibilityDelayMs * (2 ** attempt));
+        if (attempt + 1 < this.visibilityAttempts) {
+          const delay = Math.min(this.visibilityDelayMs * (2 ** attempt), this.visibilityMaxDelayMs);
+          if (delay > 0) await sleep(delay);
+        }
       }
     }
-    throw new DriveTransactionError("visibility-timeout", "A newly written Drive file did not become visible in time.", {
-      fileId, cause: lastError?.code
-    });
+    const elapsedMs = Date.now() - startedAt;
+    const lastStatus = lastError?.details?.status ?? null;
+    const cause = lastError?.code || "unknown";
+    throw new DriveTransactionError(
+      "visibility-timeout",
+      `Drive metadata visibility failed for file ID ${fileId}: HTTP ${lastStatus ?? "unknown"} after ${this.visibilityAttempts} checks over ${elapsedMs} ms (cause: ${cause}). The write outcome may be ambiguous; preserve transaction evidence and run recovery before retrying.`,
+      {
+        fileId,
+        attempts: this.visibilityAttempts,
+        elapsedMs,
+        lastStatus,
+        cause,
+        causeMessage: lastError?.message || null
+      }
+    );
   }
 
   async createImmutable({ fileId, name, kind, transactionId, content, expectedSha256 }) {
@@ -168,21 +193,57 @@ export class GoogleDriveTransactionAdapter {
     const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
     const body = joinBytes([head, bytes, tail]);
     const url = `${UPLOAD}/files?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`;
+    let ambiguousCreateFailure = null;
+    let createResponseSummary = null;
     try {
-      await this.request(url, {
+      const createResponse = await this.request(url, {
         method: "POST",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
         body
       }, { allowStatuses: [409] });
+      createResponseSummary = { status: createResponse.status };
+      if (createResponse.ok) {
+        const returnedMetadata = await createResponse.clone().json().catch(() => null);
+        createResponseSummary.returnedId = typeof returnedMetadata?.id === "string" ? returnedMetadata.id : null;
+        createResponseSummary.returnedName = typeof returnedMetadata?.name === "string" ? returnedMetadata.name : null;
+      }
     } catch (error) {
-      // A transport failure may mean Drive committed the create but the response was lost.
-      // Resolve only by inspecting the same pre-generated ID and exact expected bytes.
-      if (error.code === "authorization-required") throw error;
+      // A network failure or server-side 5xx may have happened after Drive committed
+      // the create. Resolve those ambiguous outcomes using the same pre-generated ID.
+      // Definitive client errors (including 400/404) prove the request was rejected;
+      // do not disguise them as a later metadata-visibility timeout.
+      const status = error.details?.status;
+      const ambiguousHttpFailure = Number.isInteger(status) &&
+        (status === 408 || status === 429 || status >= 500);
+      const transportFailure = !Number.isInteger(status) && error.code !== "authorization-required";
+      if (error.code === "authorization-required" || (!ambiguousHttpFailure && !transportFailure)) {
+        throw error;
+      }
+      ambiguousCreateFailure = {
+        code: error.code || error.name || "unknown",
+        message: error.message || String(error),
+        status: Number.isInteger(status) ? status : null,
+        body: typeof error.details?.body === "string" ? error.details.body : null
+      };
     }
 
-    // A 409, a lost response, or a successful response all resolve through the same
-    // exact-ID read-back path. Never allocate a replacement ID for a retry.
-    const metadataAfter = await this.waitForMetadata(fileId);
+    // A 409, an ambiguous transport/server failure, or a successful response all
+    // resolve through the same exact-ID read-back path. Never allocate a replacement
+    // ID for a retry.
+    let metadataAfter;
+    try {
+      metadataAfter = await this.waitForMetadata(fileId);
+    } catch (error) {
+      if (error instanceof DriveTransactionError && error.code === "visibility-timeout") {
+        const createOutcome = ambiguousCreateFailure || createResponseSummary || { status: null };
+        error.details = { ...error.details, createRequest: createOutcome };
+        const createStatus = Number.isInteger(createOutcome.status) ? `HTTP ${createOutcome.status}` : "no confirmed HTTP response";
+        const returnedId = createOutcome.returnedId ? `; Drive returned ID ${createOutcome.returnedId}` : "";
+        const createCause = createOutcome.message ? `; create error: ${createOutcome.message}` : "";
+        error.message = `Drive create outcome: ${createStatus}${returnedId}${createCause}. The exact file ID ${fileId} then returned HTTP ${error.details.lastStatus} on all ${error.details.attempts} metadata checks over ${error.details.elapsedMs} ms. The write outcome is ambiguous: preserve transaction evidence and run recovery before retrying.`;
+      }
+      throw error;
+    }
     if (metadataAfter.appProperties?.[TAG + "Kind"] !== kind ||
         metadataAfter.appProperties?.[TAG + "Transaction"] !== transactionId ||
         metadataAfter.appProperties?.[TAG + "Hash"] !== actualHash) {
@@ -374,9 +435,17 @@ export class DriveTransactionEngine {
         return { transactionId, commitId, revision: nextManifest.revision, manifest: nextManifest };
       } catch (error) {
         this.recoveryRequired = true;
+        const cause = error.code || error.name || "unknown";
+        const causeMessage = error.message || String(error);
         throw new DriveTransactionError("transaction-unresolved",
-          "The transaction did not reach a fully verified terminal state. Preserve its files and run recovery before another write.",
-          { transactionId, cause: error.code || error.name || "unknown", journalEventCount: events.length });
+          `Transaction unresolved (${cause}): ${causeMessage} Preserve transaction evidence and run recovery before retrying.`,
+          {
+            transactionId,
+            cause,
+            causeMessage,
+            causeDetails: error.details && typeof error.details === "object" ? error.details : {},
+            journalEventCount: events.length
+          });
       }
     });
   }
@@ -386,13 +455,42 @@ export class DriveTransactionEngine {
       if (!this.isOnline()) fail("offline", "Recovery requires an online Drive connection.");
       this.recoveryRequired = true;
       const manifest = await this.adapter.readJson(manifestFileId);
+      const hasIdentity = (value) => typeof value?.databaseId === "string" && value.databaseId.trim() !== "" &&
+        typeof value?.copyId === "string" && value.copyId.trim() !== "";
+      if (!hasIdentity(manifest)) {
+        fail("invalid-recovery-identity", "The selected manifest has no unambiguous database and copy identity.");
+      }
       const files = await this.adapter.listChildren();
       const journalFiles = files.filter((file) => file.appProperties?.[TAG + "Kind"] === "journal-event");
       const groups = new Map();
       for (const file of journalFiles) {
         const event = await this.adapter.readJson(file.id);
+        if (!event || typeof event.transactionId !== "string" || !event.transactionId) {
+          fail("journal-identity-mismatch", "A journal event has no transaction identity.");
+        }
         if (!groups.has(event.transactionId)) groups.set(event.transactionId, []);
         groups.get(event.transactionId).push(event);
+      }
+
+      // A synthetic folder can contain journals from several harness manifests.
+      // Establish identity from verified chains, never filenames or unverified tags.
+      // Preflight every group before mutating any: unidentified/corrupt evidence
+      // cannot safely be dismissed as belonging to another database.
+      const scopedGroups = [];
+      for (const [transactionId, events] of groups) {
+        events.sort((a, b) => a.sequence - b.sequence);
+        const state = await verifyJournal(events, { cryptoImpl: this.crypto });
+        if (state.transactionId !== transactionId) fail("journal-identity-mismatch", "A journal group contains inconsistent transaction IDs.");
+        const base = events[0].payload;
+        if (!hasIdentity(base)) {
+          fail("invalid-recovery-identity", "A transaction start has no unambiguous database and copy identity.", { transactionId });
+        }
+        if (base.copyId === manifest.copyId && base.databaseId !== manifest.databaseId) {
+          fail("journal-identity-mismatch", "The same copy identity is associated with different databases.", { transactionId });
+        }
+        if (base.databaseId === manifest.databaseId && base.copyId === manifest.copyId) {
+          scopedGroups.push({ transactionId, events, state, base });
+        }
       }
 
       const appendRecoveryEvent = async (transactionId, state, eventType, payload) => {
@@ -468,12 +566,9 @@ export class DriveTransactionEngine {
       };
 
       const outcomes = [];
-      for (const [transactionId, events] of groups) {
-        events.sort((a, b) => a.sequence - b.sequence);
-        let state = await verifyJournal(events, { cryptoImpl: this.crypto });
-        if (state.transactionId !== transactionId) fail("journal-identity-mismatch", "A journal group contains inconsistent transaction IDs.");
-        const startEvent = events[0];
-        const base = startEvent.payload || {};
+      for (const group of scopedGroups) {
+        const { transactionId, events, base } = group;
+        let { state } = group;
         const manifestAtBase = manifest.databaseId === base.databaseId &&
           manifest.copyId === base.copyId &&
           manifest.revision === base.baseRevision &&
@@ -528,10 +623,27 @@ export class DriveTransactionEngine {
         }
 
         if (!state.publication && state.status === "staging") {
+          // The manifest is still at the verified base and no commit record has
+          // been planned. A planned object may be absent because the page stopped
+          // after journaling its ID but before Drive accepted the upload. Verify
+          // every object that is visible, but do not let an uncreated/unavailable
+          // unreferenced object strand recovery forever. Aborting leaves any late
+          // or already-created objects as harmless orphan evidence; it never
+          // publishes them or deletes them.
           const plannedObjects = events.filter((event) => event.eventType === "object-stage-planned");
+          const unavailableObjects = [];
           for (const planned of plannedObjects) {
             const { fileId, sha256 } = planned.payload;
-            const metadata = await this.adapter.waitForMetadata(fileId);
+            let metadata;
+            try {
+              metadata = await this.adapter.waitForMetadata(fileId);
+            } catch (error) {
+              if (error.code === "visibility-timeout" && error.details?.lastStatus === 404) {
+                unavailableObjects.push(fileId);
+                continue;
+              }
+              throw error;
+            }
             if (metadata.appProperties?.[TAG + "Kind"] !== "snapshot-object" ||
                 metadata.appProperties?.[TAG + "Transaction"] !== transactionId ||
                 metadata.appProperties?.[TAG + "Hash"] !== sha256) {
@@ -543,14 +655,37 @@ export class DriveTransactionEngine {
             }
           }
           state = await appendRecoveryEvent(transactionId, state, "transaction-aborted", {
-            reason: "recovery-confirmed-manifest-remains-at-original-base-before-commit-record-planning"
+            reason: "recovery-confirmed-manifest-remains-at-original-base-before-commit-record-planning",
+            unavailablePlannedObjectIds: unavailableObjects
           });
-          outcomes.push({ transactionId, action: "aborted-at-base", outcome: "aborted", preservedEvidence: true });
+          outcomes.push({ transactionId, action: "aborted-at-base", outcome: "aborted", preservedEvidence: true,
+            unavailablePlannedObjectIds: unavailableObjects });
           continue;
         }
 
         if (!state.publication && state.status === "commit-staging") {
-          const plannedCommit = events.find((event) => event.eventType === "commit-stage-planned")?.payload?.commitId;
+          const plannedCommitEvent = events.find((event) => event.eventType === "commit-stage-planned");
+          const plannedCommit = plannedCommitEvent?.payload?.commitId;
+          const plannedCommitFileId = plannedCommitEvent?.payload?.fileId;
+          if (!plannedCommit || !plannedCommitFileId) {
+            fail("missing-commit-file-id", "The journal does not identify the planned immutable commit record.", { transactionId });
+          }
+          try {
+            await this.adapter.waitForMetadata(plannedCommitFileId);
+          } catch (error) {
+            // With the manifest still at its verified base and no publication
+            // intent, a commit record that remains absent after the adapter's
+            // bounded 404 window cannot be authoritative. Abort and retain all
+            // journal evidence; a late file is merely an unreferenced orphan.
+            if (error.code !== "visibility-timeout" || error.details?.lastStatus !== 404) throw error;
+            state = await appendRecoveryEvent(transactionId, state, "transaction-aborted", {
+              reason: "commit-record-not-visible-after-bounded-verification-before-publication",
+              unavailableCommitRecordFileId: plannedCommitFileId
+            });
+            outcomes.push({ transactionId, action: "aborted-at-base", outcome: "aborted", preservedEvidence: true,
+              unavailableCommitRecordFileId: plannedCommitFileId });
+            continue;
+          }
           const verified = await verifyCommit(transactionId, state, plannedCommit, events);
           state = await appendRecoveryEvent(transactionId, state, "commit-staged", {
             commitId: verified.record.commitId,
