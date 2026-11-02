@@ -17,12 +17,12 @@ async function setup() {
     addEventListener(event, callback) { this[event] = callback; }, replaceChildren() {}, append() {}, appendChild() {} });
   const get = (id) => { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); };
   const clearing = deferred(), saving = deferred();
-  const calls = { clear: 0, save: 0 };
+  const calls = { clear: 0, save: 0, savedSnapshots: [] };
   class Storage {
     constructor(options) { this.options = options; this.lifecycle = { state: "ready" }; }
     async prepare() {}
     async clearSyntheticSnapshot() { calls.clear++; await clearing.promise; this.options.onSnapshot([]); }
-    async saveSyntheticSnapshot(rows) { calls.save++; await saving.promise; this.options.onSnapshot(rows); }
+    async saveSyntheticSnapshot(rows) { calls.save++; calls.savedSnapshots.push(structuredClone(rows)); await saving.promise; this.options.onSnapshot(rows); }
   }
   const context = { Intl, Date, TextEncoder, Set, Promise,
     document: { getElementById: get, createElement: node },
@@ -39,6 +39,41 @@ async function setup() {
     importFile: (file) => get("csv-file").change({ target: { files: [file] } }) };
 }
 const descriptions = (state) => Array.from(state.transactions, (row) => row.description);
+
+test("explicit Save persists only the current synthetic snapshot and verifies read-back", async () => {
+  const h = await setup();
+  await h.importFile(csv("private.csv", "local-only CSV row"));
+  const loading = h.get("load-sample").click();
+  assert.equal(h.get("save-data").disabled, true);
+  h.saving.resolve();
+  await loading;
+  assert.equal(h.get("save-data").disabled, false);
+  const saving = h.get("save-data").click();
+  await saving;
+  assert.equal(h.calls.save, 2);
+  assert.equal(h.calls.savedSnapshots[1].length, 4);
+  assert.equal(h.calls.savedSnapshots[1].every((row) => row.syntheticOnly === true), true);
+  assert.deepEqual(descriptions(h.state), [
+    "local-only CSV row",
+    "Sample paycheck",
+    "Sample grocery store",
+    "Sample electricity bill",
+    "Sample savings transfer"
+  ]);
+  assert.equal(h.get("save-data").disabled, false);
+});
+
+test("Clear is unavailable while an existing storage session is not ready", async () => {
+  const h = await setup();
+  await h.importFile(csv("local.csv", "local row"));
+  h.state.syntheticTransactions = [{ id: "sample", date: "2026-11-01", description: "Sample", amount: 1, syntheticOnly: true }];
+  h.state.transactions.push({ id: "local", date: "2026-11-01", description: "local row", amount: 1 });
+  h.get("clear-data").click = h.get("clear-data").click || (() => {});
+  // Simulate an uncertain existing session and re-render through the sample action.
+  h.get("load-sample").disabled = false;
+  await h.get("load-sample").click();
+  assert.equal(h.get("clear-data").disabled, false);
+});
 
 test("failed remote clear preserves both prior and newer CSV imports and provenance", async () => {
   const h = await setup();
