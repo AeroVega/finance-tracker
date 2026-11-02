@@ -87,6 +87,9 @@ Branch: `feat/production-readiness-acceptance`
 
 - **Owner decision recorded (2026-11-02):** database history describes what the data is (logical paths and content hashes); separate per-copy information describes where objects are physically stored. This principle is accepted; the concrete locator-catalog format and publication protocol remain undecided.
 
+
+- **Owner decision recorded (2026-11-02):** each per-copy locator catalog covers every object required by that copy's retained commit history, not merely the latest snapshot.
+
 - **Owner decision recorded (2026-11-02): preserve ADR §81.** Redesign commit snapshots as logicalPath → SHA-256 only; resolve Drive IDs separately per physical copy. Next choose the durable per-copy locator representation and publication/recovery contract, then update the PR #23 transaction engine, recovery verifier, backup/restore flow, and synthetic fault-injection suite together. The current PR #25 helper's fileId-plus-hash compatibility shape is transitional and not ADR-compliant.
 - Obtain explicit owner acceptance of evidence and remaining limitations.
 
