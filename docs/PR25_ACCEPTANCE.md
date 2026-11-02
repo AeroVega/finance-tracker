@@ -45,6 +45,8 @@ Implementation must update the transaction engine, recovery verifier, backup/res
 
 **Owner confirmation (2026-11-02):** the locator catalog is understood as a per-copy lookup index connecting each logical object/version (logical path plus SHA-256) to its physical Drive file. The owner also recognizes the potential performance benefit: once a catalog is retrieved and verified, the app can resolve object locations directly rather than repeatedly searching Drive. This is an expected efficiency benefit, not yet a measured performance result. This confirms the conceptual model only; exact entry schema, integrity binding, caching/invalidation, and publication/recovery details still require specification.
 
+**Owner decision (2026-11-02):** the per-copy locator catalog covers all immutable objects required for normal operation and recovery: data objects, commit records, journal events, and other immutable protocol objects. The catalog itself is excluded from self-lookup; its identity and integrity are anchored directly by the manifest. This is a scope decision, not approval of an exact schema or implementation.
+
 **Still open:** choose and specify the durable per-copy locator representation and its publication/recovery contract before changing the engine. Until that design is accepted and implemented, the PR #25 backup helper's current `fileId + sha256` compatibility shape is transitional and must not be described as ADR-compliant or production-ready.
 
 ### Portable export and restore planning
