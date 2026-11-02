@@ -51,6 +51,10 @@ Implementation must update the transaction engine, recovery verifier, backup/res
 
 **Owner decision (2026-11-02):** history retention should be configurable. History compaction is an accepted design direction: preserve a verifiable summary/checkpoint of the database's older state while allowing the detailed events represented by that checkpoint to be discarded. Compaction must be an explicit, auditable maintenance operation, distinct from routine cleanup. The retention duration, checkpoint contents/integrity contract, compaction procedure, and recovery/backup implications remain to be specified; no history is authorized for deletion by this decision alone.
 
+
+
+**Owner decision (2026-11-02):** history retention should be configurable. History compaction is an accepted design direction: preserve a verifiable summary/checkpoint of the database's older state while allowing the detailed events represented by that checkpoint to be discarded. Compaction must be an explicit, auditable maintenance operation, distinct from routine cleanup. The retention duration, checkpoint contents/integrity contract, compaction procedure, and recovery/backup implications remain to be specified; no history is authorized for deletion by this decision alone.
+
 **Still open:** choose and specify the durable per-copy locator representation and its publication/recovery contract before changing the engine. Until that design is accepted and implemented, the PR #25 backup helper's current `fileId + sha256` compatibility shape is transitional and must not be described as ADR-compliant or production-ready.
 
 ### Portable export and restore planning
