@@ -50,7 +50,7 @@ function joinBytes(parts) {
 
 export class GoogleDriveTransactionAdapter {
   constructor({ accessToken, folderId, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
-    onRequest = null, visibilityAttempts = 5, visibilityDelayMs = 250 }) {
+    onRequest = null, visibilityAttempts = 8, visibilityDelayMs = 500, visibilityMaxDelayMs = 5000 }) {
     if (typeof accessToken !== "function" || !folderId || typeof fetchImpl !== "function") {
       fail("invalid-adapter-config", "An access-token provider, selected folder, and fetch implementation are required.");
     }
@@ -59,8 +59,14 @@ export class GoogleDriveTransactionAdapter {
     this.fetch = (...args) => fetchImpl.apply(globalThis, args);
     this.crypto = cryptoImpl;
     this.onRequest = onRequest;
+    if (!Number.isInteger(visibilityAttempts) || visibilityAttempts < 1 ||
+        !Number.isFinite(visibilityDelayMs) || visibilityDelayMs < 0 ||
+        !Number.isFinite(visibilityMaxDelayMs) || visibilityMaxDelayMs < visibilityDelayMs) {
+      fail("invalid-visibility-retry-config", "Drive visibility retry settings must be positive, bounded values.");
+    }
     this.visibilityAttempts = visibilityAttempts;
     this.visibilityDelayMs = visibilityDelayMs;
+    this.visibilityMaxDelayMs = visibilityMaxDelayMs;
   }
 
   async request(url, options = {}, { allowStatuses = [] } = {}) {
@@ -138,17 +144,28 @@ export class GoogleDriveTransactionAdapter {
 
   async waitForMetadata(fileId) {
     let lastError;
+    const startedAt = Date.now();
     for (let attempt = 0; attempt < this.visibilityAttempts; attempt += 1) {
       try {
         return await this.readMetadata(fileId);
       } catch (error) {
         lastError = error;
+        // Drive may briefly return 404 for a just-created file while its metadata
+        // becomes visible. Retry only that precise condition; auth, permission,
+        // malformed-response, and location errors must fail immediately.
         if (error.code !== "drive-request-failed" || error.details?.status !== 404) throw error;
-        if (attempt + 1 < this.visibilityAttempts) await sleep(this.visibilityDelayMs * (2 ** attempt));
+        if (attempt + 1 < this.visibilityAttempts) {
+          const delay = Math.min(this.visibilityDelayMs * (2 ** attempt), this.visibilityMaxDelayMs);
+          if (delay > 0) await sleep(delay);
+        }
       }
     }
-    throw new DriveTransactionError("visibility-timeout", "A newly written Drive file did not become visible in time.", {
-      fileId, cause: lastError?.code
+    throw new DriveTransactionError("visibility-timeout", "A newly written Drive file did not become visible within the bounded verification window. Preserve transaction evidence and run recovery before retrying.", {
+      fileId,
+      attempts: this.visibilityAttempts,
+      elapsedMs: Date.now() - startedAt,
+      lastStatus: lastError?.details?.status ?? null,
+      cause: lastError?.code
     });
   }
 
