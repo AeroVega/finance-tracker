@@ -18,8 +18,9 @@ async function setup() {
   const get = (id) => { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); };
   const clearing = deferred(), saving = deferred();
   const calls = { clear: 0, save: 0, savedSnapshots: [] };
+  let storageInstance;
   class Storage {
-    constructor(options) { this.options = options; this.lifecycle = { state: "ready" }; }
+    constructor(options) { this.options = options; this.lifecycle = { state: "ready" }; storageInstance = this; }
     async prepare() {}
     async clearSyntheticSnapshot() { calls.clear++; await clearing.promise; this.options.onSnapshot([]); }
     async saveSyntheticSnapshot(rows) { calls.save++; calls.savedSnapshots.push(structuredClone(rows)); await saving.promise; this.options.onSnapshot(rows); }
@@ -35,7 +36,7 @@ async function setup() {
     .replace('import("./storage-diagnostics.mjs")', "Promise.resolve(fakeDiagnostic)");
   vm.runInContext(source, context);
   await new Promise(setImmediate);
-  return { get, state: context.testState, clearing, saving, calls,
+  return { get, state: context.testState, storage: () => storageInstance, clearing, saving, calls,
     importFile: (file) => get("csv-file").change({ target: { files: [file] } }) };
 }
 const descriptions = (state) => Array.from(state.transactions, (row) => row.description);
@@ -63,16 +64,14 @@ test("explicit Save persists only the current synthetic snapshot and verifies re
   assert.equal(h.get("save-data").disabled, false);
 });
 
-test("Clear is unavailable while an existing storage session is not ready", async () => {
+test("Clear and Save are disabled while an existing storage session is not ready", async () => {
   const h = await setup();
   await h.importFile(csv("local.csv", "local row"));
-  h.state.syntheticTransactions = [{ id: "sample", date: "2026-11-01", description: "Sample", amount: 1, syntheticOnly: true }];
-  h.state.transactions.push({ id: "local", date: "2026-11-01", description: "local row", amount: 1 });
-  h.get("clear-data").click = h.get("clear-data").click || (() => {});
-  // Simulate an uncertain existing session and re-render through the sample action.
-  h.get("load-sample").disabled = false;
-  await h.get("load-sample").click();
-  assert.equal(h.get("clear-data").disabled, false);
+  h.storage().lifecycle.state = "ownership-unknown";
+  await h.importFile(csv("newer.csv", "newer local row"));
+  assert.equal(h.get("clear-data").disabled, true);
+  assert.equal(h.get("save-data").disabled, true);
+  assert.equal(h.get("csv-file").disabled, false);
 });
 
 test("failed remote clear preserves both prior and newer CSV imports and provenance", async () => {
