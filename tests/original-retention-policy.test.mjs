@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   ORIGINAL_RETENTION_DAYS, createOriginalRetentionRecord, assessOriginalRetention,
   confirmOriginalDeletion, recordOriginalDeletionFailure, copyOriginalRetentionForBackup,
-  originalMayBeRestored, prepareOriginalRestore
+  originalMayBeRestored, prepareOriginalRestore, processOriginalRetentionBatch
 } from "../js/original-retention-policy.mjs";
 
 const retainedAt = "2026-01-01T00:00:00.000Z";
@@ -71,4 +71,44 @@ test("rejects tampered clocks, missing hashes, and premature deletion", () => {
     (error) => error.code === "retention-not-expired");
   assert.throws(() => assessOriginalRetention({ ...record(), expiresAt: retainedAt }, expiry),
     (error) => error.code === "retention-clock-mismatch");
+});
+
+
+test("retention sweep only clears locators after provider absence verification", async () => {
+  const expired = record();
+  let deleted = false;
+  const result = await processOriginalRetentionBatch([expired], {
+    now: expiry,
+    deleteFile: async (fileId) => { assert.equal(fileId, expired.sourceFileId); deleted = true; },
+    confirmAbsent: async () => deleted
+  });
+  assert.equal(result.outcomes[0].outcome, "deleted");
+  assert.equal(result.records[0].sourceFileId, null);
+  assert.equal(result.records[0].state, "deleted");
+});
+
+test("retention sweep keeps a failed deletion retryable when absence is not confirmed", async () => {
+  const expired = record();
+  const result = await processOriginalRetentionBatch([expired], {
+    now: expiry,
+    deleteFile: async () => {},
+    confirmAbsent: async () => false
+  });
+  assert.equal(result.outcomes[0].outcome, "retryable-failure");
+  assert.equal(result.records[0].sourceFileId, expired.sourceFileId);
+  assert.equal(result.records[0].state, "deletion-failed");
+  assert.equal(assessOriginalRetention(result.records[0], expiry).deletionEligible, true);
+});
+
+test("retention sweep does not call the provider before expiry or for confirmed deletions", async () => {
+  const fresh = record();
+  const deleted = confirmOriginalDeletion(fresh, { confirmedAt: expiry, providerConfirmedAbsent: true });
+  let calls = 0;
+  const result = await processOriginalRetentionBatch([fresh, deleted], {
+    now: "2026-01-02T00:00:00.000Z",
+    deleteFile: async () => { calls += 1; },
+    confirmAbsent: async () => true
+  });
+  assert.equal(calls, 0);
+  assert.deepEqual(result.outcomes.map((entry) => entry.outcome), ["not-eligible", "already-deleted"]);
 });
