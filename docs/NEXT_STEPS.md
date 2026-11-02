@@ -95,6 +95,8 @@ Branch: `feat/production-readiness-acceptance`
 
 - **Owner confirmation recorded (2026-11-02):** the locator catalog is a per-copy lookup index from logical object identity (path plus SHA-256) to physical Drive location. The owner recognizes that a verified catalog can avoid repeated Drive searches and may improve latency/API efficiency; this is an expected benefit, not a measured result. Exact schema and cache/invalidation rules remain open.
 
+- **Owner decision recorded (2026-11-02):** the per-copy locator catalog covers all immutable objects needed for normal operation and recovery: data objects, commit records, journal events, and other immutable protocol objects. The catalog does not locate itself; its identity/integrity are anchored directly in the manifest. Exact schema and implementation remain open.
+
 - **Owner decision recorded (2026-11-02): preserve ADR §81.** Redesign commit snapshots as logicalPath → SHA-256 only; resolve Drive IDs separately per physical copy. Next choose the durable per-copy locator representation and publication/recovery contract, then update the PR #23 transaction engine, recovery verifier, backup/restore flow, and synthetic fault-injection suite together. The current PR #25 helper's fileId-plus-hash compatibility shape is transitional and not ADR-compliant.
 - Obtain explicit owner acceptance of evidence and remaining limitations.
 
