@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { DriveTransactionEngine } from "../js/drive-transaction-engine.mjs";
+import { DriveTransactionEngine, GoogleDriveTransactionAdapter } from "../js/drive-transaction-engine.mjs";
 
 const cryptoImpl = globalThis.crypto || webcrypto;
 const BASE = {
@@ -269,4 +269,72 @@ test("Drive transaction engine and browser smoke-test module have valid JavaScri
   const browserPath = fileURLToPath(new URL("../prototype/drive-feasibility-spike.mjs", import.meta.url));
   execFileSync(process.execPath, ["--check", enginePath], { stdio: "pipe" });
   execFileSync(process.execPath, ["--check", browserPath], { stdio: "pipe" });
+});
+
+
+test("Drive metadata visibility retries transient 404s with a bounded backoff", async () => {
+  let requests = 0;
+  const adapter = new GoogleDriveTransactionAdapter({
+    accessToken: () => "synthetic-token",
+    folderId: "synthetic-folder",
+    visibilityAttempts: 4,
+    visibilityDelayMs: 1,
+    visibilityMaxDelayMs: 2,
+    fetchImpl: async () => {
+      requests += 1;
+      if (requests < 4) return new Response("not visible yet", { status: 404 });
+      return new Response(JSON.stringify({
+        id: "new-file",
+        name: "synthetic-object",
+        parents: ["synthetic-folder"],
+        trashed: false,
+        appProperties: {}
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+  });
+
+  const metadata = await adapter.waitForMetadata("new-file");
+  assert.equal(metadata.id, "new-file");
+  assert.equal(requests, 4);
+});
+
+test("Drive metadata visibility timeout preserves diagnostic details after bounded retries", async () => {
+  let requests = 0;
+  const adapter = new GoogleDriveTransactionAdapter({
+    accessToken: () => "synthetic-token",
+    folderId: "synthetic-folder",
+    visibilityAttempts: 3,
+    visibilityDelayMs: 1,
+    visibilityMaxDelayMs: 2,
+    fetchImpl: async () => {
+      requests += 1;
+      return new Response("not found", { status: 404 });
+    }
+  });
+
+  await assert.rejects(adapter.waitForMetadata("missing-file"), (error) =>
+    error.code === "visibility-timeout" &&
+    error.details.fileId === "missing-file" &&
+    error.details.attempts === 3 &&
+    error.details.lastStatus === 404 &&
+    Number.isInteger(error.details.elapsedMs));
+  assert.equal(requests, 3);
+});
+
+test("Drive metadata visibility does not retry authorization failures", async () => {
+  let requests = 0;
+  const adapter = new GoogleDriveTransactionAdapter({
+    accessToken: () => "synthetic-token",
+    folderId: "synthetic-folder",
+    visibilityAttempts: 5,
+    visibilityDelayMs: 1,
+    fetchImpl: async () => {
+      requests += 1;
+      return new Response("forbidden", { status: 403 });
+    }
+  });
+
+  await assert.rejects(adapter.waitForMetadata("protected-file"), (error) =>
+    error.code === "authorization-required");
+  assert.equal(requests, 1);
 });
