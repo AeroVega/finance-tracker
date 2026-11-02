@@ -47,7 +47,15 @@ class SyntheticDrive {
     if (!file) throw new Error("not found");
     return { id, parents: ["synthetic-folder"], appProperties: file.appProperties || {} };
   }
-  async waitForMetadata(id) { return this.readMetadata(id); }
+  async waitForMetadata(id) {
+    try { return await this.readMetadata(id); }
+    catch {
+      const error = new Error("Drive metadata visibility failed for synthetic missing file.");
+      error.code = "visibility-timeout";
+      error.details = { fileId: id, attempts: 8, lastStatus: 404 };
+      throw error;
+    }
+  }
   async readBytes(id) {
     const file = this.files.get(id);
     if (!file) throw new Error("not found");
@@ -150,20 +158,18 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
     assert.equal(adapter.mutations, boundary);
     assert.equal(engine.recoveryRequired, true);
     assert.ok(adapter.files.size >= 2, `boundary ${boundary} retains its durable evidence`);
-    if (boundary === 2 || boundary === 5) {
-      await assert.rejects(
-        engine.recover({ manifestFileId: "manifest", makeManifest: transaction.makeManifest }),
-        (error) => error.message === "not found"
-      );
-      assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
-      assert.equal(engine.recoveryRequired, true);
-      continue;
-    }
     const recovered = await engine.recover({
       manifestFileId: "manifest",
       makeManifest: transaction.makeManifest
     });
     const outcome = recovered.transactions[0];
+    if (boundary === 2 || boundary === 5) {
+      assert.equal(outcome.outcome, "aborted", `boundary ${boundary} safely aborts when a planned file never becomes visible`);
+      assert.equal(outcome.preservedEvidence, true);
+      assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
+      assert.equal(engine.recoveryRequired, false);
+      continue;
+    }
     if (boundary === 1 || boundary === 3 || boundary === 4) {
       assert.equal(outcome.outcome, "aborted", `boundary ${boundary} safely aborts at the original base`);
       assert.equal(adapter.files.get("manifest").json.commitId, BASE.commitId);
