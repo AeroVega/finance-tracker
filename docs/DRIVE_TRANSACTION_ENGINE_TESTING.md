@@ -24,7 +24,7 @@ The new engine tests use an in-memory synthetic Drive implementation. They injec
 10. Manifest-published journal event.
 11. Terminal transaction-committed journal event.
 
-The suite verifies all 11 injected interruption points, preserves durable evidence, rejects stale serialized writers, refuses offline writes, aborts only after all known staged objects are independently visible and hash-verified, resumes a fully verified immutable commit when publication can safely continue, and repairs missing publication/terminal journal events after manifest read-back proves the commit. If a pre-generated ID is not visible within the retry window, recovery leaves the outcome unresolved and blocks further writes.
+The suite verifies all 11 injected interruption points, preserves durable evidence, rejects stale serialized writers, refuses offline writes, aborts only after all known staged objects are independently visible and hash-verified, resumes a fully verified immutable commit when publication can safely continue, and repairs missing publication/terminal journal events after manifest read-back proves the commit. If a pre-generated ID is not visible within the retry window, recovery leaves the outcome unresolved and blocks further writes. The live adapter now retries only HTTP 404 metadata-visibility responses up to eight attempts, with exponential delays capped at five seconds (about 22.5 seconds total by default). Authorization failures, permission errors, malformed metadata, and location mismatches are not retried. A final timeout records the file ID, attempt count, elapsed time, and last HTTP status so the owner can identify the missing object without discarding transaction evidence.
 
 ## Live Google Drive smoke test
 
