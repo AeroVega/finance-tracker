@@ -70,3 +70,22 @@ This document and the PR explanation are the discoverable handoff for a continui
 **Regression coverage added:** explicit Save writes only synthetic rows while retaining local CSV rows; Save/Clear availability follows lifecycle state transitions; direct Clear invocation during uncertain ownership is refused without removing rows. These new tests supplement the existing clear/import race tests.
 
 **Not yet verified:** exact-head GitHub Actions results and live iOS Safari/Drive behavior. This code change does not resolve the separately documented Drive metadata 404 or the Pages deployment/configuration discrepancy. Do not use the new Save button as a reason to retry a transaction while recovery or ownership is uncertain; recover first, then Save or Clear when the lifecycle returns to `ready`.
+
+
+## Owner-confirmed live dashboard acceptance (2026-11-02)
+
+The owner reports that the complete end-to-end synthetic storage cycle succeeded in the live dashboard on source commit `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`:
+
+1. Loaded four synthetic sample transactions.
+2. Explicitly saved them and received the verified-save confirmation.
+3. Released the Drive storage session.
+4. Reconnected and confirmed all four synthetic rows were restored.
+5. Cleared the synthetic transactions and saved the empty snapshot.
+6. Released the session again.
+7. Reconnected and confirmed zero synthetic rows were restored.
+
+The accompanying page diagnostics show repeated `stale-session` recovery followed by `ready`, two trusted release clicks, two completed `dashboard-handoff` releases, and successful subsequent reconnections. The final page message says zero synthetic rows were restored; the dashboard separately reports that zero rows were saved and verified. CSV imports remain local.
+
+**Performance baseline from the owner-provided trace:** initial recovery approximately 50 seconds; subsequent reconnect/recovery cycles approximately 53 and 55 seconds; each release approximately 4 seconds. Treat performance optimization as a separate follow-up. Do not weaken recovery, ownership, or read-back guarantees to reduce latency without measurement and regression coverage.
+
+This owner-confirmed live cycle supersedes the earlier statement above that live iOS Safari/Drive acceptance was still pending for the dashboard Save/Clear workflow. It does not, by itself, close the separately tracked historical Drive metadata 404 investigation or establish production financial-data persistence; PR #24 remains synthetic-fixtures-only.
