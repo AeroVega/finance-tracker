@@ -186,15 +186,15 @@ test("quarantines an incomplete backup and never changes the primary", async () 
     snapshot: { "ledger/synthetic.json": { fileId: "primary-object", sha256: sourceHash } } };
   const primaryManifest = {
     ...manifest, copyId: "synthetic-primary-copy", role: "primary",
-    storageBinding: "synthetic-primary-folder", commitRecordFileId: "primary-commit",
+    storageBinding: { provider: "google-drive", folderId: "synthetic-primary-folder" }, commitRecordFileId: "primary-commit",
     commitRecordHash: await hash(encoder.encode(canonicalizeJcs(sourceCommit)))
   };
-  const primary = new MemoryAdapter("primary");
+  const primary = new MemoryAdapter("synthetic-primary-folder");
   primary.files.set("primary-manifest", encoder.encode(canonicalizeJcs(primaryManifest)));
   primary.files.set("primary-commit", encoder.encode(canonicalizeJcs(sourceCommit)));
   primary.files.set("primary-object", sourceBytes);
   const before = new TextDecoder().decode(primary.files.get("primary-manifest"));
-  const target = new MemoryAdapter("backup");
+  const target = new MemoryAdapter("failed-backup-folder");
   let quarantineEvidence = null;
   const brokenTarget = Object.create(target);
   brokenTarget.createImmutable = async () => {
@@ -274,7 +274,7 @@ test("source revision change during backup quarantines the partial copy", async 
     if (id === "primary-manifest" && ++manifestReads === 2) return { ...value, revision: value.revision + 1 };
     return value;
   };
-  const target = new MemoryAdapter("backup");
+  const target = new MemoryAdapter("backup-folder-after-source-change");
   let quarantineCalled = false;
   await assert.rejects(createVerifiedSnapshotBackup({
     sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
