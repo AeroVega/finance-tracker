@@ -70,7 +70,8 @@ Branch: `feat/application-storage-integration`
 Branch: `feat/production-readiness-acceptance`
 
 **Implemented in the current branch:**
-- `js/portable-backup.mjs`: immutable snapshot-copy helper with source-stability check, object/commit/manifest read-back verification, new backup identity, manifest-last publication, and quarantine callback.
+- `js/portable-backup.mjs`: adapter-driven immutable snapshot-copy helper with a required serialized source-operation gate, source-stability check, exact destination bytes/metadata read-back, new backup identity, manifest-last publication, and explicit quarantine callback.
+- `js/original-retention-policy.mjs`: `processOriginalRetentionBatch` orchestrates provider deletion plus independent absence verification; failure preserves the locator and is retryable.
 - `js/portable-backup.mjs`: portable archive envelope, SHA-256 verification, exact snapshot-object set, structural-validation hook, provider-independent export without Drive file locators, and inert restore planning.
 - `js/original-retention-policy.mjs`: exact 540-day clock, deletion eligibility versus confirmed deletion, retryable failures, and backup/restore rules that do not restart or resurrect expired originals.
 - Synthetic tests in `tests/portable-backup.test.mjs` and `tests/original-retention-policy.test.mjs`.
@@ -83,6 +84,7 @@ Branch: `feat/production-readiness-acceptance`
 - Perform browser termination/reload rehearsals against live Drive at all transaction boundaries; existing PR #23's 11-boundary in-memory suite remains the automated baseline.
 - Test OAuth expiry, revocation, wrong account, permission denial, and reconnect live.
 - Inspect the actual Cloud project's OAuth publishing status, scope declarations, API restrictions, quotas, usage, and billing configuration. Recheck Google's announced 2026 quota/billing changes.
+- Resolve the critical mismatch between ADR §81 (logical paths plus hashes, no Drive IDs in commit records) and PR #23's current fileId-plus-hash snapshot references before accepting Drive backup/restore as architecture-complete.
 - Obtain explicit owner acceptance of evidence and remaining limitations.
 
 **Exit:** all evidence reviewed and explicit owner acceptance recorded. Production financial-data persistence remains disabled until the owner separately authorizes it.
