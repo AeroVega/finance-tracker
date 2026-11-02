@@ -418,12 +418,14 @@ export class DriveTransactionEngine {
         return { transactionId, commitId, revision: nextManifest.revision, manifest: nextManifest };
       } catch (error) {
         this.recoveryRequired = true;
+        const cause = error.code || error.name || "unknown";
+        const causeMessage = error.message || String(error);
         throw new DriveTransactionError("transaction-unresolved",
-          "The transaction did not reach a fully verified terminal state. Preserve its files and run recovery before another write.",
+          `Transaction unresolved (${cause}): ${causeMessage} Preserve transaction evidence and run recovery before retrying.`,
           {
             transactionId,
-            cause: error.code || error.name || "unknown",
-            causeMessage: error.message || String(error),
+            cause,
+            causeMessage,
             causeDetails: error.details && typeof error.details === "object" ? error.details : {},
             journalEventCount: events.length
           });
