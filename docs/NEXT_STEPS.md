@@ -6,10 +6,10 @@
 ## Latest PR #24 status — ready for merge review
 
 **Branch:** `feat/application-storage-integration`  
-**Reviewed source head before this documentation cleanup:** `102f6cee6536ada070f0aec88519462c20004db9`  
+**Final review head:** `b2b86d901fa98d5b90ecccd836b97ed348653e1a`  
 **Live dashboard acceptance source:** `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`
 
-**Verified CI:** both PR workflows passed on the reviewed source head. The complete Node contract suite reported **199 passed, 0 failed**; dashboard/browser module syntax checks passed. The workflow action pins are being updated from the Node-20-runtime v4 actions to current Node-24-runtime v7 releases to remove the deprecation warning; the resulting head must receive fresh CI before merge.
+**Verified CI:** both PR workflows passed on the reviewed source head. The complete Node contract suite reported **199 passed, 0 failed**; dashboard/browser module syntax checks passed. The CI workflow action pins were upgraded from the Node-20-runtime v4 actions to Node-24-runtime v7 releases. Both workflows passed again on final review head `b2b86d901fa98d5b90ecccd836b97ed348653e1a`, with 199/199 tests and no Node 20 action-runtime deprecation warning.
 
 **Owner-confirmed live acceptance:** four synthetic rows were saved and verified; release/reconnect restored all four; Clear plus an empty-snapshot Save succeeded; a second release/reconnect restored zero rows. CSV imports remained local. The diagnostic trace showed successful recovery to `ready` and two completed trusted dashboard handoffs.
 
