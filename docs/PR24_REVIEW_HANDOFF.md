@@ -4,9 +4,9 @@
 
 ## Current baseline
 
-**Verified:** corrective implementation was published on `feat/application-storage-integration` as commit `2d572dc56ecb978210abbc350ac715fdb5a77c00` (PR #24). Its Git tree is `0980c65935ab2684c34820cc237260a591ee5fb6`. The locally tested commit `850d3aacef3924a6fc1e5515d7d931636ffc62ea` has the identical tree; commit metadata differs. Continue from the published feature branch, not the old `36b3031` head. Do not revert the fixes merely because they differ from an earlier chat plan.
+**Verified:** the final reviewed feature branch is `feat/application-storage-integration`, currently at `102f6cee6536ada070f0aec88519462c20004db9` (documentation-only follow-ups may advance the head). The live dashboard acceptance was performed against source commit `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`; the code under test is unchanged at the current head.
 
-**Verified:** `node --test tests/*.test.mjs` passes 192 tests on the fetched published commit (163 before this review). JavaScript syntax and Git whitespace checks pass. Independent code review found no remaining blocker in the corrected queue/drain/identity mechanisms. CI `transaction-contracts` and `test` passed on that exact published SHA. These results do not prove live Drive or Safari behavior.
+**Verified:** both exact-head GitHub Actions workflows passed on `102f6cee6536ada070f0aec88519462c20004db9`: Node contract tests and Finance Tracker contract tests. The complete Node suite reports **199 passed, 0 failed**; dashboard/browser syntax checks also passed. The owner subsequently completed the full live synthetic dashboard save/reconnect/clear/reconnect acceptance cycle described below. Browser automation remains unavailable in the review environment, so no independent automated iOS rendering claim is made.
 
 ## Demonstrated mistakes and their corrections
 
@@ -34,20 +34,15 @@ The common weakness was not a missing retry: asynchronous state changes were tes
 
 ## Unresolved symptoms: do not claim these are fixed
 
-- **Open:** the original Drive metadata HTTP 404. The create request format and generated-ID `space=drive` usage match the reviewed provider documentation; no malformed-upload cause was demonstrated. Preserve the current create outcome/status diagnostics rather than increasing retries without evidence.
-- **User-confirmed:** the warning changed to release success without a knowingly initiated release, refresh or navigation during the save.
-- **Verified:** the screenshot's exact longer green sentence originated in the old dashboard release-handler continuation; automatic `pagehide` had different status wording. **Open:** the initiating event on that device. Do not tell the owner they must have clicked Release.
-- **Open:** live synthetic save/read-back/reconnect/clear behavior after these corrections, and real iPhone/iPad Safari lifecycle behavior. No live Drive mutations were performed during this review.
+- **Residual / not reproduced in final acceptance:** the historical Drive metadata HTTP 404 has not had a definitive root cause assigned. The final owner-run end-to-end cycle completed successfully, including verified save/read-back and subsequent recovery; retain the old 404 diagnostics and do not expand retries without evidence if it recurs.
+- **Historical / initiating event unproven:** an earlier warning changed to release success without a knowingly initiated release, refresh or navigation. The stale-success overwrite mechanism was corrected, and the final diagnostic trace shows two trusted release clicks followed by two completed dashboard handoffs. This does not establish the initiating event behind the earlier incident; do not claim it was definitely a user click.
+- **Owner-confirmed live acceptance passed:** see the complete four-row save/reconnect/clear/reconnect cycle below. Real Drive interruption at every durable mutation boundary, backup/restore, security review and PR #25 production-readiness work remain out of scope.
 
 The new expandable dashboard diagnostic panel contains a bounded, in-memory allowlisted event history. It records state/release source/browser-event booleans and the build stamp, not tokens, folder names, file IDs, URLs, transaction rows, balances or raw errors. Reload clears it. It is observational only. Use it to establish event provenance; do not invent an idle timer (none exists).
 
 ## Deployment discrepancy discovered during verification
 
-**Verified on 2026-11-02:** automatic run [41372655252](https://github.com/AeroVega/finance-tracker/actions/runs/41372655252), named `pages build and deployment`, completed successfully for `2d572dc`; its event is `dynamic` and path is `dynamic/pages/pages-build-deployment`. Live `app.js`, lifecycle and diagnostic-module bytes matched that published tree.
-
-**Verified blocker:** that built-in publication served the committed placeholder `build-info.js` (`development (not deployed)`), returned HTTP 404 for `js/google-config.json`, and served the empty client/API-key placeholders from `google-config.js`. The custom `.github/workflows/deploy-pages.yml` generates both configuration files and stamps the source commit, but triggers only on `main` push or explicit dispatch. Thus a green built-in Pages run is not proof of a configured Drive application. This configuration-file 404 is separate from the earlier Drive-file metadata 404.
-
-**Open / requires deployment authority:** reconcile the actual Pages publishing mode with the intended artifact workflow, then verify generated configuration presence (booleans only), source stamp, artifact paths and served source bytes. Do not commit configuration credentials, manually dispatch a deployment, change repository settings or merge as an unannounced workaround. No such action was taken during this review.
+**Historical deployment discrepancy — superseded for the tested build:** an earlier built-in dynamic Pages publication omitted generated Google configuration and source stamping. The owner later performed the full live dashboard acceptance against a deployed build stamped with source commit `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`; Google authorization and Drive operations succeeded. Therefore the old unconfigured artifact is not the artifact used for final acceptance. The precise publication path/settings used for that successful build are not independently recorded here; do not infer that a future branch deployment is configured merely because CI passes. The custom `.github/workflows/deploy-pages.yml` generates the public Google config and full source stamp and can be manually dispatched for a selected ref, but deployment remains a separate, explicitly authorized action.
 
 ## Continuation rules and acceptance
 
@@ -69,7 +64,7 @@ This document and the PR explanation are the discoverable handoff for a continui
 
 **Regression coverage added:** explicit Save writes only synthetic rows while retaining local CSV rows; Save/Clear availability follows lifecycle state transitions; direct Clear invocation during uncertain ownership is refused without removing rows. These new tests supplement the existing clear/import race tests.
 
-**Not yet verified:** exact-head GitHub Actions results and live iOS Safari/Drive behavior. This code change does not resolve the separately documented Drive metadata 404 or the Pages deployment/configuration discrepancy. Do not use the new Save button as a reason to retry a transaction while recovery or ownership is uncertain; recover first, then Save or Clear when the lifecycle returns to `ready`.
+**Verified:** the final exact-head CI and owner-run live dashboard Save/Clear acceptance both passed. Do not use Save or Clear while recovery or ownership is uncertain; recover first and wait until the lifecycle returns to `ready`.
 
 
 ## Owner-confirmed live dashboard acceptance (2026-11-02)
@@ -89,3 +84,12 @@ The accompanying page diagnostics show repeated `stale-session` recovery followe
 **Performance baseline from the owner-provided trace:** initial recovery approximately 50 seconds; subsequent reconnect/recovery cycles approximately 53 and 55 seconds; each release approximately 4 seconds. Treat performance optimization as a separate follow-up. Do not weaken recovery, ownership, or read-back guarantees to reduce latency without measurement and regression coverage.
 
 This owner-confirmed live cycle supersedes the earlier statement above that live iOS Safari/Drive acceptance was still pending for the dashboard Save/Clear workflow. It does not, by itself, close the separately tracked historical Drive metadata 404 investigation or establish production financial-data persistence; PR #24 remains synthetic-fixtures-only.
+
+
+## Final review disposition (2026-11-02)
+
+**Ready for merge review:** PR #24's intended synthetic-only application integration has passed exact-head CI and owner-confirmed live dashboard acceptance. The latest full Node suite reports 199/199 passing; both PR workflows passed. No unresolved code defect was identified in this final pass. The historical Drive metadata 404 root cause and earlier unsolicited-release initiating event remain unproven but were not reproduced in the successful final acceptance cycle; retain them as residual investigation items rather than silently claiming root-cause closure.
+
+**Scope guardrails remain:** synthetic fixtures only, dedicated folder name containing `synthetic`, CSV imports local-only, fail-closed ownership/recovery, no production ledger persistence. PR #25 still owns the remaining fault-injection/live interruption rehearsals, backup/restore/portability, OAuth/security, 540-day retention/deletion, current terms/quotas/$0-cost review, and explicit owner acceptance.
+
+**Performance follow-up:** owner-observed recovery takes approximately 50 seconds initially and 53–55 seconds on subsequent reconnects; orderly release takes approximately 4 seconds. Investigate request-level timings in a separate performance task. Do not weaken integrity or ownership checks to improve latency.
