@@ -319,7 +319,11 @@ test("Drive metadata visibility timeout preserves diagnostic details after bound
     error.details.fileId === "missing-file" &&
     error.details.attempts === 3 &&
     error.details.lastStatus === 404 &&
-    Number.isInteger(error.details.elapsedMs));
+    Number.isInteger(error.details.elapsedMs) &&
+    error.details.cause === "drive-request-failed" &&
+    /missing-file/.test(error.message) &&
+    /HTTP 404/.test(error.message) &&
+    /3 checks/.test(error.message));
   assert.equal(requests, 3);
 });
 
