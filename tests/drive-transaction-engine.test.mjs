@@ -144,6 +144,8 @@ test("every durable mutation boundary is injectable and preserves evidence", asy
       Boolean(error.details.transactionId) &&
       Boolean(error.details.cause) &&
       Boolean(error.details.causeMessage) &&
+      error.message.includes(error.details.cause) &&
+      error.message.includes(error.details.causeMessage) &&
       Number.isInteger(error.details.journalEventCount));
     assert.equal(adapter.mutations, boundary);
     assert.equal(engine.recoveryRequired, true);
