@@ -1,7 +1,17 @@
 # Finance Tracker — next steps and handoff
 
-**Last updated:** 2026-11-01  
+**Last updated:** 2026-11-02
 **Current phase:** PR #22's pure transaction protocol foundation and PR #23's durable Google Drive transaction engine are merged. The owner-confirmed live Drive transaction/reopen/recovery smoke test and temporary-file cleanup passed. PR #24 application lifecycle integration is underway on feat/application-storage-integration. Production financial-data persistence remains **not approved**.
+
+## Latest PR #24 review handoff
+
+**Verified:** corrective commit `2d572dc56ecb978210abbc350ac715fdb5a77c00` fixes reproduced handoff/lease/status/recovery-scope defects. All 192 tests passed on its fetched published tree and exact-SHA contract CI passed. Read [PR24_REVIEW_HANDOFF.md](PR24_REVIEW_HANDOFF.md) before continuing; it explains the changed invariants, regression evidence, unresolved symptoms and deployment discrepancy.
+
+**Verified follow-up:** the dashboard Clear rollback could discard CSV imports that arrived during a failed remote clear. The follow-up preserves newer imports, gates overlapping synthetic actions, and replaces a source-pattern assertion with five actual-handler regression tests; the local suite now passes 196 tests. See the review handoff for details.
+
+**Open:** original Drive metadata 404 and the initiating event behind the unsolicited release remain unproven. The green status overwrite was a demonstrated defect, not proof of a deliberate user click. Earlier successful prototype smoke tests below are historical evidence, not acceptance of the failing dashboard integration.
+
+**Verified deployment blocker:** built-in branch Pages publication served corrected source assets but omitted generated Google configuration and source stamping. Resolve the publishing-mode/configuration prerequisite with appropriate deployment authority before requesting further live testing. Do not equate its successful workflow with a configured app, or confuse its missing configuration-file 404 with the original Drive-file 404. No merge, manual deployment, settings change or live Drive operation was performed for this review.
 
 ## Current workstream and PR sequence
 
@@ -46,7 +56,7 @@ Branch: feat/application-storage-integration
 - Added deterministic lifecycle and dashboard-boundary tests; the Node contract workflow runs the complete `tests/*.test.mjs` suite.
 - Added the synthetic lifecycle browser harness under Prototype Tools. Owner-confirmed live tests passed for startup recovery, heartbeat, serialized writes and SHA-256 read-back, offline refusal/reconnect, orderly release, active-session refusal/sequential handoff, explicit stale-session recovery after simulated crash, and synthetic-file cleanup.
 
-**Remaining PR #24 work:** run the newly wired dashboard UI end-to-end on the deployed feature branch using only the dedicated synthetic folder. Verify connect/startup read, sample fixture write/read-back, reload restoration, clear, and orderly release. Resolve any defects before merge.
+**Remaining PR #24 work:** first resolve the deployment/configuration prerequisite and remaining review findings described in the latest handoff. Then run the corrected dashboard UI end-to-end on a verified configured feature build using only the dedicated synthetic folder. Verify connect/startup read, sample fixture write/read-back, reload restoration, clear, and orderly release. Resolve any defects before merge.
 
 **Exit:** the actual dashboard's synthetic fixture workflow passes live owner testing and automated tests; the permanent CSV workflow remains local and functional. No real financial data.
 
@@ -83,7 +93,7 @@ The accepted operating model is single-user/single-active-device. Simultaneous u
 
 PR #22 merged on 2026-11-01. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`. PR #23 adds `js/drive-transaction-engine.mjs`, `tests/drive-transaction-engine.test.mjs`, and `docs/DRIVE_TRANSACTION_ENGINE_TESTING.md`; the Drive feasibility page includes a live synthetic transaction smoke test.
 
-PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation; its automated suites and owner-run live synthetic smoke test/cleanup have passed. PR #24 owns application integration and automatic session lifecycle; its initial synthetic-only lifecycle controller is in progress. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
+PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation; its automated suites and owner-run live synthetic smoke test/cleanup have passed. PR #24 owns application integration and automatic session lifecycle; its synthetic-only lifecycle controller and dashboard are implemented, with corrective review changes and remaining live acceptance tracked in `PR24_REVIEW_HANDOFF.md`. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
 
 Do not enable real ledger reads/writes or production financial-data persistence during these workstreams. Use invented fixtures and the dedicated synthetic Drive folder only.
 
