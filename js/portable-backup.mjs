@@ -85,6 +85,9 @@ function validateManifest(manifest, { portable = false } = {}) {
     fail("not-restorable-backup", "Only a verified, non-quarantined backup copy can be exported or restored.");
   }
   if (!Number.isSafeInteger(manifest.revision) || manifest.revision < 0) fail("invalid-revision", "The backup revision is invalid.");
+  if (!/^[0-9a-f]{64}$/.test(String(manifest.commitRecordHash || ""))) {
+    fail("invalid-commit-hash", "The backup manifest requires a SHA-256 commit-record hash.");
+  }
   const binding = manifest.storageBinding;
   if (portable) {
     if (binding?.provider !== "portable-archive" || binding.folderId !== null) {
@@ -153,7 +156,8 @@ export async function createPortableBackup({ manifest, commitRecord, objects, ex
   return archive;
 }
 
-export async function verifyPortableBackup(archive, { cryptoImpl = globalThis.crypto, validateStructure = async () => true } = {}) {
+export async function verifyPortableBackup(archive, { cryptoImpl = globalThis.crypto, validateStructure } = {}) {
+  if (typeof validateStructure !== "function") fail("structural-validator-required", "Portable backup verification requires an application schema/structure validator.");
   if (!archive || archive.format !== "finance-tracker-portable-backup" || archive.version !== 1) {
     fail("unsupported-archive", "The portable backup format or version is unsupported.");
   }
@@ -162,6 +166,8 @@ export async function verifyPortableBackup(archive, { cryptoImpl = globalThis.cr
   if (actualArchiveHash !== archiveSha256) fail("archive-hash-mismatch", "The portable backup envelope failed integrity verification.");
   validateManifest(archive.manifest, { portable: true });
   validateCommit(archive.manifest, archive.commitRecord);
+  const commitHash = await sha256(new TextEncoder().encode(canonicalizeJcs(archive.commitRecord)), cryptoImpl);
+  if (archive.manifest.commitRecordHash !== commitHash) fail("commit-hash-mismatch", "The portable commit record does not match its manifest hash.");
   if (archive.databaseId !== archive.manifest.databaseId || archive.sourceCopyId !== archive.manifest.copyId ||
       archive.revision !== archive.manifest.revision || archive.commitId !== archive.manifest.commitId) {
     fail("archive-identity-mismatch", "The portable backup envelope does not match its embedded manifest.");
@@ -170,7 +176,8 @@ export async function verifyPortableBackup(archive, { cryptoImpl = globalThis.cr
   const expectedPaths = Object.keys(archive.commitRecord.snapshot).sort();
   const restoredObjects = {};
   for (const item of archive.objects) {
-    if (!item || typeof item.logicalPath !== "string" || Object.hasOwn(restoredObjects, item.logicalPath)) {
+    if (!item || typeof item.logicalPath !== "string" || !item.logicalPath ||
+        ["__proto__", "constructor", "prototype"].includes(item.logicalPath) || Object.hasOwn(restoredObjects, item.logicalPath)) {
       fail("invalid-logical-path", "The portable backup contains duplicate or invalid object paths.");
     }
     const bytes = fromBase64(item.contentBase64);
@@ -227,14 +234,14 @@ export async function planPortableRestore(archive, { newCopyId, newStorageBindin
 async function performVerifiedSnapshotBackup({
   sourceAdapter, targetAdapter, sourceManifestFileId, newCopyId, newStorageBinding,
   transactionId = globalThis.crypto?.randomUUID?.(), now = new Date().toISOString(),
-  validateStructure = async () => true, quarantine, cryptoImpl = globalThis.crypto
+  validateStructure, quarantine, cryptoImpl = globalThis.crypto
 }) {
   if (!sourceAdapter || !targetAdapter || typeof sourceManifestFileId !== "string" ||
       typeof newCopyId !== "string" || !newCopyId.trim() || newStorageBinding?.provider !== "google-drive" ||
       typeof newStorageBinding.folderId !== "string" || !newStorageBinding.folderId.trim() ||
       typeof transactionId !== "string" || !transactionId.trim() ||
-      typeof quarantine !== "function") {
-    fail("invalid-backup-config", "Source and destination adapters, source manifest, new copy identity, storage binding, transaction ID, and quarantine handler are required.");
+      typeof validateStructure !== "function" || typeof quarantine !== "function") {
+    fail("invalid-backup-config", "Source and destination adapters, source manifest, new copy identity, storage binding, transaction ID, structural validator, and quarantine handler are required.");
   }
   let manifestWritten = false;
   try {
