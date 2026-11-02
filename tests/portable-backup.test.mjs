@@ -263,7 +263,7 @@ test("source revision change during backup quarantines the partial copy", async 
     storageBinding: { provider: "google-drive", folderId: "synthetic-primary-folder" }, commitRecordFileId: "primary-commit",
     commitRecordHash: await hash(encoder.encode(canonicalizeJcs(sourceCommit)))
   };
-  const primary = new MemoryAdapter("primary");
+  const primary = new MemoryAdapter("synthetic-primary-folder");
   primary.files.set("primary-manifest", encoder.encode(canonicalizeJcs(primaryManifest)));
   primary.files.set("primary-commit", encoder.encode(canonicalizeJcs(sourceCommit)));
   primary.files.set("primary-object", sourceBytes);
@@ -278,7 +278,7 @@ test("source revision change during backup quarantines the partial copy", async 
   let quarantineCalled = false;
   await assert.rejects(createVerifiedSnapshotBackup({
     sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
-    newCopyId: "backup-copy-after-source-change", newStorageBinding: { provider: "google-drive", folderId: "backup-folder" },
+    newCopyId: "backup-copy-after-source-change", newStorageBinding: { provider: "google-drive", folderId: "backup-folder-after-source-change" },
     transactionId: "source-change-test", cryptoImpl,
     withSourceLock: async (operation) => operation(),
     quarantine: async () => { quarantineCalled = true; }
