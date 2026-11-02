@@ -81,6 +81,7 @@ export function confirmOriginalDeletion(record, { confirmedAt, providerConfirmed
     sourceFileId: null,
     state: "deleted",
     deletionConfirmedAt: iso(parseInstant(confirmedAt, "confirmedAt")),
+    lastDeletionAttemptAt: iso(parseInstant(confirmedAt, "confirmedAt")),
     deletionFailureCode: null
   });
 }
@@ -90,7 +91,7 @@ export function recordOriginalDeletionFailure(record, { attemptedAt, failureCode
   const assessment = assessOriginalRetention(record, attemptedAt);
   if (!assessment.deletionEligible) fail("retention-not-expired", "The original file is not yet eligible for deletion.");
   if (typeof failureCode !== "string" || !failureCode.trim()) fail("missing-deletion-failure", "A stable deletion failure code is required.");
-  return Object.freeze({ ...record, state: "deletion-failed", deletionFailureCode: failureCode });
+  return Object.freeze({ ...record, state: "deletion-failed", lastDeletionAttemptAt: iso(parseInstant(attemptedAt, "attemptedAt")), deletionFailureCode: failureCode });
 }
 
 /** Backup copies carry the original clock unchanged; backup creation never restarts retention. */
