@@ -311,20 +311,18 @@ export class ApplicationStorageLifecycle {
   }
 
   async release({ reason = "handoff" } = {}) {
-    // An unresolved transaction must retain its ownership claim and heartbeat.
-    // Releasing here could let another device take over before recovery has
-    // determined whether the pending transaction committed.
+    // Do not relinquish ownership while a transaction still needs recovery.
     if (this.state === "recovery-required" || this.engine?.recoveryRequired) {
       fail("recovery-required", "Storage ownership cannot be released while a transaction is unresolved. Recover and verify the transaction before handing off this device.");
+    }
+    // An uncertain/non-owner state is not a successful release. Preserve the
+    // lifecycle and heartbeat so this page does not silently abandon a claim.
+    if (!this.coordinator?.canWrite) {
+      fail("release-unconfirmed", "This page cannot verify session ownership, so no release was attempted. Reconnect and recover before switching devices.");
     }
     this.acceptingWrites = false;
     this.heartbeatStop?.();
     this.heartbeatStop = null;
-    if (!this.coordinator?.canWrite) {
-      this.detachLifecycleListeners();
-      this.started = false;
-      return { released: false, reason };
-    }
     this.publish("releasing", "Finishing storage handoff…");
     try {
       const result = await this.coordinator.release();
