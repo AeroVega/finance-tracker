@@ -63,7 +63,7 @@ function fromBase64(value) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-function validateManifest(manifest) {
+function validateManifest(manifest, { portable = false } = {}) {
   const required = ["databaseId", "copyId", "commitId", "revision", "role", "storageBinding"];
   if (!manifest || required.some((key) => manifest[key] === undefined || manifest[key] === null)) {
     fail("invalid-manifest", "The backup manifest is missing required identity or revision fields.");
@@ -72,6 +72,14 @@ function validateManifest(manifest) {
     fail("not-restorable-backup", "Only a verified, non-quarantined backup copy can be exported or restored.");
   }
   if (!Number.isSafeInteger(manifest.revision) || manifest.revision < 0) fail("invalid-revision", "The backup revision is invalid.");
+  const binding = manifest.storageBinding;
+  if (portable) {
+    if (binding?.provider !== "portable-archive" || binding.folderId !== null) {
+      fail("invalid-portable-binding", "A portable archive must not retain a Drive folder binding.");
+    }
+  } else if (binding?.provider !== "google-drive" || typeof binding.folderId !== "string" || !binding.folderId.trim()) {
+    fail("invalid-storage-binding", "A Drive backup requires an explicit Google Drive folder binding.");
+  }
 }
 
 function validateCommit(manifest, commitRecord) {
@@ -112,7 +120,7 @@ export async function createPortableBackup({ manifest, commitRecord, objects, ex
   const portableCommitHash = await sha256(new TextEncoder().encode(canonicalizeJcs(portableCommitRecord)), cryptoImpl);
   const portableManifest = {
     ...manifest,
-    storageBinding: "portable-archive",
+    storageBinding: { provider: "portable-archive", folderId: null },
     commitRecordFileId: null,
     commitRecordHash: portableCommitHash
   };
@@ -139,7 +147,7 @@ export async function verifyPortableBackup(archive, { cryptoImpl = globalThis.cr
   const { archiveSha256, ...unsigned } = archive;
   const actualArchiveHash = await sha256(new TextEncoder().encode(canonicalizeJcs(unsigned)), cryptoImpl);
   if (actualArchiveHash !== archiveSha256) fail("archive-hash-mismatch", "The portable backup envelope failed integrity verification.");
-  validateManifest(archive.manifest);
+  validateManifest(archive.manifest, { portable: true });
   validateCommit(archive.manifest, archive.commitRecord);
   if (archive.databaseId !== archive.manifest.databaseId || archive.sourceCopyId !== archive.manifest.copyId ||
       archive.revision !== archive.manifest.revision || archive.commitId !== archive.manifest.commitId) {
@@ -181,7 +189,9 @@ export async function planPortableRestore(archive, { newCopyId, newStorageBindin
   if (typeof newCopyId !== "string" || !newCopyId.trim() || newCopyId === archive?.sourceCopyId) {
     fail("invalid-restore-copy-id", "Restore requires a new physical copy ID distinct from the source backup.");
   }
-  if (typeof newStorageBinding !== "string" || !newStorageBinding.trim()) fail("invalid-storage-binding", "Restore requires an explicit destination storage binding.");
+  if (newStorageBinding?.provider !== "google-drive" || typeof newStorageBinding.folderId !== "string" || !newStorageBinding.folderId.trim()) {
+    fail("invalid-storage-binding", "Restore requires an explicit Google Drive destination folder binding.");
+  }
   const verified = await verifyPortableBackup(archive, { cryptoImpl, validateStructure });
   const manifest = {
     ...archive.manifest,
@@ -221,6 +231,11 @@ async function performVerifiedSnapshotBackup({
       fail("invalid-backup-source", "Backup requires an active primary with a verifiable committed manifest.");
     }
     if (newCopyId === sourceManifest.copyId) fail("invalid-backup-copy-id", "A backup must have a new physical copy ID.");
+    if (sourceManifest.storageBinding?.provider !== "google-drive" ||
+        sourceManifest.storageBinding.folderId !== sourceAdapter.folderId ||
+        newStorageBinding.folderId !== targetAdapter.folderId) {
+      fail("storage-binding-mismatch", "Source and destination adapter folders must match their declared Google Drive storage bindings.");
+    }
     const sourceCommit = await sourceAdapter.readJson(sourceManifest.commitRecordFileId);
     const sourceCommitText = canonicalizeJcs(sourceCommit);
     const sourceCommitHash = await sha256(new TextEncoder().encode(sourceCommitText), cryptoImpl);
