@@ -282,6 +282,7 @@
         $("release-synthetic-storage").disabled = syntheticMutationPending || lifecycleState !== "ready";
         if (["ready", "connecting", "recovering", "reconnecting", "recovering-session", "releasing"].includes(lifecycleState)) connectStorageButton.disabled = true;
         else connectStorageButton.disabled = false;
+        render();
       },
       onSnapshot: (rows) => {
         state.syntheticTransactions = rows;
@@ -349,6 +350,10 @@
   });
   $("clear-data").addEventListener("click", async () => {
     if (syntheticMutationPending) return;
+    if (syntheticStorage?.lifecycle && syntheticStorage.lifecycle.state !== "ready") {
+      setStatus("The existing synthetic storage session is not ready. Resolve its recovery or ownership state before clearing; no rows were removed.", "error");
+      return;
+    }
     syntheticMutationPending = true;
     // Capture identities, not mutable array references. Imports remain usable
     // during remote I/O; a successful clear removes only the original selection.
