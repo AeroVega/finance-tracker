@@ -102,6 +102,7 @@ function validateCommit(manifest, commitRecord) {
   if (!commitRecord || commitRecord.format !== "finance-tracker-commit" || commitRecord.version !== 1 ||
       commitRecord.databaseId !== manifest.databaseId ||
       commitRecord.commitId !== manifest.commitId || commitRecord.revision !== manifest.revision ||
+      commitRecord.parentCommitId !== manifest.parentCommitId ||
       !commitRecord.snapshot || typeof commitRecord.snapshot !== "object" || Array.isArray(commitRecord.snapshot)) {
     fail("commit-identity-mismatch", "The commit record does not match the backup manifest identity and revision.");
   }
@@ -110,6 +111,8 @@ function validateCommit(manifest, commitRecord) {
 export async function createPortableBackup({ manifest, commitRecord, objects, exportedAt = new Date().toISOString(), cryptoImpl = globalThis.crypto }) {
   validateManifest(manifest);
   validateCommit(manifest, commitRecord);
+  const sourceCommitHash = await sha256(new TextEncoder().encode(canonicalizeJcs(commitRecord)), cryptoImpl);
+  if (manifest.commitRecordHash !== sourceCommitHash) fail("commit-hash-mismatch", "The source backup manifest does not reference this exact commit record.");
   if (!Array.isArray(objects)) fail("invalid-object-list", "Portable backup objects must be an array.");
   const expectedPaths = Object.keys(commitRecord.snapshot).sort();
   const supplied = new Map();
