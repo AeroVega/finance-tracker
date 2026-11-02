@@ -112,3 +112,27 @@ test("retention sweep does not call the provider before expiry or for confirmed 
   assert.equal(calls, 0);
   assert.deepEqual(result.outcomes.map((entry) => entry.outcome), ["not-eligible", "already-deleted"]);
 });
+
+
+test("retention sweep accepts an idempotent delete only after independent absence verification", async () => {
+  const expired = record();
+  const result = await processOriginalRetentionBatch([expired], {
+    now: expiry,
+    deleteFile: async () => { throw Object.assign(new Error("already absent"), { code: "not-found" }); },
+    confirmAbsent: async () => true
+  });
+  assert.equal(result.outcomes[0].outcome, "deleted");
+  assert.equal(result.records[0].sourceFileId, null);
+});
+
+test("retention sweep preserves provider permission failures for retry", async () => {
+  const expired = record();
+  const result = await processOriginalRetentionBatch([expired], {
+    now: expiry,
+    deleteFile: async () => { throw Object.assign(new Error("forbidden"), { code: "permission-denied" }); },
+    confirmAbsent: async () => false
+  });
+  assert.equal(result.outcomes[0].outcome, "retryable-failure");
+  assert.equal(result.outcomes[0].failureCode, "permission-denied");
+  assert.equal(result.records[0].sourceFileId, expired.sourceFileId);
+});
