@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
+import { canonicalizeJcs } from "../js/transaction-protocol.mjs";
 import { createPortableBackup, verifyPortableBackup, planPortableRestore, createVerifiedSnapshotBackup } from "../js/portable-backup.mjs";
 
 const cryptoImpl = globalThis.crypto || webcrypto;
@@ -25,6 +26,7 @@ const commitRecord = {
     "ledger/synthetic.json": { fileId: "synthetic-object-1", sha256: sourceHash }
   }
 };
+manifest.commitRecordHash = await hash(encoder.encode(canonicalizeJcs(commitRecord)));
 
 async function archive() {
   return createPortableBackup({
