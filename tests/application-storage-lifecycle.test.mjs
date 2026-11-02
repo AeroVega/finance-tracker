@@ -110,6 +110,27 @@ test("recovery failure keeps the acquired session alive but blocks reads and wri
   assert.equal(lifecycle.acceptingWrites, true);
 });
 
+test("unresolved transactions block release and retain the active ownership claim", async () => {
+  const { lifecycle, sessionAdapter, engine } = setup();
+  await lifecycle.start();
+  engine.recoveryRequired = true;
+  lifecycle.state = "recovery-required";
+  lifecycle.acceptingWrites = false;
+
+  await assert.rejects(lifecycle.release(), (error) => error.code === "recovery-required");
+  assert.equal(sessionAdapter.record.state, "active");
+  assert.equal(lifecycle.coordinator.canWrite, true);
+  assert.equal(lifecycle.started, true);
+  assert.equal(typeof lifecycle.heartbeatStop, "function");
+
+  // Recovery resolves the pending transaction; only then may handoff proceed.
+  engine.recoveryRequired = false;
+  await lifecycle.recover();
+  const result = await lifecycle.release();
+  assert.equal(result.released, true);
+  assert.equal(sessionAdapter.record.state, "released");
+});
+
 test("orderly release drains and releases the session", async () => {
   const { lifecycle, sessionAdapter } = setup();
   await lifecycle.start();
