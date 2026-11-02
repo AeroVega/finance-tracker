@@ -252,3 +252,38 @@ test("refuses to start a backup without the serialized source-operation gate", a
     newCopyId: "backup-copy", newStorageBinding: "backup-folder", cryptoImpl
   }), (error) => error.code === "source-lock-required");
 });
+
+
+test("source revision change during backup quarantines the partial copy", async () => {
+  const { canonicalizeJcs } = await import("../js/transaction-protocol.mjs");
+  const sourceCommit = { ...commitRecord, copyId: "synthetic-primary-copy",
+    snapshot: { "ledger/synthetic.json": { fileId: "primary-object", sha256: sourceHash } } };
+  const primaryManifest = {
+    ...manifest, copyId: "synthetic-primary-copy", role: "primary",
+    storageBinding: "synthetic-primary-folder", commitRecordFileId: "primary-commit",
+    commitRecordHash: await hash(encoder.encode(canonicalizeJcs(sourceCommit)))
+  };
+  const primary = new MemoryAdapter("primary");
+  primary.files.set("primary-manifest", encoder.encode(canonicalizeJcs(primaryManifest)));
+  primary.files.set("primary-commit", encoder.encode(canonicalizeJcs(sourceCommit)));
+  primary.files.set("primary-object", sourceBytes);
+  const originalReadJson = primary.readJson.bind(primary);
+  let manifestReads = 0;
+  primary.readJson = async (id) => {
+    const value = await originalReadJson(id);
+    if (id === "primary-manifest" && ++manifestReads === 2) return { ...value, revision: value.revision + 1 };
+    return value;
+  };
+  const target = new MemoryAdapter("backup");
+  let quarantineCalled = false;
+  await assert.rejects(createVerifiedSnapshotBackup({
+    sourceAdapter: primary, targetAdapter: target, sourceManifestFileId: "primary-manifest",
+    newCopyId: "backup-copy-after-source-change", newStorageBinding: "backup-folder",
+    transactionId: "source-change-test", cryptoImpl,
+    withSourceLock: async (operation) => operation(),
+    quarantine: async () => { quarantineCalled = true; }
+  }), (error) => error.code === "backup-quarantined");
+  assert.equal(quarantineCalled, true);
+  assert.equal(target.files.size, 1, "only the copied object remains; no backup manifest was published");
+  assert.equal((await originalReadJson("primary-manifest")).revision, primaryManifest.revision);
+});
