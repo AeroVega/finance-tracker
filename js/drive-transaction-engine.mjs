@@ -160,13 +160,21 @@ export class GoogleDriveTransactionAdapter {
         }
       }
     }
-    throw new DriveTransactionError("visibility-timeout", "A newly written Drive file did not become visible within the bounded verification window. Preserve transaction evidence and run recovery before retrying.", {
-      fileId,
-      attempts: this.visibilityAttempts,
-      elapsedMs: Date.now() - startedAt,
-      lastStatus: lastError?.details?.status ?? null,
-      cause: lastError?.code
-    });
+    const elapsedMs = Date.now() - startedAt;
+    const lastStatus = lastError?.details?.status ?? null;
+    const cause = lastError?.code || "unknown";
+    throw new DriveTransactionError(
+      "visibility-timeout",
+      `Drive metadata visibility failed for file ID ${fileId}: HTTP ${lastStatus ?? "unknown"} after ${this.visibilityAttempts} checks over ${elapsedMs} ms (cause: ${cause}). The write outcome may be ambiguous; preserve transaction evidence and run recovery before retrying.`,
+      {
+        fileId,
+        attempts: this.visibilityAttempts,
+        elapsedMs,
+        lastStatus,
+        cause,
+        causeMessage: lastError?.message || null
+      }
+    );
   }
 
   async createImmutable({ fileId, name, kind, transactionId, content, expectedSha256 }) {
