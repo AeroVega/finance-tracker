@@ -299,3 +299,19 @@ test("source revision change during backup quarantines the partial copy", async 
   assert.equal(target.files.size, 1, "only the copied object remains; no backup manifest was published");
   assert.equal((await originalReadJson("primary-manifest")).revision, primaryManifest.revision);
 });
+
+
+test("portable backup accepts a valid genesis commit with an explicit null parent", async () => {
+  const genesisCommit = { ...commitRecord, commitId: "synthetic-genesis", revision: 1, parentCommitId: null };
+  const genesisManifest = {
+    ...manifest, commitId: "synthetic-genesis", revision: 1, parentCommitId: null,
+    commitRecordHash: await hash(encoder.encode(canonicalizeJcs(genesisCommit)))
+  };
+  const exported = await createPortableBackup({
+    manifest: genesisManifest, commitRecord: genesisCommit,
+    objects: [{ logicalPath: "ledger/synthetic.json", bytes: sourceBytes }], cryptoImpl
+  });
+  const verified = await verifyPortableBackup(exported, { cryptoImpl, validateStructure });
+  assert.equal(verified.valid, true);
+  assert.equal(exported.manifest.parentCommitId, null);
+});
