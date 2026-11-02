@@ -84,6 +84,9 @@ Branch: `feat/production-readiness-acceptance`
 - Perform browser termination/reload rehearsals against live Drive at all transaction boundaries; existing PR #23's 11-boundary in-memory suite remains the automated baseline.
 - Test OAuth expiry, revocation, wrong account, permission denial, and reconnect live.
 - Inspect the actual Cloud project's OAuth publishing status, scope declarations, API restrictions, quotas, usage, and billing configuration. Recheck Google's announced 2026 quota/billing changes.
+
+- **Owner decision recorded (2026-11-02):** database history describes what the data is (logical paths and content hashes); separate per-copy information describes where objects are physically stored. This principle is accepted; the concrete locator-catalog format and publication protocol remain undecided.
+
 - **Owner decision recorded (2026-11-02): preserve ADR §81.** Redesign commit snapshots as logicalPath → SHA-256 only; resolve Drive IDs separately per physical copy. Next choose the durable per-copy locator representation and publication/recovery contract, then update the PR #23 transaction engine, recovery verifier, backup/restore flow, and synthetic fault-injection suite together. The current PR #25 helper's fileId-plus-hash compatibility shape is transitional and not ADR-compliant.
 - Obtain explicit owner acceptance of evidence and remaining limitations.
 
