@@ -131,6 +131,20 @@ test("unresolved transactions block release and retain the active ownership clai
   assert.equal(sessionAdapter.record.state, "released");
 });
 
+test("uncertain ownership does not masquerade as a completed release", async () => {
+  const { lifecycle, sessionAdapter } = setup();
+  await lifecycle.start();
+  lifecycle.coordinator.ownership = "unknown";
+  lifecycle.state = "ownership-unknown";
+  lifecycle.acceptingWrites = false;
+
+  await assert.rejects(lifecycle.release(), (error) => error.code === "release-unconfirmed");
+  assert.equal(sessionAdapter.record.state, "active");
+  assert.equal(lifecycle.started, true);
+  assert.equal(typeof lifecycle.heartbeatStop, "function");
+  assert.equal(lifecycle.coordinator.ownership, "unknown");
+});
+
 test("orderly release drains and releases the session", async () => {
   const { lifecycle, sessionAdapter } = setup();
   await lifecycle.start();
