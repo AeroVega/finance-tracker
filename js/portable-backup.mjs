@@ -72,11 +72,16 @@ function fromBase64(value) {
 }
 
 function validateManifest(manifest, { portable = false } = {}) {
-  const required = ["databaseId", "copyId", "commitId", "revision", "role", "storageBinding"];
+  const required = ["format", "manifestVersion", "schemaVersion", "databaseId", "copyId", "role",
+    "lifecycleStatus", "revision", "commitId", "parentCommitId", "storageBinding"];
   if (!manifest || required.some((key) => manifest[key] === undefined || manifest[key] === null)) {
     fail("invalid-manifest", "The backup manifest is missing required identity or revision fields.");
   }
-  if (manifest.role !== "backup" || manifest.lifecycleStatus === "quarantined") {
+  if (manifest.format !== "finance-tracker-manifest" || typeof manifest.manifestVersion !== "string" ||
+      !manifest.manifestVersion.trim() || manifest.schemaVersion === null || manifest.schemaVersion === undefined) {
+    fail("invalid-manifest", "The backup manifest format and version fields are invalid.");
+  }
+  if (manifest.role !== "backup" || manifest.lifecycleStatus !== "active") {
     fail("not-restorable-backup", "Only a verified, non-quarantined backup copy can be exported or restored.");
   }
   if (!Number.isSafeInteger(manifest.revision) || manifest.revision < 0) fail("invalid-revision", "The backup revision is invalid.");
