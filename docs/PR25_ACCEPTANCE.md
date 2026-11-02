@@ -40,6 +40,9 @@ Implementation must update the transaction engine, recovery verifier, backup/res
 
 **Owner decision (2026-11-02):** each per-copy locator catalog must cover every physical object required by the copy's retained commit history, not only the latest snapshot. Historical commits remain resolvable and verifiable through that copy's catalog.
 
+
+**Owner decision (2026-11-02):** locator-catalog publication is copy-on-write and manifest-last. Build a new immutable catalog covering the copy's retained history, upload it, read it back, and verify it before updating the authoritative manifest to reference it alongside the new committed revision. A crash before manifest publication leaves the previous manifest/catalog authoritative; an unreferenced new catalog is unpublished data, not active state.
+
 **Still open:** choose and specify the durable per-copy locator representation and its publication/recovery contract before changing the engine. Until that design is accepted and implemented, the PR #25 backup helper's current `fileId + sha256` compatibility shape is transitional and must not be described as ADR-compliant or production-ready.
 
 ### Portable export and restore planning
