@@ -210,8 +210,9 @@ export async function verifyPortableBackup(archive, { cryptoImpl = globalThis.cr
 
 /** A restore plan is deliberately inert: persistence requires a separate, explicit adapter operation. */
 export async function planPortableRestore(archive, { newCopyId, newStorageBinding, now = new Date().toISOString(), cryptoImpl = globalThis.crypto, validateStructure } = {}) {
-  if (typeof newCopyId !== "string" || !newCopyId.trim() || newCopyId === archive?.sourceCopyId) {
-    fail("invalid-restore-copy-id", "Restore requires a new physical copy ID distinct from the source backup.");
+  const existingCopyIds = [archive?.sourceCopyId, archive?.commitRecord?.copyId].filter((value) => typeof value === "string" && value);
+  if (typeof newCopyId !== "string" || !newCopyId.trim() || existingCopyIds.includes(newCopyId)) {
+    fail("invalid-restore-copy-id", "Restore requires a new physical copy ID distinct from the source backup and any source-primary identity.");
   }
   if (newStorageBinding?.provider !== "google-drive" || typeof newStorageBinding.folderId !== "string" || !newStorageBinding.folderId.trim()) {
     fail("invalid-storage-binding", "Restore requires an explicit Google Drive destination folder binding.");
