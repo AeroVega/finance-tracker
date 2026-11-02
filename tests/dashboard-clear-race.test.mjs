@@ -76,6 +76,18 @@ test("Clear and Save are disabled while an existing storage session is not ready
   assert.deepEqual(descriptions(h.state), ["local row", "newer local row"]);
 });
 
+test("lifecycle state changes immediately refresh Save and Clear availability", async () => {
+  const h = await setup();
+  await h.importFile(csv("local.csv", "local row"));
+  h.storage().options.onStatus({ state: "ownership-unknown", message: "Ownership uncertain", kind: "error" });
+  assert.equal(h.get("clear-data").disabled, true);
+  assert.equal(h.get("save-data").disabled, true);
+  assert.equal(h.get("csv-file").disabled, false);
+  h.storage().options.onStatus({ state: "ready", message: "Ready", kind: "success" });
+  assert.equal(h.get("clear-data").disabled, false);
+  assert.equal(h.get("save-data").disabled, false);
+});
+
 test("failed remote clear preserves both prior and newer CSV imports and provenance", async () => {
   const h = await setup();
   await h.importFile(csv("before.csv", "invented before"));
