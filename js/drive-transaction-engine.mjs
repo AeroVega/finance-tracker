@@ -186,12 +186,19 @@ export class GoogleDriveTransactionAdapter {
     const body = joinBytes([head, bytes, tail]);
     const url = `${UPLOAD}/files?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`;
     let ambiguousCreateFailure = null;
+    let createResponseSummary = null;
     try {
-      await this.request(url, {
+      const createResponse = await this.request(url, {
         method: "POST",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
         body
       }, { allowStatuses: [409] });
+      createResponseSummary = { status: createResponse.status };
+      if (createResponse.ok) {
+        const returnedMetadata = await createResponse.clone().json().catch(() => null);
+        createResponseSummary.returnedId = typeof returnedMetadata?.id === "string" ? returnedMetadata.id : null;
+        createResponseSummary.returnedName = typeof returnedMetadata?.name === "string" ? returnedMetadata.name : null;
+      }
     } catch (error) {
       // A network failure or server-side 5xx may have happened after Drive committed
       // the create. Resolve those ambiguous outcomes using the same pre-generated ID.
@@ -219,11 +226,13 @@ export class GoogleDriveTransactionAdapter {
     try {
       metadataAfter = await this.waitForMetadata(fileId);
     } catch (error) {
-      if (ambiguousCreateFailure && error instanceof DriveTransactionError) {
-        error.details = { ...error.details, createRequest: ambiguousCreateFailure };
-        error.message = ambiguousCreateFailure.status
-          ? `Drive create returned HTTP ${ambiguousCreateFailure.status}; the same file ID remained unavailable during read-back. Preserve transaction evidence and run recovery before retrying.`
-          : "Drive create had no confirmed response; the same file ID remained unavailable during read-back. Preserve transaction evidence and run recovery before retrying.";
+      if (error instanceof DriveTransactionError && error.code === "visibility-timeout") {
+        const createOutcome = ambiguousCreateFailure || createResponseSummary || { status: null };
+        error.details = { ...error.details, createRequest: createOutcome };
+        const createStatus = Number.isInteger(createOutcome.status) ? `HTTP ${createOutcome.status}` : "no confirmed HTTP response";
+        const returnedId = createOutcome.returnedId ? `; Drive returned ID ${createOutcome.returnedId}` : "";
+        const createCause = createOutcome.message ? `; create error: ${createOutcome.message}` : "";
+        error.message = `Drive create outcome: ${createStatus}${returnedId}${createCause}. The exact file ID ${fileId} then returned HTTP ${error.details.lastStatus} on all ${error.details.attempts} metadata checks over ${error.details.elapsedMs} ms. The write outcome is ambiguous: preserve transaction evidence and run recovery before retrying.`;
       }
       throw error;
     }
