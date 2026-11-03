@@ -247,11 +247,11 @@ PR #25 remains responsible for its original synthetic-only storage-readiness and
 
 The PR #25 workstream must still complete its originally assigned responsibilities, including:
 - Reconcile the physical object-locator model with accepted database identity/lifecycle ADR §81.
-- Wire backup/restore and portability to the actual Drive adapters and complete live synthetic rehearsals.
+- Wire backup/restore and portability to the actual Drive adapters and complete live synthetic backup, quarantine, portable-export, and restore rehearsals.
 - Complete original-source retention metadata and actual Drive deletion/confirmed-absence verification under the approved 540-day source-file policy.
 - Perform real browser interruption/reload recovery rehearsals at transaction boundaries.
 - Test OAuth expiry, revocation, wrong-account, denied-permission, and reconnect behavior.
-- Review the actual Cloud project configuration, OAuth publishing status/scopes/restrictions, current quotas/terms/billing, and the $0 recurring-cost constraint.
+- Review the actual Cloud project configuration, OAuth publishing status/scopes/restrictions, quota and usage, current terms/billing, Google's announced 2026 quota/billing changes, and the $0 recurring-cost constraint.
 - Obtain explicit owner acceptance of the evidence and residual risks.
 
 PR #25 remains synthetic-only. Its merge does not authorize production financial-data persistence. Do not treat this product document as a release approval or a change to PR #25's acceptance criteria.
