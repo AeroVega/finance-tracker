@@ -65,7 +65,9 @@ Branch: `feat/application-storage-integration`
 
 **Exit:** met for PR #24's synthetic-only application integration. Residual historical 404/release-event root-cause investigations and performance profiling remain documented follow-ups; they do not authorize production persistence or expand PR #24's scope.
 
-### PR #25 — End-to-end acceptance and production-readiness gates (active)
+### PR #25 — End-to-end acceptance and production-readiness gates
+
+**Locator-catalog update (2026-11-02):** a proposed typed per-copy catalog contract is documented in `docs/DRIVE_LOCATOR_CATALOG_DESIGN.md` and ADR §109. Pure validation/copy-on-write/hash/resolve primitives and focused unit tests have been added to PR #25. The transaction engine, recovery, lifecycle reads, dashboard bootstrap, and backup/restore remain on the legacy embedded-locator format; do not deploy or request owner testing yet. The catalog-finalization ordering around post-publication journal events must be resolved and fault-tested before engine integration. (active)
 
 Branch: `feat/production-readiness-acceptance`
 
