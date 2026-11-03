@@ -70,7 +70,7 @@ Backups/archives retain original timing, omit already expired/deleted originals,
 - **Verified:** original PR head `22c30f9a5a21a2335a6ba813fe10f8b148e9cdd6` already had two successful Node 26 CI checks. There were no PR conversation or inline review comments when assessed.
 - **Verified:** local regression tests run on Node 24.22.1; exact final count and current-head CI are recorded in `PR25_ACCEPTANCE.md`.
 - **Verified:** local browser loaded the new page with missing Google configuration and kept Drive controls disabled. A generated synthetic archive was opened and independently verified through the page with Google disconnected. Desktop, 390px phone portrait, 844px phone landscape, and 820px tablet layouts were inspected; landscape/tablet DOM widths did not overflow their viewports. These are desktop browser viewport checks, not real iOS Safari evidence.
-- **Open:** current-head Node 26 GitHub CI until the implementation commit is pushed; no live Google Drive, actual Cloud project or real-device acceptance performed in this session.
+- **Verified CI:** both Node 26 workflows passed on application-code commit c0174b6f093fbadd3e91a34e0893e9a50b31b4af; see the linked runs in PR25_ACCEPTANCE.md. The evidence follow-up changes docs only. Require checks on the latest head before deployment. No live Google Drive, actual Cloud project or real-device acceptance was performed in this session.
 
 ## Google source review (2026-11-03)
 

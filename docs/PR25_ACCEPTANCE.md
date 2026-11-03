@@ -105,7 +105,7 @@ PR #23's transaction-engine suite injects lost responses after all 11 durable mu
 
 **Verified baseline:** both Node 26 GitHub CI checks passed at original PR head `22c30f9a5a21a2335a6ba813fe10f8b148e9cdd6`. The old request for a fresh rerun was already satisfied before this implementation pass.
 
-**Verified local implementation:** 284 tests passed, 0 failed on Node 24.22.1. This includes all 14 transaction-write interruption points, 13 recovery-repair interruption points, real-adapter HTTP/session integration, backup/restore/migration and retention tests. JavaScript syntax and diff whitespace checks passed. Current-head Node 26 CI remains pending publication. Synthetic tests and desktop viewport checks do not replace live Google Drive or real iOS Safari acceptance.
+**Verified local implementation:** 284 tests passed, 0 failed on Node 24.22.1. This includes all 14 transaction-write interruption points, 13 recovery-repair interruption points, real-adapter HTTP/session integration, backup/restore/migration and retention tests. JavaScript syntax and diff whitespace checks passed. **Verified CI:** both Node 26 workflows passed on application-code commit c0174b6f093fbadd3e91a34e0893e9a50b31b4af: [Node contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41698581359) and [Finance Tracker contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41698581552). The following evidence-only commit changes documentation, with no application-code changes. Require checks on the latest head before deployment. Synthetic tests and desktop viewport checks do not replace live Google Drive or real iOS Safari acceptance.
 
 ## Deployment readiness
 
