@@ -16,6 +16,8 @@ Implemented foundation:
 
 **Not yet reconciled:** `drive-transaction-engine.mjs`, transaction recovery, lifecycle reads, dashboard bootstrap, and portable backup/restore still use the legacy embedded-`fileId` snapshot shape. The new module is not wired into those paths. The design record identifies the terminal-journal/catalog-finalization ordering gap that must be resolved before engine integration. CI must run against the updated branch before these primitives are considered validated.
 
+**CI correction:** the first run of the new suite exposed one test-only mismatch: snapshot resolution returned a null-prototype object while the contract test expected a plain object. The resolver was corrected to return a plain object, and migration/protocol entry coverage was added. The first run therefore finished at 232 passed / 1 failed; a fresh run is required before claiming the updated branch is green.
+
 This work does not authorize production persistence and does not make the branch ready for deployment or owner testing.
 
 ## Implemented in this branch
