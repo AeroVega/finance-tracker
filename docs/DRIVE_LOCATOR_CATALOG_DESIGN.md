@@ -63,13 +63,13 @@ A transaction never edits an existing catalog. It:
 7. Publishes the new manifest pointer last, including the new catalog file ID and hash.
 8. Reads back and verifies the manifest and the complete committed snapshot through the new catalog.
 
-The manifest's catalog pointer is copy-specific and may contain the catalog's Drive file ID and SHA-256 hash. This does not violate the logical commit-record rule: the manifest belongs to one physical copy and is the authoritative current-state pointer.
+The manifest's catalog pointer is copy-specific and may contain the catalog's Drive file ID and SHA-256 hash. Its current commit pointer is also resolved through the catalog by commit identity and record hash; the manifest does not need a commit-record Drive ID. This does not violate the logical commit-record rule: the manifest belongs to one physical copy and is the authoritative current-state pointer.
 
 A transaction that adds no new content hashes may reuse the current immutable catalog pointer. Catalog generation is independent of the financial revision.
 
 ### 4. Historical content remains resolvable
 
-The catalog retains mappings for all content hashes referenced by retained commit history, not only the current snapshot. Historical objects remain available for backup, restore, audit, and projection provenance.
+The catalog retains mappings for all immutable objects required by retained history and recovery: data objects, commit records, journal events, migration records, and other immutable protocol objects. The current catalog file is excluded from self-lookup; its identity and integrity are anchored directly by the manifest. Historical objects remain available for backup, restore, audit, and projection provenance.
 
 MVP1 does not garbage-collect committed objects or remove historical locator mappings. A future verified retention/compaction design must prove that no retained commit references an object before any mapping or object can be retired.
 
@@ -112,7 +112,7 @@ A failed catalog publication leaves the old manifest and old catalog authoritati
 ## Acceptance criteria
 
 - Commit snapshot values are lowercase SHA-256 strings only; no Drive IDs appear in commit snapshot entries.
-- Each manifest points to one verified locator catalog for its physical copy.
+- Each manifest points to one verified locator catalog for its physical copy, and the catalog includes every retained immutable protocol-object class except the catalog itself.
 - Catalog validation enforces database ID, copy ID, generation, parent hash, and unique hash/file-ID mappings.
 - Catalog updates are copy-on-write and preserve all existing mappings.
 - Reads resolve logical paths through the selected copy's catalog and verify exact raw bytes.
