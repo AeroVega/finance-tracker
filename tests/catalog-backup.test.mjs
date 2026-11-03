@@ -1,0 +1,90 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { setupCatalog, MemoryCatalogDrive } from "./helpers/catalog-drive.mjs";
+import { exportCatalogArchive, verifyCatalogArchive, restoreCatalogArchive, backupCatalogCopy } from "../js/catalog-backup.mjs";
+import { verifyCatalogHistory, hashRaw, encode } from "../js/catalog-storage.mjs";
+
+const gate = (operation) => operation();
+const guard = async () => {};
+const validateStructure = ({ objects }) => Object.values(objects).every((bytes) => JSON.parse(new TextDecoder().decode(bytes)).syntheticOnly === true);
+
+async function fixture() {
+  const setup = await setupCatalog();
+  await setup.engine.transact(setup.transaction);
+  const archive = await exportCatalogArchive({ adapter: setup.adapter, manifestFileId: setup.manifestFileId, withSourceLock: gate, validateStructure });
+  return { ...setup, archive };
+}
+
+test("archive and restored Drive copy preserve exact logical history with different physical IDs", async () => {
+  const { adapter, manifestFileId, archive } = await fixture();
+  const source = await verifyCatalogHistory(adapter, await adapter.readJson(manifestFileId));
+  const targetAdapter = new MemoryCatalogDrive("other-synthetic-folder");
+  const restored = await restoreCatalogArchive({ archive, targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure });
+  const target = await verifyCatalogHistory(targetAdapter, restored.manifest);
+  assert.notEqual(restored.manifest.copyId, archive.sourceCopyId);
+  assert.equal(restored.manifest.commitRecordHash, archive.manifest.commitRecordHash);
+  for (const [key, entry] of Object.entries(source.catalog.entries)) {
+    assert.notEqual(target.catalog.entries[key].fileId, entry.fileId);
+    assert.deepEqual(target.objects.get(key), source.objects.get(key));
+  }
+  assert.equal(archive.objects.some((item) => Object.hasOwn(item, "fileId")), false);
+  assert.equal(targetAdapter.files.get(restored.manifestFileId).metadata.name, "ft-synthetic-dashboard-manifest.json");
+});
+
+test("separately bound backup uses a source gate and publishes only after source stability verification", async () => {
+  const { adapter, manifestFileId } = await fixture();
+  const targetAdapter = new MemoryCatalogDrive("backup-synthetic-folder");
+  let locked = false;
+  const result = await backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId,
+    withSourceLock: async (operation) => { locked = true; try { return await operation(); } finally { locked = false; } },
+    assertSourceWritable: async () => assert.equal(locked, true), targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure });
+  assert.equal(result.manifest.role, "backup");
+  assert.equal([...targetAdapter.files.keys()].at(-1), result.manifestFileId);
+  await verifyCatalogHistory(targetAdapter, result.manifest);
+});
+
+test("archive missing history and altered objects fail even after the envelope is rehashed", async () => {
+  const { archive } = await fixture();
+  const damaged = structuredClone(archive);
+  damaged.objects = damaged.objects.filter((item) => item.kind !== "commit-record" || item.identity === archive.manifest.commitId);
+  delete damaged.archiveSha256;
+  damaged.archiveSha256 = await hashRaw(encode(damaged));
+  await assert.rejects(verifyCatalogArchive(damaged, { validateStructure }), { code: "locator-not-found" });
+  const modified = structuredClone(archive);
+  modified.objects[0].contentBase64 = btoa("corrupt");
+  delete modified.archiveSha256;
+  modified.archiveSha256 = await hashRaw(encode(modified));
+  await assert.rejects(verifyCatalogArchive(modified, { validateStructure }), { code: "archive-object-hash-mismatch" });
+});
+
+test("failed copies retain a durable quarantine marker and cannot be reopened", async () => {
+  const { archive } = await fixture();
+  const targetAdapter = new MemoryCatalogDrive("quarantine-synthetic-folder");
+  await assert.rejects(restoreCatalogArchive({ archive, targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure,
+    beforePublish: async () => { throw new Error("Synthetic source changed"); } }), (error) => error.code === "copy-quarantined" && error.quarantineConfirmed === true);
+  const preparation = await targetAdapter.readJson([...targetAdapter.files.keys()][0]);
+  assert.equal(preparation.state, "quarantined");
+  assert.equal((await targetAdapter.listChildren()).some((file) => file.appProperties.financeTrackerKind === "dashboard-synthetic-manifest"), false);
+  await assert.rejects(restoreCatalogArchive({ archive, targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure }), { code: "fresh-destination-required" });
+});
+
+test("restores cannot reuse a primary identity carried through a backup archive", async () => {
+  const { adapter, manifestFileId } = await fixture();
+  const originalCopyId = (await adapter.readJson(manifestFileId)).copyId;
+  const backupAdapter = new MemoryCatalogDrive("identity-backup-synthetic-folder");
+  const backup = await backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId, withSourceLock: gate,
+    assertSourceWritable: guard, targetAdapter: backupAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure });
+  const archive = await exportCatalogArchive({ adapter: backupAdapter, manifestFileId: backup.manifestFileId, withSourceLock: gate, validateStructure });
+  const targetAdapter = new MemoryCatalogDrive("identity-restore-synthetic-folder");
+  await assert.rejects(restoreCatalogArchive({ archive, newCopyId: originalCopyId, targetAdapter,
+    withTargetLock: gate, assertTargetWritable: guard, validateStructure }), { code: "invalid-copy-identity" });
+  assert.equal(targetAdapter.files.size, 0);
+});
+
+test("source changes during copying quarantine the destination and never alter the source", async () => {
+  const { adapter, manifestFileId } = await fixture();
+  const targetAdapter = new MemoryCatalogDrive("unstable-synthetic-folder");
+  await assert.rejects(backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId, withSourceLock: gate,
+    assertSourceWritable: async () => { const manifest = await adapter.readJson(manifestFileId); adapter.files.get(manifestFileId).bytes = encode({ ...manifest, syntheticChange: true }); },
+    targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure }), (error) => error.code === "copy-quarantined" && error.cause.code === "source-changed");
+});

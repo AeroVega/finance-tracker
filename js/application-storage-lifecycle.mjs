@@ -1,6 +1,9 @@
 import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "./drive-transaction-engine.mjs";
 import { createDriveSessionAdapter } from "./drive-session-adapter.mjs";
 import { SessionCoordinator } from "./session-coordination.mjs";
+import { CatalogTransactionEngine } from "./catalog-transaction-engine.mjs";
+import { verifyCatalogHistory } from "./catalog-storage.mjs";
+import { resolveSnapshotLocators } from "./drive-locator-catalog.mjs";
 
 export class ApplicationStorageError extends Error {
   constructor(code, message) {
@@ -35,7 +38,7 @@ export class ApplicationStorageLifecycle {
       cryptoImpl = globalThis.crypto, isOnline = () => globalThis.navigator?.onLine !== false,
       onStatus = () => {}, onDiagnostic = () => {}, lifecycleTarget = globalThis,
       setIntervalImpl = globalThis.setInterval, clearIntervalImpl = globalThis.clearInterval,
-      factories = {}
+      factories = {}, catalogProtocol = false, afterMutation = null
     } = options;
 
     if (syntheticOnly !== true || !/synthetic/i.test(folderName)) {
@@ -62,6 +65,8 @@ export class ApplicationStorageLifecycle {
     this.setIntervalImpl = setIntervalImpl;
     this.clearIntervalImpl = clearIntervalImpl;
     this.factories = factories;
+    this.catalogProtocol = catalogProtocol;
+    this.afterMutation = afterMutation;
     this.state = "disconnected";
     this.sessionAdapter = null;
     this.coordinator = null;
@@ -101,9 +106,10 @@ export class ApplicationStorageLifecycle {
       accessToken: this.accessToken,
       folderId: this.folderId,
       fetchImpl: this.fetchImpl,
+      afterMutation: this.afterMutation,
       cryptoImpl: this.crypto
     });
-    this.engine = (this.factories.createEngine || ((options) => new DriveTransactionEngine(options)))({
+    this.engine = (this.factories.createEngine || ((options) => new (this.catalogProtocol ? CatalogTransactionEngine : DriveTransactionEngine)(options)))({
       adapter: this.transactionAdapter,
       cryptoImpl: this.crypto,
       isOnline: this.isOnline,
@@ -172,7 +178,8 @@ export class ApplicationStorageLifecycle {
       this.startHeartbeat();
       if (!this.manifestFileId && this.initializeManifest) {
         this.manifestFileId = await this.coordinator.withWrite(() =>
-          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId })
+          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId,
+            guard: () => this.coordinator.assertCanWrite({ online: this.isOnline() }) })
         );
       }
       if (!this.manifestFileId) fail("manifest-unavailable", "A verified synthetic manifest is required before recovery.");
@@ -206,7 +213,8 @@ export class ApplicationStorageLifecycle {
       this.startHeartbeat();
       if (!this.manifestFileId && this.initializeManifest) {
         this.manifestFileId = await this.coordinator.withWrite(() =>
-          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId })
+          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId,
+            guard: () => this.coordinator.assertCanWrite({ online: this.isOnline() }) })
         );
       }
       if (!this.manifestFileId) fail("manifest-unavailable", "A verified synthetic manifest is required before recovery.");
@@ -260,15 +268,37 @@ export class ApplicationStorageLifecycle {
   }
 
   async readManifest() {
-    await this.requireReady();
-    return this.transactionAdapter.readJson(this.manifestFileId);
+    try {
+      await this.requireReady();
+      const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
+      if (this.catalogProtocol) {
+        if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Catalog finalization must complete before reading application state.");
+        await verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto);
+      }
+      return manifest;
+    } catch (error) { this.pauseAfterReadFailure(error); throw error; }
   }
 
   async readObject(logicalPath) {
+    try { return await this.readObjectVerified(logicalPath); }
+    catch (error) { this.pauseAfterReadFailure(error); throw error; }
+  }
+
+  pauseAfterReadFailure(error) {
+    this.acceptingWrites = false;
+    if (this.engine) this.engine.recoveryRequired = true;
+    this.publish(error?.code === "authorization-required" ? "authorization-required" : "recovery-required",
+      "Storage could not be verified. Reconnect and recover before continuing.", error?.code || "read-unverified");
+  }
+
+  async readObjectVerified(logicalPath) {
     await this.requireReady();
     if (typeof logicalPath !== "string" || !logicalPath) fail("invalid-path", "A logical object path is required.");
     const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
-    const reference = manifest.snapshot?.[logicalPath];
+    if (this.catalogProtocol && manifest.catalogFinalizationPending !== null) fail("recovery-required", "Finish catalog recovery before reading objects.");
+    const reference = this.catalogProtocol
+      ? resolveSnapshotLocators(manifest.snapshot, (await verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto)).catalog)[logicalPath]
+      : manifest.snapshot?.[logicalPath];
     if (!reference?.fileId || !/^[0-9a-f]{64}$/.test(String(reference.sha256 || ""))) {
       fail("object-not-found", "The requested object is not present in the verified manifest.");
     }
@@ -320,7 +350,8 @@ export class ApplicationStorageLifecycle {
     try {
       if (!this.manifestFileId && this.initializeManifest) {
         this.manifestFileId = await this.coordinator.withWrite(() =>
-          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId })
+          this.initializeManifest({ adapter: this.transactionAdapter, folderId: this.folderId,
+            guard: () => this.coordinator.assertCanWrite({ online: this.isOnline() }) })
         );
       }
       if (!this.manifestFileId) fail("manifest-unavailable", "A verified synthetic manifest is required before recovery.");

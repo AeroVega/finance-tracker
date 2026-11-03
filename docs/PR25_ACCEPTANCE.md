@@ -1,26 +1,22 @@
 # PR #25 — End-to-end acceptance and production-readiness evidence
 
-**Status:** Active implementation and synthetic verification; production persistence is not approved.  
-**Last reviewed:** 2026-11-02  
+**Status:** Active implementation and synthetic verification; production persistence is not approved.
+**Last reviewed:** 2026-11-03
 **Branch:** `feat/production-readiness-acceptance`
 
 This record separates code implemented in PR #25 from tests that can run in CI, live provider rehearsals, and owner-only configuration checks. A green synthetic test suite is not a production go-live decision.
 
-## Locator-catalog reconciliation — 2026-11-02
+## Current implementation and action ownership — 2026-11-03
 
-A focused design record is now in [DRIVE_LOCATOR_CATALOG_DESIGN.md](DRIVE_LOCATOR_CATALOG_DESIGN.md), and ADR §109 captures the per-copy locator-catalog direction. The owner-approved principles are preserved; the exact catalog entry schema and post-publication recovery protocol remain an implementation proposal requiring review and fault-injection validation.
+**Implemented for review:** the synthetic dashboard now uses version-2 hash-only commits and copy-specific catalogs, including post-publication journal/catalog finalization, full retained history verification, fresh-copy backup/export/restore, explicit legacy conversion, and original-import retention integration. The new [PR25 acceptance page](../prototype/pr25-acceptance.html) composes the real Drive/session adapters and provides live rehearsal controls. Production financial CSV import remains disabled; CSV rows stay local.
 
-Implemented foundation:
-- `js/drive-locator-catalog.mjs` provides pure typed locator validation, copy-on-write extension, deterministic hashing, and logical snapshot resolution.
-- `tests/drive-locator-catalog.test.mjs` covers data objects, commit records, journal events, copy identity, duplicate/rebinding rejection, and missing mappings.
+See [implementation, ownership matrix, exact protocol, evidence and limitations](PR25_IMPLEMENTATION_HANDOFF.md). That record is the current handoff. The older v1 helper descriptions below are historical compatibility details, not the active dashboard protocol. Concrete schema/protocol review and live acceptance remain open; implementation is not owner acceptance.
 
-**Not yet reconciled:** `drive-transaction-engine.mjs`, transaction recovery, lifecycle reads, dashboard bootstrap, and portable backup/restore still use the legacy embedded-`fileId` snapshot shape. The new module is not wired into those paths. The design record identifies the terminal-journal/catalog-finalization ordering gap that must be resolved before engine integration. CI must run against the updated branch before these primitives are considered validated.
+**AI work:** coding, deterministic tests, synthetic HTTP integration tests, independent browser archive verification, current Google quota-source review, and this handoff. **Owner work:** review the concrete design/limits, approve shared Pages deployment after CI and review, perform real account/device rehearsals, inspect actual Cloud settings/billing, and accept remaining risks. AI can assist account/device tests once connected and repair any resulting defects.
 
-**CI correction:** the first run of the new suite exposed one test-only mismatch: snapshot resolution returned a null-prototype object while the contract test expected a plain object. The resolver was corrected to return a plain object, and migration/protocol entry coverage was added. The first run therefore finished at 232 passed / 1 failed; a fresh run is required before claiming the updated branch is green.
+**Known remaining gate:** deletion receipt recovery after process loss is conservative: an access-ambiguous 404 does not clear a source locator. See the handoff before treating deletion as production-ready. Active-page maintenance cannot run while every device is closed, and local exports cannot be remotely erased.
 
-This work does not authorize production persistence and does not make the branch ready for deployment or owner testing.
-
-## Implemented in this branch
+## Legacy v1 primitives retained for compatibility
 
 ### Verified snapshot backup primitive
 
@@ -75,7 +71,7 @@ Implementation must update the transaction engine, recovery verifier, backup/res
 
 **Owner decision (2026-11-02):** manual categorization corrections may be undone repeatedly. Each undo or subsequent correction is recorded as a new correction event referencing the event it reverses or supersedes; no prior event is deleted or erased. A reason or note is optional.
 
-**Still open:** choose and specify the durable per-copy locator representation and its publication/recovery contract before changing the engine. Until that design is accepted and implemented, the PR #25 backup helper's current `fileId + sha256` compatibility shape is transitional and must not be described as ADR-compliant or production-ready.
+**Current follow-up:** the concrete v2 catalog representation, publication/recovery protocol and interruption tests are implemented for review in the handoff above. Owner review and live validation remain open. The v1 `fileId + sha256` helper remains a legacy compatibility path and must not be presented as the active v2 implementation or as production-ready.
 
 ### Portable export and restore planning
 
@@ -105,25 +101,21 @@ Implementation must update the transaction engine, recovery verifier, backup/res
 
 PR #23's transaction-engine suite injects lost responses after all 11 durable mutation boundaries and exercises deterministic recovery against the in-memory synthetic Drive. This coverage remains useful and must stay green. It is not a substitute for real browser termination/reload rehearsals against Drive.
 
-## Automated CI evidence
+## Automated validation evidence
 
-**Verified on application-code head `ba0aabfbbc935a869785ff4662424d596e02b1ea` (included in PR head `d3f32cf67d8d803dd161fe524dd4292d401bb37f`):** both GitHub Actions workflows completed successfully on Node.js 26. The subsequent PR head update `9b3927e3f1a46866447eea62051cf3af935b9f13` changes acceptance documentation only; no application code changed after the successful runs.
+**Verified baseline:** both Node 26 GitHub CI checks passed at original PR head `22c30f9a5a21a2335a6ba813fe10f8b148e9cdd6`. The old request for a fresh rerun was already satisfied before this implementation pass.
 
-- Finance Tracker contract tests — run #267; dashboard/browser syntax checks and complete Node contract suite passed.
-- Node contract tests — run #381.
-- Both jobs report **223 passed, 0 failed**.
-
-This closes the outstanding automated-test rerun for the current head. These are synthetic automated tests; they do not replace live Google Drive or iOS Safari acceptance. The latest CI success does not make the backup/restore or retention flows end-to-end, and it does not change the NO-GO production-persistence decision.
+**Verified local implementation:** 284 tests passed, 0 failed on Node 24.22.1. This includes all 14 transaction-write interruption points, 13 recovery-repair interruption points, real-adapter HTTP/session integration, backup/restore/migration and retention tests. JavaScript syntax and diff whitespace checks passed. Current-head Node 26 CI remains pending publication. Synthetic tests and desktop viewport checks do not replace live Google Drive or real iOS Safari acceptance.
 
 ## Deployment readiness
 
-**Do not request an owner deployment yet.** The current Pages application still exposes the PR #24 synthetic dashboard. PR #25's backup, portable restore, and original-source retention helpers are not connected to an end-to-end browser acceptance harness, so deploying now would not exercise the missing acceptance paths.
+No deployment was performed. The new harness is implemented, but the concrete protocol/retention limits require review and both Node 26 checks must pass on the published implementation head before requesting an owner deployment. Do not deploy merely because an older head was green.
 
-The existing `Deploy static site to GitHub Pages` workflow supports manual dispatch from a selected branch. It deploys the selected branch's repository root to the shared GitHub Pages environment and URL, replacing the currently published site. Once the locator-catalog implementation, synthetic live backup/restore harness, retention integration, and recovery/OAuth test paths are ready and CI-green, ask the owner to deploy `feat/production-readiness-acceptance` and perform the documented synthetic-only rehearsals. Confirm the deployed source SHA in the page footer and the successful deployment run before testing.
+The manual Pages workflow deploys the selected branch to one shared public URL, replacing the existing site. After review and current-head CI, the owner may authorize deployment of `feat/production-readiness-acceptance`; confirm the successful deployment run and exact source SHA in the footer. Start live rehearsals in fresh disposable synthetic folders and preserve the existing PR24 source. Production persistence stays NO-GO.
 
 ## Current Google authorization, quota, and cost review
 
-**Verified from current official documentation on 2026-11-02:**
+**Verified from official documentation on 2026-11-02; Drive quota/billing source rechecked on 2026-11-03:**
 
 - The prototype requests `https://www.googleapis.com/auth/drive.file`. Google classifies `drive.file` as a **non-sensitive** scope: it grants per-file access to files created by the app or opened/shared with it through Picker. This is preferable to the broad restricted `drive` scope. See [Choose Google Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
 - The checked browser flow uses Google Identity Services token-client authorization and keeps the access token in page memory. The prototype clears its token when expired and requires an interactive reconnect. It does not persist a refresh token. This avoids long-lived browser refresh-token storage but means reauthorization is expected.
@@ -146,7 +138,7 @@ Use only a dedicated synthetic Drive folder and invented data. Never use the can
 1. **Live backup:** from a synthetic primary, create a backup in a separate synthetic folder. Confirm same `databaseId`, revision and `commitId`; different `copyId` and storage binding; all object hashes match; backup manifest appears last; and reopening the backup succeeds.
 2. **Failure/quarantine:** deliberately interrupt or corrupt a destination object/commit/manifest during backup. Confirm the source primary is unchanged, partial destination is quarantined and cannot be selected/restored/promoted, and retry starts from a fresh destination.
 3. **Portability:** export the verified synthetic backup to a local file, move it outside the Drive folder, verify it independently, and restore it into a separate synthetic folder with a new `copyId`. Verify object hashes, structural references, revision and commit lineage. Do not treat the inert restore plan as a completed restore.
-4. **Fault rehearsal:** use a disposable synthetic database and rehearse real browser termination/reload around every transaction mutation boundary. Verify reconnect recovery, preserved evidence, no duplicate commit, and fail-closed behavior. Existing in-memory 11-boundary tests are the automated baseline.
+4. **Fault rehearsal:** use a disposable synthetic database and rehearse real browser termination/reload around every transaction mutation boundary. Verify reconnect recovery, preserved evidence, no duplicate commit, and fail-closed behavior. The v2 suite covers all 14 transaction writes plus interrupted repair writes. The earlier 11-boundary suite remains a legacy regression baseline.
 5. **OAuth:** test expired token/401, explicit revocation, wrong Google account, missing folder grant, denied permissions/403, and interactive reauthorization. Confirm no empty-folder inference, automatic replacement, or write attempt after authorization loss.
 6. **Retention:** use synthetic source files and a simulated clock at one millisecond before and exactly at day 540. Verify expiry eligibility, provider-confirmed deletion, failure/retry, backup clock preservation, and no resurrection on restore. The Drive delete operation must be read back/confirmed before clearing the locator.
 7. **Cost and terms:** inspect the actual Cloud project, confirm Drive API enabled, review current quotas/usage and billing configuration, and record whether billing is disabled. Recheck the official Google quota/billing announcement before any production authorization.
@@ -157,5 +149,5 @@ Use only a dedicated synthetic Drive folder and invented data. Never use the can
 
 **Current decision: NO-GO for production financial-data persistence.**
 
-Reasons: live Drive backup/restore/portability, real interruption rehearsals, OAuth failure-mode validation, end-to-end original-source deletion, actual Cloud billing/quota inspection, and owner acceptance remain outstanding. The current branch contributes reusable code and synthetic evidence but does not close those gates.
+Reasons: concrete protocol/retention review, live Drive backup/restore/portability, real interruption rehearsals, OAuth failure-mode validation, deletion-receipt recovery and live retention acceptance, actual Cloud billing/quota inspection, and owner acceptance remain outstanding. The branch supplies the synthetic implementation and harness; it does not close account/device or production-authorization gates.
 

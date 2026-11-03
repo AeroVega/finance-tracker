@@ -1,10 +1,14 @@
 # Per-Copy Drive Locator Catalog — Design and Reconciliation
 
-**Status:** Implementation proposal based on owner-approved architecture principles; transaction-engine protocol review remains open  
-**Scope:** PR #25 transaction-engine reconciliation and synthetic backup/restore acceptance  
+**Status:** Synthetic v2 implementation and fault tests prepared for review; owner protocol acceptance and live validation remain open
+**Scope:** PR #25 transaction-engine reconciliation and synthetic backup/restore acceptance
 **Production authorization:** None. All implementation and validation remain synthetic-only.
 
-## Problem
+## Current implementation — 2026-11-03
+
+[PR25 implementation handoff](PR25_IMPLEMENTATION_HANDOFF.md) specifies the exact manifest/commit versions, 14-write ordering, recovery decisions, migration provenance, and ownership gates. `catalog-transaction-engine.mjs` implements this path; the dashboard opts into it. The sections below preserve the original proposal and principles; historical statements about the old engine apply to legacy v1 paths only. Implementation does not claim owner acceptance.
+
+## Original problem
 
 The accepted database architecture requires commit records to describe logical database state independently of a particular Google Drive folder. The current transaction engine still embeds Drive file IDs in commit snapshot references:
 
@@ -91,9 +95,9 @@ An existing catalog is never edited in place. A proposed normal transaction sequ
 8. Complete any post-publication terminal journal events and ensure those events are also indexed in a subsequent catalog generation and manifest catalog-pointer update, without inventing a new financial revision.
 9. Verify the complete committed snapshot and retained history through the published catalog.
 
-**Protocol issue requiring resolution before engine integration:** the current transaction protocol writes terminal journal events after manifest publication. A catalog published at step 7 cannot contain a terminal event that does not yet exist. The engine must therefore implement and fault-test the post-publication catalog finalization at step 8, including crashes between the financial pointer publication, terminal event writes, and follow-on catalog pointer publication. During that interval the previous published catalog remains authoritative for the committed data; recovery may use complete folder enumeration to locate unindexed in-flight journal evidence, but must verify every event and must not guess by filename. Writes remain blocked until recovery completes catalog finalization.
+**Original protocol issue, now implemented and fault-tested for review:** the current transaction protocol writes terminal journal events after manifest publication. A catalog published at step 7 cannot contain a terminal event that does not yet exist. The engine must therefore implement and fault-test the post-publication catalog finalization at step 8, including crashes between the financial pointer publication, terminal event writes, and follow-on catalog pointer publication. During that interval the previous published catalog remains authoritative for the committed data; recovery may use complete folder enumeration to locate unindexed in-flight journal evidence, but must verify every event and must not guess by filename. Writes remain blocked until recovery completes catalog finalization.
 
-This ordering preserves the accepted manifest-last publication boundary for the financial commit while ensuring the final catalog covers all immutable protocol objects. No engine code should be changed until this recovery ordering is specified and its interruption states are covered by tests.
+This ordering preserves the accepted manifest-last publication boundary for the financial commit while ensuring the final catalog covers all immutable protocol objects. The exact ordering is now specified in the handoff and tested at every durable transaction boundary and representative recovery-repair boundary before its synthetic dashboard integration. Owner review and live acceptance remain open.
 
 ## Historical retention and recovery
 
@@ -123,11 +127,9 @@ Before using the new engine against an existing synthetic folder, implement an e
 
 For PR #25 acceptance, use a fresh, clearly identified synthetic destination folder for the first full rehearsal. Never reset, overwrite, or delete the existing synthetic test folder merely to simplify migration. Any later cutover of an existing folder requires a verified backup and an explicit owner-reviewed procedure.
 
-## Implemented foundation in this branch
+## Implemented synthetic path
 
-`js/drive-locator-catalog.mjs` currently provides pure catalog validation, typed locator identities, copy-on-write extension, deterministic hashing, and logical snapshot resolution. It is deliberately not yet wired into the transaction engine. Its tests cover data-object, commit-record, and journal-event entries, identity isolation, duplicate/rebinding rejection, and missing locators.
-
-These primitives are the first implementation step, not proof that the transaction engine, recovery, backup, restore, or live Drive integration now comply with ADR §81.
+The pure `drive-locator-catalog.mjs` foundation is now composed with `catalog-storage.mjs`, `catalog-transaction-engine.mjs`, `catalog-backup.mjs`, `catalog-legacy-conversion.mjs`, lifecycle reads and dashboard bootstrap. The PR25 acceptance page uses the actual Google Drive and session adapters. Original source bytes and their mutable retention index live separately from immutable financial history. See the handoff for limits and evidence.
 
 ## Acceptance criteria
 
@@ -142,12 +144,6 @@ These primitives are the first implementation step, not proof that the transacti
 - Legacy conversion is explicit, verified, non-destructive, and rehearsed in a fresh synthetic destination.
 - No production financial-data persistence or existing-folder destructive migration is authorized.
 
-## Implementation sequencing
+## Remaining sequence
 
-1. Pure catalog primitives and unit tests — implemented in this branch; CI validation pending.
-2. Specify and test post-publication journal/catalog finalization and recovery ordering.
-3. Reconcile transaction staging, commit verification, and recovery with hash-only snapshots and catalog pointers.
-4. Update lifecycle reads and synthetic dashboard initialization to resolve through the catalog.
-5. Reconcile portable backup/export/restore to copy all history-referenced immutable objects and build destination catalogs.
-6. Add a synthetic legacy-conversion rehearsal in a fresh destination folder.
-7. Run CI and internal review; only then request PR #25 branch deployment for owner-run live synthetic acceptance.
+Synthetic implementation and deterministic fault/HTTP integration tests are complete for review. Require current-head Node 26 CI, review the concrete protocol and retention limits, then seek owner authorization for the shared branch deployment. Live synthetic Drive, OAuth, retention, iOS termination/reload and Cloud configuration evidence remain open. No automatic legacy cutover, production writes, or history deletion is authorized.

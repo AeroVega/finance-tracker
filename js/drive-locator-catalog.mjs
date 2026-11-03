@@ -37,7 +37,7 @@ function validateEntry(key, entry, ids) {
   if (!isRecord(entry) || !KINDS.has(entry.kind) ||
       typeof entry.identity !== "string" || !entry.identity.trim() ||
       typeof entry.fileId !== "string" || !entry.fileId.trim() ||
-      !SHA256.test(String(entry.sha256 || "")) ||
+      typeof entry.sha256 !== "string" || !SHA256.test(entry.sha256) ||
       key !== locatorKey(entry.kind, entry.identity)) {
     fail("invalid-locator-entry", "A locator entry has an invalid key, identity, file ID, kind, or content hash.", { key });
   }
@@ -65,9 +65,12 @@ export function validateLocatorCatalog(catalog, expected = {}) {
       typeof catalog.databaseId !== "string" || !catalog.databaseId.trim() ||
       typeof catalog.copyId !== "string" || !catalog.copyId.trim() ||
       !Number.isSafeInteger(catalog.generation) || catalog.generation < 0 ||
-      !(catalog.parentCatalogHash === null || SHA256.test(String(catalog.parentCatalogHash))) ||
+      !(catalog.parentCatalogHash === null || (typeof catalog.parentCatalogHash === "string" && SHA256.test(catalog.parentCatalogHash))) ||
       !isRecord(catalog.entries)) {
     fail("invalid-locator-catalog", "The locator catalog is malformed or uses an unsupported format.");
+  }
+  if ((catalog.generation === 0) !== (catalog.parentCatalogHash === null)) {
+    fail("invalid-catalog-parent", "Only an initial catalog may have a null parent hash.");
   }
 
   for (const field of ["databaseId", "copyId"]) {
@@ -137,7 +140,8 @@ export function createLocatorCatalog({
     validateEntry(key, entry, new Set());
     const existing = entries[key];
     if (existing) {
-      if (existing.fileId !== entry.fileId || existing.sha256 !== entry.sha256) {
+      if (existing.fileId !== entry.fileId || existing.sha256 !== entry.sha256 ||
+          existing.transactionId !== entry.transactionId || existing.sequence !== entry.sequence) {
         fail("locator-replacement-forbidden", "An existing immutable-object identity cannot be rebound to another file ID or hash.", { key });
       }
       continue;
@@ -182,7 +186,7 @@ export function resolveSnapshotLocators(snapshot, catalog) {
 
   const resolved = {};
   for (const [logicalPath, hash] of Object.entries(snapshot)) {
-    if (!logicalPath.trim() || FORBIDDEN_KEYS.has(logicalPath) || !SHA256.test(String(hash || ""))) {
+    if (!logicalPath.trim() || FORBIDDEN_KEYS.has(logicalPath) || typeof hash !== "string" || !SHA256.test(hash)) {
       fail("invalid-logical-snapshot-entry", "A committed snapshot contains an invalid logical path or content hash.", { logicalPath });
     }
     const entry = resolveLocator(catalog, { kind: "data-object", identity: hash });

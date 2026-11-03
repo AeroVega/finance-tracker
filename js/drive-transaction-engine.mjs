@@ -50,7 +50,7 @@ function joinBytes(parts) {
 
 export class GoogleDriveTransactionAdapter {
   constructor({ accessToken, folderId, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
-    onRequest = null, visibilityAttempts = 8, visibilityDelayMs = 500, visibilityMaxDelayMs = 5000 }) {
+    onRequest = null, afterMutation = null, visibilityAttempts = 8, visibilityDelayMs = 500, visibilityMaxDelayMs = 5000 }) {
     if (typeof accessToken !== "function" || !folderId || typeof fetchImpl !== "function") {
       fail("invalid-adapter-config", "An access-token provider, selected folder, and fetch implementation are required.");
     }
@@ -59,6 +59,7 @@ export class GoogleDriveTransactionAdapter {
     this.fetch = (...args) => fetchImpl.apply(globalThis, args);
     this.crypto = cryptoImpl;
     this.onRequest = onRequest;
+    this.afterMutation = afterMutation;
     if (!Number.isInteger(visibilityAttempts) || visibilityAttempts < 1 ||
         !Number.isFinite(visibilityDelayMs) || visibilityDelayMs < 0 ||
         !Number.isFinite(visibilityMaxDelayMs) || visibilityMaxDelayMs < visibilityDelayMs) {
@@ -254,6 +255,7 @@ export class GoogleDriveTransactionAdapter {
     if (storedHash !== actualHash || stored.length !== bytes.length) {
       fail("immutable-readback-mismatch", "The immutable Drive object failed exact byte verification.", { fileId });
     }
+    await this.afterMutation?.({ kind, operation: "create" });
     return { fileId, sha256: actualHash, size: bytes.length };
   }
 
@@ -284,6 +286,7 @@ export class GoogleDriveTransactionAdapter {
     if (new TextDecoder().decode(visible) !== content) {
       fail("manifest-readback-mismatch", "The published manifest did not read back exactly.");
     }
+    await this.afterMutation?.({ kind: "manifest", operation: "publish" });
     return manifest;
   }
 }

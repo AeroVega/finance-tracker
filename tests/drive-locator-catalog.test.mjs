@@ -21,6 +21,21 @@ const JOURNAL = {
   transactionId: "transaction-a", sequence: 0
 };
 
+test("catalog generations require the correct parent-hash shape", () => {
+  const initial = createLocatorCatalog({ databaseId: "synthetic-db", copyId: "synthetic-copy" });
+  assert.throws(() => validateLocatorCatalog({ ...initial, generation: 1 }), { code: "invalid-catalog-parent" });
+  assert.throws(() => validateLocatorCatalog({ ...initial, parentCatalogHash: HASH_A }), { code: "invalid-catalog-parent" });
+});
+
+test("journal transaction and sequence bindings cannot be silently changed", async () => {
+  const initial = createLocatorCatalog({ databaseId: "synthetic-db", copyId: "synthetic-copy", additions: [JOURNAL] });
+  const hash = await hashLocatorCatalog(initial);
+  for (const addition of [{ ...JOURNAL, transactionId: "other-transaction" }, { ...JOURNAL, sequence: 1 }]) {
+    assert.throws(() => createLocatorCatalog({ databaseId: initial.databaseId, copyId: initial.copyId,
+      previousCatalog: initial, previousCatalogHash: hash, additions: [addition] }), { code: "locator-replacement-forbidden" });
+  }
+});
+
 test("initial locator catalog binds data, commit, and journal objects to unique physical IDs", () => {
   const catalog = createLocatorCatalog({
     databaseId: "synthetic-database",
