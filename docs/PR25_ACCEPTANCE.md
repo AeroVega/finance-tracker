@@ -6,6 +6,18 @@
 
 This record separates code implemented in PR #25 from tests that can run in CI, live provider rehearsals, and owner-only configuration checks. A green synthetic test suite is not a production go-live decision.
 
+## Locator-catalog reconciliation — 2026-11-02
+
+A focused design record is now in [DRIVE_LOCATOR_CATALOG_DESIGN.md](DRIVE_LOCATOR_CATALOG_DESIGN.md), and ADR §109 captures the per-copy locator-catalog direction. The owner-approved principles are preserved; the exact catalog entry schema and post-publication recovery protocol remain an implementation proposal requiring review and fault-injection validation.
+
+Implemented foundation:
+- `js/drive-locator-catalog.mjs` provides pure typed locator validation, copy-on-write extension, deterministic hashing, and logical snapshot resolution.
+- `tests/drive-locator-catalog.test.mjs` covers data objects, commit records, journal events, copy identity, duplicate/rebinding rejection, and missing mappings.
+
+**Not yet reconciled:** `drive-transaction-engine.mjs`, transaction recovery, lifecycle reads, dashboard bootstrap, and portable backup/restore still use the legacy embedded-`fileId` snapshot shape. The new module is not wired into those paths. The design record identifies the terminal-journal/catalog-finalization ordering gap that must be resolved before engine integration. CI must run against the updated branch before these primitives are considered validated.
+
+This work does not authorize production persistence and does not make the branch ready for deployment or owner testing.
+
 ## Implemented in this branch
 
 ### Verified snapshot backup primitive
