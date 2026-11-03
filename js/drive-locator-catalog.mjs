@@ -180,7 +180,7 @@ export function resolveSnapshotLocators(snapshot, catalog) {
   validateLocatorCatalog(catalog);
   if (!isRecord(snapshot)) fail("invalid-logical-snapshot", "A committed snapshot must be a logical path-to-hash map.");
 
-  const resolved = Object.create(null);
+  const resolved = {};
   for (const [logicalPath, hash] of Object.entries(snapshot)) {
     if (!logicalPath.trim() || FORBIDDEN_KEYS.has(logicalPath) || !SHA256.test(String(hash || ""))) {
       fail("invalid-logical-snapshot-entry", "A committed snapshot contains an invalid logical path or content hash.", { logicalPath });
