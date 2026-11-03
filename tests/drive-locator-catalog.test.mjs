@@ -141,6 +141,18 @@ test("all immutable protocol object classes can be resolved independently", () =
     { code: "locator-not-found" });
 });
 
+test("migration and other protocol records are included in the same per-copy index", () => {
+  const migration = { kind: "migration-record", identity: "migration-1", sha256: HASH_B, fileId: "drive-migration-1" };
+  const protocol = { kind: "protocol-object", identity: "checkpoint-1", sha256: HASH_C, fileId: "drive-checkpoint-1" };
+  const catalog = createLocatorCatalog({
+    databaseId: "synthetic-database",
+    copyId: "synthetic-copy",
+    additions: [migration, protocol]
+  });
+  assert.deepEqual(resolveLocator(catalog, { kind: "migration-record", identity: "migration-1" }), migration);
+  assert.deepEqual(resolveLocator(catalog, { kind: "protocol-object", identity: "checkpoint-1" }), protocol);
+});
+
 test("snapshot resolution fails closed when a hash has no physical locator", () => {
   const catalog = createLocatorCatalog({
     databaseId: "synthetic-database",
