@@ -1,5 +1,16 @@
 # Roadmap
 
+**Status:** Historical delivery baseline; product direction expanded 2026-11-02; v1.0.0 scope and schedule require re-baselining  
+**Original MVP1 target:** 2027-01-01
+
+This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints. The owner-reviewed [Second Generation Product Definition](PRODUCT_DEFINITION.md) captures the broader product direction; the [Product Design Open Decisions register](PRODUCT_OPEN_DECISIONS.md) records unresolved owner questions. The feature map is not yet a sequenced implementation plan. Re-baseline scope and dates before treating the original schedule as a commitment.
+
+## Product direction and workstream boundaries — 2026-11-02
+
+The product direction now extends beyond the original MVP1 file-based tracker into a personal financial intelligence application with reporting, investments, liabilities, budgeting, goals, projections, insights, data-quality transparency, local-first operation, and long-term portability. These capabilities need deliberate v1.0.0 scoping; they are not all automatically assigned to the next PR.
+
+**PR #25 remains a separate engineering workstream.** It must complete its originally assigned synthetic-only storage-readiness and production-acceptance responsibilities as recorded in [PR #25](https://github.com/AeroVega/finance-tracker/pull/25) and its acceptance evidence on that branch. The product-definition discussion does not add feature-development scope to PR #25 and does not authorize production financial-data persistence.
+
 **Status:** Active planning baseline; M1 canonical contract/reference implementation merged; parser, reporting, and storage validation remain open  
 **MVP1 target:** 2027-01-01
 
