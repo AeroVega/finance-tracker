@@ -1,38 +1,34 @@
-# Per-Copy Drive Locator Catalog — Design Contract
+# Per-Copy Drive Locator Catalog — Design and Reconciliation
 
-**Status:** Owner-approved architecture direction; synthetic implementation in progress  
-**Scope:** PR #25 transaction-engine reconciliation and the subsequent synthetic backup/restore acceptance work  
+**Status:** Implementation proposal based on owner-approved architecture principles; transaction-engine protocol review remains open  
+**Scope:** PR #25 transaction-engine reconciliation and synthetic backup/restore acceptance  
 **Production authorization:** None. All implementation and validation remain synthetic-only.
 
 ## Problem
 
-The accepted database architecture requires commit records to describe logical database state independently of a particular Google Drive folder. A commit must be portable between physical copies. The current transaction engine still embeds Drive file IDs in each commit's snapshot map:
+The accepted database architecture requires commit records to describe logical database state independently of a particular Google Drive folder. The current transaction engine still embeds Drive file IDs in commit snapshot references:
 
 `logicalPath -> { fileId, sha256 }`
 
-That couples a logical commit to one physical Drive copy. Copying the commit record to another folder either leaves stale source-folder IDs or forces the commit record to be rewritten, changing its hash and breaking immutable lineage.
+That couples logical history to one physical copy. Copying the commit record to another folder either leaves stale source-folder IDs or forces immutable commit records to be rewritten.
 
-## Decision
+## Owner-approved principles
 
-Separate logical content identity from physical storage location.
+The following principles are already recorded in PR #25's acceptance history:
 
-### 1. Commit records contain only logical paths and content hashes
+- Commit history describes logical state using logical paths and exact content hashes, not physical Drive IDs (ADR §81).
+- Every physical copy has its own lookup mapping from logical immutable objects to physical Drive locators.
+- The mapping must cover all immutable objects needed for normal operation and recovery: data objects, commit records, journal events, migration records, and other protocol objects. The locator catalog itself is excluded from self-lookup; its identity and integrity are anchored by the manifest.
+- Every retained historical snapshot and its protocol history must remain resolvable.
+- Catalog updates are copy-on-write and the manifest remains the publication boundary.
+- Backup/restore creates a new copy-specific catalog while preserving logical database identity and commit lineage.
+- No production financial-data persistence is authorized.
 
-The complete snapshot map is:
+## Proposed catalog format
 
-`logicalPath -> sha256`
+A catalog is bound to both `databaseId` and `copyId`. It is immutable, versioned, and linked to its previous generation by the previous catalog's exact SHA-256 hash.
 
-Each hash is the SHA-256 digest of the exact raw bytes of one immutable data object. Commit records contain no Google Drive file IDs, folder IDs, or other copy-specific storage locators.
-
-### 2. Each physical copy has its own locator catalog
-
-A locator catalog maps content hashes to the Drive file IDs for that physical copy:
-
-`sha256 -> driveFileId`
-
-The catalog is bound to both `databaseId` and `copyId`. A locator from one physical copy must never be used to read another copy.
-
-The initial format is:
+The proposed shape is:
 
 ```json
 {
@@ -42,50 +38,74 @@ The initial format is:
   "copyId": "<physical-copy-uuid>",
   "generation": 0,
   "parentCatalogHash": null,
-  "locators": {
-    "<sha256>": "<drive-file-id>"
+  "entries": {
+    "data-object:<sha256>": {
+      "kind": "data-object",
+      "identity": "<sha256>",
+      "sha256": "<sha256>",
+      "fileId": "<drive-file-id>"
+    },
+    "commit-record:<commit-id>": {
+      "kind": "commit-record",
+      "identity": "<commit-id>",
+      "sha256": "<record-sha256>",
+      "fileId": "<drive-file-id>"
+    },
+    "journal-event:<event-id>": {
+      "kind": "journal-event",
+      "identity": "<event-id>",
+      "transactionId": "<transaction-id>",
+      "sequence": 0,
+      "sha256": "<event-sha256>",
+      "fileId": "<drive-file-id>"
+    }
   }
 }
 ```
 
-The catalog is operational metadata, not financial data. It contains no account details, transaction descriptions, amounts, credentials, or source-file contents.
+The typed key prevents different immutable-object classes from colliding. Data objects are content-addressed and can be reused when the exact hash already exists. Commit records, journal events, migration records, and other immutable protocol objects use their stable protocol identity plus an exact content hash. A physical file ID may appear only once in a catalog. Existing identities cannot be rebound to a different file ID or hash.
 
-### 3. Catalogs are immutable and copy-on-write
+The catalog is operational metadata. It contains no transaction descriptions, merchant names, account identifiers, balances, credentials, or source-file contents.
 
-A transaction never edits an existing catalog. It:
+## Logical commit and manifest shape
 
-1. Reads and verifies the catalog referenced by the current manifest.
-2. Stages and verifies any new immutable content objects.
-3. Creates a new catalog containing every prior mapping plus the newly verified hash-to-ID mappings.
-4. Verifies the new catalog's identity, parent hash, and exact content hash.
-5. Stages and verifies the new hash-only commit record.
-6. Revalidates the exact base manifest and active session.
-7. Publishes the new manifest pointer last, including the new catalog file ID and hash.
-8. Reads back and verifies the manifest and the complete committed snapshot through the new catalog.
+A commit's complete snapshot is:
 
-The manifest's catalog pointer is copy-specific and may contain the catalog's Drive file ID and SHA-256 hash. Its current commit pointer is also resolved through the catalog by commit identity and record hash; the manifest does not need a commit-record Drive ID. This does not violate the logical commit-record rule: the manifest belongs to one physical copy and is the authoritative current-state pointer.
+`logicalPath -> sha256`
 
-A transaction that adds no new content hashes may reuse the current immutable catalog pointer. Catalog generation is independent of the financial revision.
+It contains no Drive IDs. The current manifest remains copy-specific and points directly to the current catalog by file ID and exact catalog hash. The current commit is identified by commit ID and record hash and is resolved through the catalog; the manifest need not carry a commit-record Drive ID.
 
-### 4. Historical content remains resolvable
+The catalog generation is independent of the financial revision. If a transaction reuses existing content and adds no new immutable objects, it may reuse the current catalog pointer.
 
-The catalog retains mappings for all immutable objects required by retained history and recovery: data objects, commit records, journal events, migration records, and other immutable protocol objects. The current catalog file is excluded from self-lookup; its identity and integrity are anchored directly by the manifest. Historical objects remain available for backup, restore, audit, and projection provenance.
+## Copy-on-write and publication protocol
 
-MVP1 does not garbage-collect committed objects or remove historical locator mappings. A future verified retention/compaction design must prove that no retained commit references an object before any mapping or object can be retired.
+An existing catalog is never edited in place. A proposed normal transaction sequence is:
 
-### 5. Journal events retain recovery locators
+1. Read and verify the manifest-selected catalog and exact base manifest.
+2. Stage new data objects, journal events, and the immutable hash-only commit record using pre-generated IDs.
+3. Verify each object by exact raw-byte hash and expected Drive metadata.
+4. Build a new catalog preserving every prior retained mapping and adding all newly required immutable-object locators.
+5. Verify catalog identity, parent hash, uniqueness, and exact content hash.
+6. Revalidate the active session and exact base manifest.
+7. Publish the new commit and catalog pointers in the manifest last; read back and verify the manifest.
+8. Complete any post-publication terminal journal events and ensure those events are also indexed in a subsequent catalog generation and manifest catalog-pointer update, without inventing a new financial revision.
+9. Verify the complete committed snapshot and retained history through the published catalog.
 
-The append-only transaction journal may record pre-generated Drive IDs for planned objects, commit records, and catalog files. These IDs are necessary to resolve ambiguous create responses and recover interrupted work within the same physical copy.
+**Protocol issue requiring resolution before engine integration:** the current transaction protocol writes terminal journal events after manifest publication. A catalog published at step 7 cannot contain a terminal event that does not yet exist. The engine must therefore implement and fault-test the post-publication catalog finalization at step 8, including crashes between the financial pointer publication, terminal event writes, and follow-on catalog pointer publication. During that interval the previous published catalog remains authoritative for the committed data; recovery may use complete folder enumeration to locate unindexed in-flight journal evidence, but must verify every event and must not guess by filename. Writes remain blocked until recovery completes catalog finalization.
 
-Journal locators are operational, copy-specific recovery evidence. They do not make commit records copy-specific. Journal records remain append-only and are not rewritten during backup.
+This ordering preserves the accepted manifest-last publication boundary for the financial commit while ensuring the final catalog covers all immutable protocol objects. No engine code should be changed until this recovery ordering is specified and its interruption states are covered by tests.
 
-### 6. Backup and restore rebuild the destination catalog
+## Historical retention and recovery
 
-A backup preserves the logical database ID, commit IDs, revisions, parent relationships, and hash-only logical snapshots. It copies every retained object needed by the selected history into the destination folder and builds a new locator catalog bound to the destination's new copy ID.
+The catalog must preserve every physical locator needed by all retained commit records, journal events, migration records, and data objects. MVP1 does not garbage-collect committed objects or remove historical mappings. Any future compaction or retention operation must prove that an object is no longer referenced by retained history and must preserve required checkpoints and backups.
 
-The destination catalog maps the same content hashes to destination Drive file IDs. The source catalog and source copy remain untouched. Commit records do not need to be rewritten merely because the physical copy changed.
+Fail closed if the catalog is missing, malformed, has the wrong database/copy identity, fails its hash, has duplicate/conflicting mappings, or cannot resolve an object required by the selected history. Do not search Drive by filename and guess a replacement locator. A failed catalog publication leaves the old manifest and old catalog authoritative; new unreferenced files remain evidence and are not automatically deleted.
 
-Restore follows the same rule: create a new physical copy and catalog, verify every required object and historical reference, publish the destination manifest last, and preserve the selected logical commit lineage.
+## Backup and restore
+
+A backup preserves logical commit IDs, revisions, parent relationships, and hash-only snapshots. It copies every retained object required by the selected history into the destination folder and creates a new catalog bound to the destination's new `copyId`. The destination catalog maps the same logical immutable objects to destination-specific Drive IDs. The source copy and source catalog remain untouched.
+
+Restore creates a new physical copy, verifies every required object and historical reference, builds its own catalog, and publishes the destination manifest last. It preserves the selected logical commit lineage; it does not invent a financial commit.
 
 ## Legacy-format transition
 
@@ -95,37 +115,39 @@ Before using the new engine against an existing synthetic folder, implement an e
 
 - Reads the selected copy's manifest and complete commit/journal history.
 - Verifies every legacy object by its recorded exact raw-byte hash and physical folder binding.
-- Builds a destination locator catalog for that copy.
-- Produces a new hash-only logical history representation with explicit migration provenance.
+- Builds a destination catalog for the selected copy or, preferably, a separate destination physical copy.
+- Produces a hash-only logical history representation with explicit migration provenance.
 - Verifies that every retained historical snapshot resolves through the new catalog.
 - Publishes the new-format manifest only after the destination state is complete and verified.
 - Leaves the legacy source intact and read-only until the converted copy passes acceptance.
 
-For PR #25 acceptance, prefer a fresh, clearly identified synthetic destination folder for the first full rehearsal. Never reset, overwrite, or delete the existing synthetic test folder merely to simplify migration. Any later cutover of an existing folder requires a verified backup and an explicit owner-reviewed procedure.
+For PR #25 acceptance, use a fresh, clearly identified synthetic destination folder for the first full rehearsal. Never reset, overwrite, or delete the existing synthetic test folder merely to simplify migration. Any later cutover of an existing folder requires a verified backup and an explicit owner-reviewed procedure.
 
-## Failure behavior
+## Implemented foundation in this branch
 
-Fail closed if the catalog is missing, malformed, has the wrong database/copy identity, fails its hash, has duplicate or conflicting mappings, or cannot resolve any hash referenced by the selected snapshot/history. Do not search Drive by filename and guess a replacement locator. Do not automatically repair a catalog by choosing among duplicates.
+`js/drive-locator-catalog.mjs` currently provides pure catalog validation, typed locator identities, copy-on-write extension, deterministic hashing, and logical snapshot resolution. It is deliberately not yet wired into the transaction engine. Its tests cover data-object, commit-record, and journal-event entries, identity isolation, duplicate/rebinding rejection, and missing locators.
 
-A failed catalog publication leaves the old manifest and old catalog authoritative. The new catalog is an unreferenced immutable staging artifact and remains as evidence; do not delete it during recovery.
+These primitives are the first implementation step, not proof that the transaction engine, recovery, backup, restore, or live Drive integration now comply with ADR §81.
 
 ## Acceptance criteria
 
 - Commit snapshot values are lowercase SHA-256 strings only; no Drive IDs appear in commit snapshot entries.
-- Each manifest points to one verified locator catalog for its physical copy, and the catalog includes every retained immutable protocol-object class except the catalog itself.
-- Catalog validation enforces database ID, copy ID, generation, parent hash, and unique hash/file-ID mappings.
+- Each manifest points to one verified locator catalog for its physical copy.
+- Catalog entries cover every retained immutable protocol-object class except the catalog itself.
+- Catalog validation enforces database ID, copy ID, generation, parent hash, typed identity, exact hash, and unique physical file IDs.
 - Catalog updates are copy-on-write and preserve all existing mappings.
 - Reads resolve logical paths through the selected copy's catalog and verify exact raw bytes.
-- Recovery can identify and verify planned object/catalog/commit files after interruption without guessing.
-- Backup/restore creates a distinct destination catalog and preserves the logical commit history.
-- Tests cover missing, corrupt, wrong-copy, conflicting, duplicate, and unreferenced catalog entries, plus interruptions before and after manifest publication.
-- No production financial-data persistence or existing-folder destructive migration is authorized by this work.
+- Recovery handles every interruption between financial manifest publication and terminal-journal/catalog finalization without guessing.
+- Backup/restore creates a distinct destination catalog and preserves logical commit history.
+- Legacy conversion is explicit, verified, non-destructive, and rehearsed in a fresh synthetic destination.
+- No production financial-data persistence or existing-folder destructive migration is authorized.
 
 ## Implementation sequencing
 
-1. Add and test pure locator-catalog validation, hashing, extension, and resolution primitives.
-2. Reconcile the transaction engine and journal recovery protocol with hash-only snapshots and manifest catalog pointers.
-3. Update lifecycle reads and synthetic dashboard bootstrap to resolve through the catalog.
-4. Reconcile portable backup/export/restore to copy all history-referenced hashes and create a destination catalog.
-5. Add a synthetic legacy conversion rehearsal using a fresh destination.
-6. Only then request a PR #25 branch deployment for owner-run live synthetic acceptance.
+1. Pure catalog primitives and unit tests — implemented in this branch; CI validation pending.
+2. Specify and test post-publication journal/catalog finalization and recovery ordering.
+3. Reconcile transaction staging, commit verification, and recovery with hash-only snapshots and catalog pointers.
+4. Update lifecycle reads and synthetic dashboard initialization to resolve through the catalog.
+5. Reconcile portable backup/export/restore to copy all history-referenced immutable objects and build destination catalogs.
+6. Add a synthetic legacy-conversion rehearsal in a fresh destination folder.
+7. Run CI and internal review; only then request PR #25 branch deployment for owner-run live synthetic acceptance.
