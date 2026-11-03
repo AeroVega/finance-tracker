@@ -3,6 +3,7 @@ import { canonicalizeJcs, sha256Hex } from "./transaction-protocol.mjs";
 const FORMAT = "finance-tracker-locator-catalog";
 const VERSION = 1;
 const SHA256 = /^[0-9a-f]{64}$/;
+const KINDS = new Set(["data-object", "commit-record", "journal-event", "migration-record", "protocol-object"]);
 const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 export class LocatorCatalogError extends Error {
@@ -24,9 +25,40 @@ function isRecord(value) {
   return prototype === Object.prototype || prototype === null;
 }
 
+export function locatorKey(kind, identity) {
+  if (!KINDS.has(kind) || typeof identity !== "string" || !identity.trim() ||
+      FORBIDDEN_KEYS.has(identity)) {
+    fail("invalid-locator-identity", "A locator requires a supported immutable-object kind and non-empty identity.");
+  }
+  return kind + ":" + identity;
+}
+
+function validateEntry(key, entry, ids) {
+  if (!isRecord(entry) || !KINDS.has(entry.kind) ||
+      typeof entry.identity !== "string" || !entry.identity.trim() ||
+      typeof entry.fileId !== "string" || !entry.fileId.trim() ||
+      !SHA256.test(String(entry.sha256 || "")) ||
+      key !== locatorKey(entry.kind, entry.identity)) {
+    fail("invalid-locator-entry", "A locator entry has an invalid key, identity, file ID, kind, or content hash.", { key });
+  }
+  if (entry.kind === "data-object" && entry.identity !== entry.sha256) {
+    fail("invalid-data-object-identity", "A data-object locator identity must equal its exact content hash.", { key });
+  }
+  if (entry.kind === "journal-event" &&
+      (typeof entry.transactionId !== "string" || !entry.transactionId.trim() ||
+       !Number.isSafeInteger(entry.sequence) || entry.sequence < 0)) {
+    fail("invalid-journal-locator", "A journal-event locator must include its transaction ID and non-negative sequence.", { key });
+  }
+  if (ids.has(entry.fileId)) {
+    fail("duplicate-physical-locator", "One physical file ID cannot identify multiple immutable catalog entries.", { fileId: entry.fileId });
+  }
+  ids.add(entry.fileId);
+  return entry;
+}
+
 /**
- * Validate one immutable, copy-specific map from content hashes to Drive IDs.
- * Commit records never contain these physical IDs; only this catalog does.
+ * Validate one immutable, copy-specific index of all retained immutable
+ * protocol objects. The current catalog file is intentionally not self-indexed.
  */
 export function validateLocatorCatalog(catalog, expected = {}) {
   if (!isRecord(catalog) || catalog.format !== FORMAT || catalog.version !== VERSION ||
@@ -34,7 +66,7 @@ export function validateLocatorCatalog(catalog, expected = {}) {
       typeof catalog.copyId !== "string" || !catalog.copyId.trim() ||
       !Number.isSafeInteger(catalog.generation) || catalog.generation < 0 ||
       !(catalog.parentCatalogHash === null || SHA256.test(String(catalog.parentCatalogHash))) ||
-      !isRecord(catalog.locators)) {
+      !isRecord(catalog.entries)) {
     fail("invalid-locator-catalog", "The locator catalog is malformed or uses an unsupported format.");
   }
 
@@ -52,13 +84,7 @@ export function validateLocatorCatalog(catalog, expected = {}) {
   }
 
   const ids = new Set();
-  for (const [hash, fileId] of Object.entries(catalog.locators)) {
-    if (!SHA256.test(hash) || typeof fileId !== "string" || !fileId.trim() ||
-        FORBIDDEN_KEYS.has(hash) || ids.has(fileId)) {
-      fail("invalid-locator-entry", "Every content hash must map to exactly one unique, non-empty physical file ID.", { hash });
-    }
-    ids.add(fileId);
-  }
+  for (const [key, entry] of Object.entries(catalog.entries)) validateEntry(key, entry, ids);
   return catalog;
 }
 
@@ -75,12 +101,12 @@ export function createLocatorCatalog({
 } = {}) {
   if (typeof databaseId !== "string" || !databaseId.trim() ||
       typeof copyId !== "string" || !copyId.trim() || !Array.isArray(additions)) {
-    fail("invalid-locator-catalog-input", "A database ID, copy ID, and object-addition list are required.");
+    fail("invalid-locator-catalog-input", "A database ID, copy ID, and immutable-object addition list are required.");
   }
 
   let generation = 0;
   let parentCatalogHash = null;
-  const locators = Object.create(null);
+  const entries = Object.create(null);
 
   if (previousCatalog !== null) {
     validateLocatorCatalog(previousCatalog, { databaseId, copyId });
@@ -89,30 +115,39 @@ export function createLocatorCatalog({
     }
     generation = previousCatalog.generation + 1;
     parentCatalogHash = previousCatalogHash;
-    for (const [hash, fileId] of Object.entries(previousCatalog.locators)) locators[hash] = fileId;
+    for (const [key, entry] of Object.entries(previousCatalog.entries)) entries[key] = { ...entry };
   } else if (previousCatalogHash !== null) {
     fail("unexpected-parent-catalog-hash", "An initial locator catalog cannot declare a parent hash.");
   }
 
-  const ids = new Map(Object.entries(locators).map(([hash, fileId]) => [fileId, hash]));
-  for (const item of additions) {
-    const hash = item?.sha256;
-    const fileId = item?.fileId;
-    if (!SHA256.test(String(hash || "")) || typeof fileId !== "string" || !fileId.trim()) {
-      fail("invalid-locator-addition", "A locator addition requires a SHA-256 content hash and physical file ID.");
+  const ids = new Map(Object.entries(entries).map(([key, entry]) => [entry.fileId, key]));
+  for (const addition of additions) {
+    if (!isRecord(addition)) fail("invalid-locator-addition", "Each locator addition must be an object.");
+    const entry = {
+      kind: addition.kind,
+      identity: addition.identity,
+      fileId: addition.fileId,
+      sha256: addition.sha256
+    };
+    if (addition.kind === "journal-event") {
+      entry.transactionId = addition.transactionId;
+      entry.sequence = addition.sequence;
     }
-    if (Object.hasOwn(locators, hash)) {
-      if (locators[hash] !== fileId) {
-        fail("locator-replacement-forbidden", "An existing content hash cannot be rebound to a different physical file ID.", { hash });
+    const key = locatorKey(entry.kind, entry.identity);
+    validateEntry(key, entry, new Set());
+    const existing = entries[key];
+    if (existing) {
+      if (existing.fileId !== entry.fileId || existing.sha256 !== entry.sha256) {
+        fail("locator-replacement-forbidden", "An existing immutable-object identity cannot be rebound to another file ID or hash.", { key });
       }
       continue;
     }
-    const priorHash = ids.get(fileId);
-    if (priorHash && priorHash !== hash) {
-      fail("duplicate-physical-locator", "One physical file ID cannot identify two different content hashes.", { fileId });
+    const priorKey = ids.get(entry.fileId);
+    if (priorKey && priorKey !== key) {
+      fail("duplicate-physical-locator", "One physical file ID cannot identify multiple immutable catalog entries.", { fileId: entry.fileId });
     }
-    locators[hash] = fileId;
-    ids.set(fileId, hash);
+    entries[key] = entry;
+    ids.set(entry.fileId, key);
   }
 
   const catalog = {
@@ -122,7 +157,7 @@ export function createLocatorCatalog({
     copyId,
     generation,
     parentCatalogHash,
-    locators
+    entries
   };
   return validateLocatorCatalog(catalog, { databaseId, copyId, generation });
 }
@@ -130,6 +165,14 @@ export function createLocatorCatalog({
 export async function hashLocatorCatalog(catalog, cryptoImpl = globalThis.crypto) {
   validateLocatorCatalog(catalog);
   return sha256Hex(canonicalizeJcs(catalog), cryptoImpl);
+}
+
+export function resolveLocator(catalog, { kind, identity } = {}) {
+  validateLocatorCatalog(catalog);
+  const key = locatorKey(kind, identity);
+  const entry = catalog.entries[key];
+  if (!entry) fail("locator-not-found", "The selected physical copy has no locator for the requested immutable object.", { key });
+  return entry;
 }
 
 /** Resolve a commit's logicalPath -> SHA-256 map through this physical copy's catalog. */
@@ -142,11 +185,11 @@ export function resolveSnapshotLocators(snapshot, catalog) {
     if (!logicalPath.trim() || FORBIDDEN_KEYS.has(logicalPath) || !SHA256.test(String(hash || ""))) {
       fail("invalid-logical-snapshot-entry", "A committed snapshot contains an invalid logical path or content hash.", { logicalPath });
     }
-    const fileId = catalog.locators[hash];
-    if (typeof fileId !== "string" || !fileId) {
-      fail("locator-not-found", "The selected physical copy has no locator for a committed content hash.", { logicalPath, hash });
+    const entry = resolveLocator(catalog, { kind: "data-object", identity: hash });
+    if (entry.sha256 !== hash) {
+      fail("locator-hash-mismatch", "The data-object locator does not match the committed content hash.", { logicalPath, hash });
     }
-    resolved[logicalPath] = { sha256: hash, fileId };
+    resolved[logicalPath] = { sha256: hash, fileId: entry.fileId };
   }
   return resolved;
 }
