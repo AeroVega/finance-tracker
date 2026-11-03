@@ -243,7 +243,7 @@ The existing January 1, 2027 MVP1 target is a planning target, not permission to
 
 ## 12. PR #25 scope boundary — do not expand
 
-PR #25 remains responsible for its original synthetic-only storage-readiness and acceptance work, as documented in [PR25_ACCEPTANCE.md](PR25_ACCEPTANCE.md) and its pull request. The product vision in this document does **not** add reporting, investments, debt, budgeting, goals, projections, insights, or other product features to PR #25.
+PR #25 remains responsible for its original synthetic-only storage-readiness and acceptance work, as documented in [PR #25 acceptance record](https://github.com/AeroVega/finance-tracker/blob/feat/production-readiness-acceptance/docs/PR25_ACCEPTANCE.md) and [pull request #25](https://github.com/AeroVega/finance-tracker/pull/25). The product vision in this document does **not** add reporting, investments, debt, budgeting, goals, projections, insights, or other product features to PR #25.
 
 The PR #25 workstream must still complete its originally assigned responsibilities, including:
 - Reconcile the physical object-locator model with accepted database identity/lifecycle ADR §81.
@@ -266,6 +266,6 @@ This document captures product-level intent. Detailed technical decisions remain
 - [Database identity and lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md)
 - [Data model and reconciliation principles](DATA_MODEL.md)
 - [Security and privacy requirements](SECURITY.md)
-- [PR #25 acceptance evidence](PR25_ACCEPTANCE.md) (on the active PR #25 branch until merged)
+- [PR #25 acceptance evidence](https://github.com/AeroVega/finance-tracker/blob/feat/production-readiness-acceptance/docs/PR25_ACCEPTANCE.md) (on the active PR #25 branch until merged)
 
 When a future implementation proposal appears to conflict with an established decision, identify the conflict and bring it forward for resolution. Do not silently reinterpret this document or an existing technical contract.
