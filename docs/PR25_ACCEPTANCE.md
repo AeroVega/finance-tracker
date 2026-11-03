@@ -93,7 +93,7 @@ PR #23's transaction-engine suite injects lost responses after all 11 durable mu
 
 ## Automated CI evidence
 
-**Verified on current PR #25 head `ba0aabfbbc935a869785ff4662424d596e02b1ea`:** both GitHub Actions workflows completed successfully on Node.js 26.
+**Verified on application-code head `ba0aabfbbc935a869785ff4662424d596e02b1ea` (included in PR head `d3f32cf67d8d803dd161fe524dd4292d401bb37f`):** both GitHub Actions workflows completed successfully on Node.js 26. The subsequent PR head update `9b3927e3f1a46866447eea62051cf3af935b9f13` changes acceptance documentation only; no application code changed after the successful runs.
 
 - Finance Tracker contract tests — run #267; dashboard/browser syntax checks and complete Node contract suite passed.
 - Node contract tests — run #381.
