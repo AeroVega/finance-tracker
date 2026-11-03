@@ -93,13 +93,13 @@ PR #23's transaction-engine suite injects lost responses after all 11 durable mu
 
 ## Automated CI evidence
 
-**Verified on the previous tested code head:** both GitHub Actions workflows completed successfully on Node.js 26.
+**Verified on current PR #25 head `ba0aabfbbc935a869785ff4662424d596e02b1ea`:** both GitHub Actions workflows completed successfully on Node.js 26.
 
-- Finance Tracker contract tests — run #224; dashboard/browser syntax checks and complete Node contract suite passed.
-- Node contract tests — run #338.
-- That tested head reported **222 passed, 0 failed**.
+- Finance Tracker contract tests — run #267; dashboard/browser syntax checks and complete Node contract suite passed.
+- Node contract tests — run #381.
+- Both jobs report **223 passed, 0 failed**.
 
-One additional edge-case test was added afterward (genesis commit with a null parent), alongside a restore copy-ID collision assertion and corresponding validation changes. The current branch therefore contains **223 tests**, but needs a fresh run before it can be called green. Trigger the existing `Finance Tracker contract tests` workflow manually from the Actions tab if the latest PR synchronization did not start a run. These automated synthetic tests do not replace live Google Drive or iOS Safari acceptance.
+This closes the outstanding automated-test rerun for the current head. These are synthetic automated tests; they do not replace live Google Drive or iOS Safari acceptance. The latest CI success does not make the backup/restore or retention flows end-to-end, and it does not change the NO-GO production-persistence decision.
 
 ## Current Google authorization, quota, and cost review
 
