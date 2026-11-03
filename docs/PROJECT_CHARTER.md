@@ -5,7 +5,7 @@
 **MVP target:** 2027-01-01
 
 ## North Star
-Build a trustworthy, low-friction personal finance tracker that combines financial information from multiple institutions into a consistent view of cash flow and financial position. It should work comfortably on iPhone and iPad, reduce manual data entry, and make uncertainty visible rather than hiding it.
+Build a trustworthy personal financial intelligence application that helps one person understand their financial position, understand how they arrived there, anticipate where they may be heading, explore alternatives, and measure progress toward meaningful goals. It should be mobile-first, tablet-friendly, desktop-capable, responsive, explainable, and privacy-first. See the [Second Generation Product Definition](PRODUCT_DEFINITION.md) for the owner-reviewed product direction and [Product Design Open Decisions](PRODUCT_OPEN_DECISIONS.md) for unresolved questions.
 
 ## Problem
 The current annual spreadsheet workflow is flexible but requires repeated manual entry and makes duplicate prevention, reconciliation, and timely insights difficult. Automation matters, but data correctness and privacy come first.
@@ -20,7 +20,7 @@ The current annual spreadsheet workflow is flexible but requires repeated manual
 7. Incremental delivery: file imports first, API automation later if feasible.
 8. Portable data and recoverable backups.
 
-## MVP1 outcomes
+## Existing MVP1 baseline — scope requires re-baselining\n\nThe outcomes below are the original file-based MVP1 baseline. The expanded second-generation product vision is documented separately. Do not assume every capability in the product definition must be fully mature in v1.0.0, and do not silently expand active PR scopes. The v1.0.0 minimum coherent feature set, acceptance criteria, and schedule must be explicitly re-baselined against the product definition. PR #25 retains its original synthetic-only production-readiness responsibilities.\n\n## MVP1 outcomes
 - Import supported CSVs from Wells Fargo, SoFi, and Fidelity.
 - Normalize provider-specific rows into a common model.
 - Prevent duplicates across repeated and overlapping imports.
