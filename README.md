@@ -1,5 +1,7 @@
 # Finance Tracker
 
+[Open Finance Tracker](https://aerovega.github.io/finance-tracker/)
+
 A second-generation personal finance tracker built around trustworthy data, transparent calculations, and privacy-first handling of financial information.
 
 **North Star:** a dependable personal finance dashboard for iPhone and iPad. Target MVP date: **January 1, 2027**.
