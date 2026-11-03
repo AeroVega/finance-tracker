@@ -145,6 +145,7 @@ test("malformed catalog entries and unsafe logical paths are rejected", () => {
   });
   assert.throws(() => validateLocatorCatalog({ ...catalog, locators: { [HASH_A]: " ", [HASH_B]: "same" } }),
     { code: "invalid-locator-entry" });
-  assert.throws(() => resolveSnapshotLocators({ "__proto__": HASH_A }, catalog),
+  const unsafeSnapshot = JSON.parse('{"__proto__":"' + HASH_A + '"}');
+  assert.throws(() => resolveSnapshotLocators(unsafeSnapshot, catalog),
     { code: "invalid-logical-snapshot-entry" });
 });
