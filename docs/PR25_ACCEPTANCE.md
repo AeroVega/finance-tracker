@@ -101,6 +101,12 @@ PR #23's transaction-engine suite injects lost responses after all 11 durable mu
 
 This closes the outstanding automated-test rerun for the current head. These are synthetic automated tests; they do not replace live Google Drive or iOS Safari acceptance. The latest CI success does not make the backup/restore or retention flows end-to-end, and it does not change the NO-GO production-persistence decision.
 
+## Deployment readiness
+
+**Do not request an owner deployment yet.** The current Pages application still exposes the PR #24 synthetic dashboard. PR #25's backup, portable restore, and original-source retention helpers are not connected to an end-to-end browser acceptance harness, so deploying now would not exercise the missing acceptance paths.
+
+The existing `Deploy static site to GitHub Pages` workflow supports manual dispatch from a selected branch. It deploys the selected branch's repository root to the shared GitHub Pages environment and URL, replacing the currently published site. Once the locator-catalog implementation, synthetic live backup/restore harness, retention integration, and recovery/OAuth test paths are ready and CI-green, ask the owner to deploy `feat/production-readiness-acceptance` and perform the documented synthetic-only rehearsals. Confirm the deployed source SHA in the page footer and the successful deployment run before testing.
+
 ## Current Google authorization, quota, and cost review
 
 **Verified from current official documentation on 2026-11-02:**
