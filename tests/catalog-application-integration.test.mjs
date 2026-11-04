@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ApplicationStorageLifecycle } from "../js/application-storage-lifecycle.mjs";
-import { findOrCreateManifest, createSnapshotTransaction } from "../js/dashboard-synthetic-storage.mjs";
+import { inspectPr25Folder, findOrCreateManifest, createSnapshotTransaction } from "../js/dashboard-synthetic-storage.mjs";
 
 /** Synthetic HTTP provider exercises the real adapters, sessions and lifecycle. */
 class DriveHttp {
@@ -107,5 +107,27 @@ test("PR25 refuses an unrecognized nonempty folder rather than initializing over
     readJson: async () => { reads += 1; throw new Error("Unexpected manifest read"); }
   };
   await assert.rejects(findOrCreateManifest(adapter, async () => {}), { code: "nonempty-folder" });
+  assert.equal(reads, 0);
+});
+
+test("PR25 folder preflight rejects a legacy manifest before session acquisition", async () => {
+  let reads = 0;
+  const adapter = {
+    listChildren: async () => [{ id: "invented-pr24-manifest", name: "ft-synthetic-dashboard-manifest.json",
+      appProperties: { financeTrackerKind: "dashboard-synthetic-manifest" } }],
+    readJson: async () => { reads += 1; return { manifestVersion: "1.0.0" }; }
+  };
+  await assert.rejects(inspectPr25Folder(adapter), { code: "unsupported-folder-format" });
+  assert.equal(reads, 1);
+});
+
+test("PR25 folder preflight rejects unrecognized contents before session acquisition", async () => {
+  let reads = 0;
+  const adapter = {
+    listChildren: async () => [{ id: "invented-old-object", name: "old-pr24-object.json",
+      appProperties: { financeTrackerKind: "snapshot-object" } }],
+    readJson: async () => { reads += 1; throw new Error("Unexpected manifest read"); }
+  };
+  await assert.rejects(inspectPr25Folder(adapter), { code: "nonempty-folder" });
   assert.equal(reads, 0);
 });
