@@ -47,13 +47,13 @@ Every immutable write is read back by exact generated ID, folder, kind, transact
 
 Recovery resumes a complete, verified staged commit at its exact base, or verifies the already-published intended commit and finishes the terminal catalog. An incomplete pre-commit stage can be aborted only at its exact base; visible staged objects are verified, unavailable planned IDs remain evidence, and nothing is deleted. A missing previously verified commit/object or an unrelated manifest blocks writes. All recovery repairs are restartable; the tests interrupt both the original transaction and its repair. A pending marker blocks application reads and new writes until recovery succeeds.
 
-## Copy and migration behavior
+## Copy behavior
 
 Version-2 archives contain every catalog-referenced retained immutable object, not just the head snapshot. Logical commit bytes and hashes remain unchanged across backup/restore. Archive mappings have no physical Drive IDs. Historical journal bytes can still contain the original protocol's locators; treat exported archives as private recovery artifacts. The archive digest detects alteration; it is not authentication or encryption.
 
 Both source and destination session gates stay held during copying, with independent heartbeats. A destination must contain only its verified session marker. A preparation marker starts quarantined, changes to ready after object/structure verification, and the database manifest is created last. Reopen checks that preparation marker as well as the full catalog/history. Failure attempts a durable quarantine update and reports whether it succeeded. Unavailable authorization can prevent quarantine confirmation; preserve that destination for inspection and retry in a fresh folder.
 
-The explicit conversion tool supports complete PR24 synthetic dashboard history in a fresh destination. It verifies legacy bytes, object bindings and terminal journals; retains old manifests/commits/journals as migration evidence; converts snapshots to hashes; and records original commit hashes. PR24's empty revision-zero seed had no immutable commit record: this specific case is represented explicitly in migration provenance, attested by a verified journal base or the still-empty original bootstrap. Other missing history fails closed. Conversion changes record hashes with explicit provenance; ordinary v2 backup/restore does not. No source cutover, overwrite, history compaction, or deletion is performed.
+**Folder-format boundary:** PR25 creates and reopens only fresh version-2 synthetic folders. Existing PR24-format folders are unsupported: there is no conversion, migration, or in-place upgrade path. Select a new empty synthetic folder for PR25 tests. The PR24 test directories can be retired independently; their Git history remains available as implementation history.
 
 ## Retention limits to review
 
@@ -80,8 +80,8 @@ The [Drive deletion reference](https://developers.google.com/workspace/drive/api
 
 ## Next owner steps, in order
 
-1. Review the concrete protocol, migration behavior and retention limits above. Resolve the deletion-receipt recovery gate and account-access behavior before treating this as production-ready.
+1. Review the concrete protocol and retention limits above. Resolve the deletion-receipt recovery gate and account-access behavior before treating this as production-ready.
 2. Review the implementation diff and require both Node 26 CI checks on that head. Only then decide whether to authorize manually deploying the PR branch to the single shared Pages URL. No deployment was requested or performed by this coding pass.
-3. Open Prototype Tools → Backup and readiness acceptance. Use disposable synthetic folders and the page's controls to run all live acceptance in `PR25_ACCEPTANCE.md`. Use a fresh disposable source for each interruption boundary. Preserve failed folders; do not reset the existing PR24 folder.
+3. Open Prototype Tools → Backup and readiness acceptance. Use disposable synthetic folders and the page's controls to run all live acceptance in `PR25_ACCEPTANCE.md`. Use a fresh disposable source for each interruption boundary. Preserve failed PR25 folders as evidence. Do not select PR24-format folders; they are not part of this acceptance sequence.
 4. Record only non-sensitive pass/fail summaries, tested SHA and device/browser versions publicly. Keep tokens, folder/file locators, account/project identifiers, raw archives and private screenshots outside GitHub.
 5. Inspect actual Cloud configuration and billing, review evidence and remaining risks, and give explicit acceptance. Merging PR25 alone must not enable production persistence.
