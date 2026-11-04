@@ -1,4 +1,5 @@
 import { ApplicationStorageLifecycle } from "./application-storage-lifecycle.mjs";
+import { GoogleDriveTransactionAdapter } from "./drive-transaction-engine.mjs";
 import { validateGoogleConfig } from "./google-config-validation.mjs";
 import { initializeCatalogCopy, verifyCatalogHistory, storageError } from "./catalog-storage.mjs";
 import { SyntheticOriginalRetentionStore } from "./drive-original-retention.mjs";
@@ -125,14 +126,14 @@ function manifestBuilder({ current, record, commitFileId, commitHash, snapshot }
   };
 }
 
-export async function findOrCreateManifest(adapter, guard) {
+export async function inspectPr25Folder(adapter) {
   const files = await adapter.listChildren();
   const named = files.filter((file) => file.name === MANIFEST_NAME);
-  if (named.length > 1) throw new Error("Multiple dashboard manifest candidates exist. Stop and inspect the test folder; no files were changed.");
+  if (named.length > 1) throw storageError("ambiguous-manifest", "Multiple dashboard manifest candidates exist. Stop and inspect the test folder.");
   if (named.length === 1) {
     const file = named[0];
     if (file.appProperties?.financeTrackerKind !== MANIFEST_KIND) {
-      throw new Error("A file uses the synthetic dashboard manifest name but has unexpected metadata. No files were changed.");
+      throw storageError("invalid-manifest-metadata", "A file uses the synthetic dashboard manifest name but has unexpected metadata.");
     }
     const manifest = await adapter.readJson(file.id);
     if (manifest.manifestVersion !== "2.0.0") {
@@ -141,15 +142,23 @@ export async function findOrCreateManifest(adapter, guard) {
     if (manifest.format !== "finance-tracker-manifest" || manifest.syntheticOnly !== true ||
         !manifest.databaseId || !manifest.copyId || !Number.isSafeInteger(manifest.revision) ||
         typeof manifest.commitId !== "string" || !manifest.snapshot || typeof manifest.snapshot !== "object") {
-      throw new Error("The existing synthetic dashboard manifest failed identity validation. No files were changed.");
+      throw storageError("invalid-manifest", "The existing synthetic dashboard manifest failed identity validation.");
     }
-    await verifyCatalogHistory(adapter, manifest);
-    return file.id;
+    return { manifestFileId: file.id, manifest };
   }
   const unexpected = files.filter((file) => !(file.name === "finance-tracker-active-session.json" &&
     file.appProperties?.financeTrackerSession === "v1"));
   if (unexpected.length) {
-    throw storageError("nonempty-folder", "PR25 requires a fresh empty synthetic folder. Existing files were found without a version-2 manifest; no files were changed.");
+    throw storageError("nonempty-folder", "PR25 requires a fresh empty synthetic folder. Existing files were found without a version-2 manifest.");
+  }
+  return { manifestFileId: null, manifest: null };
+}
+
+export async function findOrCreateManifest(adapter, guard) {
+  const existing = await inspectPr25Folder(adapter);
+  if (existing.manifestFileId) {
+    await verifyCatalogHistory(adapter, existing.manifest);
+    return existing.manifestFileId;
   }
   return (await initializeCatalogCopy({ adapter, guard, manifestName: MANIFEST_NAME })).manifestFileId;
 }
@@ -247,6 +256,13 @@ export class DashboardSyntheticStorage {
         picker.setVisible(true);
       });
 
+      // Refuse PR24-format or otherwise nonempty folders before the lifecycle
+      // creates or updates a session marker. A rejected folder stays untouched.
+      const preflightAdapter = new GoogleDriveTransactionAdapter({
+        folderId: this.folderId,
+        accessToken: () => this.token()
+      });
+      await inspectPr25Folder(preflightAdapter);
       if (this.lifecycle && this.lifecycle.folderId !== this.folderId) {
         if (this.lifecycle.coordinator?.canWrite) {
           await this.lifecycle.release({ reason: "synthetic-folder-change" });
