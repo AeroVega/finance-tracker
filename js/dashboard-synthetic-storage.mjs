@@ -1,12 +1,14 @@
 import { ApplicationStorageLifecycle } from "./application-storage-lifecycle.mjs";
+import { GoogleDriveTransactionAdapter } from "./drive-transaction-engine.mjs";
 import { validateGoogleConfig } from "./google-config-validation.mjs";
+import { initializeCatalogCopy, verifyCatalogHistory, storageError } from "./catalog-storage.mjs";
+import { SyntheticOriginalRetentionStore } from "./drive-original-retention.mjs";
 
 const DRIVE_FILES = "https://www.googleapis.com/drive/v3/files";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const MANIFEST_NAME = "ft-synthetic-dashboard-manifest.json";
 const MANIFEST_KIND = "dashboard-synthetic-manifest";
-const BOOTSTRAP_TRANSACTION = "dashboard-synthetic-bootstrap";
 const SNAPSHOT_PATH = "synthetic/dashboard-transactions.json";
 const PRODUCTION_FOLDER_NAME = "finance-tracker-database";
 
@@ -90,7 +92,7 @@ async function loadGoogleLibraries() {
 }
 
 async function loadConfig() {
-  const response = await fetch("./js/google-config.json", { cache: "no-store" });
+  const response = await fetch(new URL("./google-config.json", import.meta.url), { cache: "no-store" });
   if (!response.ok) throw new Error("Google deployment configuration could not be loaded (HTTP " + response.status + ").");
   const config = await response.json();
   validateGoogleConfig(config);
@@ -124,57 +126,49 @@ function manifestBuilder({ current, record, commitFileId, commitHash, snapshot }
   };
 }
 
-async function findOrCreateManifest(adapter) {
+export async function inspectPr25Folder(adapter) {
   const files = await adapter.listChildren();
   const named = files.filter((file) => file.name === MANIFEST_NAME);
-  if (named.length > 1) throw new Error("Multiple dashboard manifest candidates exist. Stop and inspect the test folder; no files were changed.");
+  if (named.length > 1) throw storageError("ambiguous-manifest", "Multiple dashboard manifest candidates exist. Stop and inspect the test folder.");
   if (named.length === 1) {
     const file = named[0];
-    if (file.appProperties?.financeTrackerKind !== MANIFEST_KIND ||
-        file.appProperties?.financeTrackerTransaction !== BOOTSTRAP_TRANSACTION) {
-      throw new Error("A file uses the synthetic dashboard manifest name but has unexpected metadata. No files were changed.");
+    if (file.appProperties?.financeTrackerKind !== MANIFEST_KIND) {
+      throw storageError("invalid-manifest-metadata", "A file uses the synthetic dashboard manifest name but has unexpected metadata.");
     }
     const manifest = await adapter.readJson(file.id);
+    if (manifest.manifestVersion !== "2.0.0") {
+      throw storageError("unsupported-folder-format", "This folder uses the PR24 synthetic format. PR25 requires a fresh empty synthetic folder; this format is not supported and cannot be converted.");
+    }
     if (manifest.format !== "finance-tracker-manifest" || manifest.syntheticOnly !== true ||
         !manifest.databaseId || !manifest.copyId || !Number.isSafeInteger(manifest.revision) ||
         typeof manifest.commitId !== "string" || !manifest.snapshot || typeof manifest.snapshot !== "object") {
-      throw new Error("The existing synthetic dashboard manifest failed identity validation. No files were changed.");
+      throw storageError("invalid-manifest", "The existing synthetic dashboard manifest failed identity validation.");
     }
-    return file.id;
+    return { manifestFileId: file.id, manifest };
   }
-  const manifest = {
-    format: "finance-tracker-manifest",
-    manifestVersion: "1.0.0",
-    schemaVersion: 1,
-    syntheticOnly: true,
-    databaseId: "dashboard-synthetic-database-" + crypto.randomUUID(),
-    copyId: "dashboard-synthetic-copy-" + crypto.randomUUID(),
-    role: "primary",
-    revision: 0,
-    commitId: crypto.randomUUID(),
-    parentCommitId: null,
-    snapshot: {}
-  };
-  const content = JSON.stringify(manifest);
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
-  const expectedSha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  const fileId = await adapter.allocateFileId();
-  await adapter.createImmutable({
-    fileId,
-    name: MANIFEST_NAME,
-    kind: MANIFEST_KIND,
-    transactionId: BOOTSTRAP_TRANSACTION,
-    content,
-    expectedSha256
-  });
-  return fileId;
+  const unexpected = files.filter((file) => !(file.name === "finance-tracker-active-session.json" &&
+    file.appProperties?.financeTrackerSession === "v1"));
+  if (unexpected.length) {
+    throw storageError("nonempty-folder", "PR25 requires a fresh empty synthetic folder. Existing files were found without a version-2 manifest.");
+  }
+  return { manifestFileId: null, manifest: null };
+}
+
+export async function findOrCreateManifest(adapter, guard) {
+  const existing = await inspectPr25Folder(adapter);
+  if (existing.manifestFileId) {
+    await verifyCatalogHistory(adapter, existing.manifest);
+    return existing.manifestFileId;
+  }
+  return (await initializeCatalogCopy({ adapter, guard, manifestName: MANIFEST_NAME })).manifestFileId;
 }
 
 export class DashboardSyntheticStorage {
-  constructor({ onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {} } = {}) {
+  constructor({ onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {}, afterMutation = null } = {}) {
     this.onStatus = onStatus;
     this.onSnapshot = onSnapshot;
     this.onDiagnostic = onDiagnostic;
+    this.afterMutation = afterMutation;
     this.accessToken = "";
     this.tokenExpiresAt = 0;
     this.config = null;
@@ -183,6 +177,8 @@ export class DashboardSyntheticStorage {
     this.lifecycle = null;
     this.busy = false;
     this.readyPromise = null;
+    this.originals = null;
+    this.retentionTimer = null;
   }
 
   async prepare() {
@@ -260,6 +256,13 @@ export class DashboardSyntheticStorage {
         picker.setVisible(true);
       });
 
+      // Refuse PR24-format or otherwise nonempty folders before the lifecycle
+      // creates or updates a session marker. A rejected folder stays untouched.
+      const preflightAdapter = new GoogleDriveTransactionAdapter({
+        folderId: this.folderId,
+        accessToken: () => this.token()
+      });
+      await inspectPr25Folder(preflightAdapter);
       if (this.lifecycle && this.lifecycle.folderId !== this.folderId) {
         if (this.lifecycle.coordinator?.canWrite) {
           await this.lifecycle.release({ reason: "synthetic-folder-change" });
@@ -271,9 +274,11 @@ export class DashboardSyntheticStorage {
       if (!this.lifecycle) {
         this.lifecycle = new ApplicationStorageLifecycle({
           syntheticOnly: true,
+          catalogProtocol: true,
+          afterMutation: this.afterMutation,
           folderName: this.folderName,
           folderId: this.folderId,
-          initializeManifest: ({ adapter }) => findOrCreateManifest(adapter),
+          initializeManifest: ({ adapter, guard }) => findOrCreateManifest(adapter, guard),
           // Session adapter folder enumeration consumes the token synchronously.
           // Keep this provider synchronous; an async wrapper becomes Bearer [object Promise].
           accessToken: () => this.token(),
@@ -293,6 +298,19 @@ export class DashboardSyntheticStorage {
         await this.lifecycle.start();
       }
       const snapshot = await this.readSnapshot();
+      this.originals = new SyntheticOriginalRetentionStore({ adapter: this.lifecycle.transactionAdapter,
+        withWrite: (operation) => this.lifecycle.coordinator.withWrite(operation),
+        assertWritable: async () => {
+          if (this.lifecycle.engine.recoveryRequired) throw storageError("recovery-required", "Finish transaction recovery before retention maintenance.");
+          await this.lifecycle.coordinator.assertCanWrite({ online: navigator.onLine !== false });
+        } });
+      await this.originals.process();
+      if (this.retentionTimer) clearInterval(this.retentionTimer);
+      this.retentionTimer = setInterval(() => {
+        if (this.lifecycle?.state === "ready" && this.lifecycle.acceptingWrites) {
+          void this.originals.process().catch(() => this.onDiagnostic({ event: "retention-retry-required" }));
+        }
+      }, 60 * 60 * 1000);
       this.onSnapshot(snapshot);
       this.publish("ready", "Synthetic storage connected. CSV imports remain local to this page.", "success");
       return { folderName: this.folderName, snapshot };
@@ -358,6 +376,9 @@ export class DashboardSyntheticStorage {
       throw Object.assign(new Error("Storage release could not be verified. Keep this device selected and resolve the session before switching devices."), { code: "release-unconfirmed" });
     }
     this.lifecycle = null;
+    if (this.retentionTimer) clearInterval(this.retentionTimer);
+    this.retentionTimer = null;
+    this.originals = null;
     this.publish("disconnected", "Synthetic storage session released.", "success");
     return result;
   }

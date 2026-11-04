@@ -1,0 +1,157 @@
+# PR #25 — End-to-end acceptance and production-readiness evidence
+
+**Status:** Synthetic storage-readiness implementation reviewed; owner acceptance rehearsals completed; production financial-data persistence is not approved.
+**Last reviewed:** 2026-11-04
+**Reviewed code head:** `79292202e6b7c3c8499f4860d5cdad2335a32ecb`
+**Branch:** `feat/production-readiness-acceptance`
+
+This record separates implementation, automated validation, owner-reported live acceptance, and the separate production authorization decision. A green synthetic test suite and successful acceptance rehearsals do not authorize production financial-data persistence.
+
+## Current implementation and acceptance status — 2026-11-04
+
+**Implemented for review:** the synthetic dashboard uses version-2 hash-only commits and copy-specific catalogs, including post-publication journal/catalog finalization, full retained-history verification, fresh-copy backup/export/restore, and original-import retention integration. The PR25 acceptance page composes the real Drive/session adapters and provides live rehearsal controls. Production financial CSV import remains disabled; CSV rows stay local.
+
+See [implementation, ownership matrix, exact protocol, evidence and limitations](PR25_IMPLEMENTATION_HANDOFF.md). PR25 initializes and reopens fresh version-2 folders only. It does not convert, migrate, or reopen PR24-format folders.
+
+**Owner-reported live acceptance completed (2026-11-04):** using synthetic data and the approved Google test account, the owner reports successful backup creation/reopen/verification; failed-backup quarantine; portable archive export and independent verification; restore into a fresh Drive folder with a new physical copy identity; invented-original retention and deletion at the 540-day boundary; denial of an unapproved Google account followed by successful approved-account reconnection; full iPad browser-tab termination/reopen and stale-session recovery at transaction boundary 5; and actual Google Drive authorization revocation followed by fail-closed verification/write refusal, reauthorization, recovery of the existing session, and successful retained-history/commit-ancestry verification. Exact observed messages and scope limits are recorded in the handoff below.
+
+**Automated validation:** both Node 26 workflows passed on the reviewed head. Each reported 288 passed and 0 failed; browser/dashboard syntax checks also passed. The suite includes all 14 durable transaction-write interruption points and interrupted recovery-repair coverage.
+
+**Remaining owner work for PR25 closure:** review this evidence and the residual deletion-receipt limitation; inspect actual Cloud OAuth audience/scopes, API/key restrictions, assigned quotas, usage and billing; and explicitly accept the synthetic implementation's documented limitations. No more feature work or additional routine acceptance rehearsals are currently proposed for PR25.
+
+**Production boundary:** merging PR25 does not enable production financial-data persistence. That requires a separate design/approval milestone and a separate implementation PR.
+
+## Historical PR23/PR24 implementation notes (not used by PR25)
+
+### Verified snapshot backup primitive
+
+`js/portable-backup.mjs` adds `createVerifiedSnapshotBackup` for adapters scoped to a source primary and a separately prepared destination folder.
+
+- Requires an active primary manifest and a matching, SHA-256-verified commit record.
+- Reads each object in the committed snapshot and verifies its exact hash before copying.
+- Writes new immutable destination objects and verifies destination read-back.
+- Creates a destination commit record with the copied object locators while preserving the logical commit identity and history.
+- Assigns a new physical `copyId`, backup role, and explicit destination storage binding.
+- Re-reads the source manifest after copying; if it changed, the backup is not accepted.
+- Writes the backup manifest last and verifies its exact read-back.
+- Requires the caller to hold the active session's serialized source-operation gate for the entire copy, and requires an explicit quarantine callback. Partial copies must not be classified as backups, restored, or promoted. No cleanup is attempted because partial files are evidence.
+- Resolves ambiguous destination create responses only by exact pre-generated-ID read-back and SHA-256 verification.
+
+**Boundary:** the helper is adapter-driven and covered by in-memory synthetic tests. It is not yet wired into the dashboard lifecycle or exercised against live Google Drive. Destination folder creation and durable quarantine marking must be provided by the caller/adapter.
+
+
+
+### Architecture reconciliation — owner decision recorded
+
+**Decision (2026-11-02): preserve accepted ADR §81 and redesign physical object resolution.** Do not revise the ADR to accommodate the current PR #23 implementation.
+
+The current PR #23 engine stores `fileId` alongside `sha256` in each commit snapshot reference. That is a mismatch, not the desired contract. The target commit snapshot is a complete logical map of `logicalPath -> sha256`; Drive IDs remain copy-specific physical locators and must be resolved outside immutable commit records.
+
+Implementation must update the transaction engine, recovery verifier, backup/restore flow, and synthetic fault-injection tests together. A backup must retain byte-identical logical commit history while using its own physical object locators. Recovery must resolve each logical path/hash against the active copy's locator data and fail closed for missing, duplicate, mismatched, or ambiguous mappings.
+
+
+**Owner decision (2026-11-02):** the database's logical history describes what the data is (logical paths and content hashes); a separate per-copy mapping describes where those objects are physically stored. This principle is accepted. The concrete locator-catalog format and publication protocol are not yet approved.
+
+
+**Owner decision (2026-11-02):** each per-copy locator catalog must cover every physical object required by the copy's retained commit history, not only the latest snapshot. Historical commits remain resolvable and verifiable through that copy's catalog.
+
+
+**Owner decision (2026-11-02):** locator-catalog publication is copy-on-write and manifest-last. Build a new immutable catalog covering the copy's retained history, upload it, read it back, and verify it before updating the authoritative manifest to reference it alongside the new committed revision. A crash before manifest publication leaves the previous manifest/catalog authoritative; an unreferenced new catalog is unpublished data, not active state.
+
+**Owner confirmation (2026-11-02):** the locator catalog is understood as a per-copy lookup index connecting each logical object/version (logical path plus SHA-256) to its physical Drive file. The owner also recognizes the potential performance benefit: once a catalog is retrieved and verified, the app can resolve object locations directly rather than repeatedly searching Drive. This is an expected efficiency benefit, not yet a measured performance result. This confirms the conceptual model only; exact entry schema, integrity binding, caching/invalidation, and publication/recovery details still require specification.
+
+**Owner decision (2026-11-02):** the per-copy locator catalog covers all immutable objects required for normal operation and recovery: data objects, commit records, journal events, and other immutable protocol objects. The catalog itself is excluded from self-lookup; its identity and integrity are anchored directly by the manifest. This is a scope decision, not approval of an exact schema or implementation.
+
+
+
+**Owner decision (2026-11-02):** history retention should be configurable. History compaction is an accepted design direction: preserve a verifiable summary/checkpoint of the database's older state while allowing the detailed events represented by that checkpoint to be discarded. Compaction must be an explicit, auditable maintenance operation, distinct from routine cleanup. The retention duration, checkpoint contents/integrity contract, compaction procedure, and recovery/backup implications remain to be specified; no history is authorized for deletion by this decision alone.
+
+
+
+**Owner decision (2026-11-02):** history retention should be configurable. History compaction is an accepted design direction: preserve a verifiable summary/checkpoint of the database's older state while allowing the detailed events represented by that checkpoint to be discarded. Compaction must be an explicit, auditable maintenance operation, distinct from routine cleanup. The retention duration, checkpoint contents/integrity contract, compaction procedure, and recovery/backup implications remain to be specified; no history is authorized for deletion by this decision alone.
+
+**Owner decision (2026-11-02):** compaction establishes a new historical baseline. The compacted checkpoint preserves verified long-term financial reporting; newer activity remains detailed after the checkpoint; a cryptographic link anchors the checkpoint to the history it replaces. Once checkpoint verification and required backup safeguards pass, the represented old detailed events may be discarded. Compaction must preserve comparable long-term reporting across the boundary, including monthly income and expense totals, category totals, account balances, and investment summaries.  **Owner clarification (2026-11-02):** category totals, account balances, and investment summaries are retained at monthly granularity as well. **Owner clarification (2026-11-02):** monthly investment summaries retain both total portfolio market value and a holdings breakdown identifying individual securities, quantities, and values, so long-term reporting preserves both portfolio growth and changes in composition. **Owner decision (2026-11-02):** retain monthly investment cash-flow and performance components as well: contributions/deposits, withdrawals, dividends and interest, investment fees, and realized gains/losses. The reporting contract must distinguish external cash flows from investment performance; portfolio market-value change alone must not be presented as investment return. **Owner decision (2026-11-02):** nominal historical values remain the authoritative retained financial record. Inflation-adjusted figures are an optional derived presentation feature, not a replacement for nominal history; calculate them from nominal values using an explicitly identified inflation index and reference date rather than storing them as authoritative financial facts.
+
+**Owner decision (2026-11-02):** closing or disconnecting an account must not create gaps in long-term reporting. Retain that account's historical monthly balances and its contribution to income, expense, category, and investment summaries in compacted checkpoints, together with stable historical account identity and closure status. Historical reporting remains available after the account is closed; this does not require retaining every underlying transaction indefinitely. Monthly income and expense totals, category totals, account-balance snapshots, and investment summaries therefore remain available for each retained reporting month; annual and longer-term views can be derived from those monthly records. Preserve the reporting semantics needed to interpret those measures consistently over time (currency, period boundaries, account/category identity and history, and treatment of transfers, pending activity, refunds, reversals, corrections, and investment activity). The objective is to retain durable financial insight, not reconstruct individual old purchases. **Owner decision (2026-11-02):** preserve historical categorization as recorded at the time. Later additions or refinements to the category taxonomy apply prospectively and do not automatically reclassify old transactions or rewrite compacted historical category totals. Historical category identity and name must remain exactly as recorded for old transactions and reports. Category additions, refinements, and renames apply prospectively only; a rename must not change the displayed name in historical reports or compacted historical summaries. A rename preserves the category's underlying identity for new activity; a change in meaning or a split into distinct classifications creates new category identities. Historical records retain the name and identity that applied when they were recorded. Do not automatically recategorize old transactions, rewrite compacted category totals, or retroactively rename historical category labels. Retrospective changes are out of scope unless separately specified and explicitly authorized in a future change. **Owner decision (2026-11-02):** category merging is allowed prospectively. When categories are merged, new activity uses the surviving destination category; historical transactions, category identities, names, and compacted summaries remain unchanged. A merge must not retroactively rewrite historical reports.  **Owner decision (2026-11-02):** categories may optionally contain subcategories. A category without subcategories may receive transactions directly. Once it has subcategories, it is a reporting parent only and transactions must be assigned to one of its subcategories; parent totals are calculated from the child totals and must not double-count them. When a category is split into subcategories, transactions already assigned directly to the parent remain assigned there as historical records; new transactions must use a subcategory. Do not automatically redistribute historical parent-level transactions. Historical category/subcategory assignments and names remain as recorded; hierarchy changes apply prospectively and do not move old transactions. The category hierarchy is limited to two classification levels: Sum Total → Category → Subcategory. Subcategories cannot contain further nested categories. Sum Total is the overall aggregate, not a user-assigned transaction category. This is a design decision, not authorization to implement deletion or enable production persistence. **Owner decision (2026-11-02):** users may manually reassign an existing transaction to a different category or subcategory. This is an explicit correction, not automatic recategorization. The correction must preserve an auditable record of the prior assignment, replacement assignment, and correction time; it must not silently overwrite the original classification history. A user-provided reason or note may be attached to the correction, but is optional and must never be required to complete it. **Owner decision (2026-11-02):** manual transaction corrections update the effective historical reports for the transaction's original reporting period (corrected-history approach). The audit trail must still preserve the original assignment, replacement assignment, and correction time. The reporting and compaction design must provide a verifiable way to apply such corrections to already-compacted monthly summaries without erasing the prior classification or silently rewriting checkpoint history; the exact append-only adjustment/checkpoint mechanism remains to be specified.
+
+**Owner decision (2026-11-02):** manual categorization corrections may be undone repeatedly. Each undo or subsequent correction is recorded as a new correction event referencing the event it reverses or supersedes; no prior event is deleted or erased. A reason or note is optional.
+
+**Current follow-up:** the concrete v2 catalog representation, publication/recovery protocol and interruption tests are implemented and were reviewed for PR25. Owner-reported live synthetic acceptance is summarized at the top of this document; remaining owner actions are limited to residual-risk acceptance and inspection of actual Cloud/security configuration. The v1 `fileId + sha256` helper remains only for historical PR23/PR24 regression/reference pages. PR25 does not use it to open, convert, or upgrade PR24-format folders.
+
+### Portable export and restore planning
+
+`createPortableBackup`, `verifyPortableBackup`, and `planPortableRestore` provide a versioned JSON archive contract.
+
+- Archive envelope and each object are SHA-256 verified.
+- The archive must contain exactly the logical objects in the commit snapshot; missing, extra, duplicate, or modified objects fail closed.
+- A structural-validation callback is required at verification time.
+- Portable archives omit Drive file IDs and replace the source storage binding with a portable marker; they are not tied to the original Drive folder.
+- Restore planning requires a new physical copy ID and explicit destination binding, preserves logical database/commit lineage, and returns verified object bytes.
+- Restore planning is deliberately inert. It does not write a destination folder or publish a manifest. A persistence workflow must upload objects under new Drive IDs, rebuild the commit snapshot references, and publish the restored manifest only after verification.
+
+### 540-day original-source retention policy
+
+`js/original-retention-policy.mjs` implements pure retention-state primitives:
+
+- Expiry is exactly 540 × 24 hours from successful private retention.
+- Eligibility is separate from provider-confirmed deletion.
+- Failed eligible deletions preserve the locator, record the failure/attempt, and remain retryable.
+- The live locator is cleared only after provider-confirmed absence.
+- Backup metadata preserves the original retention timestamp and expiry.
+- Restore omits expired or confirmed-deleted originals and never restarts their clock.
+
+**Boundary:** this state machine is not yet connected to an original-CSV upload/import record, a scheduled deletion worker, Google Drive deletion calls, or backup/restore persistence. Production retention is therefore **not implemented end to end**.
+
+### Existing transaction fault-injection coverage
+
+PR #23's transaction-engine suite injects lost responses after all 11 durable mutation boundaries and exercises deterministic recovery against the in-memory synthetic Drive. This coverage remains useful and must stay green. It is not a substitute for real browser termination/reload rehearsals against Drive.
+
+## Automated validation evidence
+
+**Reviewed current head:** `79292202e6b7c3c8499f4860d5cdad2335a32ecb`, dated 2026-11-04.
+
+- [Node contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41788168056): Node 26.13.0; **288 passed, 0 failed**.
+- [Finance Tracker contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41788168051): Node 26.13.0; **288 passed, 0 failed**.
+- Browser/dashboard module syntax checks passed in the Finance Tracker workflow.
+- The suite covers all 14 durable transaction-write interruption points, interrupted recovery repairs, real-adapter HTTP/session integration, backup/restore, retention, and fail-closed folder preflight behavior.
+
+These CI results apply to the reviewed head above. Any subsequent code change requires fresh checks. Owner-reported real-provider/device tests are separately identified and are not represented as CI evidence.
+
+## Deployment readiness
+
+The owner deployed the PR25 acceptance branch to the shared Pages site and completed the live synthetic rehearsals summarized above. This record does not authorize another deployment or production data use. PR24-format synthetic folders remain unsupported and must not be selected for PR25 acceptance.
+
+## Current Google authorization, quota, and cost review
+
+**Verified from official documentation on 2026-11-02; Drive quota/billing source rechecked on 2026-11-03:**
+
+- The prototype requests `https://www.googleapis.com/auth/drive.file`. Google classifies `drive.file` as a **non-sensitive** scope: it grants per-file access to files created by the app or opened/shared with it through Picker. This is preferable to the broad restricted `drive` scope. See [Choose Google Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
+- The checked browser flow uses Google Identity Services token-client authorization and keeps the access token in page memory. The prototype clears its token when expired and requires an interactive reconnect. It does not persist a refresh token. This avoids long-lived browser refresh-token storage but means reauthorization is expected.
+- Google's current OAuth help says apps in Testing are limited to listed test users and user authorizations expire after seven days. A personal-use app with fewer than 100 users may qualify for an exception from verification, but that does not remove the need to obey the Google API Services User Data Policy. Confirm the actual Cloud Console publishing status and exception applicability before relying on it. See [Manage app audience](https://support.google.com/cloud/answer/15549945?hl=en) and [When verification is not needed](https://support.google.com/cloud/answer/13464323?hl=en).
+- Google Drive's current quota documentation lists 1,000,000 quota units per minute per project, 325,000 per minute per user/project, and a 1 TB/day project egress limit. It currently says standard Drive API use is available at no additional cost. The same page describes a 400,000,000 quota-unit daily billing threshold and says charges above it are planned for later in 2026, with further billing details to be shared after at least 90 days' notice. See [Drive API usage limits](https://developers.google.com/workspace/drive/api/guides/limits) and [Google Workspace standardized model](https://developers.google.com/workspace/tools-safety).
+
+**Not verified / owner action required:**
+
+- The actual Cloud Console OAuth publishing status, listed test users, declared scopes, API restrictions/referrer restrictions, and project billing configuration have not been inspected by this code review.
+- Owner-reported live tests completed: actual Drive authorization revocation, fail-closed verification/write pause, approved-account reauthorization and recovery; an unapproved account was denied while the app was in Testing mode. The iPad browser interruption rehearsal was completed at boundary 5. Separate live token-expiry and denied-scope cases were not independently documented.
+- The future billing details and effective date for over-threshold Drive usage remain subject to Google's updates. The $0 constraint cannot be guaranteed solely from the published standard-use statement; the project must remain below the applicable threshold and must not silently enable billing-dependent behavior.
+- The live usage and quotas assigned to the owner's Cloud project have not been retrieved.
+
+The current scope is appropriately narrow at the prototype level. It is not a substitute for live OAuth and project-configuration acceptance.
+
+## Remaining owner review before PR25 can close
+
+The following are deliberately separate from the completed synthetic acceptance rehearsals:
+
+1. **Residual-risk acceptance:** review the deletion-receipt recovery limitation in `PR25_IMPLEMENTATION_HANDOFF.md`. A process loss after provider deletion but before durable metadata update can lose the in-memory receipt; the app conservatively preserves the old locator rather than inferring deletion from an access-ambiguous 404.
+2. **Cloud configuration and cost:** inspect the actual Cloud OAuth publishing status/audience, declared scopes, API and key restrictions, assigned quotas, usage, and billing configuration. Public Google documentation does not establish the actual project's $0 operating cost.
+3. **Security/privacy:** inspect the deployed artifact and browser storage/network behavior. Confirm no client secret, token, financial data, CSV contents, account identifiers, or private diagnostics are shipped, stored in public Pages assets, or emitted to logs.
+4. **Explicit PR25 closure:** review the recorded evidence, unsupported PR24 folder boundary, single-active-device constraint, and residual limitations. Record owner acceptance separately from production authorization.
+
+Use only dedicated synthetic folders and invented data for this PR. Never use the canonical ledger folder or real financial records.
+
+## Release decision
+
+**PR25 synthetic implementation: recommended for merge after owner review of the documented residual limitations.**
+
+**Production financial-data persistence: NO-GO.** It remains disabled and requires a separate design/approval milestone and a separate implementation PR. Merging PR25 alone must not enable it.

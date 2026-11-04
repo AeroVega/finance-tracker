@@ -581,6 +581,22 @@ IndexedDB stores only the known-copy inventory and narrowly scoped recovery diag
 
 PR #20's synthetic feasibility spike established complete folder enumeration, pre-generated-ID retry behavior, and exact object hashing, and demonstrated that the tested stale-`If-Match` mechanism is not enforced. The owner then accepted single-user, single-active-device operation instead of requiring a server-enforced lock. PR #21 validates best-effort session coordination; PR #22 establishes the pure transaction protocol; PR #23 implements the durable Drive adapter and synthetic fault-injection/recovery tests; PR #24 integrates the engine with automatic application lifecycle behavior; PR #25 completes end-to-end acceptance and production-readiness review. These workstreams use invented records and a dedicated synthetic folder only. They do not authorize real ledger reads/writes or production financial-data storage.
 
+
+### 109. Resolve logical snapshots through a per-copy locator catalog
+
+Commit records store each complete snapshot as `logicalPath -> sha256`; they never store Google Drive file IDs. Each physical copy has a separate immutable locator catalog bound to its `databaseId` and `copyId`. The catalog resolves logical data objects and every retained immutable protocol object needed for normal operation and recovery, including data objects, commit records, journal events, migration records, and other protocol objects. Each entry has a typed immutable identity, exact SHA-256 content hash, and copy-specific Drive file ID. The catalog itself is excluded from self-lookup; its identity and integrity are anchored directly by the manifest.
+
+Catalog updates are copy-on-write. A new catalog preserves all prior retained mappings and adds newly verified immutable objects. It includes a generation and parent-catalog hash. Existing mappings are never rebound to different IDs or hashes. Catalog generation is independent of the financial revision; a commit that introduces no new immutable objects may reuse the existing catalog.
+
+The manifest points to the current catalog by its copy-specific Drive file ID and exact hash. The current commit is identified by commit ID and record hash and resolved through the catalog; commit records remain portable. A read resolves each logical path to its content hash through the manifest-selected copy's catalog, then verifies the exact raw bytes against that hash. Missing, corrupt, ambiguous, wrong-copy, or incomplete catalog state blocks the operation; do not guess by Drive filename.
+
+Append-only transaction journals may record pre-generated physical IDs for staged objects, commit records, journal events, and catalogs so interrupted operations can recover exact intended files. These recovery locators do not enter logical commit records. The transaction protocol must explicitly handle the ordering gap created by terminal journal events written after financial manifest publication: finalization must index those terminal events in a follow-on catalog generation and update only the manifest's catalog pointer, without inventing a new financial revision. Recovery must be fault-tested across each interruption in this sequence and must use complete folder enumeration only to locate unindexed in-flight evidence, never to guess an object by name.
+
+Backup and restore preserve logical commit IDs, revisions, parent lineage, and hash-only snapshots, but create a new locator catalog bound to the destination's new `copyId`. The destination catalog maps the same logical immutable objects to destination-specific Drive IDs. Source copy and source catalog remain unchanged.
+
+PR25's catalog-backed dashboard initializes fresh version-2 synthetic folders only. Existing PR24-format synthetic folders are unsupported: PR25 does not convert, migrate, or upgrade them, and must refuse them without modifying their contents. The owner may retire those disposable PR24 test folders independently. This directory-format boundary is not a change to the separate future schema-migration requirements recorded in decisions 56–64.
+
+See [Per-Copy Drive Locator Catalog — Design and Reconciliation](DRIVE_LOCATOR_CATALOG_DESIGN.md) for the proposed entry schema, publication/finalization ordering, failure behavior, migration boundary, and acceptance criteria.
 ## Initial manifest example — approved design contract
 
 This illustrates the accepted initial fields and values. IDs and timestamps are placeholders, not real values.

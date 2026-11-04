@@ -1,12 +1,17 @@
 # Finance Tracker — next steps and handoff
 
-**Last updated:** 2026-11-02
-**Current phase:** PR #22's transaction protocol foundation and PR #23's durable Google Drive transaction engine are merged. PR #24's synthetic-only application integration has passed exact-head CI and owner-confirmed live dashboard acceptance. Production financial-data persistence remains **not approved** and is not enabled by PR #24.
+## PR25 current handoff — 2026-11-03
 
-## Latest PR #24 status — ready for merge review
+Synthetic catalog-backed transactions/recovery, full-history backup/restore, retention integration and live-rehearsal controls are implemented for review. PR25 uses fresh version-2 synthetic folders only; no PR24 directory conversion is supported. See [the action ownership matrix and remaining gates](PR25_IMPLEMENTATION_HANDOFF.md) and [current acceptance evidence](PR25_ACCEPTANCE.md). This supersedes earlier implementation-pending notes below. Concrete protocol/retention review, current-head Node 26 CI and all live account/device/Cloud/owner acceptance gates remain open. No deployment or production persistence was authorized by this coding pass.
+
+**Last updated:** 2026-11-02
+**Current phase:** PRs #22–#24 are merged. PR #25 is active on `feat/production-readiness-acceptance`, adding synthetic-only backup/restore portability and 540-day retention primitives plus an explicit acceptance record. Production financial-data persistence remains **not approved**.
+
+## PR #24 status — merged 2026-11-02
 
 **Branch:** `feat/application-storage-integration`  
-**Final review head before this handoff refresh:** `d9fb3092a1a6f06601bb1f41b5dab5a9e92c9855`  
+**Merge commit:** `fed48fb2f4863c3be6715f4951b17dedf6b7904d`  
+**Final review head:** `0c514fd39a13537adc21a648f4d031ad36088318`  
 **Live dashboard acceptance source:** `c6c9f93f54e888a721bcdf78c6d6cb09b829cbf4`
 
 **Verified CI:** both PR workflows passed on the reviewed source head. The complete Node contract suite reported **199 passed, 0 failed**; dashboard/browser module syntax checks passed. The CI workflow action pins were upgraded from the Node-20-runtime v4 actions to Node-24-runtime v7 releases. Both workflows passed again on final review head `b2b86d901fa98d5b90ecccd836b97ed348653e1a`, with 199/199 tests and no Node 20 action-runtime deprecation warning.
@@ -51,7 +56,7 @@ Branch: `feat/durable-drive-transaction-engine`
 
 **Exit:** Node fault-injection CI passes; the owner-confirmed live synthetic Drive transaction/reopen/recovery smoke test and cleanup passed on 2026-11-01; repeated recovery and ambiguous-outcome preservation are covered by synthetic tests. Real Drive interruption/reload rehearsals at every boundary remain open. No real financial data.
 
-### PR #24 — Application integration and automatic lifecycle (ready for merge review)
+### PR #24 — Application integration and automatic lifecycle (merged 2026-11-02)
 
 Branch: `feat/application-storage-integration`
 
@@ -60,20 +65,57 @@ Branch: `feat/application-storage-integration`
 - Preserves local-only CSV imports. Only invented rows explicitly tagged `syntheticOnly: true` can be written to Drive. No production ledger read/write path is enabled.
 - Adds deterministic lifecycle, transaction, diagnostics and dashboard-handler regression tests; PR CI runs the complete Node contract suite.
 - Owner-confirmed live dashboard cycle passed: save four rows, release/reconnect and restore four, clear and save empty, release/reconnect and restore zero.
-- Exact-head CI passed with 199/199 Node tests and dashboard/browser syntax checks. Final CI must be rerun after the last workflow/documentation commits.
+- Exact-head CI passed with 199/199 Node tests and dashboard/browser syntax checks.
 
 **Exit:** met for PR #24's synthetic-only application integration. Residual historical 404/release-event root-cause investigations and performance profiling remain documented follow-ups; they do not authorize production persistence or expand PR #24's scope.
 
 ### PR #25 — End-to-end acceptance and production-readiness gates
 
-- Complete comprehensive fault-injection and recovery rehearsals across every commit boundary.
-- Demonstrate verified backup, restore, and portability.
-- Complete OAuth expiry/revocation/wrong-account/permission-denial handling and security/privacy review.
-- Implement and verify the 540-day (18-month) original-source retention/deletion lifecycle, including backup behavior.
-- Verify current Google terms, quotas, OAuth requirements, and sustainable $0 recurring cost.
-- Review all failure modes, recovery instructions, data-integrity evidence, and limitations with the owner.
+**Locator-catalog update (2026-11-02):** a proposed typed per-copy catalog contract is documented in `docs/DRIVE_LOCATOR_CATALOG_DESIGN.md` and ADR §109. Pure validation/copy-on-write/hash/resolve primitives and focused unit tests have been added to PR #25. The transaction engine, recovery, lifecycle reads, dashboard bootstrap, and backup/restore remain on the legacy embedded-locator format; do not deploy or request owner testing yet. The catalog-finalization ordering around post-publication journal events must be resolved and fault-tested before engine integration. (active)
 
-**Exit:** explicit owner acceptance of the evidence and risks. Production financial-data persistence remains disabled until the owner separately authorizes it.
+Branch: `feat/production-readiness-acceptance`
+
+**Implemented in the current branch:**
+- `js/portable-backup.mjs`: adapter-driven immutable snapshot-copy helper with a required serialized source-operation gate, source-stability check, exact destination bytes/metadata read-back, new backup identity, manifest-last publication, and explicit quarantine callback.
+- `js/original-retention-policy.mjs`: `processOriginalRetentionBatch` orchestrates provider deletion plus independent absence verification; failure preserves the locator and is retryable.
+- `js/portable-backup.mjs`: portable archive envelope, SHA-256 verification, exact snapshot-object set, structural-validation hook, provider-independent export without Drive file locators, and inert restore planning.
+- `js/original-retention-policy.mjs`: exact 540-day clock, deletion eligibility versus confirmed deletion, retryable failures, and backup/restore rules that do not restart or resurrect expired originals.
+- Synthetic tests in `tests/portable-backup.test.mjs` and `tests/original-retention-policy.test.mjs`.
+- `docs/PR25_ACCEPTANCE.md`: current Google OAuth/quota/cost review, evidence labels, and owner-run acceptance protocol.
+
+**Still required before PR #25 can close:**
+- **Verified on current PR #25 head** `ba0aabfbbc935a869785ff4662424d596e02b1ea`: Finance Tracker contract tests run #267 and Node contract tests run #381 both passed on Node.js 26, with 223/223 tests and dashboard/browser syntax checks green. This closes the current automated CI rerun only; live Drive acceptance and end-to-end wiring remain open.
+- Wire retention state into original-import metadata and actual Drive deletion/read-back; the current state machine is not an end-to-end deletion worker.
+- Wire the backup helper to the actual Drive adapters and complete live synthetic backup, quarantine, portability, and restore rehearsals. Restore planning alone is not a completed restore.
+- Perform browser termination/reload rehearsals against live Drive at all transaction boundaries; existing PR #23's 11-boundary in-memory suite remains the automated baseline.
+- Test OAuth expiry, revocation, wrong account, permission denial, and reconnect live.
+- Inspect the actual Cloud project's OAuth publishing status, scope declarations, API restrictions, quotas, usage, and billing configuration. Recheck Google's announced 2026 quota/billing changes.
+
+- **Owner decision recorded (2026-11-02):** database history describes what the data is (logical paths and content hashes); separate per-copy information describes where objects are physically stored. This principle is accepted; the concrete locator-catalog format and publication protocol remain undecided.
+
+
+- **Owner decision recorded (2026-11-02):** each per-copy locator catalog covers every object required by that copy's retained commit history, not merely the latest snapshot.
+
+
+- **Owner decision recorded (2026-11-02):** publish locator catalogs copy-on-write and manifest-last: create and verify the complete new immutable catalog before updating the authoritative manifest pointer. A crash before publication leaves the prior manifest/catalog authoritative.
+
+- **Owner confirmation recorded (2026-11-02):** the locator catalog is a per-copy lookup index from logical object identity (path plus SHA-256) to physical Drive location. The owner recognizes that a verified catalog can avoid repeated Drive searches and may improve latency/API efficiency; this is an expected benefit, not a measured result. Exact schema and cache/invalidation rules remain open.
+
+- **Owner decision recorded (2026-11-02):** the per-copy locator catalog covers all immutable objects needed for normal operation and recovery: data objects, commit records, journal events, and other immutable protocol objects. The catalog does not locate itself; its identity/integrity are anchored directly in the manifest. Exact schema and implementation remain open.
+
+- **Owner decision recorded (2026-11-02): preserve ADR §81.** Redesign commit snapshots as logicalPath → SHA-256 only; resolve Drive IDs separately per physical copy. Next choose the durable per-copy locator representation and publication/recovery contract, then update the PR #23 transaction engine, recovery verifier, backup/restore flow, and synthetic fault-injection suite together. The current PR #25 helper's fileId-plus-hash compatibility shape is transitional and not ADR-compliant.
+
+
+**Owner decision recorded (2026-11-02):** make history retention configurable. Support explicit, auditable compaction that replaces older detailed events with a verifiable checkpoint of the database state, allowing the represented events to be discarded. Retention duration, checkpoint format and integrity contract, compaction procedure, and backup/recovery implications remain open. This is a design decision only; it does not authorize pruning history.
+**Owner decision recorded (2026-11-02):** the compacted checkpoint becomes the new historical baseline. Preserve monthly income and expense totals, category totals, account balances, and investment summaries so long-term trends remain useful even after old transaction details are discarded. Category totals, account balances, and investment summaries must also be retained at monthly granularity, alongside monthly income and expense totals; longer reporting periods can be derived from these monthly records. Monthly investment summaries must preserve both total portfolio market value and individual holdings (security identity, quantity, and value), retaining both the portfolio-level growth trend and its historical composition. Also retain monthly contributions/deposits, withdrawals, dividends and interest, investment fees, and realized gains/losses. Reporting must distinguish external cash flows from investment performance rather than treating portfolio market-value change as investment return. Preserve category assignments and category names exactly as historically recorded. Category additions, refinements, and renames apply prospectively only; a rename must not change the displayed name in historical reports or compacted summaries. A rename preserves the category's underlying identity for new activity; a change in meaning or a split into distinct classifications creates new category identities. Historical records retain the name and identity that applied when they were recorded. Do not automatically recategorize old transactions, rewrite compacted category totals, or retroactively rename historical category labels. Retrospective changes are out of scope unless separately specified and explicitly authorized. Category merging is allowed prospectively: new activity uses the surviving destination category, while historical transactions, category identities, names, and compacted summaries remain unchanged.
+
+Nominal historical values remain authoritative. Inflation-adjusted values are an optional derived presentation feature only, calculated from nominal values with the inflation index and reference date clearly identified; they do not replace or become the retained source-of-truth values.
+
+Closing or disconnecting an account must not create gaps: preserve its historical monthly balances and its contribution to income, expense, category, and investment reporting, with stable historical identity and closure status. Keep this historical reporting available without requiring indefinite retention of every underlying transaction. Retain the reporting semantics needed for valid comparisons across compaction boundaries, including currency, period boundaries, historical account/category identity, and consistent treatment of transfers, pending activity, refunds, reversals, corrections, and investment activity. Keep newer events detailed after the checkpoint and cryptographically link the checkpoint to the history it replaces. Discard represented detailed events only after checkpoint verification and required backup safeguards.  Categories may optionally contain subcategories. A category without subcategories may receive transactions directly; once subcategories exist, the parent is a reporting roll-up only and transactions must be assigned to a subcategory. When a category is split into subcategories, existing direct-to-parent transactions remain assigned to the parent as historical records; new transactions use a subcategory. Never automatically redistribute historical parent-level transactions. Parent totals are derived from child totals without double-counting. Preserve historical category/subcategory assignments and names; hierarchy changes apply prospectively and do not move old transactions. Limit the hierarchy to two classification levels: Sum Total → Category → Subcategory. Subcategories cannot contain further nested categories; Sum Total is the overall aggregate, not a user-assigned transaction category. This does not authorize implementation of deletion or production persistence. Users may manually reassign an existing transaction to a different category or subcategory as an explicit correction. Preserve an auditable record of the prior assignment, replacement assignment, and correction time; do not silently overwrite classification history. A user-provided reason or note is optional and must not be required. Manual corrections update effective historical reports for the transaction's original reporting period, while preserving the original assignment and correction audit trail. Specify an append-only, verifiable mechanism for applying corrections to already-compacted monthly summaries without erasing prior checkpoint history. Manual corrections may be undone repeatedly. Each undo or subsequent correction is recorded as a new correction event referencing the event it reverses or supersedes; no prior event is deleted or erased. A user-provided reason or note is optional.
+
+- Obtain explicit owner acceptance of evidence and remaining limitations.
+
+**Exit:** all evidence reviewed and explicit owner acceptance recorded. Production financial-data persistence remains disabled until the owner separately authorizes it.
 
 ## Temporary prototype navigation and MVP1 cleanup
 

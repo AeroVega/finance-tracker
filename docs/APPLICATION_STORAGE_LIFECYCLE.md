@@ -1,5 +1,9 @@
 # Application storage lifecycle integration
 
+## PR25 synthetic catalog path — 2026-11-03
+
+The dashboard now opts into `catalogProtocol: true` and uses `CatalogTransactionEngine`. Fresh bootstrap writes a real genesis commit and immutable catalog before its manifest. Reads verify the selected logical commit and retained ancestry; pending finalization or a read/auth/integrity failure pauses access until reconnect/recovery. Initialization receives the session guard for each mutation. PR25 requires a fresh empty synthetic folder; PR24-format folders are rejected and are not converted or upgraded. See [the v2 protocol and acceptance handoff](PR25_IMPLEMENTATION_HANDOFF.md) for live-test requirements.
+
 **Status:** PR #24 implementation integrated on the dashboard using synthetic fixtures only; not production persistence authorization.
 
 ## Purpose
