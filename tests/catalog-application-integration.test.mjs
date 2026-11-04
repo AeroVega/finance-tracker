@@ -98,3 +98,14 @@ test("PR25 refuses PR24-format synthetic folders without changing them", async (
   });
   assert.equal(reads, 1);
 });
+
+test("PR25 refuses an unrecognized nonempty folder rather than initializing over old contents", async () => {
+  let reads = 0;
+  const adapter = {
+    listChildren: async () => [{ id: "invented-old-object", name: "old-pr24-object.json",
+      appProperties: { financeTrackerKind: "snapshot-object" } }],
+    readJson: async () => { reads += 1; throw new Error("Unexpected manifest read"); }
+  };
+  await assert.rejects(findOrCreateManifest(adapter, async () => {}), { code: "nonempty-folder" });
+  assert.equal(reads, 0);
+});
