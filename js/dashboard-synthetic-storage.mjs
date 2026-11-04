@@ -136,7 +136,7 @@ export async function findOrCreateManifest(adapter, guard) {
     }
     const manifest = await adapter.readJson(file.id);
     if (manifest.manifestVersion !== "2.0.0") {
-      throw storageError("legacy-conversion-required", "This folder contains legacy synthetic history. Preserve it and choose a fresh synthetic folder for PR25, or use the explicit conversion rehearsal.");
+      throw storageError("unsupported-folder-format", "This folder uses the PR24 synthetic format. PR25 requires a fresh empty synthetic folder; this format is not supported and cannot be converted.");
     }
     if (manifest.format !== "finance-tracker-manifest" || manifest.syntheticOnly !== true ||
         !manifest.databaseId || !manifest.copyId || !Number.isSafeInteger(manifest.revision) ||
