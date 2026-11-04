@@ -2,7 +2,7 @@
 
 ## PR25 synthetic catalog path — 2026-11-03
 
-The dashboard now opts into `catalogProtocol: true` and uses `CatalogTransactionEngine`. Fresh bootstrap writes a real genesis commit and immutable catalog before its manifest. Reads verify the selected logical commit and retained ancestry; pending finalization or a read/auth/integrity failure pauses access until reconnect/recovery. Initialization receives the session guard for each mutation. PR25 requires a fresh empty synthetic folder; PR24-format folders are rejected and are not converted or upgraded. See [the v2 protocol and acceptance handoff](PR25_IMPLEMENTATION_HANDOFF.md) for live-test requirements.
+The dashboard now opts into `catalogProtocol: true` and uses `CatalogTransactionEngine`. Fresh bootstrap writes a real genesis commit and immutable catalog before its manifest. Reads verify the selected logical commit and retained ancestry; pending finalization or a read/auth/integrity failure pauses access until reconnect/recovery. Initialization receives the session guard for each mutation. PR25 requires a fresh empty synthetic folder; PR24-format folders are rejected and are not converted or upgraded. See [the per-copy locator catalog design](DRIVE_LOCATOR_CATALOG_DESIGN.md) and [synthetic storage acceptance record](SYNTHETIC_STORAGE_ACCEPTANCE.md) for live-test requirements.
 
 **Status:** PR #24 implementation integrated on the dashboard using synthetic fixtures only; not production persistence authorization.
 
@@ -34,7 +34,7 @@ js/application-storage-lifecycle.mjs composes the PR #21 session coordinator, Dr
 
 This PR's controller requires syntheticOnly: true and a folder name containing synthetic. This is an engineering integration harness, not an application production-storage switch.
 
-The dashboard now uses this lifecycle for its synthetic sample-data path: after explicit Google authorization and synthetic-folder selection, startup acquires the session, initializes/reuses a synthetic-only manifest, recovers, and reads the saved invented sample snapshot through manifest, metadata, and SHA-256 verification. The sample-data action commits only rows explicitly tagged `syntheticOnly: true`; the dashboard renders the verified read-back. Clear writes an empty synthetic snapshot through the same transaction boundary. CSV imports remain a separate local-only collection and are never passed to the Drive storage API. The real financial ledger has no Drive read/write path. Production ledger reads/writes remain disabled pending PR #25 and separate owner authorization.
+The dashboard now uses this lifecycle for its synthetic sample-data path: after explicit Google authorization and synthetic-folder selection, startup acquires the session, initializes/reuses a synthetic-only manifest, recovers, and reads the saved invented sample snapshot through manifest, metadata, and SHA-256 verification. The sample-data action commits only rows explicitly tagged `syntheticOnly: true`; the dashboard renders the verified read-back. Clear writes an empty synthetic snapshot through the same transaction boundary. CSV imports remain a separate local-only collection and are never passed to the Drive storage API. The real financial ledger has no Drive read/write path. Production ledger reads/writes remain disabled. Production persistence requires the separate PR #27 design, implementation, and explicit owner authorization.
 
 The controller's injected factories exist to make lifecycle behavior deterministic in tests. They are not runtime configuration for production storage.
 
@@ -57,3 +57,25 @@ The complete Node contract workflow now runs node --test tests/*.test.mjs on pul
 The dashboard's expandable diagnostic panel keeps a bounded, in-memory event history (release source, safe state transitions, browser event booleans, and source build). It does not persist or upload diagnostics, tokens, file IDs, folder names, CSV rows, or financial values. Reload clears the history. Diagnostic observers cannot change storage behavior.
 
 **Open:** these checks do not establish that the live Drive metadata HTTP 404 is fixed. Confirm the browser source commit, retain the sanitized create outcome and exact action (save versus recovery), and use the procedure in `DRIVE_TRANSACTION_ENGINE_TESTING.md`. Real iOS Safari lifecycle and live synthetic Drive tests remain necessary; no live account operations were performed for this patch.
+
+
+## Dashboard behavior and concurrency safety
+
+The dashboard's synthetic storage lifecycle is the sole Drive-backed dashboard sample-data path. It performs session acquisition, manifest initialization, startup recovery, heartbeat, verified snapshot reads, serialized commits, hash-verified read-back, reload restoration, Clear, and orderly release. Only invented rows explicitly marked `syntheticOnly: true` are eligible for synthetic Drive writes. CSV-imported rows, source-file metadata, and fingerprints remain local and are never included in synthetic snapshots.
+
+Clear does not optimistically remove local CSV imports. It captures the selected synthetic row/source/fingerprint identities and removes only that selection after a verified remote result. A failed remote operation preserves local rows and provenance. Imports remain usable during remote I/O. Duplicate sample/Clear actions and manual Release are gated while a synthetic mutation is in flight; direct handlers also refuse unsafe actions.
+
+The regression suite preserves these concurrency properties:
+- Already-admitted writes drain with ownership guards and renewal intact before release.
+- Recovery is rechecked after the drain and before release-marker mutation.
+- Heartbeat/session-marker operations use a separate serialized queue so long transactions do not starve lease renewal.
+- Startup renewal begins after verified acquisition and before initialization/recovery.
+- A later asynchronous completion cannot overwrite a newer ownership/recovery error with a success message.
+- Missing lifecycle state or an unverified release cannot be reported as success.
+- Recovery preflights journal chains and identities, then mutates only the selected exact database/copy pair. Verified foreign histories remain untouched; unidentified, corrupt, or conflicting evidence still blocks recovery.
+
+The initiating event behind an earlier unexpected-release symptom was not established. The historical Drive metadata HTTP 404 root cause was also not definitively established. Successful later acceptance does not prove either historical root cause was resolved; use the action/build/create-outcome diagnostic procedure in [Drive Transaction Engine Testing](DRIVE_TRANSACTION_ENGINE_TESTING.md) if either symptom recurs.
+
+## Live performance observation
+
+The owner-observed synthetic dashboard acceptance recorded approximately 50 seconds for initial recovery, 53–55 seconds for subsequent reconnect/recovery cycles, and approximately 4 seconds for orderly release. Treat these as an historical baseline, not a service-level guarantee. Profile request-level timings separately; do not weaken recovery, ownership, integrity, or read-back checks to reduce latency.

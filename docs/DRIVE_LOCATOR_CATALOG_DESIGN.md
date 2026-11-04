@@ -6,7 +6,7 @@
 
 ## Current implementation — 2026-11-03
 
-[PR25 implementation handoff](PR25_IMPLEMENTATION_HANDOFF.md) specifies the exact manifest/commit versions, 14-write ordering, recovery decisions, and ownership gates. `catalog-transaction-engine.mjs` implements this path; the dashboard opts into it. The sections below preserve the original proposal and principles; historical statements about the old engine apply to legacy v1 paths only. Implementation does not claim owner acceptance.
+[Drive Transaction Engine Testing](DRIVE_TRANSACTION_ENGINE_TESTING.md) specifies the current 14-write ordering and recovery validation. `catalog-transaction-engine.mjs` implements this path; the dashboard opts into it. The sections below preserve the original proposal and principles; historical statements about the old engine apply to legacy v1 paths only. Implementation does not claim owner acceptance.
 
 ## Original problem
 
@@ -97,7 +97,7 @@ An existing catalog is never edited in place. A proposed normal transaction sequ
 
 **Original protocol issue, now implemented and fault-tested for review:** the current transaction protocol writes terminal journal events after manifest publication. A catalog published at step 7 cannot contain a terminal event that does not yet exist. The engine must therefore implement and fault-test the post-publication catalog finalization at step 8, including crashes between the financial pointer publication, terminal event writes, and follow-on catalog pointer publication. During that interval the previous published catalog remains authoritative for the committed data; recovery may use complete folder enumeration to locate unindexed in-flight journal evidence, but must verify every event and must not guess by filename. Writes remain blocked until recovery completes catalog finalization.
 
-This ordering preserves the accepted manifest-last publication boundary for the financial commit while ensuring the final catalog covers all immutable protocol objects. The exact ordering is now specified in the handoff and tested at every durable transaction boundary and representative recovery-repair boundary before its synthetic dashboard integration. Owner review and live acceptance remain open.
+This ordering preserves the accepted manifest-last publication boundary for the financial commit while ensuring the final catalog covers all immutable protocol objects. The exact ordering is specified in [Drive Transaction Engine Testing](DRIVE_TRANSACTION_ENGINE_TESTING.md) and fault-tested at every durable transaction boundary and representative recovery-repair boundary. Owner-reported live acceptance is recorded in [Synthetic Storage Acceptance](SYNTHETIC_STORAGE_ACCEPTANCE.md).
 
 ## Historical retention and recovery
 
@@ -117,7 +117,7 @@ PR25 starts with fresh version-2 synthetic folders. Existing PR24-format folders
 
 ## Implemented synthetic path
 
-The pure `drive-locator-catalog.mjs` foundation is now composed with `catalog-storage.mjs`, `catalog-transaction-engine.mjs`, `catalog-backup.mjs`, lifecycle reads and dashboard bootstrap. The PR25 acceptance page uses the actual Google Drive and session adapters. Original source bytes and their mutable retention index live separately from immutable financial history. See the handoff for limits and evidence.
+The pure `drive-locator-catalog.mjs` foundation is now composed with `catalog-storage.mjs`, `catalog-transaction-engine.mjs`, `catalog-backup.mjs`, lifecycle reads and dashboard bootstrap. The PR25 acceptance page uses the actual Google Drive and session adapters. Original source bytes and their mutable retention index live separately from immutable financial history. See [Drive Backup and Restore](DRIVE_BACKUP_AND_RESTORE.md), [Original Source File Retention](ORIGINAL_SOURCE_RETENTION.md), and [Synthetic Storage Acceptance](SYNTHETIC_STORAGE_ACCEPTANCE.md) for operational behavior, limits, and evidence.
 
 ## Acceptance criteria
 
