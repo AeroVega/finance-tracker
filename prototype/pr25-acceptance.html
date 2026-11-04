@@ -14,10 +14,10 @@
   <p class="eyebrow">Finance Tracker · PR #25 · Development only</p>
   <h1>Storage acceptance</h1>
   <p>Use invented fixtures in dedicated synthetic folders. Production financial data remains disabled.</p>
-  <aside>Each copy destination must be fresh. Failed copies remain quarantined as evidence. These tools never delete a database or modify an existing legacy copy.</aside>
+  <aside>Each copy destination must be fresh. Failed copies remain quarantined as evidence. These tools never delete a database or modify an existing copy.</aside>
   <section>
     <h2>1. Connect a synthetic primary</h2>
-    <p>Choose an empty folder, or reopen a version-2 synthetic copy. Preserve your existing PR24 folder for explicit conversion.</p>
+    <p>Choose a fresh empty synthetic folder, or reopen a version-2 synthetic copy. PR24-format folders are not supported.</p>
     <button id="connect" disabled>Connect Google Drive</button>
     <button id="stale" disabled>Confirm stale-session recovery</button>
     <button id="recover" disabled>Retry transaction recovery</button>
@@ -39,7 +39,6 @@
     <input id="archive" type="file" accept="application/json,.json">
     <button id="verify-archive" disabled>Verify loaded archive</button>
     <button id="restore" disabled>Restore archive into fresh Drive folder</button>
-    <button id="convert" disabled>Convert legacy dashboard into fresh folder</button>
     <p id="copy-result" role="status" aria-live="polite">Not tested. Exported originals keep their original expiry; manage local exported files privately.</p>
   </section>
   <section>
