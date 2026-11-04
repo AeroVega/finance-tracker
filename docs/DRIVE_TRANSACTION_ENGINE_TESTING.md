@@ -1,6 +1,6 @@
 # Drive Transaction Engine — Synthetic Test Guide
 
-**Scope:** PR #23 transaction-engine verification only. All fixtures and Drive objects are invented. This guide does not authorize production ledger storage.
+**Scope:** Synthetic Drive transaction, recovery, and lifecycle verification. All fixtures and Drive objects are invented. This guide does not authorize production ledger storage.
 
 ## Fast local regression suite
 
@@ -63,3 +63,47 @@ Safe reproduction after the patch is deployed:
 5. Reopen and verify the expected invented rows after a successful save/release/reconnect. A passing unit suite or a green deployment is not proof of this live result.
 
 Provider references: [Drive generated IDs](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/generateIds), [multipart uploads](https://developers.google.com/workspace/drive/api/guides/manage-uploads), [Drive 404 errors](https://developers.google.com/workspace/drive/api/guides/handle-errors#notFound). These were checked for this review; the selected ordinary Drive folder uses `space=drive`, not `appDataFolder`.
+
+
+## Version-2 catalog transaction protocol
+
+The current synthetic dashboard uses `CatalogTransactionEngine` with version-2 hash-only logical commits and a per-copy locator catalog. The 14 durable writes for one new object are:
+
+| Boundary | Durable write |
+| --- | --- |
+| 1 | Transaction-started event, including exact base-manifest hash |
+| 2 | Object-stage plan with preallocated ID and hash |
+| 3 | Immutable data object |
+| 4 | Object-staged event |
+| 5 | Commit-stage plan |
+| 6 | Immutable logical commit |
+| 7 | Commit-staged event |
+| 8 | Immutable catalog covering staged objects, commit, and journal prefix |
+| 9 | Publication-intent event containing exact intended manifest |
+| 10 | Financial manifest publication with pending-finalization marker |
+| 11 | Manifest-published event |
+| 12 | Transaction-committed event |
+| 13 | Catalog generation adding publication-intent and terminal events |
+| 14 | Catalog-only manifest publication clearing pending marker; financial revision is unchanged |
+
+Every immutable write is read back by exact generated ID, folder, kind, transaction binding, and raw-byte hash. Catalog updates preserve prior mappings. Manifest publication rechecks the exact base, revalidates the session, and verifies exact read-back. Complete folder enumeration discovers journals not yet in a published catalog; names alone never establish identity. Malformed, duplicate, or conflicting evidence stops recovery before mutation.
+
+Recovery resumes a complete verified staged commit at its exact base, or verifies an already-published intended commit and finishes terminal catalog finalization. An incomplete pre-commit stage can be aborted only at its exact base; visible staged objects are verified, unavailable planned IDs remain evidence, and nothing is deleted. A missing previously verified commit/object or unrelated manifest blocks writes. Recovery repairs are restartable, and tests interrupt both the original transaction and repair. A pending marker blocks application reads and new writes until recovery succeeds.
+
+See [Per-Copy Drive Locator Catalog Design](DRIVE_LOCATOR_CATALOG_DESIGN.md) for the logical/physical identity model and [Synthetic Storage Acceptance](SYNTHETIC_STORAGE_ACCEPTANCE.md) for current acceptance evidence.
+
+## PR24 lifecycle regression and diagnostic requirements
+
+The dashboard integration tests must continue to exercise interactions between admission guards, write drain, heartbeat renewal, recovery, and status reporting—not only isolated callbacks. The following are established regression requirements:
+
+- A release request closes admission to new writes but does not invalidate already-admitted operations before they drain.
+- Release rechecks unresolved recovery after the drain; failure retains ownership/renewal and recovery-required state.
+- Session-marker operations serialize separately from long transactions, preventing heartbeat starvation.
+- Startup heartbeat begins before potentially long initialization/recovery.
+- Independent asynchronous UI success writers must not overwrite newer ownership or recovery failures.
+- Foreign verified journal histories remain untouched; recovery is limited to the selected database/copy identity after preflight.
+- A missing lifecycle or unverified release is never a successful release.
+- Clear must not roll back or discard CSV imports that arrive during remote operations. Only the captured synthetic selection is removed after a verified remote result; failed remote operations preserve local rows and provenance.
+- Explicit Save writes only synthetic rows. Clear writes an empty synthetic snapshot through the same verified transaction boundary. Both are refused when ownership/recovery is uncertain.
+
+Historical Drive metadata 404 and earlier unexpected-release symptoms were not assigned definitive root causes. If they recur, record the source build and exact failing action (connect/recovery, sample save, Clear, or release), preserve the sanitized diagnostic sequence and HTTP status, and privately compare requested/returned IDs. Never publish tokens, authorization headers, full network captures, folder names, file IDs, or financial contents. Do not increase retries without tracing the actual outcome. A successful later test does not prove the historical root cause was fixed.
