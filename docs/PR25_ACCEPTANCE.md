@@ -1,20 +1,25 @@
 # PR #25 — End-to-end acceptance and production-readiness evidence
 
-**Status:** Active implementation and synthetic verification; production persistence is not approved.
-**Last reviewed:** 2026-11-03
+**Status:** Synthetic storage-readiness implementation reviewed; owner acceptance rehearsals completed; production financial-data persistence is not approved.
+**Last reviewed:** 2026-11-04
+**Reviewed code head:** `79292202e6b7c3c8499f4860d5cdad2335a32ecb`
 **Branch:** `feat/production-readiness-acceptance`
 
-This record separates code implemented in PR #25 from tests that can run in CI, live provider rehearsals, and owner-only configuration checks. A green synthetic test suite is not a production go-live decision.
+This record separates implementation, automated validation, owner-reported live acceptance, and the separate production authorization decision. A green synthetic test suite and successful acceptance rehearsals do not authorize production financial-data persistence.
 
-## Current implementation and action ownership — 2026-11-03
+## Current implementation and acceptance status — 2026-11-04
 
-**Implemented for review:** the synthetic dashboard now uses version-2 hash-only commits and copy-specific catalogs, including post-publication journal/catalog finalization, full retained history verification, fresh-copy backup/export/restore, and original-import retention integration. The new [PR25 acceptance page](../prototype/pr25-acceptance.html) composes the real Drive/session adapters and provides live rehearsal controls. Production financial CSV import remains disabled; CSV rows stay local.
+**Implemented for review:** the synthetic dashboard uses version-2 hash-only commits and copy-specific catalogs, including post-publication journal/catalog finalization, full retained-history verification, fresh-copy backup/export/restore, and original-import retention integration. The PR25 acceptance page composes the real Drive/session adapters and provides live rehearsal controls. Production financial CSV import remains disabled; CSV rows stay local.
 
-See [implementation, ownership matrix, exact protocol, evidence and limitations](PR25_IMPLEMENTATION_HANDOFF.md). That record is the current handoff. The older v1 helper descriptions below are historical PR23/PR24 implementation notes, not part of PR25's active storage path. PR25 starts with fresh version-2 folders and does not convert or reopen PR24-format folders. Concrete schema/protocol review and live acceptance remain open; implementation is not owner acceptance.
+See [implementation, ownership matrix, exact protocol, evidence and limitations](PR25_IMPLEMENTATION_HANDOFF.md). PR25 initializes and reopens fresh version-2 folders only. It does not convert, migrate, or reopen PR24-format folders.
 
-**AI work:** coding, deterministic tests, synthetic HTTP integration tests, independent browser archive verification, current Google quota-source review, and this handoff. **Owner work:** review the concrete design/limits, approve shared Pages deployment after CI and review, perform real account/device rehearsals, inspect actual Cloud settings/billing, and accept remaining risks. AI can assist account/device tests once connected and repair any resulting defects.
+**Owner-reported live acceptance completed (2026-11-04):** using synthetic data and the approved Google test account, the owner reports successful backup creation/reopen/verification; failed-backup quarantine; portable archive export and independent verification; restore into a fresh Drive folder with a new physical copy identity; invented-original retention and deletion at the 540-day boundary; denial of an unapproved Google account followed by successful approved-account reconnection; full iPad browser-tab termination/reopen and stale-session recovery at transaction boundary 5; and actual Google Drive authorization revocation followed by fail-closed verification/write refusal, reauthorization, recovery of the existing session, and successful retained-history/commit-ancestry verification. Exact observed messages and scope limits are recorded in the handoff below.
 
-**Known remaining gate:** deletion receipt recovery after process loss is conservative: an access-ambiguous 404 does not clear a source locator. See the handoff before treating deletion as production-ready. Active-page maintenance cannot run while every device is closed, and local exports cannot be remotely erased.
+**Automated validation:** both Node 26 workflows passed on the reviewed head. Each reported 288 passed and 0 failed; browser/dashboard syntax checks also passed. The suite includes all 14 durable transaction-write interruption points and interrupted recovery-repair coverage.
+
+**Remaining owner work for PR25 closure:** review this evidence and the residual deletion-receipt limitation; inspect actual Cloud OAuth audience/scopes, API/key restrictions, assigned quotas, usage and billing; and explicitly accept the synthetic implementation's documented limitations. No more feature work or additional routine acceptance rehearsals are currently proposed for PR25.
+
+**Production boundary:** merging PR25 does not enable production financial-data persistence. That requires a separate design/approval milestone and a separate implementation PR.
 
 ## Historical PR23/PR24 implementation notes (not used by PR25)
 
@@ -103,15 +108,18 @@ PR #23's transaction-engine suite injects lost responses after all 11 durable mu
 
 ## Automated validation evidence
 
-**Verified baseline:** both Node 26 GitHub CI checks passed at original PR head `22c30f9a5a21a2335a6ba813fe10f8b148e9cdd6`. The old request for a fresh rerun was already satisfied before this implementation pass.
+**Reviewed current head:** `79292202e6b7c3c8499f4860d5cdad2335a32ecb`, dated 2026-11-04.
 
-**Verified current head:** code head `a7828b809ffe1675db74fd75659070ea069e695e` passed both Node 26 GitHub workflows: [Node contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41770994656) and [Finance Tracker contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41770994660). Each complete Node contract suite reported **288 passed, 0 failed**; browser/dashboard module syntax checks passed. The suite includes all 14 transaction-write interruption points, interrupted recovery-repair coverage, real-adapter HTTP/session integration, backup/restore, retention, and fail-closed preflight rejection tests for PR24-format and unrecognized nonempty folders before session acquisition. Synthetic tests and desktop viewport checks do not replace live Google Drive or real iOS Safari acceptance.
+- [Node contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41788168056): Node 26.13.0; **288 passed, 0 failed**.
+- [Finance Tracker contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41788168051): Node 26.13.0; **288 passed, 0 failed**.
+- Browser/dashboard module syntax checks passed in the Finance Tracker workflow.
+- The suite covers all 14 durable transaction-write interruption points, interrupted recovery repairs, real-adapter HTTP/session integration, backup/restore, retention, and fail-closed folder preflight behavior.
+
+These CI results apply to the reviewed head above. Any subsequent code change requires fresh checks. Owner-reported real-provider/device tests are separately identified and are not represented as CI evidence.
 
 ## Deployment readiness
 
-No deployment was performed. The new harness is implemented, but the concrete protocol/retention limits require review. Both Node 26 checks passed on the current implementation head recorded above; any subsequent code change requires fresh checks before deployment.
-
-The manual Pages workflow deploys the selected branch to one shared public URL, replacing the existing site. After review and current-head CI, the owner may authorize deployment of `feat/production-readiness-acceptance`; confirm the successful deployment run and exact source SHA in the footer. Start live rehearsals in fresh disposable synthetic folders. PR24-format synthetic folders are outside the PR25 test path and may be retired separately. Production persistence stays NO-GO.
+The owner deployed the PR25 acceptance branch to the shared Pages site and completed the live synthetic rehearsals summarized above. This record does not authorize another deployment or production data use. PR24-format synthetic folders remain unsupported and must not be selected for PR25 acceptance.
 
 ## Current Google authorization, quota, and cost review
 
@@ -131,23 +139,19 @@ The manual Pages workflow deploys the selected branch to one shared public URL, 
 
 The current scope is appropriately narrow at the prototype level. It is not a substitute for live OAuth and project-configuration acceptance.
 
-## Required owner-run acceptance before this workstream can close
+## Remaining owner review before PR25 can close
 
-Use only a dedicated synthetic Drive folder and invented data. Never use the canonical ledger folder or real financial records.
+The following are deliberately separate from the completed synthetic acceptance rehearsals:
 
-1. **Live backup:** from a synthetic primary, create a backup in a separate synthetic folder. Confirm same `databaseId`, revision and `commitId`; different `copyId` and storage binding; all object hashes match; backup manifest appears last; and reopening the backup succeeds.
-2. **Failure/quarantine:** deliberately interrupt or corrupt a destination object/commit/manifest during backup. Confirm the source primary is unchanged, partial destination is quarantined and cannot be selected/restored/promoted, and retry starts from a fresh destination.
-3. **Portability:** export the verified synthetic backup to a local file, move it outside the Drive folder, verify it independently, and restore it into a separate synthetic folder with a new `copyId`. Verify object hashes, structural references, revision and commit lineage. Do not treat the inert restore plan as a completed restore.
-4. **Fault rehearsal:** use a disposable synthetic database and rehearse real browser termination/reload around every transaction mutation boundary. Verify reconnect recovery, preserved evidence, no duplicate commit, and fail-closed behavior. The v2 suite covers all 14 transaction writes plus interrupted repair writes. The earlier 11-boundary suite remains a legacy regression baseline.
-5. **OAuth:** test expired token/401, explicit revocation, wrong Google account, missing folder grant, denied permissions/403, and interactive reauthorization. Confirm no empty-folder inference, automatic replacement, or write attempt after authorization loss.
-6. **Retention:** use synthetic source files and a simulated clock at one millisecond before and exactly at day 540. Verify expiry eligibility, provider-confirmed deletion, failure/retry, backup clock preservation, and no resurrection on restore. The Drive delete operation must be read back/confirmed before clearing the locator.
-7. **Cost and terms:** inspect the actual Cloud project, confirm Drive API enabled, review current quotas/usage and billing configuration, and record whether billing is disabled. Recheck the official Google quota/billing announcement before any production authorization.
-8. **Security/privacy:** inspect the deployed artifact and browser storage/network behavior. Confirm no client secret, token, financial data, CSV contents, account identifiers, or private diagnostics are shipped, stored in public Pages assets, or emitted to logs.
-9. **Owner acceptance:** review all evidence, open limitations, and the accepted single-active-device constraint. Production persistence requires a separate explicit authorization after PR #25; merging PR #25 alone must not enable it.
+1. **Residual-risk acceptance:** review the deletion-receipt recovery limitation in `PR25_IMPLEMENTATION_HANDOFF.md`. A process loss after provider deletion but before durable metadata update can lose the in-memory receipt; the app conservatively preserves the old locator rather than inferring deletion from an access-ambiguous 404.
+2. **Cloud configuration and cost:** inspect the actual Cloud OAuth publishing status/audience, declared scopes, API and key restrictions, assigned quotas, usage, and billing configuration. Public Google documentation does not establish the actual project's $0 operating cost.
+3. **Security/privacy:** inspect the deployed artifact and browser storage/network behavior. Confirm no client secret, token, financial data, CSV contents, account identifiers, or private diagnostics are shipped, stored in public Pages assets, or emitted to logs.
+4. **Explicit PR25 closure:** review the recorded evidence, unsupported PR24 folder boundary, single-active-device constraint, and residual limitations. Record owner acceptance separately from production authorization.
+
+Use only dedicated synthetic folders and invented data for this PR. Never use the canonical ledger folder or real financial records.
 
 ## Release decision
 
-**Current decision: NO-GO for production financial-data persistence.**
+**PR25 synthetic implementation: recommended for merge after owner review of the documented residual limitations.**
 
-Reasons: concrete protocol/retention review, live Drive backup/restore/portability, real interruption rehearsals, OAuth failure-mode validation, deletion-receipt recovery and live retention acceptance, actual Cloud billing/quota inspection, and owner acceptance remain outstanding. The branch supplies the synthetic implementation and harness; it does not close account/device or production-authorization gates.
-
+**Production financial-data persistence: NO-GO.** It remains disabled and requires a separate design/approval milestone and a separate implementation PR. Merging PR25 alone must not enable it.
