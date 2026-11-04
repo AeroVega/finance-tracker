@@ -6,7 +6,7 @@
 
 ## Current implementation — 2026-11-03
 
-[PR25 implementation handoff](PR25_IMPLEMENTATION_HANDOFF.md) specifies the exact manifest/commit versions, 14-write ordering, recovery decisions, migration provenance, and ownership gates. `catalog-transaction-engine.mjs` implements this path; the dashboard opts into it. The sections below preserve the original proposal and principles; historical statements about the old engine apply to legacy v1 paths only. Implementation does not claim owner acceptance.
+[PR25 implementation handoff](PR25_IMPLEMENTATION_HANDOFF.md) specifies the exact manifest/commit versions, 14-write ordering, recovery decisions, and ownership gates. `catalog-transaction-engine.mjs` implements this path; the dashboard opts into it. The sections below preserve the original proposal and principles; historical statements about the old engine apply to legacy v1 paths only. Implementation does not claim owner acceptance.
 
 ## Original problem
 
@@ -111,25 +111,13 @@ A backup preserves logical commit IDs, revisions, parent relationships, and hash
 
 Restore creates a new physical copy, verifies every required object and historical reference, builds its own catalog, and publishes the destination manifest last. It preserves the selected logical commit lineage; it does not invent a financial commit.
 
-## Legacy-format transition
+## Folder-format boundary
 
-The current synthetic transaction engine and PR #24 synthetic dashboard data use the legacy embedded-locator representation. Do not silently reinterpret those records as hash-only records and do not mutate immutable records in place.
-
-Before using the new engine against an existing synthetic folder, implement an explicit, verified conversion path that:
-
-- Reads the selected copy's manifest and complete commit/journal history.
-- Verifies every legacy object by its recorded exact raw-byte hash and physical folder binding.
-- Builds a destination catalog for the selected copy or, preferably, a separate destination physical copy.
-- Produces a hash-only logical history representation with explicit migration provenance.
-- Verifies that every retained historical snapshot resolves through the new catalog.
-- Publishes the new-format manifest only after the destination state is complete and verified.
-- Leaves the legacy source intact and read-only until the converted copy passes acceptance.
-
-For PR #25 acceptance, use a fresh, clearly identified synthetic destination folder for the first full rehearsal. Never reset, overwrite, or delete the existing synthetic test folder merely to simplify migration. Any later cutover of an existing folder requires a verified backup and an explicit owner-reviewed procedure.
+PR25 starts with fresh version-2 synthetic folders. Existing PR24-format folders are unsupported and are not converted, upgraded, or opened by the PR25 dashboard. Use a new empty synthetic folder for acceptance. This is distinct from future application-schema migrations: those remain governed by the general database lifecycle decisions and are not implemented by this PR25 directory-format work.
 
 ## Implemented synthetic path
 
-The pure `drive-locator-catalog.mjs` foundation is now composed with `catalog-storage.mjs`, `catalog-transaction-engine.mjs`, `catalog-backup.mjs`, `catalog-legacy-conversion.mjs`, lifecycle reads and dashboard bootstrap. The PR25 acceptance page uses the actual Google Drive and session adapters. Original source bytes and their mutable retention index live separately from immutable financial history. See the handoff for limits and evidence.
+The pure `drive-locator-catalog.mjs` foundation is now composed with `catalog-storage.mjs`, `catalog-transaction-engine.mjs`, `catalog-backup.mjs`, lifecycle reads and dashboard bootstrap. The PR25 acceptance page uses the actual Google Drive and session adapters. Original source bytes and their mutable retention index live separately from immutable financial history. See the handoff for limits and evidence.
 
 ## Acceptance criteria
 
@@ -141,9 +129,9 @@ The pure `drive-locator-catalog.mjs` foundation is now composed with `catalog-st
 - Reads resolve logical paths through the selected copy's catalog and verify exact raw bytes.
 - Recovery handles every interruption between financial manifest publication and terminal-journal/catalog finalization without guessing.
 - Backup/restore creates a distinct destination catalog and preserves logical commit history.
-- Legacy conversion is explicit, verified, non-destructive, and rehearsed in a fresh synthetic destination.
+- PR25 initializes only fresh version-2 synthetic folders; PR24-format folders are rejected without modification.
 - No production financial-data persistence or existing-folder destructive migration is authorized.
 
 ## Remaining sequence
 
-Synthetic implementation and deterministic fault/HTTP integration tests are complete for review. Require current-head Node 26 CI, review the concrete protocol and retention limits, then seek owner authorization for the shared branch deployment. Live synthetic Drive, OAuth, retention, iOS termination/reload and Cloud configuration evidence remain open. No automatic legacy cutover, production writes, or history deletion is authorized.
+Synthetic implementation and deterministic fault/HTTP integration tests are complete for review. Require current-head Node 26 CI, review the concrete protocol and retention limits, then seek owner authorization for the shared branch deployment. Live synthetic Drive, OAuth, retention, iOS termination/reload and Cloud configuration evidence remain open. No legacy-folder conversion, production writes, or history deletion is implemented or authorized.
