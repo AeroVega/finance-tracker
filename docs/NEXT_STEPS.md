@@ -2,7 +2,7 @@
 
 ## PR25 current handoff — 2026-11-03
 
-Synthetic catalog-backed transactions/recovery, full-history backup/restore, retention integration and live-rehearsal controls are implemented for review. PR25 uses fresh version-2 synthetic folders only; no PR24 directory conversion is supported. See [the action ownership matrix and remaining gates](PR25_IMPLEMENTATION_HANDOFF.md) and [current acceptance evidence](PR25_ACCEPTANCE.md). This supersedes earlier implementation-pending notes below. Concrete protocol/retention review, current-head Node 26 CI and all live account/device/Cloud/owner acceptance gates remain open. No deployment or production persistence was authorized by this coding pass.
+Synthetic catalog-backed transactions/recovery, full-history backup/restore, retention integration and live-rehearsal controls are implemented for review. PR25 uses fresh version-2 synthetic folders only; no PR24 directory conversion is supported. See [the action ownership matrix and remaining gates](DRIVE_BACKUP_AND_RESTORE.md) and [current acceptance evidence](SYNTHETIC_STORAGE_ACCEPTANCE.md). This supersedes earlier implementation-pending notes below. Concrete protocol/retention review, current-head Node 26 CI and all live account/device/Cloud/owner acceptance gates remain open. No deployment or production persistence was authorized by this coding pass.
 
 **Last updated:** 2026-11-02
 **Current phase:** PRs #22–#24 are merged. PR #25 is active on `feat/production-readiness-acceptance`, adding synthetic-only backup/restore portability and 540-day retention primitives plus an explicit acceptance record. Production financial-data persistence remains **not approved**.
