@@ -92,7 +92,7 @@ async function loadGoogleLibraries() {
 }
 
 async function loadConfig() {
-  const response = await fetch("./js/google-config.json", { cache: "no-store" });
+  const response = await fetch(new URL("./google-config.json", import.meta.url), { cache: "no-store" });
   if (!response.ok) throw new Error("Google deployment configuration could not be loaded (HTTP " + response.status + ").");
   const config = await response.json();
   validateGoogleConfig(config);
