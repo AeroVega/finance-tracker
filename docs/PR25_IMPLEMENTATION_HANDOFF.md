@@ -96,7 +96,7 @@ Backups/archives retain original timing, omit already expired/deleted originals,
 
 **Verified:** the [official Drive limits page](https://developers.google.com/workspace/drive/api/guides/limits), updated 2026-10-30, still lists 1,000,000 units/minute/project, 325,000 units/minute/user/project, a 1 TB/day egress limit and a 400,000,000-unit/day billing threshold. It says standard use has no additional cost and planned over-threshold charges will receive at least 90 days' notice. Actual assigned quotas and billing status remain uninspected. This documentation alone does not establish that this project meets the owner's $0 requirement.
 
-The [Drive deletion reference](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/delete) describes permanent deletion; it is why the live retention rehearsal asks the owner to confirm deletion of invented originals. No live deletion was performed here.
+The [Drive deletion reference](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/delete) describes permanent deletion. The owner reports that expired invented originals were deleted and their absence verified through Drive during the live retention rehearsal.
 
 ## Next owner steps
 
