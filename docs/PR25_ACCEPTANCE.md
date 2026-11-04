@@ -8,15 +8,15 @@ This record separates code implemented in PR #25 from tests that can run in CI, 
 
 ## Current implementation and action ownership — 2026-11-03
 
-**Implemented for review:** the synthetic dashboard now uses version-2 hash-only commits and copy-specific catalogs, including post-publication journal/catalog finalization, full retained history verification, fresh-copy backup/export/restore, explicit legacy conversion, and original-import retention integration. The new [PR25 acceptance page](../prototype/pr25-acceptance.html) composes the real Drive/session adapters and provides live rehearsal controls. Production financial CSV import remains disabled; CSV rows stay local.
+**Implemented for review:** the synthetic dashboard now uses version-2 hash-only commits and copy-specific catalogs, including post-publication journal/catalog finalization, full retained history verification, fresh-copy backup/export/restore, and original-import retention integration. The new [PR25 acceptance page](../prototype/pr25-acceptance.html) composes the real Drive/session adapters and provides live rehearsal controls. Production financial CSV import remains disabled; CSV rows stay local.
 
-See [implementation, ownership matrix, exact protocol, evidence and limitations](PR25_IMPLEMENTATION_HANDOFF.md). That record is the current handoff. The older v1 helper descriptions below are historical compatibility details, not the active dashboard protocol. Concrete schema/protocol review and live acceptance remain open; implementation is not owner acceptance.
+See [implementation, ownership matrix, exact protocol, evidence and limitations](PR25_IMPLEMENTATION_HANDOFF.md). That record is the current handoff. The older v1 helper descriptions below are historical PR23/PR24 implementation notes, not part of PR25's active storage path. PR25 starts with fresh version-2 folders and does not convert or reopen PR24-format folders. Concrete schema/protocol review and live acceptance remain open; implementation is not owner acceptance.
 
 **AI work:** coding, deterministic tests, synthetic HTTP integration tests, independent browser archive verification, current Google quota-source review, and this handoff. **Owner work:** review the concrete design/limits, approve shared Pages deployment after CI and review, perform real account/device rehearsals, inspect actual Cloud settings/billing, and accept remaining risks. AI can assist account/device tests once connected and repair any resulting defects.
 
 **Known remaining gate:** deletion receipt recovery after process loss is conservative: an access-ambiguous 404 does not clear a source locator. See the handoff before treating deletion as production-ready. Active-page maintenance cannot run while every device is closed, and local exports cannot be remotely erased.
 
-## Legacy v1 primitives retained for compatibility
+## Historical PR23/PR24 implementation notes (not used by PR25)
 
 ### Verified snapshot backup primitive
 
@@ -105,13 +105,13 @@ PR #23's transaction-engine suite injects lost responses after all 11 durable mu
 
 **Verified baseline:** both Node 26 GitHub CI checks passed at original PR head `22c30f9a5a21a2335a6ba813fe10f8b148e9cdd6`. The old request for a fresh rerun was already satisfied before this implementation pass.
 
-**Verified local implementation:** 284 tests passed, 0 failed on Node 24.22.1. This includes all 14 transaction-write interruption points, 13 recovery-repair interruption points, real-adapter HTTP/session integration, backup/restore/migration and retention tests. JavaScript syntax and diff whitespace checks passed. **Verified CI:** both Node 26 workflows passed on application-code commit c0174b6f093fbadd3e91a34e0893e9a50b31b4af: [Node contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41698581359) and [Finance Tracker contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41698581552). The following evidence-only commit changes documentation, with no application-code changes. Require checks on the latest head before deployment. Synthetic tests and desktop viewport checks do not replace live Google Drive or real iOS Safari acceptance.
+**Verified local implementation:** 284 tests passed, 0 failed on Node 24.22.1. This includes all 14 transaction-write interruption points, 13 recovery-repair interruption points, real-adapter HTTP/session integration, backup/restore and retention tests. JavaScript syntax and diff whitespace checks passed. **Verified CI:** both Node 26 workflows passed on application-code commit c0174b6f093fbadd3e91a34e0893e9a50b31b4af: [Node contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41698581359) and [Finance Tracker contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41698581552). The following evidence-only commit changes documentation, with no application-code changes. Require checks on the latest head before deployment. Synthetic tests and desktop viewport checks do not replace live Google Drive or real iOS Safari acceptance.
 
 ## Deployment readiness
 
 No deployment was performed. The new harness is implemented, but the concrete protocol/retention limits require review and both Node 26 checks must pass on the published implementation head before requesting an owner deployment. Do not deploy merely because an older head was green.
 
-The manual Pages workflow deploys the selected branch to one shared public URL, replacing the existing site. After review and current-head CI, the owner may authorize deployment of `feat/production-readiness-acceptance`; confirm the successful deployment run and exact source SHA in the footer. Start live rehearsals in fresh disposable synthetic folders and preserve the existing PR24 source. Production persistence stays NO-GO.
+The manual Pages workflow deploys the selected branch to one shared public URL, replacing the existing site. After review and current-head CI, the owner may authorize deployment of `feat/production-readiness-acceptance`; confirm the successful deployment run and exact source SHA in the footer. Start live rehearsals in fresh disposable synthetic folders. PR24-format synthetic folders are outside the PR25 test path and may be retired separately. Production persistence stays NO-GO.
 
 ## Current Google authorization, quota, and cost review
 
