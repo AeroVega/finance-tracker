@@ -110,7 +110,7 @@ export class SyntheticOriginalRetentionStore {
     return readBack.index;
   }
   async completePendingRetention(pending) {
-    const bytes = encode("date,description,amount\\n2026-01-01,Invented retention fixture,1.00\\n");
+    const bytes = encode("date,description,amount\n2026-01-01,Invented retention fixture,1.00\n");
     if (await hashRaw(bytes) !== pending.pendingRetention.sourceSha256) throw storageError("retention-intent-hash-mismatch", "The pending retention intent does not match the generated synthetic fixture.");
     // Adopt a prior upload if the browser stopped after Drive accepted it.
     const matches = (await this.adapter.listChildren()).filter((file) =>
@@ -157,7 +157,7 @@ export class SyntheticOriginalRetentionStore {
       if (existing?.status === "completed") return existing;
       if (existing?.status === "retention-pending") return this.completePendingRetention(existing);
       // Persist exact intent and retention clock before creating the Drive object.
-      const bytes = encode("date,description,amount\\n2026-01-01,Invented retention fixture,1.00\\n");
+      const bytes = encode("date,description,amount\n2026-01-01,Invented retention fixture,1.00\n");
       const pending = { importId, status: "retention-pending", syntheticOnly: true, privateSourceFileRef: null,
         pendingRetention: { importId, sourceSha256: await hashRaw(bytes), retainedAt: this.now() } };
       await this.persist(base, { ...base.index, imports: [...base.index.imports, pending] });
