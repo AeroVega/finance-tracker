@@ -80,3 +80,21 @@ for (const status of [401, 403]) test("HTTP " + status + " disables writes and c
   assert.equal(provider.files.size, before);
   await lifecycle.release();
 });
+
+test("PR25 refuses PR24-format synthetic folders without changing them", async () => {
+  const legacyManifest = {
+    format: "finance-tracker-manifest", manifestVersion: "1.0.0", schemaVersion: 1,
+    syntheticOnly: true, databaseId: "invented-db", copyId: "invented-pr24-copy",
+    role: "primary", revision: 0, commitId: "invented-legacy-commit", snapshot: {}
+  };
+  let reads = 0;
+  const adapter = {
+    listChildren: async () => [{ id: "invented-manifest-id", name: "ft-synthetic-dashboard-manifest.json",
+      appProperties: { financeTrackerKind: "dashboard-synthetic-manifest" } }],
+    readJson: async () => { reads += 1; return legacyManifest; }
+  };
+  await assert.rejects(findOrCreateManifest(adapter, async () => {}), {
+    code: "unsupported-folder-format"
+  });
+  assert.equal(reads, 1);
+});
