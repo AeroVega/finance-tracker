@@ -594,7 +594,7 @@ Append-only transaction journals may record pre-generated physical IDs for stage
 
 Backup and restore preserve logical commit IDs, revisions, parent lineage, and hash-only snapshots, but create a new locator catalog bound to the destination's new `copyId`. The destination catalog maps the same logical immutable objects to destination-specific Drive IDs. Source copy and source catalog remain unchanged.
 
-The current synthetic dashboard and transaction engine use the legacy embedded-locator format. Conversion must be explicit, verified, and non-destructive: verify legacy history and every referenced object, construct a new destination catalog and hash-only history with migration provenance, verify all retained snapshots, then publish the new-format manifest last. Do not rewrite immutable legacy records in place or reset an existing synthetic folder to avoid migration work. The first acceptance rehearsal should use a fresh, clearly identified synthetic destination folder.
+PR25's catalog-backed dashboard initializes fresh version-2 synthetic folders only. Existing PR24-format synthetic folders are unsupported: PR25 does not convert, migrate, or upgrade them, and must refuse them without modifying their contents. The owner may retire those disposable PR24 test folders independently. This directory-format boundary is not a change to the separate future schema-migration requirements recorded in decisions 56–64.
 
 See [Per-Copy Drive Locator Catalog — Design and Reconciliation](DRIVE_LOCATOR_CATALOG_DESIGN.md) for the proposed entry schema, publication/finalization ordering, failure behavior, migration boundary, and acceptance criteria.
 ## Initial manifest example — approved design contract
