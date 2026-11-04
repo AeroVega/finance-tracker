@@ -4,7 +4,6 @@ import { SessionCoordinator } from "../js/session-coordination.mjs";
 import { createDriveSessionAdapter } from "../js/drive-session-adapter.mjs";
 import { verifyCatalogHistory, storageError } from "../js/catalog-storage.mjs";
 import { backupCatalogCopy, exportCatalogArchive, verifyCatalogArchive, restoreCatalogArchive } from "../js/catalog-backup.mjs";
-import { convertLegacySyntheticCopy } from "../js/catalog-legacy-conversion.mjs";
 import { chooseSyntheticFolder } from "../js/synthetic-folder-picker.mjs";
 import { ORIGINAL_RETENTION_MS } from "../js/original-retention-policy.mjs";
 
@@ -16,7 +15,7 @@ let stopBoundary = 0;
 let boundary = 0;
 let retainedAt = null;
 const ownedDestinations = new Set();
-const readyActions = ["save", "verify-source", "backup", "quarantine", "export", "restore", "convert", "retain", "before-expiry", "expiry", "pause-save", "expire"];
+const readyActions = ["save", "verify-source", "backup", "quarantine", "export", "restore", "retain", "before-expiry", "expiry", "pause-save", "expire"];
 function result(id, message, kind = "pass") { $(id).textContent = message; $(id).dataset.result = kind; }
 function refresh() {
   const lifecycle = storage.lifecycle;
@@ -139,19 +138,6 @@ action("restore", "copy-result", async () => {
   const folder = await pick("Choose a fresh synthetic restore destination");
   const restored = await folderSession(folder, (target) => restoreCatalogArchive({ archive: loadedArchive, ...target, validateStructure }));
   result("copy-result", "PASS: restored into a separate Drive folder with a new physical copy identity. Revision " + restored.manifest.revision + "; exact logical history verified.");
-});
-action("convert", "copy-result", async () => {
-  const legacyFolder = await pick("Choose the existing legacy synthetic dashboard folder (preserved)");
-  const destination = await pick("Choose a fresh synthetic conversion destination");
-  if (destination.id === legacyFolder.id) throw storageError("same-copy-folder", "Conversion requires a different destination.");
-  await folderSession(legacyFolder, async (legacy) => {
-    const manifests = (await legacy.targetAdapter.listChildren()).filter((file) => file.name === "ft-synthetic-dashboard-manifest.json" && file.appProperties?.financeTrackerKind === "dashboard-synthetic-manifest");
-    if (manifests.length !== 1) throw storageError("ambiguous-legacy-manifest", "Choose a folder with exactly one legacy dashboard manifest.");
-    await folderSession(destination, (target) => convertLegacySyntheticCopy({ sourceAdapter: legacy.targetAdapter,
-      sourceManifestFileId: manifests[0].id, withSourceLock: legacy.withTargetLock, assertSourceWritable: legacy.assertTargetWritable,
-      ...target, validateStructure }));
-  });
-  result("copy-result", "PASS: verified conversion created a separate version-2 copy with explicit migration evidence. The legacy source is unchanged. This does not cut over the old folder.");
 });
 action("retain", "retention-result", async () => { const item = await storage.originals.retainFixture(); retainedAt = item.sourceFileRetainedAt; result("retention-result", "PASS: invented original uploaded, hash-verified, and linked to a completed synthetic import with its 540-day clock."); });
 action("before-expiry", "retention-result", async () => {
