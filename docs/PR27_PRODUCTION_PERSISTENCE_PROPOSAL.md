@@ -160,7 +160,7 @@ After merge, synthetic data remains mandatory and first-class for ongoing develo
 - [Database Identity and Lifecycle ADR](DATABASE_IDENTITY_AND_LIFECYCLE.md) — accepted database identity, immutable storage, transaction, recovery, migration, and single-device contracts.
 - [Data Model and Reconciliation Principles](DATA_MODEL.md) — canonical financial data and import semantics.
 - [Architecture Decisions](ARCHITECTURE_DECISIONS.md) — $0 cost, file-import, Drive direction, and existing workstream constraints.
-- [PR #25 acceptance record](PR25_ACCEPTANCE.md) — synthetic storage-readiness evidence.
+- [Synthetic Storage Acceptance](SYNTHETIC_STORAGE_ACCEPTANCE.md) — owner-reported synthetic storage-readiness evidence and CI results.
 
 Where this proposal conflicts with an accepted contract, identify the conflict and seek an explicit owner decision. Do not silently override existing decisions.
 
