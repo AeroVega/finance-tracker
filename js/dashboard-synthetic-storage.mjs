@@ -146,6 +146,11 @@ export async function findOrCreateManifest(adapter, guard) {
     await verifyCatalogHistory(adapter, manifest);
     return file.id;
   }
+  const unexpected = files.filter((file) => !(file.name === "finance-tracker-active-session.json" &&
+    file.appProperties?.financeTrackerSession === "v1"));
+  if (unexpected.length) {
+    throw storageError("nonempty-folder", "PR25 requires a fresh empty synthetic folder. Existing files were found without a version-2 manifest; no files were changed.");
+  }
   return (await initializeCatalogCopy({ adapter, guard, manifestName: MANIFEST_NAME })).manifestFileId;
 }
 
