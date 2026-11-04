@@ -72,8 +72,19 @@ export class SyntheticOriginalRetentionStore {
     const ids = new Set();
     const locators = new Set();
     for (const item of index.imports) {
-      if (!item.importId || ids.has(item.importId) || item.syntheticOnly !== true || item.status !== "completed") throw storageError("invalid-original-import", "Synthetic import records must have unique identities and completed status.");
+      if (!item.importId || ids.has(item.importId) || item.syntheticOnly !== true) throw storageError("invalid-original-import", "Synthetic import records must have unique identities.");
       ids.add(item.importId);
+      if (item.status === "retention-pending") {
+        const intent = item.pendingRetention;
+        if (item.originalRetention || item.privateSourceFileRef !== null || !intent || intent.importId !== item.importId ||
+            !/^[0-9a-f]{64}$/.test(intent.sourceSha256 || "")) throw storageError("invalid-original-retention-intent", "A pending original-retention intent is malformed.");
+        const expiresAt = new Date(Date.parse(intent.retainedAt) + 540 * 24 * 60 * 60 * 1000).toISOString();
+        assessOriginalRetention({ format: "finance-tracker-original-retention", version: 1, importId: item.importId,
+          sourceFileId: "pending", sourceSha256: intent.sourceSha256, retainedAt: intent.retainedAt, expiresAt,
+          state: "retained", deletionConfirmedAt: null, deletionFailureCode: null }, this.now());
+        continue;
+      }
+      if (item.status !== "completed") throw storageError("invalid-original-import", "Synthetic imports must be completed or explicitly pending retention.");
       if (item.originalRetention) {
         const locator = item.originalRetention.sourceFileId;
         if (locator && locators.has(locator)) throw storageError("duplicate-original-locator", "A source file cannot belong to multiple import retention records.");
@@ -98,22 +109,65 @@ export class SyntheticOriginalRetentionStore {
     if (canonicalizeJcs(readBack.index) !== canonicalizeJcs(index)) throw storageError("original-index-unverified", "Original-import metadata did not read back exactly.");
     return readBack.index;
   }
+  async completePendingRetention(pending) {
+    const bytes = encode("date,description,amount\\n2026-01-01,Invented retention fixture,1.00\\n");
+    if (await hashRaw(bytes) !== pending.pendingRetention.sourceSha256) throw storageError("retention-intent-hash-mismatch", "The pending retention intent does not match the generated synthetic fixture.");
+    // Adopt a prior upload if the browser stopped after Drive accepted it.
+    const matches = (await this.adapter.listChildren()).filter((file) =>
+      file.appProperties?.financeTrackerKind === "retained-original" &&
+      file.appProperties?.financeTrackerTransaction === pending.importId &&
+      file.appProperties?.financeTrackerHash === pending.pendingRetention.sourceSha256);
+    if (matches.length > 1) throw storageError("ambiguous-pending-original", "Multiple Drive objects match one pending retention intent; preserve them for inspection.");
+    let location;
+    if (matches.length === 1) {
+      const verified = await readVerified(this.adapter, { fileId: matches[0].id, sha256: pending.pendingRetention.sourceSha256,
+        kind: "retained-original", transactionId: pending.importId });
+      location = { fileId: matches[0].id, sha256: await hashRaw(verified) };
+    } else {
+      location = await writeVerified(this.adapter, { content: bytes, kind: "retained-original", transactionId: pending.importId,
+        name: "ft-synthetic-original.csv" }, this.assertWritable);
+    }
+    const retention = createOriginalRetentionRecord({ importId: pending.importId, sourceFileId: location.fileId,
+      sourceSha256: pending.pendingRetention.sourceSha256, retainedAt: pending.pendingRetention.retainedAt });
+    const completed = { importId: pending.importId, status: "completed", syntheticOnly: true,
+      ...importFields(retention), originalRetention: retention };
+    const current = await this.read();
+    const existing = current.index.imports.find((item) => item.importId === pending.importId);
+    if (!existing || existing.status !== "retention-pending" ||
+        canonicalizeJcs(existing.pendingRetention) !== canonicalizeJcs(pending.pendingRetention)) {
+      throw storageError("retention-intent-conflict", "The durable retention intent changed during reconciliation.");
+    }
+    const imports = current.index.imports.map((item) => item.importId === pending.importId ? completed : item);
+    await this.persist(current, { ...current.index, imports });
+    return completed;
+  }
+  async reconcilePendingRetentions() {
+    return this.run(async () => {
+      const base = await this.read();
+      const pending = base.index.imports.filter((item) => item.status === "retention-pending");
+      const completed = [];
+      for (const item of pending) completed.push(await this.completePendingRetention(item));
+      return completed;
+    });
+  }
   async retainFixture({ importId = globalThis.crypto.randomUUID() } = {}) {
     return this.run(async () => {
       const base = await this.read();
-      if (base.index.imports.some((item) => item.importId === importId)) return base.index.imports.find((item) => item.importId === importId);
-      // Generated here, rather than accepting a user's financial CSV as input.
-      const bytes = encode("date,description,amount\n2026-01-01,Invented retention fixture,1.00\n");
-      const location = await writeVerified(this.adapter, { content: bytes, kind: "retained-original", transactionId: importId,
-        name: "ft-synthetic-original.csv" }, this.assertWritable);
-      const retention = createOriginalRetentionRecord({ importId, sourceFileId: location.fileId, sourceSha256: location.sha256, retainedAt: this.now() });
-      const item = { importId, status: "completed", syntheticOnly: true, ...importFields(retention), originalRetention: retention };
-      await this.persist(base, { ...base.index, imports: [...base.index.imports, item] });
-      return item;
+      const existing = base.index.imports.find((item) => item.importId === importId);
+      if (existing?.status === "completed") return existing;
+      if (existing?.status === "retention-pending") return this.completePendingRetention(existing);
+      // Persist exact intent and retention clock before creating the Drive object.
+      const bytes = encode("date,description,amount\\n2026-01-01,Invented retention fixture,1.00\\n");
+      const pending = { importId, status: "retention-pending", syntheticOnly: true, privateSourceFileRef: null,
+        pendingRetention: { importId, sourceSha256: await hashRaw(bytes), retainedAt: this.now() } };
+      await this.persist(base, { ...base.index, imports: [...base.index.imports, pending] });
+      return this.completePendingRetention(pending);
     });
   }
   async process({ now = this.now() } = {}) {
     return this.run(async () => {
+      const pending = (await this.read()).index.imports.filter((item) => item.status === "retention-pending");
+      for (const item of pending) await this.completePendingRetention(item);
       const base = await this.read();
       const records = base.index.imports.filter((item) => item.originalRetention).map((item) => item.originalRetention);
       const byFileId = new Map(records.map((record) => [record.sourceFileId, record]));
