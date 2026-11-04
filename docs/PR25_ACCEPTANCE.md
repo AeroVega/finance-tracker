@@ -71,7 +71,7 @@ Implementation must update the transaction engine, recovery verifier, backup/res
 
 **Owner decision (2026-11-02):** manual categorization corrections may be undone repeatedly. Each undo or subsequent correction is recorded as a new correction event referencing the event it reverses or supersedes; no prior event is deleted or erased. A reason or note is optional.
 
-**Current follow-up:** the concrete v2 catalog representation, publication/recovery protocol and interruption tests are implemented for review in the handoff above. Owner review and live validation remain open. The v1 `fileId + sha256` helper remains a legacy compatibility path and must not be presented as the active v2 implementation or as production-ready.
+**Current follow-up:** the concrete v2 catalog representation, publication/recovery protocol and interruption tests are implemented for review in the handoff above. Owner review and live validation remain open. The v1 `fileId + sha256` helper remains only for historical PR23/PR24 regression/reference pages. PR25 does not use it to open, convert, or upgrade PR24-format folders.
 
 ### Portable export and restore planning
 
@@ -105,11 +105,11 @@ PR #23's transaction-engine suite injects lost responses after all 11 durable mu
 
 **Verified baseline:** both Node 26 GitHub CI checks passed at original PR head `22c30f9a5a21a2335a6ba813fe10f8b148e9cdd6`. The old request for a fresh rerun was already satisfied before this implementation pass.
 
-**Verified local implementation:** 284 tests passed, 0 failed on Node 24.22.1. This includes all 14 transaction-write interruption points, 13 recovery-repair interruption points, real-adapter HTTP/session integration, backup/restore and retention tests. JavaScript syntax and diff whitespace checks passed. **Verified CI:** both Node 26 workflows passed on application-code commit c0174b6f093fbadd3e91a34e0893e9a50b31b4af: [Node contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41698581359) and [Finance Tracker contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41698581552). The following evidence-only commit changes documentation, with no application-code changes. Require checks on the latest head before deployment. Synthetic tests and desktop viewport checks do not replace live Google Drive or real iOS Safari acceptance.
+**Verified current head:** commit `1bb962a3b49e1f4a29d1c7b592496f7cb6b71f50` passed both Node 26 GitHub workflows: [Node contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41770825649) and [Finance Tracker contract tests](https://github.com/AeroVega/finance-tracker/actions/runs/41770825634). Each complete Node contract suite reported **286 passed, 0 failed**; browser/dashboard module syntax checks passed. The suite includes all 14 transaction-write interruption points, interrupted recovery-repair coverage, real-adapter HTTP/session integration, backup/restore, retention, and fail-closed rejection tests for PR24-format and unrecognized nonempty folders. Synthetic tests and desktop viewport checks do not replace live Google Drive or real iOS Safari acceptance.
 
 ## Deployment readiness
 
-No deployment was performed. The new harness is implemented, but the concrete protocol/retention limits require review and both Node 26 checks must pass on the published implementation head before requesting an owner deployment. Do not deploy merely because an older head was green.
+No deployment was performed. The new harness is implemented, but the concrete protocol/retention limits require review. Both Node 26 checks passed on the current implementation head recorded above; any subsequent code change requires fresh checks before deployment.
 
 The manual Pages workflow deploys the selected branch to one shared public URL, replacing the existing site. After review and current-head CI, the owner may authorize deployment of `feat/production-readiness-acceptance`; confirm the successful deployment run and exact source SHA in the footer. Start live rehearsals in fresh disposable synthetic folders. PR24-format synthetic folders are outside the PR25 test path and may be retired separately. Production persistence stays NO-GO.
 
