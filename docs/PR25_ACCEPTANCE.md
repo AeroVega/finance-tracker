@@ -76,7 +76,7 @@ Implementation must update the transaction engine, recovery verifier, backup/res
 
 **Owner decision (2026-11-02):** manual categorization corrections may be undone repeatedly. Each undo or subsequent correction is recorded as a new correction event referencing the event it reverses or supersedes; no prior event is deleted or erased. A reason or note is optional.
 
-**Current follow-up:** the concrete v2 catalog representation, publication/recovery protocol and interruption tests are implemented for review in the handoff above. Owner review and live validation remain open. The v1 `fileId + sha256` helper remains only for historical PR23/PR24 regression/reference pages. PR25 does not use it to open, convert, or upgrade PR24-format folders.
+**Current follow-up:** the concrete v2 catalog representation, publication/recovery protocol and interruption tests are implemented and were reviewed for PR25. Owner-reported live synthetic acceptance is summarized at the top of this document; remaining owner actions are limited to residual-risk acceptance and inspection of actual Cloud/security configuration. The v1 `fileId + sha256` helper remains only for historical PR23/PR24 regression/reference pages. PR25 does not use it to open, convert, or upgrade PR24-format folders.
 
 ### Portable export and restore planning
 
@@ -133,7 +133,7 @@ The owner deployed the PR25 acceptance branch to the shared Pages site and compl
 **Not verified / owner action required:**
 
 - The actual Cloud Console OAuth publishing status, listed test users, declared scopes, API restrictions/referrer restrictions, and project billing configuration have not been inspected by this code review.
-- Live expiry, revocation, wrong-account, denied-scope, and 401/403 recovery tests have not been run against the owner's Google account.
+- Owner-reported live tests completed: actual Drive authorization revocation, fail-closed verification/write pause, approved-account reauthorization and recovery; an unapproved account was denied while the app was in Testing mode. The iPad browser interruption rehearsal was completed at boundary 5. Separate live token-expiry and denied-scope cases were not independently documented.
 - The future billing details and effective date for over-threshold Drive usage remain subject to Google's updates. The $0 constraint cannot be guaranteed solely from the published standard-use statement; the project must remain below the applicable threshold and must not silently enable billing-dependent behavior.
 - The live usage and quotas assigned to the owner's Cloud project have not been retrieved.
 
