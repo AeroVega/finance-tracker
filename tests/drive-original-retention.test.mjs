@@ -88,3 +88,34 @@ test("backup and restore preserve original clocks and omit expired source bytes"
   await restoreCatalogArchive({ archive: expiredArchive, targetAdapter: expiredTarget, withTargetLock: gate, assertTargetWritable: guard, validateStructure: () => true });
   assert.equal((await expiredTarget.listChildren()).some((file) => file.appProperties.financeTrackerKind === "retained-original"), false);
 });
+
+
+test("interruption after original upload is recovered from the durable intent without orphaning or duplicating it", async () => {
+  const adapter = new MemoryCatalogDrive();
+  const first = new SyntheticOriginalRetentionStore({ adapter, withWrite: gate, assertWritable: guard, now: () => retainedAt });
+  adapter.mutations = 0;
+  adapter.stopAfter = 2; // index intent is durable; original upload succeeds, then the page dies
+  await assert.rejects(first.retainFixture({ importId: "interrupted-original" }), { code: "page-terminated" });
+  assert.equal([...adapter.files.values()].filter((file) => file.metadata.appProperties.financeTrackerKind === "retained-original").length, 1);
+  adapter.reboot();
+  const recovered = new SyntheticOriginalRetentionStore({ adapter, withWrite: gate, assertWritable: guard, now: () => retainedAt });
+  const result = await recovered.retainFixture({ importId: "interrupted-original" });
+  assert.equal(result.status, "completed");
+  assert.equal(result.originalRetention.retainedAt, retainedAt);
+  assert.equal([...adapter.files.values()].filter((file) => file.metadata.appProperties.financeTrackerKind === "retained-original").length, 1);
+  assert.equal((await recovered.read()).index.imports[0].privateSourceFileRef, result.privateSourceFileRef);
+});
+
+test("pending original-retention intent can be reconciled after interruption before upload", async () => {
+  const adapter = new MemoryCatalogDrive();
+  const first = new SyntheticOriginalRetentionStore({ adapter, withWrite: gate, assertWritable: guard, now: () => retainedAt });
+  adapter.mutations = 0;
+  adapter.stopAfter = 1; // intent index is durable; page dies before original upload
+  await assert.rejects(first.retainFixture({ importId: "pending-original" }), { code: "page-terminated" });
+  adapter.reboot();
+  const recovered = new SyntheticOriginalRetentionStore({ adapter, withWrite: gate, assertWritable: guard, now: () => retainedAt });
+  const outcomes = await recovered.reconcilePendingRetentions();
+  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes[0].status, "completed");
+  assert.equal([...adapter.files.values()].filter((file) => file.metadata.appProperties.financeTrackerKind === "retained-original").length, 1);
+});
