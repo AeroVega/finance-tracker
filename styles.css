@@ -50,6 +50,7 @@ code { font-size: .85em; background: #f1f1f4; border-radius: 5px; padding: 2px 5
 .sample-details p { font-size: .82rem; line-height: 1.5; color: var(--muted); }
 .secondary-button { border: 1px solid var(--line); background: white; padding: 9px 13px; border-radius: 10px; cursor: pointer; font-size: .82rem; font-weight: 650; }
 .secondary-button:hover { border-color: #aaaab4; }
+.prototype-hub-button { color: var(--text); text-decoration: none; white-space: nowrap; flex: 0 0 auto; }
 .count-pill { display: inline-grid; place-items: center; min-width: 25px; height: 25px; padding: 0 7px; background: #f1f1f4; border-radius: 999px; color: var(--muted); font-size: .72rem; vertical-align: 2px; }
 .text-button { border: 0; background: transparent; color: var(--muted); padding: 8px; cursor: pointer; font-size: .84rem; }
 .ledger-actions { display: flex; align-items: center; gap: 8px; }
