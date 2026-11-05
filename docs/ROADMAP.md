@@ -22,7 +22,12 @@ This is the agreed product delivery model. The Product Definition describes the 
 Expected scope:
 - Supported CSV import and strict provider-format recognition for the initial Wells Fargo, SoFi, and Fidelity exports.
 - Explicit import provenance, account mapping, coverage-period declaration/confirmation, and validation of observed transaction dates against declared coverage.
-- Migration of the first-generation Excel history beginning in 2023, preserving monthly aggregate granularity and provenance; never fabricate transaction-level records from monthly totals.
+- One-time migration of the first-generation Excel history beginning in 2023, using a purpose-built Python conversion script rather than a permanent Excel-import feature.
+  - Preserve monthly net-worth snapshots, monthly income totals and available income-source breakdowns, and monthly expense totals and available primary expense-category breakdowns.
+  - Store these as historical monthly-summary records, distinct from the canonical transaction/activity ledger.
+  - Never fabricate transaction-level records from monthly totals.
+  - Preserve the original workbook, mapping, source provenance, and reconciliation report; validate month-by-month totals and flag discrepancies for owner review.
+  - Expense subcategory migration is pending inspection of the workbook and is not yet committed.
 - Canonical typed activity ledger, conservative matching, overlap/idempotency handling, pending/posted relationships where evidence supports them, and append-only corrections/reversals.
 - Deterministic categorization, efficient user review and correction, and consistent application of learned corrections to future matching records.
 - Trustworthy account balances, assets, liabilities, cash flow, and net-worth calculations with clear definitions and data-quality/freshness/coverage context.
@@ -77,7 +82,7 @@ Potential scope includes deeper investment analysis, more sophisticated planning
 - PR #25 retains its original synthetic-only storage-readiness and production-acceptance responsibilities. This roadmap update does not authorize production financial-data persistence.
 
 **Status:** Active planning baseline; M1 canonical contract/reference implementation merged; parser, reporting, and storage validation remain open  
-**MVP1 target:** 2027-01-01
+**Historical MVP1 target:** 2027-01-01 (superseded scope; the date remains the 1.0.0 target above)
 
 This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints.
 
