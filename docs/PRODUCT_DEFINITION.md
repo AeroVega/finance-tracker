@@ -3,7 +3,7 @@
 **Status:** Owner-reviewed design baseline in progress  
 **Product:** Second Generation Finance Tracker (working name)  
 **Target release:** v1.0.0  
-**Last updated:** 2026-11-02
+**Last updated:** 2026-11-05
 
 This document captures the product direction and owner-approved principles established during the November 2, 2026 product-design discussion. It is intended to guide future product, architecture, implementation, and review sessions.
 
@@ -174,7 +174,21 @@ Use progressive transparency: concise finding first, then analysis, then support
 - Presentation and report customization must not alter the underlying financial records.
 - Maintain consistent overview-first, drill-down behavior throughout the application.
 
-The detailed navigation structure, report catalog, and first-run experience remain open.
+The intended primary navigation is:
+
+- **Home:** a present-day, bird's-eye overview of financial position, recent developments, and broad trends.
+- **Activity:** historical transactions, transfers, and day-to-day financial history.
+- **Accounts:** institutions, individual accounts, balances, holdings, assets, and liabilities.
+- **Planning:** goals, budgets, projections, and scenarios.
+- **More:** settings, data management, diagnostics, and less frequently used functions.
+
+Home should use a flexible two-column bento-style arrangement of dashboard cards rather than a rigid uniform grid. Cards may vary in size and height. A net-worth trend chart is one card among others, not a mandatory full-width banner. Other useful cards may include a category breakdown, recent transactions, and current financial-position summaries. Each card should open the relevant detailed experience when selected.
+
+CSV upload should be a prominent, readily accessible Home action because importing data is a frequent and essential task during the initial release.
+
+Insights should have a dedicated experience that is easy to reach, not be buried among infrequently used settings. A prominent Home card may serve as an entry point to that experience; whether Insights ultimately warrants a separate primary navigation destination remains open.
+
+The first-run experience should prioritize getting useful financial history into the application. Initial setup should be lightweight and should not require a lengthy guided tutorial. Without imported or migrated data, most of the product has little value. The exact screens, sequence, and recovery behavior remain open design work.
 
 ## 7. Data quality, history, and trust
 
@@ -224,6 +238,10 @@ Examples and detailed behavior should follow the existing canonical ledger, cate
 - GitHub Pages is public static hosting and must never serve private financial records.
 - No bank passwords, unauthorized scraping, third-party AI, paid recurring dependencies, expiring trials, or financial-data analytics/advertising services.
 - Manual file import remains permanent.
+- CSV import must track the coverage period represented by each file separately from the transaction dates observed within it. When a file contains explicit coverage-period metadata, extract it and ask the user to confirm it. When it does not, require the user to declare an inclusive start and end date using two independently navigable, side-by-side calendars.
+- For repeat imports into the same account, the importer may prefill a suggested start date based on the day after the previous confirmed coverage end date. The suggestion must remain editable and must never be treated as user confirmation.
+- Validate every usable transaction date in the file against the declared coverage period. Flag and identify any out-of-range dates; do not silently expand the period or infer coverage from account-balance arithmetic. The user must resolve the discrepancy—by correcting the selected dates or investigating the file—before finalizing the import. Files with no usable transaction dates require review.
+- Preserve declared coverage, observed transaction-date range, and import timestamp as distinct metadata. Preserve whether coverage came from explicit source metadata or a user declaration.
 - Supported initial institution/file scope remains Wells Fargo, SoFi, and Fidelity; adding more institution integrations is not required merely because the financial model supports more account types.
 - Provide a complete portable export and restore path. Include historical records, corrections, categorization rules, account relationships, projection scenarios, and necessary metadata—not just transaction rows.
 - Future application generations must be able to import prior-generation archives.
@@ -240,6 +258,19 @@ Use semantic versioning:
 Preserve backward compatibility where reasonable, keep financial history portable, and make breaking changes deliberate and explainable.
 
 The existing January 1, 2027 MVP1 target is a planning target, not permission to weaken correctness, privacy, recovery, or production-readiness requirements. The v1.0.0 feature scope and schedule must be re-baselined against this product definition rather than assuming every capability described here must be fully mature on that date.
+
+### Development milestones: Alpha → Beta → 1.0.0 → 2.0.0
+
+Use the following progression to separate foundational correctness from the richer analytical experience:
+
+- **Alpha — trustworthy financial foundation.** Establish supported CSV imports, migration of the prior-generation monthly financial history, the canonical ledger and reconciliation, categorization and auditable corrections, accurate account balances/assets/liabilities/net worth, and dependable storage, backup, recovery, and portability. Alpha is successful when the owner can load and review financial history, correct it, and trust that the information is preserved and represented honestly.
+- **Beta — visual and analytical experience.** Build the dashboard and navigation, present-day overview, historical trends and reports, insights, and the initial goals/budgets/projections/scenarios experience on top of the trusted foundation. Use controlled synthetic datasets to test chart layouts, uncertainty cones, edge cases, and interactions. Beta is successful when the experience works on target devices against those controlled datasets and is usable.
+- **1.0.0 — integrated first product release.** Combine the Alpha foundation and Beta experience, then validate the integrated application against actual financial data. Release requires reliable import, historical migration, categorization, storage/recovery, and the user-facing experience to work together.
+- **2.0.0 — expanded capabilities.** Reserve deeper investment analysis, more advanced planning and projection methods, expanded automation, additional integrations, and other deliberately deferred ambitions for later development.
+
+Alpha and Beta are deployable development milestones, not public semantic-version releases. The owner should be able to interact with each milestone on the target devices through the existing GitHub Pages workflow and perform a hands-on smoke test before the next milestone advances. The milestones may be delivered through separate or overlapping PRs; PR number order does not dictate merge order. In particular, a later-numbered PR may merge before an earlier-numbered PR when dependencies and readiness justify it.
+
+The first-generation Excel archive is a first-class Alpha input. Its month-by-month historical records must retain their actual granularity and provenance. Do not manufacture transaction-level detail from monthly aggregates or present aggregate values as if they were individual transactions.
 
 ## 12. PR #25 scope boundary — do not expand
 
