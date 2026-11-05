@@ -1,7 +1,7 @@
 # Roadmap
 
 **Status:** Active delivery strategy; Alpha/Beta/1.0.0/2.0.0 progression established 2026-11-05; detailed scope and dates require re-baselining  
-**Original MVP1 target:** 2027-01-01 (superseded planning baseline; not a commitment for the expanded product)
+**Target 1.0.0 release date:** 2027-01-01 (owner's intended target; planning target, subject to release gates)
 
 This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints. The owner-reviewed [Second Generation Product Definition](PRODUCT_DEFINITION.md) captures the broader product direction; the [Product Design Open Decisions register](PRODUCT_OPEN_DECISIONS.md) records unresolved owner questions. The feature map is not yet a sequenced implementation plan. Re-baseline scope and dates before treating the original schedule as a commitment.
 
@@ -129,7 +129,7 @@ The following dependencies apply across Alpha and later stages:
 
 ## Previous nominal schedule — historical baseline, superseded
 
-The schedule below was written for the earlier MVP1/MVP2 framing and the original January 1, 2027 MVP1 target. It is retained as historical context only. It is **not** the schedule for the expanded Alpha/Beta/1.0.0/2.0.0 delivery model, and its dates must not be treated as current commitments.
+The schedule below was written for the earlier MVP1/MVP2 framing. It is retained as historical context only and is **not** the current detailed schedule for the expanded Alpha/Beta/1.0.0/2.0.0 delivery model. The January 1, 2027 date remains the owner's intended **1.0.0 release target**, but the old phase dates and MVP1 scope do not define the current path to that target.
 
 | Window | Previous phase | Previous intended outcomes |
 | --- | --- | --- |
@@ -141,11 +141,11 @@ The schedule below was written for the earlier MVP1/MVP2 framing and the origina
 | Dec 21–31, 2026 | Final validation and release preparation | Fix correctness and security issues, verify recovery and deployment, document known limitations, and decide whether the MVP meets its release criteria. |
 | Jan 1, 2027 | Previous target MVP1 date | Begin using MVP1 only if privacy, correctness, and recovery exit criteria are met; otherwise defer release rather than compromise them. |
 
-A new, dependency-aware schedule should be established after the Alpha scope and its gating dependencies are sufficiently defined. Do not force the expanded product into the previous calendar simply to preserve the old target date.
+The dependency-aware schedule must work backward from the owner's intended **1.0.0 release target of January 1, 2027**. Alpha and Beta are development milestones that must be completed in time to support integrated 1.0.0 validation. The date is a target, not permission to weaken release gates: if privacy, correctness, or recovery criteria are not met, defer the release and explain the gap rather than ship an unsafe or untrustworthy product.
 
 ### Schedule guardrails
 
 - Prioritize financial correctness, privacy, and recoverability over visual polish or calendar dates.
 - Evaluate the storage/authentication/security architecture before implementing persistence for real records. This is a gating dependency, not a reason to publish private data to a static site.
 - Keep direct integrations optional and subject to free, authorized, sustainable access; manual file imports remain permanent.
-- Treat the old January 1, 2027 target as historical planning context, not a release promise for 1.0.0.
+- Treat January 1, 2027 as the intended 1.0.0 target date. The former MVP1 framing is historical; the date itself remains the owner's target for the integrated 1.0.0 product.
