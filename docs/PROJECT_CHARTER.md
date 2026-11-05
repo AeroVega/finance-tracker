@@ -1,8 +1,8 @@
 # Project Charter
 
 **Status:** Draft baseline  
-**Last updated:** 2026-10-10  
-**MVP target:** 2027-01-01
+**Last updated:** 2026-11-05  
+**1.0.0 target:** 2027-01-01
 
 ## North Star
 Build a trustworthy personal financial intelligence application that helps one person understand their financial position, understand how they arrived there, anticipate where they may be heading, explore alternatives, and measure progress toward meaningful goals. It should be mobile-first, tablet-friendly, desktop-capable, responsive, explainable, and privacy-first. See the [Second Generation Product Definition](PRODUCT_DEFINITION.md) for the owner-reviewed product direction and [Product Design Open Decisions](PRODUCT_OPEN_DECISIONS.md) for unresolved questions.
@@ -52,4 +52,4 @@ The outcomes below are the original file-based MVP1 baseline. The expanded secon
 - Migrating unsupported transaction-level history from all prior years.
 
 ## Constraints and open decisions
-The repository is public; recurring cost must be $0; bank passwords will not be stored; unauthorized scraping is prohibited; manual imports remain a permanent fallback. The frontend direction is modular static HTML/CSS/JavaScript on GitHub Pages, but private storage, authentication, import execution, deployment topology, and backup/recovery remain unselected. The archived `Finances.xlsx` is read-only and must not be modified.
+The repository is public; recurring cost must be $0; bank passwords will not be stored; unauthorized scraping is prohibited; manual imports remain a permanent fallback. The frontend direction is modular static HTML/CSS/JavaScript on GitHub Pages. Google Drive is the selected private-storage direction, subject to production-readiness validation; authentication configuration, import execution, deployment details, and backup/recovery remain subject to their existing engineering and acceptance gates. The archived `Finances.xlsx` is read-only and must not be modified.
