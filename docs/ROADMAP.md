@@ -3,7 +3,7 @@
 **Status:** Active delivery strategy; Alpha/Beta/1.0.0/2.0.0 progression established 2026-11-05; detailed scope and dates require re-baselining  
 **Target 1.0.0 release date:** 2027-01-01 (owner's intended target; planning target, subject to release gates)
 
-This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints. The owner-reviewed [Second Generation Product Definition](PRODUCT_DEFINITION.md) captures the broader product direction; the [Product Design Open Decisions register](PRODUCT_OPEN_DECISIONS.md) records unresolved owner questions. The feature map is not yet a sequenced implementation plan. Re-baseline scope and dates before treating the original schedule as a commitment.
+This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints. The owner-reviewed [Second Generation Product Definition](PRODUCT_DEFINITION.md) captures the broader product direction. Unresolved owner questions remain tracked separately until they are resolved or transferred into their appropriate planning and engineering homes. The feature map is not yet a sequenced implementation plan. Re-baseline scope and dates before treating the original schedule as a commitment.
 
 ## Product direction and workstream boundaries — 2026-11-02
 
@@ -81,10 +81,7 @@ Potential scope includes deeper investment analysis, more sophisticated planning
 - Keep documentation/design work and engineering implementation in their appropriate PRs. A roadmap milestone does not silently expand the scope or authorization of an existing PR.
 - PR #25 retains its original synthetic-only storage-readiness and production-acceptance responsibilities. This roadmap update does not authorize production financial-data persistence.
 
-**Status:** Active planning baseline; M1 canonical contract/reference implementation merged; parser, reporting, and storage validation remain open  
-**Historical MVP1 target:** 2027-01-01 (superseded scope; the date remains the 1.0.0 target above)
-
-This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints.
+**Status:** Active planning baseline; M1 canonical contract/reference implementation merged; parser, reporting, and storage validation remain open
 
 ## Current project position — 2026-10-31
 
@@ -131,22 +128,6 @@ The following dependencies apply across Alpha and later stages:
 - Preserve manual CSV import as a permanent workflow even if an authorized direct integration is later available.
 - Treat the 540-day (18-month) retention policy for original imported source files separately from the indefinite retention of canonical financial history, unless a future explicit decision changes either policy.
 - Keep simultaneous multi-device use unsupported under the accepted single-active-device operating model; do not imply synchronization guarantees that have not been implemented and tested.
-
-## Previous nominal schedule — historical baseline, superseded
-
-The schedule below was written for the earlier MVP1/MVP2 framing. It is retained as historical context only and is **not** the current detailed schedule for the expanded Alpha/Beta/1.0.0/2.0.0 delivery model. The January 1, 2027 date remains the owner's intended **1.0.0 release target**, but the old phase dates and MVP1 scope do not define the current path to that target.
-
-| Window | Previous phase | Previous intended outcomes |
-| --- | --- | --- |
-| Oct 9–18, 2026 | Requirements and historical baseline | Establish the North Star and constraints; inspect sanitized provider samples; document supported export formats, reporting principles, and the import/reconciliation contract. |
-| Oct 19–Nov 1, 2026 | Data-integration prototype | Finalize the canonical ledger/import-run model; create synthetic fixtures; validate raw CSV mechanics where appropriate; investigate feasible ingestion and storage boundaries. Do not use real financial data until the security architecture is approved. |
-| Nov 2–15, 2026 | Ledger and categorization | Implement normalization, provenance, conservative matching, human-review decisions, deterministic categorization, and core synthetic tests. |
-| Nov 16–29, 2026 | Reporting and historical baseline | Define and implement the first trustworthy cash-flow and wealth reports; migrate only supported annual summary figures from 2023–2026 if feasible, without modifying the archived workbook or inventing missing values. |
-| Nov 30–Dec 20, 2026 | Cutover rehearsal | Exercise imports, overlap handling, reconciliation, exception review, export portability, and backup/restore; test the intended iPhone/iPad workflow. |
-| Dec 21–31, 2026 | Final validation and release preparation | Fix correctness and security issues, verify recovery and deployment, document known limitations, and decide whether the MVP meets its release criteria. |
-| Jan 1, 2027 | Previous target MVP1 date | Begin using MVP1 only if privacy, correctness, and recovery exit criteria are met; otherwise defer release rather than compromise them. |
-
-The dependency-aware schedule must work backward from the owner's intended **1.0.0 release target of January 1, 2027**. Alpha and Beta are development milestones that must be completed in time to support integrated 1.0.0 validation. The date is a target, not permission to weaken release gates: if privacy, correctness, or recovery criteria are not met, defer the release and explain the gap rather than ship an unsafe or untrustworthy product.
 
 ### Schedule guardrails
 
