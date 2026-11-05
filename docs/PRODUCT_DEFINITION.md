@@ -286,6 +286,35 @@ Preserve backward compatibility where reasonable, keep financial history portabl
 
 The existing January 1, 2027 MVP1 target is a planning target, not permission to weaken correctness, privacy, recovery, or production-readiness requirements. The v1.0.0 feature scope and schedule must be re-baselined against this product definition rather than assuming every capability described here must be fully mature on that date.
 
+### Minimum coherent v1.0.0 scope — owner-confirmed 2026-11-05
+
+The January 1, 2027 target is for a minimum coherent, trustworthy replacement for the first-generation workbook—not for full maturity of every capability in this product vision. The following release scope is the planning baseline for the remaining development window. Each capability must meet its stated minimum; advanced refinement may follow in compatible minor releases (1.1.0, 1.2.0, and so on).
+
+| Capability | Minimum v1.0.0 requirement |
+|---|---|
+| Historical migration | Import the workbook's monthly history from 2023 onward, preserving available breakdowns, provenance, and reconciliation evidence. |
+| CSV imports | Reliably import supported Wells Fargo, SoFi, and Fidelity exports, including repeat and overlapping imports. |
+| Financial ledger | Maintain a unified activity history, prevent duplicates, and support corrections and deterministic categorization. |
+| Accounts | Show persistent accounts, balances, assets, and liabilities. |
+| Financial reporting | Provide trustworthy income, spending, cash-flow, savings, and net-worth reporting. |
+| Historical trends | Present migrated financial history with monthly detail and clearly distinguish workbook-derived summaries from imported transactions. |
+| Private storage | Google Drive persistence, authentication, recovery, backup, and portable export must pass their applicable acceptance and authorization gates. |
+| Core interface | Provide a usable Home, Activity, Accounts, and More experience on iPhone and iPad. |
+
+The following capabilities should have useful but deliberately limited initial implementations rather than their eventual advanced forms:
+
+- **Insights:** meaningful observations and evidence-based, optional recommendations.
+- **Investments:** account balances, holdings, contributions, distributions, dividends, and basic investment activity; advanced performance analysis may follow.
+- **Budgets:** basic category budgets and spending comparisons.
+- **Projections:** a straightforward baseline projection with clearly stated assumptions.
+- **Data quality:** clear indicators for stale imports, missing coverage, and reconciliation problems.
+
+Advanced investment performance and tax-lot analysis, sophisticated forecasting, complex goal hierarchies and optimization, advanced budget rollover/customization, multi-currency support, extensive dashboard/report customization, additional institution integrations, and simultaneous multi-device operation are not v1.0.0 release requirements. They may be considered for later releases subject to compatibility, correctness, privacy, cost, and product review.
+
+The minor-version sequence is an opportunity, not an automatic commitment to a particular feature or date. A refinement belongs in a 1.1.x or 1.2.x release when it can be added compatibly without weakening established financial meaning or requiring an unplanned breaking migration. The v1.0.0 release remains conditional on functional completeness, data integrity/security/recovery acceptance, and explicit owner acceptance after reconciliation. If those gates are not met by January 1, move the release date rather than lower the standard.
+
+This scope baseline does not authorize production financial-data persistence or alter PR #25's existing acceptance boundaries. All applicable security, storage, and owner-authorization gates remain in force.
+
 ### Development milestones: Alpha → Beta → 1.0.0 → 2.0.0
 
 Use the following progression to separate foundational correctness from the richer analytical experience:
