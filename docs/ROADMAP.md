@@ -1,13 +1,13 @@
 # Roadmap
 
-**Status:** Active delivery strategy; Alpha/Beta/1.0.0/2.0.0 progression established 2026-11-05; detailed scope and dates require re-baselining  
+**Status:** Active delivery strategy; minimum v1.0.0 scope established 2026-11-05; dependency-aware schedule and detailed acceptance criteria remain to be baselined  
 **Target 1.0.0 release date:** 2027-01-01 (owner's intended target; planning target, subject to release gates)
 
 This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints. The owner-reviewed [Second Generation Product Definition](PRODUCT_DEFINITION.md) captures the broader product direction. Unresolved owner questions remain tracked separately until they are resolved or transferred into their appropriate planning and engineering homes. The feature map is not yet a sequenced implementation plan. Re-baseline scope and dates before treating the original schedule as a commitment.
 
 ## Product direction and workstream boundaries — 2026-11-02
 
-The product direction now extends beyond the original MVP1 file-based tracker into a personal financial intelligence application with reporting, investments, liabilities, budgeting, goals, projections, insights, data-quality transparency, local-first operation, and long-term portability. These capabilities need deliberate v1.0.0 scoping; they are not all automatically assigned to the next PR.
+The product direction now extends beyond the original MVP1 file-based tracker into a personal financial intelligence application with reporting, investments, liabilities, budgeting, goals, projections, insights, data-quality transparency, local-first operation, and long-term portability. The owner-confirmed minimum v1.0.0 scope is now recorded below; capabilities beyond that minimum remain product direction or later-release candidates, not automatic additions to the next PR.
 
 **PR #25 remains a separate engineering workstream.** It must complete its originally assigned synthetic-only storage-readiness and production-acceptance responsibilities as recorded in [PR #25](https://github.com/AeroVega/finance-tracker/pull/25) and its acceptance evidence on that branch. The product-definition discussion does not add feature-development scope to PR #25 and does not authorize production financial-data persistence.
 
@@ -43,7 +43,7 @@ Expected scope:
 - Home dashboard and primary navigation, with drill-down into detailed experiences.
 - Present-day financial overview, recent activity, category breakdowns, net-worth and historical trend visualizations.
 - Historical reporting and insights with documented calculation definitions.
-- Initial goals, budgets, projections, and scenario experiences, with assumptions and uncertainty communicated clearly.
+- The minimum-scope planning experience: basic category budgets and comparisons, plus a straightforward baseline projection with stated assumptions. Advanced goal hierarchies, scenario management, and forecasting sophistication are not implied v1.0.0 requirements.
 - Investment and liability presentation appropriate to the agreed initial scope.
 - Responsive, usable interactions across the target iPhone and iPad experiences.
 
@@ -56,7 +56,7 @@ Expected scope:
 The January 1 target is a minimum coherent replacement for the first-generation workbook, not full maturity of every capability in the Product Definition. The release baseline is:
 
 - **Required replacement foundation:** historical workbook migration (monthly history from 2023 onward, with available breakdowns and provenance); reliable Wells Fargo, SoFi, and Fidelity CSV imports including overlapping/repeat imports; unified ledger with duplicate prevention, corrections, and deterministic categorization; persistent accounts, balances, assets, and liabilities; trustworthy income, spending, cash-flow, savings, and net-worth reporting; historical trends that distinguish workbook-derived monthly summaries from transaction-level imports; and approved, validated private storage, authentication, backup, recovery, and portable export.
-- **Core experience:** usable Home, Activity, Accounts, and More experiences on iPhone and iPad.
+- **Core experience:** usable Home, Activity, Accounts, Planning, and More experiences on iPhone and iPad.
 - **Useful initial forms:** meaningful Insights with optional evidence-based recommendations; basic investment balances/holdings/activity; basic category budgets and comparisons; a straightforward baseline projection with stated assumptions; and clear data-quality/freshness/coverage indicators.
 - **Deferred refinements:** advanced investment performance/tax-lot analysis, sophisticated forecasting, complex goal hierarchies and optimization, advanced budget rollover/customization, multi-currency, extensive dashboard/report customization, additional institution integrations, and simultaneous multi-device operation.
 
@@ -93,9 +93,9 @@ Potential scope includes deeper investment analysis, more sophisticated planning
 - PR #25 retains its original synthetic-only storage-readiness and production-acceptance responsibilities. This roadmap update does not authorize production financial-data persistence.
 
 
-## Current project position — 2026-10-31
+## Current project position — 2026-11-05
 
-**Current phase:** PR #19's 108-decision database identity/lifecycle/storage/recovery architecture baseline is merged. Google Drive remains the selected private-storage direction. The tested Drive v3 stale-`If-Match` path failed; the owner accepted single-user, single-active-device operation, with simultaneous multi-device use explicitly unsupported and writes refused when another active session is detected. Production ledger writes remain blocked pending session coordination, serialized writes, recovery, snapshot consistency, privacy, and $0 recurring-cost validation.
+**Current phase:** PR #19's 108-decision database identity/lifecycle/storage/recovery architecture baseline is merged. PR #26 remains an open, draft, documentation-only product-definition PR; its owner-confirmed minimum v1.0.0 scope is now recorded, while the dependency-aware schedule and measurable acceptance criteria remain open. Google Drive remains the selected private-storage direction. The tested Drive v3 stale-`If-Match` path failed; the owner accepted single-user, single-active-device operation, with simultaneous multi-device use explicitly unsupported and writes refused when another active session is detected. Production ledger writes remain blocked pending session coordination, serialized writes, recovery, snapshot consistency, privacy, and $0 recurring-cost validation.
 
 ### Completed or demonstrated
 - Project constraints, provider-export research, and initial Wells Fargo, SoFi, and Fidelity sample-schema observations are documented.
@@ -122,14 +122,14 @@ Recorded decisions: integer minor units with decimal-string fallback; preserve s
 - [x] Inspect sanitized sample exports for MVP1 account types (Wells Fargo, SoFi, Fidelity).
 - [x] Document observed schemas, date formats, confirmed signs, and available identifiers/activity fields; validate raw CSV mechanics when appropriate.
 - [x] Record and merge canonical ledger/import-run contract decisions and a pure synthetic reconciliation reference module (PR #11; complete).
-- [ ] Complete production evaluation of private storage, authentication, backup/recovery, and portability (the initial synthetic Drive round trip is a successful prototype check, not production approval; the new feasibility spike is underway).
+- [ ] Complete production evaluation of private storage, authentication, backup/recovery, and portability. The synthetic Drive and transaction-engine work in PRs #20–24 provides prototype evidence, not production approval; PR #25 retains the remaining synthetic-only production-readiness gates.
 - [x] Document and review the database identity/lifecycle/storage architecture (PR #19 merged; production implementation remains separately gated).
 
 Phase 0 discovery is substantially complete. The canonical contract and synthetic reference behavior are merged through PR #11. Provider parsers can now be developed against that contract using invented fixtures; production persistence remains separately gated. The Drive probe does not complete the storage/security phase.
 
 ## Current delivery work and dependencies
 
-The stage definitions above describe the intended product progression, not a claim that all work is complete or that every detailed scope decision is settled. The immediate work is to finish the outstanding product-definition discussion, keep the PR #25 synthetic-only engineering workstream within its agreed boundary, and begin the Alpha implementation in its own reviewable PR(s) when the required design and security decisions are ready.
+The stage definitions above describe the intended product progression, not a claim that all work is complete. The owner-confirmed minimum v1.0.0 scope is recorded in the Product Definition and this roadmap. The next planning task is to establish a dependency-aware schedule and measurable acceptance criteria, while keeping PR #25 within its original synthetic-only boundary. Alpha implementation must proceed in separate reviewable PRs and remain subject to the required design, security, and production-authorization gates.
 
 The following dependencies apply across Alpha and later stages:
 
