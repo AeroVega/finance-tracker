@@ -51,6 +51,17 @@ Expected scope:
 
 **Beta exit criteria:** The visual and analytical experience operates against controlled datasets, communicates limitations honestly, and is usable through the existing GitHub Pages deployment workflow on target devices.
 
+### Owner-confirmed minimum v1.0.0 scope — 2026-11-05
+
+The January 1 target is a minimum coherent replacement for the first-generation workbook, not full maturity of every capability in the Product Definition. The release baseline is:
+
+- **Required replacement foundation:** historical workbook migration (monthly history from 2023 onward, with available breakdowns and provenance); reliable Wells Fargo, SoFi, and Fidelity CSV imports including overlapping/repeat imports; unified ledger with duplicate prevention, corrections, and deterministic categorization; persistent accounts, balances, assets, and liabilities; trustworthy income, spending, cash-flow, savings, and net-worth reporting; historical trends that distinguish workbook-derived monthly summaries from transaction-level imports; and approved, validated private storage, authentication, backup, recovery, and portable export.
+- **Core experience:** usable Home, Activity, Accounts, and More experiences on iPhone and iPad.
+- **Useful initial forms:** meaningful Insights with optional evidence-based recommendations; basic investment balances/holdings/activity; basic category budgets and comparisons; a straightforward baseline projection with stated assumptions; and clear data-quality/freshness/coverage indicators.
+- **Deferred refinements:** advanced investment performance/tax-lot analysis, sophisticated forecasting, complex goal hierarchies and optimization, advanced budget rollover/customization, multi-currency, extensive dashboard/report customization, additional institution integrations, and simultaneous multi-device operation.
+
+The owner expects deeper compatible refinements to be considered for minor releases (1.1.0, 1.2.0, and later), rather than making them prerequisites for 1.0.0. Minor-release planning remains subject to compatibility and separate prioritization; these are not automatic feature commitments. January 1 remains conditional on functional completeness, data integrity, security/recovery gates, and explicit owner acceptance after reconciliation. Move the release date if those conditions are not met; do not lower the standard. This scope does not alter PR #25's synthetic-only boundaries or authorize production financial-data persistence.
+
 ### 1.0.0 — integrated first product release
 
 **Purpose:** Integrate the Alpha foundation and Beta experience into a coherent, trustworthy application.
