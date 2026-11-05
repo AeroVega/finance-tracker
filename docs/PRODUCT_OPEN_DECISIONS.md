@@ -8,46 +8,7 @@ This register preserves questions that have not yet been answered during product
 
 Do not infer an answer merely because a topic appears here. Do not reopen settled decisions without a concrete conflict or new evidence. Technical implementation details should be handled by the engineering workstream unless they require a consequential product decision.
 
-## 1. Owner decisions recorded
-
-These decisions are settled at the product-direction level. Detailed implementation choices may still be developed by the engineering workstream without reopening the underlying intent.
-
-### Release progression
-- Development proceeds through **Alpha** (trustworthy financial foundation), **Beta** (visual and analytical experience using controlled synthetic data), **1.0.0** (integrated release validated against actual financial data), and **2.0.0** (expanded capabilities).
-- Alpha and Beta are deployable development milestones, not semantic-version product releases. The owner should be able to smoke-test each on target devices through the existing GitHub Pages workflow.
-- PR numbering does not prescribe merge order; dependency and readiness determine sequencing.
-- The prior-generation Excel history is a first-class Alpha input. Monthly aggregate history must retain its granularity and must not be fabricated into transaction-level records.
-- **Release date:** January 1, 2027 is the owner's intended target date for the integrated **1.0.0** release. Alpha and Beta are the deployable development milestones leading to it. The date does not override privacy, correctness, recovery, or other release gates; defer rather than weaken them.
-
-### Dashboard and application structure
-- The intended primary navigation is **Home | Activity | Accounts | Planning | More**, with the broad responsibilities documented in the Product Definition.
-- Home is a present-day overview with a flexible two-column bento-style card layout. Cards may vary in size and should drill into their relevant detailed experiences.
-- CSV upload is a prominent Home action during the initial release.
-- Insights has a dedicated, readily accessible experience and must not be buried in infrequently used settings. A prominent Home card is an intended entry point; whether Insights becomes its own primary navigation destination remains unresolved.
-
-### First-run priorities
-- Initial setup should be lightweight and prioritize importing or migrating financial history rather than requiring a lengthy tutorial.
-- Exact first-run screens, sequence, and recovery behavior remain unresolved.
-
-### CSV coverage and import validation
-- Coverage period is distinct from the earliest/latest transaction dates observed in a CSV. Do not infer coverage from account-balance arithmetic.
-- If explicit coverage metadata exists in the file, extract it and ask the user to confirm it. Otherwise, the user declares inclusive start and end dates using two independently navigable side-by-side calendars.
-- For repeat imports into the same account, the app may suggest a start date based on the day after the previous confirmed coverage end date. The suggestion remains editable and is not confirmation.
-- Validate every usable transaction date against the declared period. Flag and identify out-of-range dates; do not silently expand the period. The user resolves the discrepancy by adjusting the selected range or investigating the file before finalizing the import.
-- Files with no usable transaction dates require review. Preserve declared coverage, observed transaction-date range, import timestamp, and whether coverage came from source metadata or user declaration as separate facts.
-
-### One-time first-generation Excel history migration
-- Treat the existing Excel workbook as a one-time historical data-conversion input, not a permanent supported import format or a reason to build a general-purpose Excel-import interface.
-- Use a small, purpose-built Python conversion script; the script may be disposable, but converted data, source archive, mapping, reconciliation report, and provenance are durable.
-- Migrate month-by-month summaries from 2023 onward, including monthly net worth, total income and available income-source breakdowns, and total expenses and available primary expense-category breakdowns.
-- Store these as a distinct historical monthly-summary record type, separate from the canonical transaction/activity ledger.
-- Do not reconstruct or fabricate individual transactions from monthly aggregates.
-- Expense subcategory migration is still open pending inspection of the workbook's structure and effort; primary expense categories are in scope.
-- Reconcile source and output month by month, including income-source totals and expense-category totals against their respective monthly totals. Flag missing months, ambiguity, formula errors, and mismatches; do not silently interpolate or correct values.
-- Preserve the original workbook unchanged and retain source workbook/worksheet provenance.
-- Perform the actual conversion and import in a separate engineering PR, after applicable storage/security gates. PR #26 documents the decision and approach only.
-
-## 2. Explicitly unresolved product decisions
+## 1. Unresolved product decisions
 
 ### User experience and application structure
 - What detailed screen hierarchy, section contents, and navigation behavior should implement the agreed Home / Activity / Accounts / Planning / More structure?
@@ -132,7 +93,7 @@ These decisions are settled at the product-direction level. Detailed implementat
 - When a quality issue should suppress a report or projection versus simply add a warning.
 - How users can resolve data-quality findings and see the effect of the resolution.
 
-## 3. Cross-cutting questions requiring explicit reconciliation
+## 2. Cross-cutting questions requiring explicit reconciliation
 
 These are especially important because existing engineering contracts constrain what the product can safely do.
 
@@ -148,7 +109,7 @@ The product-level retention decision is indefinite retention of canonical financ
 ### Product vision versus PR #25 scope
 PR #25 remains limited to its original synthetic-only backup, restore, portability, retention, recovery, OAuth/security, cost/terms, and owner-acceptance gates. The product features in the companion definition are future product work, not additions to PR #25.
 
-## 4. Future-version opportunities already identified
+## 3. Future-version opportunities already identified
 
 These are intentionally deferred unless the owner promotes them:
 - User-defined custom account types.
@@ -159,7 +120,7 @@ These are intentionally deferred unless the owner promotes them:
 - Broader customization of reports and dashboards.
 - Additional automation and categorization capabilities as deterministic rules mature.
 
-## 5. Engineering questions are not automatically owner questions
+## 4. Engineering questions are not automatically owner questions
 
 The following should normally be proposed and resolved by the engineering workstream, escalating only when they change user-visible behavior, privacy, cost, data integrity, or a previously approved contract:
 - Internal module boundaries and code organization.
@@ -172,7 +133,7 @@ The following should normally be proposed and resolved by the engineering workst
 
 Engineering must preserve the product principles, explain tradeoffs, and bring back consequential choices rather than asking the owner to approve every implementation detail.
 
-## 6. Decision process
+## 5. Decision process
 
 For each unresolved topic:
 1. State the user-visible decision in plain language.
