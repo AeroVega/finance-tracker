@@ -20,7 +20,11 @@ The current annual spreadsheet workflow is flexible but requires repeated manual
 7. Incremental delivery: file imports first, API automation later if feasible.
 8. Portable data and recoverable backups.
 
-## Existing MVP1 baseline — scope requires re-baselining\n\nThe outcomes below are the original file-based MVP1 baseline. The expanded second-generation product vision is documented separately. Do not assume every capability in the product definition must be fully mature in v1.0.0, and do not silently expand active PR scopes. The v1.0.0 minimum coherent feature set, acceptance criteria, and schedule must be explicitly re-baselined against the product definition. PR #25 retains its original synthetic-only production-readiness responsibilities.\n\n## MVP1 outcomes
+## Existing MVP1 baseline — scope requires re-baselining
+
+The outcomes below are the original file-based MVP1 baseline. The expanded second-generation product vision is documented separately. Do not assume every capability in the product definition must be fully mature in v1.0.0, and do not silently expand active PR scopes. The v1.0.0 minimum coherent feature set, acceptance criteria, and schedule must be explicitly re-baselined against the product definition. PR #25 retains its original synthetic-only production-readiness responsibilities.
+
+## MVP1 outcomes
 - Import supported CSVs from Wells Fargo, SoFi, and Fidelity.
 - Normalize provider-specific rows into a common model.
 - Prevent duplicates across repeated and overlapping imports.
