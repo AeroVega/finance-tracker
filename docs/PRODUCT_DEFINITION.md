@@ -272,6 +272,27 @@ Alpha and Beta are deployable development milestones, not public semantic-versio
 
 The first-generation Excel archive is a first-class Alpha input. Its month-by-month historical records must retain their actual granularity and provenance. Do not manufacture transaction-level detail from monthly aggregates or present aggregate values as if they were individual transactions.
 
+## 11.1 One-time migration of first-generation Excel history
+
+The first-generation Excel workbook is a one-time Alpha migration input, not a permanent import format or a reason to build a general-purpose Excel-import interface.
+
+The migration should use a small, purpose-built Python conversion script. The script may be disposable after successful migration; the converted records, source workbook archive, mapping specification, validation results, and provenance are durable.
+
+The agreed historical scope is month-by-month financial summaries beginning in 2023, preserving the level of detail the workbook actually contains:
+
+- Monthly net-worth snapshot.
+- Monthly total income and the available income-source breakdown (for example, paychecks, refunds, bonuses).
+- Monthly total expenses and the available primary expense-category breakdown (for example, daily living, transportation, food, hobbies and activities).
+- The represented month and any source context needed to interpret the values.
+
+Do not reconstruct individual transactions or imply that monthly aggregates are transaction-level ledger entries. Expense subcategory preservation remains subject to inspection of the workbook's structure; the owner has not committed to the additional effort until the actual workbook is reviewed. Preserve any other reliably represented monthly detail only where its meaning and reconciliation can be established.
+
+Represent these records as a distinct historical monthly-summary record type, separate from the canonical transaction/activity ledger. This allows historical net-worth and cash-flow trends to extend back to 2023 without confusing aggregates with imported transactions or double-counting them in ledger reports.
+
+Before importing, the conversion must produce a reviewable output and reconciliation report. Validate month coverage, source-to-output values, income-source sums against monthly income totals, expense-category sums against monthly expense totals, and any available net-cash-flow/net-worth relationships. Flag missing months, ambiguous labels, formula errors, and mismatches; do not silently fill, interpolate, or correct source values. Retain the original workbook unchanged and record source workbook/worksheet and migration provenance for each output record.
+
+The actual workbook inspection, conversion script, reconciliation, and import will be implemented in a separate, dedicated engineering PR. PR #26 records the product decision and migration approach only; it does not perform the migration or authorize use of real financial data before the applicable storage/security gates.
+
 ## 12. PR #25 scope boundary — do not expand
 
 PR #25 remains responsible for its original synthetic-only storage-readiness and acceptance work, as documented in [PR #25 acceptance record](https://github.com/AeroVega/finance-tracker/blob/feat/production-readiness-acceptance/docs/PR25_ACCEPTANCE.md) and [pull request #25](https://github.com/AeroVega/finance-tracker/pull/25). The product vision in this document does **not** add reporting, investments, debt, budgeting, goals, projections, insights, or other product features to PR #25.
