@@ -1,7 +1,7 @@
 # Roadmap
 
-**Status:** Historical delivery baseline; product direction expanded 2026-11-02; v1.0.0 scope and schedule require re-baselining  
-**Original MVP1 target:** 2027-01-01
+**Status:** Active delivery strategy; Alpha/Beta/1.0.0/2.0.0 progression established 2026-11-05; detailed scope and dates require re-baselining  
+**Original MVP1 target:** 2027-01-01 (superseded planning baseline; not a commitment for the expanded product)
 
 This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints. The owner-reviewed [Second Generation Product Definition](PRODUCT_DEFINITION.md) captures the broader product direction; the [Product Design Open Decisions register](PRODUCT_OPEN_DECISIONS.md) records unresolved owner questions. The feature map is not yet a sequenced implementation plan. Re-baseline scope and dates before treating the original schedule as a commitment.
 
@@ -10,6 +10,71 @@ This is a plan, not a guarantee that all proposed capabilities are feasible unde
 The product direction now extends beyond the original MVP1 file-based tracker into a personal financial intelligence application with reporting, investments, liabilities, budgeting, goals, projections, insights, data-quality transparency, local-first operation, and long-term portability. These capabilities need deliberate v1.0.0 scoping; they are not all automatically assigned to the next PR.
 
 **PR #25 remains a separate engineering workstream.** It must complete its originally assigned synthetic-only storage-readiness and production-acceptance responsibilities as recorded in [PR #25](https://github.com/AeroVega/finance-tracker/pull/25) and its acceptance evidence on that branch. The product-definition discussion does not add feature-development scope to PR #25 and does not authorize production financial-data persistence.
+
+## Delivery progression — Alpha → Beta → 1.0.0 → 2.0.0
+
+This is the agreed product delivery model. The Product Definition describes the intended product; this roadmap organizes the work into coherent, testable stages. These milestones are ordered by dependency and readiness, not by PR number. PRs may overlap, remain in draft, or merge out of numerical order when that is the safest and clearest sequence.
+
+### Alpha — trustworthy financial foundation
+
+**Purpose:** Establish a reliable, auditable financial data foundation before investing heavily in the analytical presentation.
+
+Expected scope:
+- Supported CSV import and strict provider-format recognition for the initial Wells Fargo, SoFi, and Fidelity exports.
+- Explicit import provenance, account mapping, coverage-period declaration/confirmation, and validation of observed transaction dates against declared coverage.
+- Migration of the first-generation Excel history beginning in 2023, preserving monthly aggregate granularity and provenance; never fabricate transaction-level records from monthly totals.
+- Canonical typed activity ledger, conservative matching, overlap/idempotency handling, pending/posted relationships where evidence supports them, and append-only corrections/reversals.
+- Deterministic categorization, efficient user review and correction, and consistent application of learned corrections to future matching records.
+- Trustworthy account balances, assets, liabilities, cash flow, and net-worth calculations with clear definitions and data-quality/freshness/coverage context.
+- Approved private storage, authentication, backup, recovery, and portable export, all validated under the $0 recurring-cost and privacy constraints.
+
+**Alpha exit criteria:** The owner can import and migrate financial history, review and correct it, understand its coverage and provenance, reconcile the resulting financial position, and trust that the data is safely preserved and recoverable. No real financial data may be used until the applicable security and storage gates have been explicitly satisfied.
+
+### Beta — visual and analytical experience
+
+**Purpose:** Build the user-facing overview and analytical tools on top of the Alpha foundation.
+
+Expected scope:
+- Home dashboard and primary navigation, with drill-down into detailed experiences.
+- Present-day financial overview, recent activity, category breakdowns, net-worth and historical trend visualizations.
+- Historical reporting and insights with documented calculation definitions.
+- Initial goals, budgets, projections, and scenario experiences, with assumptions and uncertainty communicated clearly.
+- Investment and liability presentation appropriate to the agreed initial scope.
+- Responsive, usable interactions across the target iPhone and iPad experiences.
+
+**Validation approach:** Use controlled synthetic datasets to exercise chart layouts, unusual financial patterns, missing data, uncertainty ranges, and interaction behavior. Synthetic data is the appropriate basis for Beta visual and analytical testing; actual personal financial data is not a prerequisite for this stage.
+
+**Beta exit criteria:** The visual and analytical experience operates against controlled datasets, communicates limitations honestly, and is usable through the existing GitHub Pages deployment workflow on target devices.
+
+### 1.0.0 — integrated first product release
+
+**Purpose:** Integrate the Alpha foundation and Beta experience into a coherent, trustworthy application.
+
+Release requires:
+- Alpha and Beta capabilities integrated without weakening data integrity, privacy, or recovery.
+- End-to-end validation using actual financial data only after production storage and authorization gates have been approved.
+- Successful validation of imports, historical migration, categorization and corrections, balances and reports, persistence, backup/restore, and recovery.
+- Clear known limitations, documented operational procedures, and a usable target-device experience.
+- Confirmation that ongoing operation remains within the $0 recurring-cost constraint and does not depend on expiring trials, unauthorized scraping, or stored bank passwords.
+
+**1.0.0 exit criteria:** The integrated application reliably preserves, represents, and explains the owner's financial history and provides the agreed core user-facing experience. If the criteria are not met, defer the release rather than weakening safeguards.
+
+### 2.0.0 — expanded capabilities
+
+**Purpose:** Deliberately expand beyond the first coherent product release.
+
+Potential scope includes deeper investment analysis, more sophisticated planning and projection methods, expanded automation, additional institution integrations where sustainable and authorized, and other advanced capabilities deferred from 1.0.0. Each addition remains subject to privacy, correctness, portability, and $0 recurring-cost constraints.
+
+**2.0.0 scope and exit criteria:** To be defined through subsequent product decisions and roadmap updates; these opportunities are not automatic commitments for 1.0.0.
+
+### Milestone and PR sequencing rules
+
+- Alpha and Beta are deployable development milestones, not public semantic-version releases. The owner should be able to use each milestone through the existing GitHub Pages workflow and perform hands-on smoke tests on target devices before advancing.
+- 1.0.0 and 2.0.0 are product release versions.
+- Synthetic data is sufficient for Beta visual and analytical validation. Real-data acceptance belongs to the 1.0.0 integration/release gate and is permitted only after the relevant security approvals.
+- PR numbers do not prescribe merge order. Sequence work by dependency, reviewability, and readiness; a higher-numbered PR may merge before a lower-numbered PR.
+- Keep documentation/design work and engineering implementation in their appropriate PRs. A roadmap milestone does not silently expand the scope or authorization of an existing PR.
+- PR #25 retains its original synthetic-only storage-readiness and production-acceptance responsibilities. This roadmap update does not authorize production financial-data persistence.
 
 **Status:** Active planning baseline; M1 canonical contract/reference implementation merged; parser, reporting, and storage validation remain open  
 **MVP1 target:** 2027-01-01
@@ -50,51 +115,23 @@ Recorded decisions: integer minor units with decimal-string fallback; preserve s
 
 Phase 0 discovery is substantially complete. The canonical contract and synthetic reference behavior are merged through PR #11. Provider parsers can now be developed against that contract using invented fixtures; production persistence remains separately gated. The Drive probe does not complete the storage/security phase.
 
-## MVP1 — Reliable file-based tracker
-Scope:
-- Modular static HTML/CSS/JavaScript frontend, subject to architecture review.
-- Manual file selection and import.
-- Parsers for verified Wells Fargo, SoFi, and Fidelity CSV formats.
-- Common normalized ledger and import provenance.
-- Idempotent imports, overlap handling, correction and review paths.
-- Deterministic categorization with review for ambiguous records.
-- Cash-flow and wealth reports with documented definitions.
-- Import outcomes, history coverage, and freshness indicators.
-- Private storage/authentication only after a suitable architecture is approved.
-- Portable export and tested backup/recovery.
+## Current delivery work and dependencies
 
-Exit criteria:
-- Synthetic tests cover each supported format and important edge cases.
-- Re-import and overlapping-import tests demonstrate duplicate safety.
-- Totals reconcile with explainable rules.
-- Incomplete coverage and ambiguous rows are clearly represented.
-- Security, deployment, backup, and restore are reviewed and tested.
-- No recurring costs, trial dependency, or private data in the repository.
+The stage definitions above describe the intended product progression, not a claim that all work is complete or that every detailed scope decision is settled. The immediate work is to finish the outstanding product-definition discussion, keep the PR #25 synthetic-only engineering workstream within its agreed boundary, and begin the Alpha implementation in its own reviewable PR(s) when the required design and security decisions are ready.
 
-## MVP2 — Direct-import research and possible automation
-Investigate free, authorized, sustainable production access for Wells Fargo, SoFi, Fidelity brokerage, and Fidelity workplace 401(k). Verify cost, terms, permissions, history depth, supported activity, refresh limits, revocation, and security. Do not rely on stored passwords, unauthorized scraping, commercial production tiers, or expiring trials.
+The following dependencies apply across Alpha and later stages:
 
-Any qualifying integration must feed the same normalization and reconciliation pipeline. Keep file imports permanently. If no qualifying API exists, remaining file-based is an acceptable outcome.
+- Complete production evaluation of private storage, authentication, backup/recovery, and portability before enabling persistence for real financial records.
+- Implement provider parsers against strict, synthetic fixtures and the canonical import contract; keep production data out of public repositories and CI.
+- Preserve manual CSV import as a permanent workflow even if an authorized direct integration is later available.
+- Treat the 540-day (18-month) retention policy for original imported source files separately from the indefinite retention of canonical financial history, unless a future explicit decision changes either policy.
+- Keep simultaneous multi-device use unsupported under the accepted single-active-device operating model; do not imply synchronization guarantees that have not been implemented and tested.
 
-## Suggested sequence
-1. Inspect sanitized sample exports.
-2. Document schemas and author synthetic fixtures.
-3. Define ledger semantics, matching, and reconciliation.
-4. Evaluate storage, authentication, deployment cost, and backups.
-5. Review architecture decisions.
-6. Implement tested parsers and normalization.
-7. Build persistence and UI within the approved security boundary.
-8. Validate end-to-end imports, reconciliation, recovery, and device usability.
-9. Release MVP1.
-10. Continue API research for MVP2.
+## Previous nominal schedule — historical baseline, superseded
 
-Prefer a smaller reliable scope over weakening privacy or correctness to meet a date.
+The schedule below was written for the earlier MVP1/MVP2 framing and the original January 1, 2027 MVP1 target. It is retained as historical context only. It is **not** the schedule for the expanded Alpha/Beta/1.0.0/2.0.0 delivery model, and its dates must not be treated as current commitments.
 
-## Nominal development schedule
-
-These are planning windows, not immovable deadlines. The target remains a usable, trustworthy MVP1 for **January 1, 2027**. Prioritize financial correctness, privacy, and recoverability over visual polish; if a milestone slips, reduce scope or adjust the schedule rather than weakening safeguards.
-
-| Window | Phase | Intended outcomes |
+| Window | Previous phase | Previous intended outcomes |
 | --- | --- | --- |
 | Oct 9–18, 2026 | Requirements and historical baseline | Establish the North Star and constraints; inspect sanitized provider samples; document supported export formats, reporting principles, and the import/reconciliation contract. |
 | Oct 19–Nov 1, 2026 | Data-integration prototype | Finalize the canonical ledger/import-run model; create synthetic fixtures; validate raw CSV mechanics where appropriate; investigate feasible ingestion and storage boundaries. Do not use real financial data until the security architecture is approved. |
@@ -102,11 +139,13 @@ These are planning windows, not immovable deadlines. The target remains a usable
 | Nov 16–29, 2026 | Reporting and historical baseline | Define and implement the first trustworthy cash-flow and wealth reports; migrate only supported annual summary figures from 2023–2026 if feasible, without modifying the archived workbook or inventing missing values. |
 | Nov 30–Dec 20, 2026 | Cutover rehearsal | Exercise imports, overlap handling, reconciliation, exception review, export portability, and backup/restore; test the intended iPhone/iPad workflow. |
 | Dec 21–31, 2026 | Final validation and release preparation | Fix correctness and security issues, verify recovery and deployment, document known limitations, and decide whether the MVP meets its release criteria. |
-| Jan 1, 2027 | Target MVP1 date | Begin using MVP1 only if privacy, correctness, and recovery exit criteria are met; otherwise defer release rather than compromise them. |
+| Jan 1, 2027 | Previous target MVP1 date | Begin using MVP1 only if privacy, correctness, and recovery exit criteria are met; otherwise defer release rather than compromise them. |
+
+A new, dependency-aware schedule should be established after the Alpha scope and its gating dependencies are sufficiently defined. Do not force the expanded product into the previous calendar simply to preserve the old target date.
 
 ### Schedule guardrails
 
-- The dates are nominal and should be re-baselined if discovery reveals a blocking issue, especially around secure private storage and authentication at $0 recurring cost.
+- Prioritize financial correctness, privacy, and recoverability over visual polish or calendar dates.
 - Evaluate the storage/authentication/security architecture before implementing persistence for real records. This is a gating dependency, not a reason to publish private data to a static site.
-- Keep MVP1 focused on reliable manual imports and explainable reporting. Direct integrations remain MVP2 research and are not required for the January 1 target.
-- Treat UI polish as lower priority than data integrity, privacy, transparent calculations, and tested backup/recovery.
+- Keep direct integrations optional and subject to free, authorized, sustainable access; manual file imports remain permanent.
+- Treat the old January 1, 2027 target as historical planning context, not a release promise for 1.0.0.
