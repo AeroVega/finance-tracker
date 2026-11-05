@@ -27,7 +27,7 @@ The owner-confirmed minimum coherent v1.0.0 scope is recorded in Product Definit
 The January 1 date remains conditional on functional completeness, data integrity/security/recovery acceptance, and explicit owner acceptance after reconciliation.
 
 ### Financial definitions and reporting
-- Detailed calculation formulas for income, spending, net cash flow, savings rate, assets, liabilities, net worth, and investment performance, building on the agreed distinctions in Product Definition §4.4.
+- Detailed calculation formulas for income, spending, net cash flow, savings rate, assets, liabilities, net worth, and investment performance, building on the agreed distinctions in Product Definition §4.4. Treat this as a clean mathematical design for the new tracker; do not mechanically port first-generation workbook formulas or quirks.
 - Reporting treatment and date basis for pending activity, refunds, chargebacks, reversals, and corrections.
 - Trade-date versus settlement-date treatment where relevant.
 - Savings-rate denominator and treatment of investment contributions, transfers, employer contributions, and other non-income inflows.
