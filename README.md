@@ -2,7 +2,7 @@
 
 A second-generation personal finance tracker built around trustworthy data, transparent calculations, and privacy-first handling of financial information.
 
-**North Star:** a personal financial intelligence application that helps the user understand their financial position, evaluate possible futures, and make informed decisions. Mobile-first, tablet-friendly, and desktop-capable. The original MVP1 target is **January 1, 2027**, subject to scope and release-readiness review.
+**North Star:** a personal financial intelligence application that helps the user understand their financial position, evaluate possible futures, and make informed decisions. Mobile-first, tablet-friendly, and desktop-capable. The intended **1.0.0 release target is January 1, 2027**, subject to scope and release-readiness gates.
 
 > **Privacy warning:** This repository is public. Never commit real financial data, account exports, statements, credentials, access tokens, or production secrets. Assume everything committed here can be read by anyone.
 
