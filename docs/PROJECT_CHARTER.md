@@ -20,11 +20,11 @@ The current annual spreadsheet workflow is flexible but requires repeated manual
 7. Incremental delivery: file imports first, API automation later if feasible.
 8. Portable data and recoverable backups.
 
-## Existing MVP1 baseline — scope requires re-baselining
+## Historical MVP1 baseline — superseded by the v1.0.0 scope
 
-The outcomes below are the original file-based MVP1 baseline. The expanded second-generation product vision is documented separately. Do not assume every capability in the product definition must be fully mature in v1.0.0, and do not silently expand active PR scopes. The v1.0.0 minimum coherent feature set, acceptance criteria, and schedule must be explicitly re-baselined against the product definition. PR #25 retains its original synthetic-only production-readiness responsibilities.
+The outcomes, success criteria, and non-goals below preserve the original file-based MVP1 planning baseline for historical context. They are not the current v1.0.0 release specification. The owner-confirmed minimum coherent v1.0.0 scope is now recorded in [Product Definition §11](PRODUCT_DEFINITION.md#11-delivery-and-release-philosophy) and the [Roadmap](ROADMAP.md). Do not silently expand active PR scopes. PR #25 retains its original synthetic-only production-readiness responsibilities.
 
-## MVP1 outcomes
+## Historical MVP1 outcomes
 - Import supported CSVs from Wells Fargo, SoFi, and Fidelity.
 - Normalize provider-specific rows into a common model.
 - Prevent duplicates across repeated and overlapping imports.
@@ -34,7 +34,7 @@ The outcomes below are the original file-based MVP1 baseline. The expanded secon
 - Migrate annual summary metrics for 2023–2026 only where the archived source supports them.
 - Keep private records outside public source control.
 
-## Success criteria
+## Historical MVP1 success criteria
 - Each supported format has documented parsing behavior and synthetic tests.
 - Re-imports and overlapping periods do not duplicate ledger records.
 - Reconciliation is explainable and ambiguous rows are reviewable.
@@ -43,7 +43,7 @@ The outcomes below are the original file-based MVP1 baseline. The expanded secon
 - Records can be exported in a portable format.
 - No recurring charges, trial dependency, or private records in the public repository.
 
-## Non-goals for MVP1
+## Historical MVP1 non-goals
 - Automatic bank refresh.
 - Commercial multi-user product.
 - Financial, tax, or investment advice.
