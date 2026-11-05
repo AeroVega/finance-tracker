@@ -26,7 +26,7 @@ Do not infer an answer merely because a topic appears here. Do not reopen settle
 - What are the release-blocking limitations versus acceptable documented limitations?
 
 ### Financial definitions and reporting
-- Final definitions for income, spending, net cash flow, savings rate, assets, liabilities, net worth, and investment performance.
+- Detailed calculation formulas for income, spending, net cash flow, savings rate, assets, liabilities, net worth, and investment performance, building on the agreed distinctions in Product Definition §4.4.
 - Reporting treatment and date basis for pending activity, refunds, chargebacks, reversals, and corrections.
 - Trade-date versus settlement-date treatment where relevant.
 - Savings-rate denominator and treatment of investment contributions, transfers, employer contributions, and other non-income inflows.
