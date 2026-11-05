@@ -17,6 +17,7 @@ These decisions are settled at the product-direction level. Detailed implementat
 - Alpha and Beta are deployable development milestones, not semantic-version product releases. The owner should be able to smoke-test each on target devices through the existing GitHub Pages workflow.
 - PR numbering does not prescribe merge order; dependency and readiness determine sequencing.
 - The prior-generation Excel history is a first-class Alpha input. Monthly aggregate history must retain its granularity and must not be fabricated into transaction-level records.
+- **Release date:** January 1, 2027 is the owner's intended target date for the integrated **1.0.0** release. Alpha and Beta are the deployable development milestones leading to it. The date does not override privacy, correctness, recovery, or other release gates; defer rather than weaken them.
 
 ### Dashboard and application structure
 - The intended primary navigation is **Home | Activity | Accounts | Planning | More**, with the broad responsibilities documented in the Product Definition.
@@ -35,6 +36,17 @@ These decisions are settled at the product-direction level. Detailed implementat
 - Validate every usable transaction date against the declared period. Flag and identify out-of-range dates; do not silently expand the period. The user resolves the discrepancy by adjusting the selected range or investigating the file before finalizing the import.
 - Files with no usable transaction dates require review. Preserve declared coverage, observed transaction-date range, import timestamp, and whether coverage came from source metadata or user declaration as separate facts.
 
+### One-time first-generation Excel history migration
+- Treat the existing Excel workbook as a one-time historical data-conversion input, not a permanent supported import format or a reason to build a general-purpose Excel-import interface.
+- Use a small, purpose-built Python conversion script; the script may be disposable, but converted data, source archive, mapping, reconciliation report, and provenance are durable.
+- Migrate month-by-month summaries from 2023 onward, including monthly net worth, total income and available income-source breakdowns, and total expenses and available primary expense-category breakdowns.
+- Store these as a distinct historical monthly-summary record type, separate from the canonical transaction/activity ledger.
+- Do not reconstruct or fabricate individual transactions from monthly aggregates.
+- Expense subcategory migration is still open pending inspection of the workbook's structure and effort; primary expense categories are in scope.
+- Reconcile source and output month by month, including income-source totals and expense-category totals against their respective monthly totals. Flag missing months, ambiguity, formula errors, and mismatches; do not silently interpolate or correct values.
+- Preserve the original workbook unchanged and retain source workbook/worksheet provenance.
+- Perform the actual conversion and import in a separate engineering PR, after applicable storage/security gates. PR #26 documents the decision and approach only.
+
 ## 2. Explicitly unresolved product decisions
 
 ### User experience and application structure
@@ -49,7 +61,7 @@ These decisions are settled at the product-direction level. Detailed implementat
 - What is the minimum coherent v1.0.0 implementation for each capability in the Product Definition?
 - Which capabilities must be fully implemented at release, and which can have a deliberately limited initial form?
 - What are the measurable acceptance criteria for feature completeness and production readiness?
-- How should the original January 1, 2027 target be re-baselined against the expanded product vision?
+- What detailed, dependency-aware schedule is needed to complete Alpha and Beta and validate the integrated product before the January 1, 2027 1.0.0 target?
 - What are the release-blocking limitations versus acceptable documented limitations?
 
 ### Financial definitions and reporting
