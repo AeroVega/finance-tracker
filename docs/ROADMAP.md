@@ -81,7 +81,6 @@ Potential scope includes deeper investment analysis, more sophisticated planning
 - Keep documentation/design work and engineering implementation in their appropriate PRs. A roadmap milestone does not silently expand the scope or authorization of an existing PR.
 - PR #25 retains its original synthetic-only storage-readiness and production-acceptance responsibilities. This roadmap update does not authorize production financial-data persistence.
 
-**Status:** Active planning baseline; M1 canonical contract/reference implementation merged; parser, reporting, and storage validation remain open
 
 ## Current project position — 2026-10-31
 
