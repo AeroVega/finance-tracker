@@ -96,13 +96,31 @@ Use a controlled standard set of account types in v1.0.0. Users may give account
 
 Financial accounts are persistent entities. Once an account has been created or recognized and associated with financial history, it remains available even when the user stops importing data from that institution or account. The absence of a new import is not evidence that an account has closed, been deleted, or ceased to exist. Preserve its identity and historical relationships, and distinguish stale or missing recent data from an explicitly closed or inactive account. Any future closure, archival, deletion, or status change must be explicit and preserve historical integrity; do not infer it from import inactivity.
 
-### 4.4 Transfers
+### 4.4 Financial activity and reporting semantics
+
+The application must distinguish the economic meaning of financial activity from the movement of money between accounts. A transaction must not be classified as income or expense merely because cash entered or left an account.
+
+Use these distinct concepts throughout the ledger, calculations, dashboards, and reports:
+
+- **Income:** Economic inflows earned or received, such as wages, interest, and dividends. Classify income according to its source and meaning, not simply its deposit into a cash account.
+- **Expenses / spending:** The cost of goods, services, and other consumption or obligations. Spending reports must exclude internal transfers and investment purchases. Credit-card purchases are spending when incurred; paying the card balance is settlement of the liability, not a second expense. Debt principal repayment reduces a liability rather than representing an expense; interest and fees are expenses.
+- **Transfers:** Movement of funds between accounts owned by the user. Transfers are neither income nor spending. Link both sides when evidence supports the relationship and avoid double-counting.
+- **Investment activity:** A distinct activity domain covering contributions and withdrawals, purchases and sales, dividends, interest, fees, and other investment events. An investment purchase or contribution moves existing funds into an investment and is not ordinary household spending or new income. Investment income (such as dividends and interest) retains its income meaning while also remaining identifiable as investment activity. Changes in market value are investment performance, not cash income.
+- **Cash flow:** Movement of cash into and out of cash accounts over a period. Cash-flow reporting must make internal transfers visible as a separate component so users can distinguish gross account movement from flows entering or leaving their overall finances. Net external cash flow excludes transfers between the user's own accounts.
+- **Assets and liabilities:** Assets represent what the user owns; liabilities represent what the user owes. Both contribute to a consolidated financial-position view.
+- **Net worth:** Assets minus liabilities at a point in time. **Change in net worth** compares those positions across dates and can reflect saving, investment performance, debt changes, and valuation changes—not only income minus expenses.
+
+Provide separate, complementary views for **spending** and **total cash movement**. Spending reports answer what the user consumed or paid for; cash-flow reports answer how money moved through accounts and distinguish internal transfers from external inflows and outflows. Investment activity and performance must remain separately inspectable rather than being folded into ordinary spending.
+
+These distinctions are foundational reporting semantics. They must be applied consistently across categorization, account activity, summaries, charts, and projections. Detailed formulas and date-treatment edge cases remain open where identified in the product-decision register.
+
+### 4.5 Transfers
 
 Transfers are a distinct financial activity, not income or spending. Link outgoing and incoming sides when evidence supports the relationship, including transfers across institutions. Avoid double-counting. Uncertain or incomplete pairs require review rather than unsupported assumptions.
 
 This reaffirms the existing canonical ledger decision; it is not a new implementation request.
 
-### 4.5 Categories
+### 4.6 Categories
 
 Provide a standard built-in category set and allow users to manage their categories. Preserve the already-established category semantics: historical classification is retained as recorded; taxonomy changes apply prospectively; renames do not rewrite historical labels; meaningful splits create new identities; merges are prospective; optional subcategories are limited to two classification levels; and manual corrections are auditable, affect the effective historical reporting period, and can be undone through additional events rather than erasing prior history.
 
@@ -110,11 +128,11 @@ The detailed category identity, hierarchy, correction, and compaction rules are 
 
 When the user manually corrects a transaction's category, the correction automatically becomes or updates a reusable deterministic categorization rule by default; no separate confirmation or promotion step is required. The corrected transaction reflects the user's selection, and future transactions matching the resulting rule are categorized consistently. Derive the rule from the explicit correction without inferring a broader pattern than the correction supports. Rules must remain inspectable and maintainable, and corrections must preserve the canonical ledger's audit history and historical meaning. Detailed matching keys, rule representation, precedence, conflict resolution, and rule lifecycle remain engineering design matters.
 
-### 4.6 Multi-currency
+### 4.7 Multi-currency
 
 Multi-currency support belongs in the foundational model, even if the initial setup uses only one currency. Preserve original amounts and currencies. Allow a primary display currency for consolidated views. Converted amounts are derived values; preserve the exchange-rate basis used for historical reporting so past reports remain explainable and do not silently change with today's rates.
 
-### 4.7 Investments
+### 4.8 Investments
 
 Investments are a first-class financial domain, not merely a balance displayed beside checking accounts. The intended experience includes:
 - Portfolio overview and allocation.
@@ -125,7 +143,7 @@ Investments are a first-class financial domain, not merely a balance displayed b
 
 The user should be able to move from an overall portfolio view to accounts, holdings, and activity. Existing historical-retention decisions for monthly investment values, holdings, and cash-flow/performance components remain applicable.
 
-### 4.8 Liabilities and debt
+### 4.9 Liabilities and debt
 
 Liabilities are first-class financial entities and contribute to net worth. The initial experience should support standard debt types such as credit cards, mortgages, and auto loans.
 
