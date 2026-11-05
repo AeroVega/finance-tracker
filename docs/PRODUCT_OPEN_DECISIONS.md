@@ -19,11 +19,12 @@ Do not infer an answer merely because a topic appears here. Do not reopen settle
 - Which settings belong in the first release, and how should advanced settings be organized?
 
 ### v1.0.0 scope and release criteria
-- What is the minimum coherent v1.0.0 implementation for each capability in the Product Definition?
-- Which capabilities must be fully implemented at release, and which can have a deliberately limited initial form?
-- What are the measurable acceptance criteria for feature completeness and production readiness?
-- What detailed, dependency-aware schedule is needed to complete Alpha and Beta and validate the integrated product before the January 1, 2027 1.0.0 target?
-- What are the release-blocking limitations versus acceptable documented limitations?
+The owner-confirmed minimum coherent v1.0.0 scope is recorded in Product Definition §11 and the Roadmap. The remaining open work is:
+- What measurable acceptance criteria demonstrate that each minimum-scope capability is functionally complete and production-ready?
+- What dependency-aware schedule and sequencing can realistically complete Alpha, Beta, integration, and owner validation before the January 1, 2027 target?
+- Which residual limitations are release-blocking versus acceptable when clearly documented?
+
+The January 1 date remains conditional on functional completeness, data integrity/security/recovery acceptance, and explicit owner acceptance after reconciliation.
 
 ### Financial definitions and reporting
 - Detailed calculation formulas for income, spending, net cash flow, savings rate, assets, liabilities, net worth, and investment performance, building on the agreed distinctions in Product Definition §4.4.
