@@ -5,7 +5,7 @@
 **Target release:** v1.0.0  
 **Last updated:** 2026-11-05
 
-This document captures the product direction and owner-approved principles established during the November 2, 2026 product-design discussion. It is intended to guide future product, architecture, implementation, and review sessions.
+This document captures the product direction and owner-approved principles established during the November 2–5, 2026 product-design discussions. It is intended to guide future product, architecture, implementation, and review sessions.
 
 It is a product specification, not an implementation plan or authorization to enable production financial-data persistence. Detailed technical contracts and release gates remain in their existing architecture and acceptance documents. Where this document identifies a conflict with an existing approved technical constraint, the conflict is called out rather than silently resolved.
 
@@ -112,7 +112,7 @@ Use these distinct concepts throughout the ledger, calculations, dashboards, and
 
 Provide separate, complementary views for **spending** and **total cash movement**. Spending reports answer what the user consumed or paid for; cash-flow reports answer how money moved through accounts and distinguish internal transfers from external inflows and outflows. Investment activity and performance must remain separately inspectable rather than being folded into ordinary spending.
 
-These distinctions are foundational reporting semantics. They must be applied consistently across categorization, account activity, summaries, charts, and projections. Detailed formulas and date-treatment edge cases remain open where identified in the product-decision register.
+These distinctions are foundational reporting semantics. They must be applied consistently across categorization, account activity, summaries, charts, and projections. The first-generation workbook is a historical data source for migration, not the mathematical authority for the new application: do not mechanically reproduce its formulas or calculation quirks. Design new formulas using sound, consistent, explainable financial methodology. Detailed formulas and date-treatment edge cases remain open where identified in the product-decision register.
 
 ### 4.5 Transfers
 
@@ -183,7 +183,9 @@ A lightweight initial budget experience may include periodic category targets, a
 
 Provide a dedicated Insights experience that the user can visit. Do not default to unsolicited push notifications. Insights should identify meaningful patterns and risks—such as spending changes, savings pace, cash-flow risk, unusual activity, or projection outcomes—and explain the evidence and assumptions.
 
-For potentially low balances or cash-flow problems, provide useful analysis: when a threshold may be crossed, estimated magnitude and duration, uncertainty, sensitivity to assumptions, and whether the issue appears temporary or sustained. Avoid generic or obvious advice. Offer scenario exploration; leave financial decisions to the user.
+For potentially low balances or cash-flow problems, provide useful analysis: when a threshold may be crossed, estimated magnitude and duration, uncertainty, sensitivity to assumptions, and whether the issue appears temporary or sustained. Avoid generic or obvious advice.
+
+Insights may include actionable recommendations when supported by reliable financial evidence. Present the progression from observation to interpretation to an optional recommendation. Recommendations must be specific, explainable, proportionate to the evidence, and disclose material assumptions and uncertainty. They must preserve user control and never modify financial records, budgets, goals, or planning assumptions without explicit user action. When data is incomplete or unreliable, qualify the finding or withhold a recommendation rather than guessing. Not every insight needs a recommendation; descriptive or analytical findings remain appropriate when no meaningful action is warranted. Offer scenario exploration; leave financial decisions to the user.
 
 Use progressive transparency: concise finding first, then analysis, then supporting records and methodology.
 
@@ -284,7 +286,7 @@ Use semantic versioning:
 
 Preserve backward compatibility where reasonable, keep financial history portable, and make breaking changes deliberate and explainable.
 
-The existing January 1, 2027 MVP1 target is a planning target, not permission to weaken correctness, privacy, recovery, or production-readiness requirements. The v1.0.0 feature scope and schedule must be re-baselined against this product definition rather than assuming every capability described here must be fully mature on that date.
+The January 1, 2027 v1.0.0 target is a planning target, not permission to weaken correctness, privacy, recovery, or production-readiness requirements. The owner-confirmed minimum feature scope is recorded below; the detailed dependency-aware delivery schedule and measurable acceptance criteria remain to be established.
 
 ### Minimum coherent v1.0.0 scope — owner-confirmed 2026-11-05
 
@@ -299,7 +301,7 @@ The January 1, 2027 target is for a minimum coherent, trustworthy replacement fo
 | Financial reporting | Provide trustworthy income, spending, cash-flow, savings, and net-worth reporting. |
 | Historical trends | Present migrated financial history with monthly detail and clearly distinguish workbook-derived summaries from imported transactions. |
 | Private storage | Google Drive persistence, authentication, recovery, backup, and portable export must pass their applicable acceptance and authorization gates. |
-| Core interface | Provide a usable Home, Activity, Accounts, and More experience on iPhone and iPad. |
+| Core interface | Provide a usable Home, Activity, Accounts, Planning, and More experience on iPhone and iPad. |
 
 The following capabilities should have useful but deliberately limited initial implementations rather than their eventual advanced forms:
 
