@@ -94,6 +94,8 @@ Also provide a consolidated financial-position view. Switching perspectives must
 
 Use a controlled standard set of account types in v1.0.0. Users may give accounts their own names, but arbitrary custom account types are deferred to a future release. Keep the model extensible enough to add them later without rewriting historical records.
 
+Financial accounts are persistent entities. Once an account has been created or recognized and associated with financial history, it remains available even when the user stops importing data from that institution or account. The absence of a new import is not evidence that an account has closed, been deleted, or ceased to exist. Preserve its identity and historical relationships, and distinguish stale or missing recent data from an explicitly closed or inactive account. Any future closure, archival, deletion, or status change must be explicit and preserve historical integrity; do not infer it from import inactivity.
+
 ### 4.4 Transfers
 
 Transfers are a distinct financial activity, not income or spending. Link outgoing and incoming sides when evidence supports the relationship, including transfers across institutions. Avoid double-counting. Uncertain or incomplete pairs require review rather than unsupported assumptions.
@@ -105,6 +107,8 @@ This reaffirms the existing canonical ledger decision; it is not a new implement
 Provide a standard built-in category set and allow users to manage their categories. Preserve the already-established category semantics: historical classification is retained as recorded; taxonomy changes apply prospectively; renames do not rewrite historical labels; meaningful splits create new identities; merges are prospective; optional subcategories are limited to two classification levels; and manual corrections are auditable, affect the effective historical reporting period, and can be undone through additional events rather than erasing prior history.
 
 The detailed category identity, hierarchy, correction, and compaction rules are governed by the canonical ledger/PR25 acceptance decisions. Do not replace them with a simpler retroactive-recategorization model.
+
+When the user manually corrects a transaction's category, the correction automatically becomes or updates a reusable deterministic categorization rule by default; no separate confirmation or promotion step is required. The corrected transaction reflects the user's selection, and future transactions matching the resulting rule are categorized consistently. Derive the rule from the explicit correction without inferring a broader pattern than the correction supports. Rules must remain inspectable and maintainable, and corrections must preserve the canonical ledger's audit history and historical meaning. Detailed matching keys, rule representation, precedence, conflict resolution, and rule lifecycle remain engineering design matters.
 
 ### 4.6 Multi-currency
 
@@ -188,7 +192,11 @@ CSV upload should be a prominent, readily accessible Home action because importi
 
 Insights should have a dedicated experience that is easy to reach, not be buried among infrequently used settings. A prominent Home card may serve as an entry point to that experience; whether Insights ultimately warrants a separate primary navigation destination remains open.
 
-The first-run experience should prioritize getting useful financial history into the application. Initial setup should be lightweight and should not require a lengthy guided tutorial. Without imported or migrated data, most of the product has little value. The exact screens, sequence, and recovery behavior remain open design work.
+The first-run experience should prioritize getting useful financial history into the application. Initial setup should be lightweight and should not require a lengthy guided tutorial. Without imported or migrated data, most of the product has little value.
+
+After the user establishes authorized access to Google Drive and selects or confirms the primary Finance Tracker database directory, the application should validate the database identity, folder binding, manifest, and primary role under the accepted database lifecycle contract. A folder name or remembered path alone is not sufficient proof. If the selected directory is empty, unrecognized, or cannot be verified as the primary database, follow the established initialization, inspection, or recovery process; never silently create, overwrite, or switch databases. If Drive access is unavailable, explain the access or recovery state rather than presenting financial history as empty or zero.
+
+Once the authoritative Drive data is accessible, show the user's migrated historical financial summaries immediately. Do not require current Wells Fargo, SoFi, or Fidelity imports before presenting useful historical information. Clearly distinguish the available historical baseline from current institution data that has not yet been imported. The exact screens, sequence, and recovery behavior remain open design work.
 
 ## 7. Data quality, history, and trust
 
@@ -235,6 +243,7 @@ Examples and detailed behavior should follow the existing canonical ledger, cate
 
 - No financial information may be transmitted to services outside the user's own storage provider.
 - Google Drive is the selected private-storage direction, subject to the existing production-readiness gates.
+- First-run setup must establish the user's primary Finance Tracker database directory in Google Drive and validate its identity and primary role under the accepted database lifecycle contract before using it. Do not silently initialize, overwrite, or switch to an unverified directory.
 - GitHub Pages is public static hosting and must never serve private financial records.
 - No bank passwords, unauthorized scraping, third-party AI, paid recurring dependencies, expiring trials, or financial-data analytics/advertising services.
 - Manual file import remains permanent.
