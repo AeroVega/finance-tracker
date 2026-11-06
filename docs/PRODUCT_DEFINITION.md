@@ -185,9 +185,9 @@ Preserve past forecasts as historical projections with their assumptions and inf
 
 Budgeting is optional. The application must be useful without user-created budgets. Where used, budgets represent user intent (targets), while projections estimate likely outcomes. Actual activity connects the two.
 
-A lightweight initial budget experience may include periodic category targets, actual-versus-target comparisons, remaining budget, projected end-of-period spending, historical comparisons, and optional savings targets. Exceeding a target is information, not a moral judgment or product failure.
+A lightweight initial budget experience may include periodic category targets, actual-versus-target comparisons, remaining budget, projected end-of-period spending, and historical comparisons. Exceeding a target is information, not a moral judgment or product failure.
 
-**Owner-confirmed 2026-11-06:** Initial budgets apply at the main category level only. Subcategory budgets are deferred as a possible compatible 1.x addition, without a committed date or allocation design. Category budgets use calendar months, with each month starting fresh. Unused budget does not carry forward into the next month. Keep previous months available for comparison. Budget-target changes apply to the current month onward, while previous months retain their targets for honest comparisons. Savings transfers, overspend carryover, retroactive target overrides, and prorating remain unspecified.
+**Owner-confirmed 2026-11-06:** Initial budgets cover spending categories only, at the main category level. Income targets and savings goals belong to separate later planning features; no later release date or v1.0.0 goals requirement is implied. Subcategory budgets are deferred as a possible compatible 1.x addition, without a committed date or allocation design. Category budgets use calendar months, with each month starting fresh. Unused budget does not carry forward into the next month. Keep previous months available for comparison. Budget-target changes apply to the current month onward, while previous months retain their targets for honest comparisons. Savings transfers, overspend carryover, retroactive target overrides, and prorating remain unspecified.
 
 ### 5.6 Insights
 
