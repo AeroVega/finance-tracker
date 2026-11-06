@@ -395,20 +395,17 @@ Before importing, the conversion must produce a reviewable output and reconcilia
 
 The actual workbook inspection, conversion script, reconciliation, and import will be implemented in a separate, dedicated engineering PR. PR #26 records the product decision and migration approach only; it does not perform the migration or authorize use of real financial data before the applicable storage/security gates.
 
-## 12. PR #25 scope boundary — do not expand
+## 12. PR #25 scope boundary — synthetic implementation merged; production remains gated
 
-PR #25 remains responsible for its original synthetic-only storage-readiness and acceptance work, as documented in [PR #25 acceptance record](https://github.com/AeroVega/finance-tracker/blob/feat/production-readiness-acceptance/docs/PR25_ACCEPTANCE.md) and [pull request #25](https://github.com/AeroVega/finance-tracker/pull/25). The product vision in this document does **not** add reporting, investments, debt, budgeting, goals, projections, insights, or other product features to PR #25.
+PR #25's synthetic-only storage-readiness implementation is merged. Its scope included backup/restore portability, immutable snapshot verification, source-retention primitives, and synthetic acceptance workflows. The product vision in this document does **not** add reporting, investments, debt, budgeting, goals, projections, insights, or other product features to PR #25.
 
-The PR #25 workstream must still complete its originally assigned responsibilities, including:
-- Reconcile the physical object-locator model with accepted database identity/lifecycle ADR §81.
-- Wire backup/restore and portability to the actual Drive adapters and complete live synthetic backup, quarantine, portable-export, and restore rehearsals.
-- Complete original-source retention metadata and actual Drive deletion/confirmed-absence verification under the approved 540-day source-file policy.
-- Perform real browser interruption/reload recovery rehearsals at transaction boundaries.
-- Test OAuth expiry, revocation, wrong-account, denied-permission, and reconnect behavior.
-- Review the actual Cloud project configuration, OAuth publishing status/scopes/restrictions, quota and usage, current terms/billing, Google's announced 2026 quota/billing changes, and the $0 recurring-cost constraint.
-- Obtain explicit owner acceptance of the evidence and residual risks.
+Owner-reported synthetic acceptance evidence is recorded in the [PR #25 acceptance record](https://github.com/AeroVega/finance-tracker/blob/main/docs/PR25_ACCEPTANCE.md) and [implementation handoff](https://github.com/AeroVega/finance-tracker/blob/main/docs/PR25_IMPLEMENTATION_HANDOFF.md). That evidence is distinct from automated CI and does not remove the documented limitations. Remaining owner review includes:
+- Review the residual deletion-receipt recovery limitation and its conservative retry behavior.
+- Inspect the actual Cloud OAuth audience/scopes, API-key restrictions, assigned quotas, usage, and billing.
+- Complete final privacy/security inspection of the deployed artifact and browser storage/network behavior.
+- Manage private local exports and expired source copies, which a static app cannot remotely erase.
 
-PR #25 remains synthetic-only. Its merge does not authorize production financial-data persistence. Do not treat this product document as a release approval or a change to PR #25's acceptance criteria.
+PR #25 remains synthetic-only. Its merge does **not** authorize production financial-data persistence. Production use remains NO-GO until a separate design/approval milestone is completed and a separate implementation PR is reviewed and explicitly authorized. Do not treat this product document as release approval or as a change to the PR #25 acceptance evidence.
 
 ## 13. Relationship to existing authoritative documents
 
