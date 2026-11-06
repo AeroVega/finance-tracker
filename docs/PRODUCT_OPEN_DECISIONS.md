@@ -331,7 +331,7 @@ These are documentation or engineering follow-ups, not new owner decisions:
 2. **Later versions.** The "2.0.0 expanded capabilities" paragraphs may read as reserving all refinements for 2.0.0, while [Product §11][product-minimum] and [Roadmap minimum scope][roadmap-minimum] explicitly allow compatible 1.x additions. Later capabilities are candidates, not automatic commitments to a major version.
 3. **Historical migration.** [Data Model's annual-summary proposal][data-model-history] is stale against the later [monthly migration decision][product-migration]. Preserve monthly summaries from 2023 onward. Workbook refund labels are historical evidence, not approval to count refunds as income in the new tracker. Expense-subcategory migration remains subject to workbook inspection, as §11.1 already states.
 4. **Liability schema.** The [canonical account-type enum][ledger-account] lists checking, savings, credit card, brokerage, retirement, and other, while [Product §4.9][product-liabilities] names mortgages and auto loans. Engineering must specify a compatible representation; neither list silently cancels the other.
-5. **Stale status.** The [Data Model introduction][data-model-history] still calls the canonical contract proposed, while [Roadmap M1 status][roadmap-m1] records it merged. PR26's README and Product §13 also retain older PR24/PR25 status wording. Consult the current accepted contracts and [merged PR25 acceptance record][pr25-acceptance]; a merge does not authorize production data.
+5. **Stale status.** The [Data Model introduction][data-model-history] still calls the canonical contract proposed, while [Roadmap M1 status][roadmap-m1] records it merged. That Data Model wording remains a documentation follow-up; PR26's README and Product Definition now reflect the merged PR24/PR25 status. Consult the current accepted contracts and [merged PR25 acceptance record][pr25-acceptance]; a merge does not authorize production data.
 
 
 ## Other later opportunities already identified
@@ -375,7 +375,7 @@ Compatible additions may fit a minor release. No feature or date is committed me
 [product-minimum]: PRODUCT_DEFINITION.md#minimum-coherent-v100-scope--owner-confirmed-2026-11-05
 [product-milestones]: PRODUCT_DEFINITION.md#development-milestones-alpha--beta--100--200
 [product-migration]: PRODUCT_DEFINITION.md#111-one-time-migration-of-first-generation-excel-history
-[product-pr25]: PRODUCT_DEFINITION.md#12-pr-25-scope-boundary--do-not-expand
+[product-pr25]: PRODUCT_DEFINITION.md#12-pr-25-scope-boundary--synthetic-implementation-merged-production-remains-gated
 [roadmap-beta]: ROADMAP.md#beta--visual-and-analytical-experience
 [roadmap-minimum]: ROADMAP.md#owner-confirmed-minimum-v100-scope--2026-11-05
 [roadmap-sequencing]: ROADMAP.md#milestone-and-pr-sequencing-rules
