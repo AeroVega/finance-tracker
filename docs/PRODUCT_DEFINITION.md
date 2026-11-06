@@ -189,6 +189,8 @@ A lightweight initial budget experience may include periodic category targets, a
 
 **Owner-confirmed 2026-11-06:** Initial budgets cover spending categories only, at the main category level. Income targets and savings goals belong to separate later planning features; no later release date or v1.0.0 goals requirement is implied. Subcategory budgets are deferred as a possible compatible 1.x addition, without a committed date or allocation design. Category budgets use calendar months, with each month starting fresh. Unused budget does not carry forward into the next month. Keep previous months available for comparison. Budget-target changes apply to the current month onward, while previous months retain their targets for honest comparisons. Savings transfers, overspend carryover, retroactive target overrides, and prorating remain unspecified.
 
+**Owner-confirmed 2026-11-06:** Show each budget's target, actual spending, and amount remaining or over target. Include an estimated month-end total when there is enough data, clearly label it as an estimate, and use neutral wording. The exact visualization and the criteria for sufficient forecast data remain to be designed.
+
 ### 5.6 Insights
 
 Provide a dedicated Insights experience that the user can visit. Do not default to unsolicited push notifications. Insights should identify meaningful patterns and risks—such as spending changes, savings pace, cash-flow risk, unusual activity, or projection outcomes—and explain the evidence and assumptions.

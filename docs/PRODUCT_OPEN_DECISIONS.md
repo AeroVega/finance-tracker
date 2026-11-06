@@ -84,7 +84,8 @@ Goals are optional. Purchase savings, emergency reserves, debt payoff, and inves
 - [x] ~~How do parent and subcategory actuals aggregate?~~ The hierarchy has two classification levels. A parent with subcategories is a reporting parent; child totals roll up without double-counting. Historical assignments and taxonomy changes preserve their established meanings. See [PR25 category decisions][pr25-history] and [Product §4.6][product-categories].
 - [x] ~~Are subcategory budgets part of the initial release?~~ Owner-confirmed 2026-11-06: keep initial budgets at the main category level. Subcategory budgeting may be considered for a compatible 1.x release; no date or shared-allowance allocation design was approved. See [Product §5.5][product-planning].
 - [ ] For later subcategory budgeting, how should parent and child targets interact, share limits, and handle historical parent-level actuals? The category rules settle actuals classification, not budget allocation. This is not a v1.0.0 requirement.
-- [ ] How should overspending, remaining budgets, and any projected period-end totals be presented? Any overspend carryover behavior remains open. Neutral, non-judgmental wording is already required by [Product §5.5][product-planning].
+- [x] ~~Which values and wording should the budget display use?~~ Owner-confirmed 2026-11-06: show the target, actual spending, and remaining or over-target amount, plus a clearly labeled estimated month-end total when enough data is available. Use neutral wording. See [Product §5.5][product-planning].
+- [ ] What exact visualization communicates those values, and what forecast-data sufficiency criteria should govern month-end estimates? Overspend carryover behavior remains open.
 
 ### Multi-currency
 
