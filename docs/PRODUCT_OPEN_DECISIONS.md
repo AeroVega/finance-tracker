@@ -55,7 +55,8 @@ This register preserves unanswered product questions without reopening decisions
 ### Projection methodology
 
 - [x] ~~What forecast horizon should v1.0.0 use?~~ Owner-confirmed 2026-11-06: use three months initially. Extending to at least a full year is a later aspiration, without a committed date or release. See [Product §5.1][product-planning].
-- [ ] What time granularity and update cadence should the baseline projection use?
+- [x] ~~What forecast granularity should v1.0.0 show?~~ Owner-confirmed 2026-11-06: show projected month-end cash balances for each of the next three months. Daily projected balances are deferred; no implementation-effort estimate is established. See [Product §5.1][product-planning].
+- [ ] What update cadence should the baseline projection use?
 - [ ] How should historical activity become baseline assumptions, including seasonality and unusual one-off activity?
 - [ ] How should users enter and revise future assumptions?
 - [x] ~~Must scenarios change actual records, and may old forecasts be replaced silently?~~ Named alternatives leave actual records unchanged. Historical forecasts retain their assumptions and then-available information for comparison with actual outcomes. See [Product §§5.3 and 5.4][product-planning].
@@ -66,7 +67,7 @@ This register preserves unanswered product questions without reopening decisions
 - [x] ~~Are sophisticated forecasts and scenario-management capabilities required for the initial release?~~ v1.0.0 requires a straightforward baseline cash-balance projection with stated assumptions. Goals and saved what-if scenarios are explicitly deferred, as is sophisticated forecasting. See [minimum v1.0.0 scope][product-minimum] and [Roadmap Beta scope][roadmap-beta].
 - [x] ~~Which outcome should the first baseline projection estimate?~~ Owner-confirmed 2026-11-06: start with cash balance. Net-worth projection is lower priority. Calculation methodology remains open. See [Product §5.1][product-planning].
 - [x] ~~Which accounts and movements define cash for the baseline projection?~~ Owner-confirmed 2026-11-06: combine checking and savings accounts, exclude investments and available credit, and treat transfers between included accounts as having no effect on the combined balance. See [Product §5.1][product-planning].
-- [ ] What constitutes a useful complete initial cash-balance projection within that boundary and the three-month horizon? Methodology, time granularity, and update cadence remain open; later projection types need separate prioritization.
+- [ ] What constitutes a useful complete initial cash-balance projection within that boundary and the three-month horizon? Methodology and update cadence remain open; later projection types need separate prioritization.
 
 ### Goals
 
@@ -171,7 +172,7 @@ The questions below concern later goals. Purchase savings, emergency reserves, d
 
 These are documentation or engineering follow-ups, not new owner decisions:
 
-1. **Resolved: Beta planning scope.** The owner confirmed on 2026-11-06 that v1.0.0 planning is limited to basic category budgets and a baseline cash-balance projection. Goals and saved what-if scenarios are deferred. [Product §11's Beta paragraph][product-milestones] and [Roadmap Beta][roadmap-beta] now match that scope. The baseline projection's methodology, time granularity, and update cadence remain open.
+1. **Resolved: Beta planning scope.** The owner confirmed on 2026-11-06 that v1.0.0 planning is limited to basic category budgets and a baseline cash-balance projection. Goals and saved what-if scenarios are deferred. [Product §11's Beta paragraph][product-milestones] and [Roadmap Beta][roadmap-beta] now match that scope. The baseline projection's methodology and update cadence remain open.
 2. **Later versions.** The "2.0.0 expanded capabilities" paragraphs may read as reserving all refinements for 2.0.0, while [Product §11][product-minimum] and [Roadmap minimum scope][roadmap-minimum] explicitly allow compatible 1.x additions. Later capabilities are candidates, not automatic commitments to a major version.
 3. **Historical migration.** [Data Model's annual-summary proposal][data-model-history] is stale against the later [monthly migration decision][product-migration]. Preserve monthly summaries from 2023 onward. Workbook refund labels are historical evidence, not approval to count refunds as income in the new tracker. Expense-subcategory migration remains subject to workbook inspection, as §11.1 already states.
 4. **Liability schema.** The [canonical account-type enum][ledger-account] lists checking, savings, credit card, brokerage, retirement, and other, while [Product §4.9][product-liabilities] names mortgages and auto loans. Engineering must specify a compatible representation; neither list silently cancels the other.

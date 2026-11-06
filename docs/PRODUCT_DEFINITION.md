@@ -167,7 +167,7 @@ For v1.0.0, manual liability creation and periodic balance updates are acceptabl
 
 Projections are a core capability. They estimate likely future outcomes using observed financial history, current circumstances, and explicit future assumptions. They should remain useful even when the user has not created budgets or goals.
 
-**Owner-confirmed 2026-11-06:** The initial baseline projection estimates the combined cash balance of checking and savings accounts, excluding investments and available credit. Transfers between included accounts do not change that combined balance. Net-worth projection is a lower-priority candidate for later work. The v1.0.0 forecast horizon is three months. The owner wants to extend it to at least a full year eventually, without a committed date or later release. Time granularity, update cadence, and calculation methodology remain open.
+**Owner-confirmed 2026-11-06:** The initial baseline projection estimates the combined cash balance of checking and savings accounts, excluding investments and available credit. Transfers between included accounts do not change that combined balance. Net-worth projection is a lower-priority candidate for later work. The v1.0.0 forecast horizon is three months. The owner wants to extend it to at least a full year eventually, without a committed date or later release. For v1.0.0, show projected month-end cash balances for each of the next three months. Daily projected balances are deferred. Update cadence and calculation methodology remain open.
 
 ### 5.2 Goals
 
