@@ -116,6 +116,8 @@ Provide separate, complementary views for **spending** and **total cash movement
 
 **Owner-confirmed 2026-11-06:** Count a refund against its original spending category in the month the refund posts. A partial refund reduces spending only by the refunded amount, in the month it posts. Do not treat refunds as income or restate the earlier purchase month solely because of the refund. The desired experience includes a persistent, navigable link to the original expense when the relationship can be established. Engineering must assess how the storage model can support that link and specify feasibility, matching, and implementation details; this is a desired capability, not a claim that it is implemented.
 
+**Owner-confirmed 2026-11-06:** An unmatched refund keeps a clear refund type label, is visibly marked for review, and allows the user to assign a spending category manually. Do not guess its category or original expense, or classify it as income. Its transaction type, spending category, and review status are separate concepts.
+
 **Owner-confirmed 2026-11-06:** When the bank corrects a duplicate or erroneous charge, correct the original reporting period's effective totals while preserving the audit trail. Clearly label the bank correction and its relationship to the original error, so the error is not presented as real spending followed by a refund. This treatment applies to identified bank corrections; a credit alone does not establish that it is a correction.
 
 These distinctions are foundational reporting semantics. They must be applied consistently across categorization, account activity, summaries, charts, and projections. The first-generation workbook is a historical data source for migration, not the mathematical authority for the new application: do not mechanically reproduce its formulas or calculation quirks. Design new formulas using sound, consistent, explainable financial methodology. Detailed formulas and date-treatment edge cases remain open where identified in the product-decision register.
@@ -185,6 +187,8 @@ Budgeting is optional. The application must be useful without user-created budge
 
 A lightweight initial budget experience may include periodic category targets, actual-versus-target comparisons, remaining budget, projected end-of-period spending, historical comparisons, and optional savings targets. Exceeding a target is information, not a moral judgment or product failure.
 
+**Owner-confirmed 2026-11-06:** Initial budgets apply at the main category level only. Subcategory budgets are deferred as a possible compatible 1.x addition, without a committed date or allocation design. Category budgets use calendar months, with each month starting fresh. Unused budget does not carry forward into the next month. Keep previous months available for comparison. Budget-target changes apply to the current month onward, while previous months retain their targets for honest comparisons. Savings transfers, overspend carryover, retroactive target overrides, and prorating remain unspecified.
+
 ### 5.6 Insights
 
 Provide a dedicated Insights experience that the user can visit. Do not default to unsolicited push notifications. Insights should identify meaningful patterns and risks—such as spending changes, savings pace, cash-flow risk, unusual activity, or projection outcomes—and explain the evidence and assumptions.
@@ -211,6 +215,8 @@ The intended primary navigation is:
 - **Accounts:** institutions, individual accounts, balances, holdings, assets, and liabilities.
 - **Planning:** goals, budgets, projections, and scenarios.
 - **More:** settings, data management, diagnostics, and less frequently used functions.
+
+**Owner-confirmed 2026-11-06:** Activity must let the user search, filter, sort, and group transactions by clear, consistent built-in transaction type labels in v1.0.0. Refund, bank correction, paycheck, and purchase are examples, not an exhaustive taxonomy. Transaction type is separate from categories such as groceries and from review status, so the user can find all refunds or just grocery refunds. Arbitrary custom tags are deferred to later releases. The complete built-in type set, its mapping to the canonical ledger, and the detailed controls remain to be specified; this records the intended behavior, not an implemented feature.
 
 Home should use a flexible two-column bento-style arrangement of dashboard cards rather than a rigid uniform grid. Cards may vary in size and height. A net-worth trend chart is one card among others, not a mandatory full-width banner. Other useful cards may include a category breakdown, recent transactions, and current financial-position summaries. Each card should open the relevant detailed experience when selected.
 
