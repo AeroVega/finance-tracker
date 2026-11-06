@@ -1,5 +1,7 @@
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
+import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
+import { validateSyntheticApplicationSnapshot } from '../js/synthetic-application-structure.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { createLedger, registerAccount, prepareCanonicalImport, applyReviewDecision, applyFinancialEvent, reverseReviewDecision, getEffectiveActivities, summarizeLedger } from '../js/canonical-import.mjs';
 
@@ -16,6 +18,7 @@ let pauseAfterFirstWrite = false;
 let busy = false, configured = false, ledger = null, store = null, parsed = null, dirty = false;
 let mappingForms = [];
 let previewGeneration = 0, parsedFixture = null;
+let acceptanceListener = null;
 const element = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
 const inputMessages = Object.freeze({
   'account-mapping-required': 'Choose a destination for every source account.',
@@ -51,6 +54,7 @@ function refresh() {
   if ($('pause-canonical')) $('pause-canonical').disabled = $('save').disabled;
   $('event').disabled = busy || !ready || !store || !$('activity').value;
   $('summarize').disabled = busy || !ledger;
+  acceptanceListener?.({ ready: Boolean(ready && store && ledger && !dirty), busy });
   $('dirty').textContent = !ledger ? 'No ledger loaded.' : dirty ? 'Unsaved local changes. Closing this tab loses them.' : 'No unsaved changes. This is a new empty ledger or verified saved records.';
 }
 const storage = new DashboardSyntheticStorage({
@@ -243,3 +247,47 @@ window.addEventListener('beforeunload',event=>{ if(dirty||busy){event.preventDef
 window.addEventListener('online',refresh); window.addEventListener('offline',refresh);
 storage.prepare().then(()=>{configured=true;refresh();}).catch(()=>{$('connection').textContent='Google configuration unavailable. No data saved. Use the configured synthetic deployment.';refresh();});
 refresh();
+
+// Narrow module-only integration. No token, folder, adapter or lifecycle handle is
+// placed on window. The lease blocks all manual controls and repeated starts.
+export async function withAcceptanceWorkbench(operation) {
+  if (busy) inputError('operation-in-progress');
+  const lifecycle = storage.lifecycle;
+  if (!store || !ledger || dirty || lifecycle?.state !== 'ready' || !lifecycle.acceptingWrites || navigator.onLine === false) inputError('verified-clean-connection-required');
+  busy = true; refresh();
+  const ready = () => {
+    if (storage.lifecycle !== lifecycle || lifecycle.state !== 'ready' || !lifecycle.acceptingWrites || navigator.onLine === false) inputError('reconnect-required');
+  };
+  const reopen = async () => { ready(); await loadLedger(); return structuredClone(ledger); };
+  try {
+    return await operation(Object.freeze({
+      async requireFresh() {
+        ready();
+        const manifest = await lifecycle.readManifest();
+        if (manifest.syntheticOnly !== true || manifest.revision !== 0 || Object.keys(manifest.snapshot || {}).length || manifest.catalogFinalizationPending !== null) inputError('fresh-empty-copy-required');
+        if (await store.load() !== null || store.base?.revision !== 0 || Object.keys(store.base?.snapshot || {}).length || store.base?.syntheticOnly !== true || store.base?.catalogFinalizationPending !== null) inputError('fresh-empty-copy-required');
+        // The store uses this verified base and will refuse any competing change.
+      },
+      async identity() { ready(); const manifest = await lifecycle.readManifest(); return { databaseId: manifest.databaseId, copyId: manifest.copyId, folderId: lifecycle.folderId }; },
+      stage(next) { ready(); changed(next); },
+      async save(next) { ready(); const saved = await store.save(next); ledger = saved; dirty = false; renderLedger(); return structuredClone(saved); },
+      reopen,
+      async verifyPortable() {
+        ready();
+        const archive = await exportCatalogArchive({ adapter: lifecycle.transactionAdapter, manifestFileId: lifecycle.manifestFileId,
+          withSourceLock: operation => lifecycle.coordinator.withWrite(operation), validateStructure: validateSyntheticApplicationSnapshot });
+        await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });
+        // The archive is neither downloaded, shared nor stored in checklist state.
+      },
+      async revalidate() { ready(); await lifecycle.handleOnline(); ready(); },
+      async release() {
+        ready(); if (dirty) inputError('unsaved-changes');
+        await storage.release();
+        if (lifecycle.started || lifecycle.coordinator?.canWrite || lifecycle.releasePending) inputError('release-unverified');
+        store = null;
+      }
+    }));
+  } finally { busy = false; refresh(); }
+}
+
+export function subscribeAcceptanceStatus(listener) { acceptanceListener = listener; refresh(); return () => { if (acceptanceListener === listener) acceptanceListener = null; }; }

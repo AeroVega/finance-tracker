@@ -32,7 +32,7 @@ MVP1 uses user-provided CSV imports. Google Drive is the **selected private-stor
 
 The [approved PR28 scope](docs/PR28_IMPLEMENTATION_SCOPE.md) implements a synthetic-only CSV → account/coverage mapping → review → canonical save → reopen flow using the merged storage machinery. The [implementation contract and verification guide](docs/PR28_CANONICAL_IMPORT.md) describe the record model, tested provider variants, and acceptance evidence. The development-only [invented import workbench](prototype/pr28-import.html) accepts bundled fixtures only. Production activation remains gated by PR27.
 
-Start human testing from [PR28 guided acceptance](prototype/pr28-testing.html), also linked first in the prototype hub. It combines the existing workbench with a fixed invented-data recipe, expected results, separate manual and automated outcomes, and a sanitized copyable report.
+Start with [PR28 assisted acceptance](prototype/pr28-testing.html), also linked first in the prototype hub. Connect a fresh empty synthetic folder and press **Run live checks**. It supplies the invented mappings and decisions, checks three saved checkpoints through the existing workbench/storage APIs, verifies a portable export in memory, and releases the session. Reconnect to the same folder and press **Verify saved run after reconnect** for the last assertion. Human device/OAuth, whole-tab interruption and new-folder backup/restore checks remain separate. The safe report contains fixed statuses only. No run starts on page load.
 
 ## Temporary prototype navigation
 

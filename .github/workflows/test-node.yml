@@ -19,5 +19,12 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 26
+      - name: Check browser module syntax
+        run: |
+          node --check prototype/pr28-import.mjs
+          node --check prototype/pr28-testing.mjs
+          node --check prototype/pr28-testing-plan.mjs
+          node --check prototype/pr28-testing-checks.mjs
+          node --check prototype/pr28-live-checks.mjs
       - name: Run complete Node test suite
         run: node --test tests/*.test.mjs

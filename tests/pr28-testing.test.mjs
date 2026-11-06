@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import * as plan from '../prototype/pr28-testing-plan.mjs';
+import * as liveChecks from '../prototype/pr28-live-checks.mjs';
 import { runFixtureChecks } from '../prototype/pr28-testing-checks.mjs';
 
 const [html, script, workbench, controls, css, hub] = await Promise.all([
@@ -68,9 +69,9 @@ test('canonical pause is optional, explicit, uses existing save and stops after 
   assert.match(plan.CHECKS.find(item => item.id === 'recovery').actions.join(' '), /Copy the safe report before closing/);
 });
 test('guidance distinguishes live coverage, missing refund evidence, prior checkpoints and independent tools', () => {
-  assert.match(plan.CHECKS.find(item => item.id === 'refund-missing-date').actions.join(' '), /Do not save this probe/);
-  assert.match(plan.CHECKS.find(item => item.id === 'refund-date').expected, /70\.00/);
-  assert.match(plan.CHECKS.find(item => item.id === 'future-rule').expected, /66\.00/);
+  assert.match(plan.MANUAL_RECIPE.find(item => item.id === 'refund-missing-date').actions.join(' '), /Do not save this probe/);
+  assert.match(plan.MANUAL_RECIPE.find(item => item.id === 'refund-date').expected, /70\.00/);
+  assert.match(plan.MANUAL_RECIPE.find(item => item.id === 'future-rule').expected, /66\.00/);
   assert.match(plan.CHECKS.find(item => item.id === 'recovery').actions.join(' '), /one canonical boundary/);
   assert.match(plan.CHECKS.find(item => item.id === 'backup-restore').actions.join(' '), /release/);
   assert.match(html, /Every manual check starts Not run/);
@@ -95,14 +96,14 @@ function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage =
   get('build-sha').textContent = stamp;
   const sections = Array.from({ length: 6 }, () => { const item = element('section'); return item; });
   get('workbench').querySelectorAll = () => sections;
-  const context = { ...plan, URL, Date, JSON, Promise, Object, Number,
+  const context = { ...plan, ...liveChecks, URL, Date, JSON, Promise, Object, Number,
     document: { getElementById: get, createElement: element, importNode: item => item },
     DOMParser: class { parseFromString() { return { querySelectorAll: () => sections, getElementById: () => ({}) }; } },
     sessionStorage: { getItem(key) { if (unavailableStorage) throw new Error('unavailable'); return stored.get(key) || null; }, setItem(key, value) { if (unavailableStorage) throw new Error('unavailable'); stored.set(key, value); } },
     navigator: { clipboard: { async writeText(value) { if (clipboardFails) throw new Error('denied'); copied.push(value); } } },
     confirm: () => true,
     fetch: async () => { calls.fetches++; return { ok: true, text: async () => controls }; },
-    mountModule: async () => { calls.imports++; },
+    mountModule: async () => { calls.imports++; return { withAcceptanceWorkbench: async () => { throw new Error('not-connected'); }, subscribeAcceptanceStatus: listener => listener({ ready: false, busy: false }) }; },
     runFixtureChecks: async () => { calls.checks++; return Object.fromEntries(plan.AUTOMATED_IDS.map(id => [id, 'passed'])); }
   };
   const source = script.replace(/^import .*;$/gm, '').replaceAll('import.meta.url', JSON.stringify(new URL('../prototype/pr28-testing.mjs', import.meta.url).href)).replace("import('./pr28-import.mjs')", 'mountModule()');
@@ -118,7 +119,7 @@ test('actual guide handlers keep manual status separate from local checks and mo
   h.get('step-status').value = 'passed'; h.get('step-status').change();
   await h.get('run-fixture-checks').click();
   const report = JSON.parse(h.get('safe-report').value);
-  assert.equal(report.manual.setup, 'passed'); assert.equal(report.manual.foundation, 'not-run');
+  assert.equal(report.manual.setup, 'passed'); assert.equal(report.manual['device-usability'], 'not-run');
   assert.equal(Object.values(report.automated).every(status => status === 'passed'), true);
   h.get('next-step').click(); assert.equal(h.get('step-choice').value, '1'); assert.equal(h.get('step-status').value, 'not-run');
   await h.get('copy-report').click(); assert.equal(h.copied.length, 1); assert.equal(h.copied[0], h.get('safe-report').value);
@@ -155,4 +156,31 @@ test('session storage refusal still permits checklist use and safe report copyin
   h.get('step-status').value = 'blocked'; h.get('step-status').change(); await h.get('copy-report').click();
   assert.equal(JSON.parse(h.copied[0]).manual.setup, 'blocked');
   assert.match(h.get('checklist-storage').textContent, /unavailable/);
+});
+
+
+test('restored live evidence is explicitly historical, source-scoped, and never resumes checks', async () => {
+  const saved = { version: plan.PLAN_VERSION, source: 'a'.repeat(40), live: { 'fresh-base': 'passed', 'first-save-reopen': 'passed' }, liveState: 'running' };
+  const h = controller({ saved }); await tick();
+  const report = JSON.parse(h.get('safe-report').value);
+  assert.equal(report.liveEvidence, 'historical'); assert.equal(report.live['first-save-reopen'], 'passed');
+  assert.match(h.get('live-result').textContent, /No live checks ran after reload/);
+  assert.equal(h.get('verify-live-reconnect').disabled, true);
+  assert.equal(h.calls.checks, 0);
+  const different = controller({ stamp: 'b'.repeat(40), saved });
+  assert.equal(JSON.parse(different.get('safe-report').value).live['first-save-reopen'], 'not-run');
+});
+
+test('safe report live status allowlist does not serialize caller objects or identifiers', () => {
+  const text = plan.createSafeReport({ live: { 'fresh-base': 'passed', 'first-save-reopen': { private: 'never-copy-me' }, folderId: 'never-copy-me' }, liveState: { private: 'never-copy-me' } });
+  const report = JSON.parse(text); assert.equal(report.live['fresh-base'], 'passed'); assert.equal(report.live['first-save-reopen'], 'not-run');
+  assert.equal(report.liveEvidence, 'not-run'); assert.doesNotMatch(text, /never-copy-me|folderId/);
+});
+
+test('default human checklist contains no duplicated deterministic import recipe', () => {
+  assert.deepEqual(plan.CHECKS.map(check => check.id), ['setup', 'device-usability', 'recovery', 'backup-restore']);
+  assert.match(html, /id="run-live-checks" disabled/); assert.match(html, /id="stop-live-checks" disabled/);
+  assert.match(html, /id="prepare-interruption" disabled/);
+  assert.match(script, /await liveRunner.run\(\)/); assert.match(script, /await liveRunner.verifyReconnect\(\)/);
+  assert.match(workbench, /store.base\?\.revision !== 0/); assert.match(workbench, /Object.keys\(store.base\?\.snapshot/);
 });

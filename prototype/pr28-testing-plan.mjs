@@ -1,8 +1,9 @@
+import { blankLive } from './pr28-live-checks.mjs';
 // Public, invented acceptance instructions only. No ledger or provider data belongs here.
-export const PLAN_VERSION = 'pr28-guided-v1';
+export const PLAN_VERSION = 'pr28-assisted-v2';
 export const STATUS_LABELS = Object.freeze({ 'not-run': 'Not run', passed: 'Passed by me', failed: 'Failed', blocked: 'Blocked', skipped: 'Skipped' });
 export const BROWSER_LABELS = Object.freeze(['Not recorded', 'Safari on iPhone', 'Safari on iPad', 'Safari on Mac', 'Chrome on desktop', 'Firefox on desktop', 'Edge on desktop', 'Other browser']);
-export const CHECKS = Object.freeze([
+export const MANUAL_RECIPE = Object.freeze([
   {
     id: 'setup', title: 'Connect a fresh synthetic folder', target: 'connect-storage',
     actions: [
@@ -161,6 +162,29 @@ export const CHECKS = Object.freeze([
   }
 ]);
 
+// Only checks that need a human stay on the main checklist. The former recipe
+// remains available for engineering reference, not as duplicate acceptance work.
+export const CHECKS = Object.freeze([
+  { id: 'setup', title: 'Confirm this device and Google connection', target: 'connect-storage',
+    actions: ['Confirm the intended deployed source commit and choose your device/browser above.', 'Create a fresh empty Drive folder with synthetic in its name. Connect below and choose that folder. Run live checks once. The page supplies invented data, saves, reloads, verifies and releases automatically.'],
+    expected: 'The selected source and browser are the ones you intended. Google consent and folder selection work on this device. Machine results appear separately and do not mark this observation for you.' },
+  { id: 'device-usability', title: 'Check touch, keyboard and OAuth cancellation', target: 'choose-source',
+    actions: ['Use portrait, landscape and text zoom. Open optional workbench controls and preview a fixture to try both independent coverage calendars. Do not stage or save manual changes to the completed automated run.', 'Check touch targets, labels, focus and panel scrolling. When no save is running, try cancelling Google consent or folder selection, then reconnect. The page must show an honest cancelled/error state.'],
+    expected: 'Controls remain usable on this device. The whole page does not require sideways scrolling. Google cancellation does not save an invented ledger or count as a successful connection.' },
+  { ...MANUAL_RECIPE.find(check => check.id === 'recovery'), actions: [
+    'Copy the completed live report first. Release any connected session, connect a separate fresh empty synthetic folder, then choose Prepare interruption test. The page saves the four-row baseline and stages one classification for you. It does not pause or claim recovery passed.',
+    'Open the optional workbench Save and reopen section. Choose Save and pause after first durable write, confirm, and wait for PAUSED. Copy the safe report before closing. Fully close this tab and reopen this page. This is one canonical boundary rehearsal, not every crash boundary or an iOS process-kill test.',
+    'Reconnect to that same disposable folder. Recover interrupted save if offered. If a stopped session remains, wait for conclusively stale status and confirm all old tabs/devices stopped before Recover stopped session. Never take over a live session.',
+    'Reopen verified saved ledger. Expect 1 account, 1 import, 4 observations, 4 activities, 0 decisions and either 0 events or one complete market classification. Only if the event is absent, stage that one classification, save and reopen. Exactly 1 event and January spending 100.00 must remain. Mark this human check only after observing the pause and recovered state.'
+  ] },
+  { ...MANUAL_RECIPE.find(check => check.id === 'backup-restore'), actions: [
+    'The live runner already verifies all retained history and a portable archive in memory. This additional check creates real copies. Copy your live report and release the current session. Open PR25 Storage acceptance and connect to the completed source.',
+    'Create a verified Drive backup in a fresh empty synthetic folder. Export the portable archive, move it outside Drive, reopen and verify it, then restore to a second fresh empty synthetic folder. Keep the archive private. Do not use dashboard snapshot, retention or interruption buttons.',
+    'Release PR25 before opening each copied folder in this page. Reopen each copy with the optional workbench. Expect 5 accounts, 7 imports, 15 observations, 15 activities, 15 events and 8 review decisions. The two retained inactive activities remain history. Full January–March known spending is 101.75 and income is 2250.37, qualified as incomplete. The automated core checking account alone has combined January–February spending 66.00.',
+    'The same-copy verification button intentionally rejects backup/restored copies because their physical copy identities differ. Use this human copy check for them, then release.'
+  ], expected: 'Both copies independently reopen with the complete logical graph and history, using new physical copy locators. In-memory archive validation alone does not prove a live new-folder backup or restore.' }
+]);
+
 export const AUTOMATED_IDS = Object.freeze(['fixture-foundation', 'canonical-foundation', 'classifications', 'category-rule', 'repeat-import', 'review-import', 'review-retry', 'review-decisions', 'missing-refund-date', 'refund-period', 'amount-correction', 'future-category', 'provider-shapes']);
 export const blankResults = () => Object.fromEntries(CHECKS.map(check => [check.id, 'not-run']));
 export function safeStatuses(input) {
@@ -172,13 +196,15 @@ export function safeAutomated(input) {
 export function verifiedSource(text, confirmed) {
   return confirmed === true && typeof text === 'string' && /^[0-9a-f]{40}$/.test(text) ? text : 'unverified';
 }
-export function createSafeReport({ manual, automated, browser, source, sourceConfirmed, date }) {
+export function createSafeReport({ manual, automated, browser, source, sourceConfirmed, date, live, liveState }) {
   // Deliberate allowlist. Never serialize DOM, URLs, errors, storage objects or free text.
   const isoDate = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date ? date : 'not-recorded';
   return JSON.stringify({ plan: PLAN_VERSION, date: isoDate,
     browser: BROWSER_LABELS.includes(browser) ? browser : 'Not recorded',
     sourceCommit: verifiedSource(source, sourceConfirmed),
     manualProvenance: 'Tester selections, not automatically verified', manual: safeStatuses(manual),
-    automatedProvenance: 'Bundled-fixture checks only; no browser-layout, OAuth or Drive verification', automated: safeAutomated(automated)
+    automatedProvenance: 'Bundled-fixture checks only; no browser-layout, OAuth or Drive verification', automated: safeAutomated(automated),
+    liveProvenance: 'Programmatic assertions in the connected synthetic session; save/reopen, export validation and release have separate results. No layout, OAuth cancellation, whole-tab interruption or new-folder restore claim.',
+    liveEvidence: ['not-run', 'running', 'complete', 'failed', 'stopped', 'historical', 'blocked'].includes(liveState) ? liveState : 'not-run', live: blankLive(live)
   }, null, 2);
 }

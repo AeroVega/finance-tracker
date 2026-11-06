@@ -114,7 +114,11 @@ export class CanonicalLedgerStore {
     // Discard an earlier writable base before reading. Failed loads cannot leave
     // a stale candidate eligible for a later save.
     this.base = null;
-    const manifest = await this.lifecycle.readManifest();
+    // The real catalog lifecycle verifies all retained history once and pins
+    // this selected snapshot. Older/test lifecycle drivers keep their read path.
+    const snapshot = typeof this.lifecycle.readVerifiedSnapshot === "function"
+      ? await this.lifecycle.readVerifiedSnapshot() : null;
+    const manifest = snapshot ? snapshot.manifest : await this.lifecycle.readManifest();
     if (manifest.syntheticOnly !== true) fail("synthetic-data-required", "Canonical application integration requires a synthetic copy.");
     const records = new Map();
     if (!Object.hasOwn(manifest.snapshot || {}, CANONICAL_INDEX)) {
@@ -130,7 +134,8 @@ export class CanonicalLedgerStore {
       let text;
       let value;
       try {
-        text = new TextDecoder("utf-8", { fatal: true }).decode(await this.lifecycle.readObject(path));
+        if (snapshot && !Object.hasOwn(snapshot.objects, path)) fail("canonical-record-missing", "A verified snapshot is missing a required canonical record.");
+        text = new TextDecoder("utf-8", { fatal: true }).decode(snapshot ? snapshot.objects[path] : await this.lifecycle.readObject(path));
         value = JSON.parse(text);
       } catch (error) {
         if (error instanceof SyntaxError || error instanceof TypeError) fail("invalid-canonical-object", "A canonical object is not valid UTF-8 JSON.");
@@ -156,7 +161,9 @@ export class CanonicalLedgerStore {
       fail("unindexed-canonical-record", "The snapshot contains canonical history outside its index.");
     }
     validateLedger(ledger);
-    const current = await this.lifecycle.readManifest();
+    // readVerifiedSnapshot already checked the exact manifest after reading all
+    // bytes and rechecked ownership. This is a point-in-time view, not a cache.
+    const current = snapshot ? manifest : await this.lifecycle.readManifest();
     if (canonicalizeJcs(current) !== canonicalizeJcs(manifest)) {
       fail("base-conflict", "Storage changed while canonical records were loading. Reopen and review the latest state.");
     }
