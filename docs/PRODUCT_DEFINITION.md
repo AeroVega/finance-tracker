@@ -167,7 +167,7 @@ For v1.0.0, manual liability creation and periodic balance updates are acceptabl
 
 Projections are a core capability. They estimate likely future outcomes using observed financial history, current circumstances, and explicit future assumptions. They should remain useful even when the user has not created budgets or goals.
 
-**Owner-confirmed 2026-11-06:** The initial baseline projection estimates cash balance. Net-worth projection is a lower-priority candidate for later work. The forecast horizon, update cadence, and calculation methodology remain open.
+**Owner-confirmed 2026-11-06:** The initial baseline projection estimates the combined cash balance of checking and savings accounts, excluding investments and available credit. Transfers between included accounts do not change that combined balance. Net-worth projection is a lower-priority candidate for later work. The v1.0.0 forecast horizon is three months. The owner wants to extend it to at least a full year eventually, without a committed date or later release. Time granularity, update cadence, and calculation methodology remain open.
 
 ### 5.2 Goals
 
@@ -336,7 +336,7 @@ The following capabilities should have useful but deliberately limited initial i
 - **Insights:** meaningful observations and evidence-based, optional recommendations.
 - **Investments:** account balances, holdings, contributions, distributions, dividends, and basic investment activity; advanced performance analysis may follow.
 - **Budgets:** basic category budgets and spending comparisons.
-- **Projections:** a straightforward baseline cash-balance projection with clearly stated assumptions.
+- **Projections:** a straightforward three-month baseline cash-balance projection with clearly stated assumptions.
 - **Data quality:** clear indicators for stale imports, missing coverage, and reconciliation problems.
 
 Advanced investment performance and tax-lot analysis, sophisticated forecasting, goals and saved what-if scenarios, advanced budget rollover/customization, multi-currency support, extensive dashboard/report customization, additional institution integrations, and simultaneous multi-device operation are not v1.0.0 release requirements. They may be considered for later releases subject to compatibility, correctness, privacy, cost, and product review.
