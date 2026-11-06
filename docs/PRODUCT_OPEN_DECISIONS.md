@@ -6,87 +6,58 @@
 
 **Last updated:** 2026-11-06
 
-The remaining work is organized into **five consequential v1.0.0 owner-review bundles**, not a continuing question-by-question interview. Engineering should prepare the evidence and proposals before the owner reviews each bundle. No recommended answers are recorded by this consolidation, and no proposal becomes an owner decision without confirmation.
+After the reporting, savings-rate, forecast, investment/debt, reliability, and release-boundary confirmations, the remaining consequential choices are organized into **three v1.0.0 owner-review bundles**. Engineering should prepare evidence and proposals before the owner reviews them. Unpresented choices remain open; no recommendation becomes an owner decision without confirmation. Reliability implementation and release-evidence preparation are engineering work under the confirmed boundaries. Actual owner release approval is still required.
 
 ## At a glance
 
-- **Owner review:** 5 bundles containing 21 detailed entries.
-- **Engineering proposals and research:** 4 work packages containing 22 detailed entries.
+- **Owner review:** 3 bundles containing 10 detailed entries.
+- **Engineering proposals and research:** 4 work packages containing 27 detailed entries.
 - **Explicitly later work:** 5 groups containing 15 detailed entries.
 - **Existing-policy change, only if requested:** 1 conditional entry, not a v1 release blocker.
 
-**Count basis:** 59 detailed entries preserve all 57 previously unchecked entries. Two mixed entries were split into current-release and later portions: investment performance and debt-payoff forecasting. These are inventory-entry counts, not counts of atomic subquestions or additional decisions the owner must make. Cross-references do not count twice.
+**Count basis:** The consolidation preserved 57 earlier unchecked entries as 59 entries by splitting investment performance and debt-payoff forecasting into current-release and later portions. Subsequent owner confirmations resolved Q8, Q15, Q37, Q38, Q39a, and Q46b, leaving 53 open entries. Six remaining entries moved from owner review to engineering after their product rules were confirmed. Resolved IDs remain in the settled record. These are inventory-entry counts, not atomic subquestions or additional owner decisions. Cross-references do not count twice.
 
 Scope and recorded decisions are unchanged except for the owner confirmations already recorded in the Product Definition. The numerical Health Score, goals, saved what-if scenarios, and other explicitly deferred capabilities must not return as v1 prerequisites. Topics without a release decision remain proposals or unresolved details; this organization does not silently defer them.
 
-## Five v1 owner-review bundles
+## Three remaining v1 owner-review bundles
 
-- **O1. Financial reporting and budget rules.** Settle the remaining financial meanings and report boundaries: savings rate, pending activity and dates, corrections/chargebacks, historical-source overlap, and unresolved budget behavior. Engineering should supply a coherent calculation proposal first. 6 detailed entries below.
-- **O2. Cash-forecast methodology.** Review the baseline calculation, treatment of unusual activity and debt payments, editable assumptions, and confidence after the confirmed coverage gate. Cash scope, month-end granularity, three-month horizon, and the latest-three-completed-month gate are already settled. 5 detailed entries below.
-- **O3. Initial investment and debt scope.** Choose the remaining supported types, valuation/price-input approach, and minimum investment/debt fields and calculations. Research available provider data before asking for choices; advanced analysis is already deferred. 6 detailed entries below.
-- **O4. Report reliability and qualifications.** Review remaining report aggregation and valuation rules when data is incomplete or stale, including when to qualify or withhold results. The specific budget, cash-forecast, per-account coverage, and stale-balance decisions are settled. 3 detailed entries below.
-- **O5. Release acceptance and residual risks.** Accept or reject the eventual evidence and residual limitations after engineering prepares the acceptance plan and results. Existing correctness, privacy, cost, recovery, and production-authorization gates remain mandatory. 1 detailed entry below.
+- **O1. Financial reporting and budget rules.** Settle the remaining financial meanings and report boundaries: remaining savings-rate inputs and edge cases, pending activity and dates, corrections/chargebacks, and unresolved budget behavior. Engineering should supply a coherent calculation proposal first. 5 detailed entries below.
+- **O2. Cash-forecast methodology.** Review remaining calculation edge cases, unusual activity, and confidence after the confirmed coverage gate. The three-month average, debt-payment inclusion, exclusion of internal cash transfers, editable assumptions, and recalculation after changes are settled alongside cash scope, month-end granularity, horizon, and coverage gate. 2 detailed entries below.
+- **O3. Initial investment and debt scope.** Review remaining investment types and consequential data/calculation scope within the confirmed boundaries: imported balances and dated values, holdings and activity, no live prices or performance calculations, and three debt types with manual updates and no payoff modelling. Research source data first. 3 detailed entries below.
 
 Resolve these as coherent bundles after reviewing engineering's proposal, not as separate questions for every field or screen. The owner still decides consequential behavior and risk; engineering handles implementation detail within approved contracts.
 
 ### O1. Financial reporting and budget rules
 
 <details>
-<summary>6 preserved detailed entries</summary>
+<summary>5 remaining detailed entries</summary>
 
-- [ ] **Q9.** What detailed aggregation, valuation, remaining period-boundary, and calculation rules implement income, spending, cash flow, savings, assets, liabilities, net worth, and basic investment reporting? Use the agreed meanings and a clean mathematical design, not the old workbook's formulas or quirks.
-- [ ] **Q10.** What are the remaining pending-transaction rules for balances, cash flow, projections, and posted-date versus effective-date reporting? Beyond the confirmed unmatched-refund behavior, what remaining refund edge cases, review-resolution criteria, and linkage/matching behavior need specification, and what report inclusion and date rules apply to chargebacks, reversals, and other non-category corrections? Engineering must assess persistent refund-link feasibility and implementation. The cumulative effective-state calculations and compacted-summary adjustment mechanism still need a contract.
+- [ ] **Q9.** What detailed aggregation, valuation, remaining period-boundary, and calculation rules implement income, spending, cash flow, savings, assets, liabilities, net worth, and basic investment reporting? Apply the confirmed posted-activity total basis, calendar-year annual views, optional custom ranges, and savings-rate formula without reopening them. Use the agreed meanings and a clean mathematical design, not the old workbook's formulas or quirks.
+- [ ] **Q10.** What are the remaining pending-transaction rules for balances, projections, and cash-flow presentation beyond the confirmed posted-activity reporting totals? What date-treatment edge cases remain after preserving the confirmed refund and original-period correction rules? Beyond the confirmed unmatched-refund behavior, what remaining refund edge cases, review-resolution criteria, and linkage/matching behavior need specification, and what report inclusion and date rules apply to chargebacks, reversals, and other non-category corrections? Engineering must assess persistent refund-link feasibility and implementation. The cumulative effective-state calculations and compacted-summary adjustment mechanism still need a contract.
 - [ ] **Q11.** When should reporting use trade date versus settlement date? Preserving both dates does not choose a reporting basis.
-- [ ] **Q12.** What is the savings-rate denominator, and how do investment contributions, employer contributions, transfers, and other non-income inflows affect that metric? Their existing economic classifications do not settle the savings-rate formula.
-- [ ] **Q14.** What exact ready-made reports, formulas, remaining period controls, and drill-downs implement the required income, spending, cash-flow, savings, and net-worth report families? Custom-date selection and the precise annual-view boundaries remain open. When workbook summaries overlap transaction-covered months, how does a report select or combine sources without double-counting or implying uniform detail? The no-double-counting and source-distinction requirements are settled in [Product §11.1][product-migration]; the selection rule is not.
-- [ ] **Q29.** What exact visualization communicates budget targets, actual spending, remaining or over-target amounts, and labeled month-end estimates, and what forecast-data sufficiency criteria should govern those estimates? Overspend carryover behavior remains open.
+- [ ] **Q12.** What income basis, including gross versus net, and employer-contribution treatment should the confirmed savings-rate formula use? How should negative-income and other residual input edge cases be handled? The formula is income minus spending, divided by income; savings/investment transfers are not spending, and zero-income months show not applicable. Preserve existing economic classifications without treating those decisions as answers to every input edge case. See [Product §4.4][product-financial].
+- [ ] **Q29.** What overspend carryover behavior should apply? The owner rejected unused-budget rollover but did not decide overspend carryover. Budget visualization and forecast-data sufficiency remain engineering work under Q3 and Q54.
 
 </details>
 
 ### O2. Cash-forecast methodology
 
 <details>
-<summary>5 preserved detailed entries</summary>
+<summary>2 remaining detailed entries</summary>
 
-- [ ] **Q16.** How should historical activity become baseline assumptions, including seasonality and unusual one-off activity? A three-month average of inflows/outflows with visible, editable amounts is a tentative approach, not a finalized method. The averaging method and detailed cash-flow treatment remain open.
-- [ ] **Q17.** How should users enter and revise future assumptions once the confirmed coverage gate is met? Manual assumptions cannot bypass missing required coverage.
+- [ ] **Q16.** How should the confirmed three-month-average baseline handle seasonality, unusual one-off activity, and remaining calculation edge cases? Apply the approved averaging method, debt-payment inclusion, internal cash-transfer exclusion, editable assumptions, and coverage gate. See [Product §5.1][product-planning].
 - [ ] **Q19.** How should projection confidence reflect remaining data-quality limitations after the confirmed coverage gate is met?
-- [ ] **Q22.** What constitutes a useful complete initial cash-balance projection within that boundary and the three-month horizon? Methodology and update cadence remain open; later projection types need separate prioritization.
-- [ ] **Q46b.** How should debt-payment assumptions affect the initial cash-balance forecast? This remains part of its open methodology.
 
 </details>
 
 ### O3. Initial investment and debt scope
 
 <details>
-<summary>6 preserved detailed entries</summary>
+<summary>3 remaining detailed entries</summary>
 
 - [ ] **Q35.** What exact investment account and security types belong in the basic v1.0.0 balances, holdings, and activity scope?
-- [ ] **Q37.** Should security prices be imported, manually supplied, or obtained from an approved provider?
-- [ ] **Q39a.** What basic performance measures, if any, belong in v1.0.0? Advanced performance analysis remains outside the initial release requirement.
-- [ ] **Q40.** What initial cost-basis, realized/unrealized-gain, and employer-match behavior is necessary? Do not reopen the exclusion of advanced performance/tax-lot analysis as a v1.0.0 gate.
-- [ ] **Q42.** What is the complete initial supported debt-type list and each type's required fields? Align the technical account-type representation with those product types; see [documented mismatches](#documentation-conflicts-and-existing-constraints).
-- [ ] **Q44.** Should v1.0.0 include interest rates, minimum payments, scheduled payments, and amortization, or defer some of them?
-
-</details>
-
-### O4. Report reliability and qualifications
-
-<details>
-<summary>3 preserved detailed entries</summary>
-
-- [ ] **Q13.** Beyond those safeguards, how should each report aggregate or qualify incomplete coverage, stale sources, and estimates? Define warning versus suppression behavior with the Data quality questions below.
-- [ ] **Q38.** How should stale/missing prices and unpriced assets be displayed beyond the settled rule that unknown is not zero?
-- [ ] **Q54.** What detailed timeline presentation and reliability thresholds should govern coverage gaps and budget estimates? What rules should govern combining account data in reports beyond the confirmed per-account coverage view? Beyond the settled budget behavior and baseline-forecast coverage gate, when should financial-data quality suppress other reports or projections rather than add a warning? Storage-integrity failures already have fail-closed constraints under [database lifecycle §§39 to 42][database-integrity].
-
-</details>
-
-### O5. Release acceptance and residual risks
-
-<details>
-<summary>1 preserved detailed entry</summary>
-
-- [ ] **Q8.** Which additional residual limitations block release, and which are acceptable when documented? Do not reopen the settled exclusions or treat correctness, privacy, recovery, cost, or owner-authorization gates as optional.
+- [ ] **Q40.** What initial cost-basis, source-provided realized/unrealized-gain, and employer-match data behavior is necessary? Field and retention requirements remain open within the existing historical-record contract. Do not add performance calculations or advanced tax-lot analysis to v1.0.0.
+- [ ] **Q44.** Should v1.0.0 include interest rates, minimum payments, scheduled payments, and amortization, or defer some of them? These details were not approved by the initial debt-scope decision. Debt-payoff modelling is excluded from v1.0.0.
 
 </details>
 
@@ -99,41 +70,43 @@ Prepare concrete designs, inspect source formats, and define tests. Escalate cho
 Propose screens, navigation/report destinations, default cards, transaction-type controls, settings, account lifecycle flows, and review interactions within the agreed scope.
 
 <details>
-<summary>7 preserved detailed entries</summary>
+<summary>8 remaining detailed entries</summary>
 
 - [ ] **Q1.** What detailed screen hierarchy, section contents, and navigation behavior implement the agreed Home / Activity / Accounts / Planning / More map? The precise report destinations, complete built-in transaction-type set, and detailed discovery controls remain open. The map does not make every eventual planning feature a v1.0.0 requirement.
 - [ ] **Q2.** What exact first-run screens, transitions, and recovery presentation implement those established states and safeguards?
-- [ ] **Q3.** Which exact default cards, report layouts, remaining period controls, and breakdowns implement the agreed Home content and reporting families? Apply the settled reporting-period decision; the examples do not settle a complete card inventory or every ready-made report.
+- [ ] **Q3.** Which exact default cards, report layouts, remaining period controls, and breakdowns implement the agreed Home content and reporting families? What budget visualization communicates the confirmed target, actual, remaining/over-target, and labeled month-end estimate? Apply the settled reporting-period decision; the examples do not settle a complete card inventory or every ready-made report.
 - [ ] **Q4.** What should account creation, explicit closure, and manual balance-update screens and confirmation flows look like?
 - [ ] **Q5.** What additional settings are required for v1.0.0, and how should advanced settings be organized?
 - [ ] **Q49.** How should users dismiss, revisit, or mark an insight as understood?
 - [ ] **Q55.** What remaining resolution screens and actions are needed for each quality finding, and how should the user see its effect on indicators, scores, reports, and projections?
+- [ ] **Q17.** What assumption fields and editing controls implement the confirmed editable assumptions and recalculation after changes? Manual assumptions cannot bypass missing required coverage. See [Product §5.1][product-planning].
 
 </details>
 
 ### E2. Inputs, reconciliation, and storage design
 
-Inspect provider formats and propose schema mappings, refund linkage, balance provenance, numerical reconciliation, and permitted local-cache behavior. Escalate changes to approved contracts before implementation.
+Inspect provider formats and propose schema mappings, required debt fields, report/source-selection contracts, refund linkage, balance provenance, numerical reconciliation, and permitted local-cache behavior. Escalate changes to approved contracts before implementation.
 
 <details>
-<summary>5 preserved detailed entries</summary>
+<summary>7 remaining detailed entries</summary>
 
 - [ ] **Q36.** Which exact holdings schemas, original CSV mechanics, action semantics, and other initial-provider formats remain to be inspected and supported?
 - [ ] **Q41.** How do those components reconcile numerically to account balances and basic portfolio reporting, including incomplete holdings or activity?
 - [ ] **Q43.** How should manual balance updates be dated and sourced?
 - [ ] **Q45.** How should purchases, statements, payments, and liability-balance snapshots reconcile, beyond those settled classifications?
 - [ ] **Q56.** Engineering must reconcile persistent offline-reading/cache behavior with §107's current restriction of IndexedDB to inventory and narrow recovery diagnostics before proposing that implementation. A change to the accepted storage contract requires explicit review; the product direction does not silently authorize it.
+- [ ] **Q14.** What exact ready-made reports, formulas, remaining period controls, and drill-downs implement the required income, spending, cash-flow, savings, and net-worth report families? Calendar-year annual views and optional custom ranges are settled in [Product §6][product-ux]. For overlapping history, what evidence and reconciliation criteria establish a complete month, and how should source selection work where workbook and transaction data have different scopes or levels of detail? Use transaction detail only for months reconciled as complete; otherwise retain workbook summaries and label coverage. Never double-count or assume unsupported per-account workbook detail. The selection principle is settled in [Product §11.1][product-migration]; its engineering contract remains open.
+- [ ] **Q42.** What fields are required for the confirmed initial credit-card, mortgage, and auto-loan scope with manual updates? Align the technical account-type representation with those product types; see [documented mismatches](#documentation-conflicts-and-existing-constraints).
 
 </details>
 
 ### E3. Analysis, insights, and data-quality proposals
 
-Prepare cadence, forecast-accountability and uncertainty proposals, initial insight candidates, evidence drill-downs, and stale-data/remediation thresholds. These are proposals to review, not automatically new v1 requirements or approved notifications.
+Prepare report-reliability criteria, forecast-accountability and uncertainty proposals, initial insight candidates, evidence drill-downs, and stale-data/remediation thresholds. These are proposals to review, not automatically new v1 requirements or approved notifications.
 
 <details>
-<summary>8 preserved detailed entries</summary>
+<summary>9 remaining detailed entries</summary>
 
-- [ ] **Q15.** What update cadence should the baseline projection use?
 - [ ] **Q18.** What statistical meaning and calibration should the uncertainty cone have when implemented? The intended widening-cone presentation is settled; the methodology is not.
 - [ ] **Q21.** Which error measures and presentation should compare retained forecasts with subsequent actual outcomes, including systematic over- or under-estimation?
 - [ ] **Q47.** Which specific insight types are reliable and useful enough for v1.0.0? Spending changes, savings pace, unusual activity, and cash-flow risk are examples, not a selected initial catalog.
@@ -141,18 +114,21 @@ Prepare cadence, forecast-accountability and uncertainty proposals, initial insi
 - [ ] **Q50.** What exact fields, calculations, and drill-downs implement that evidence standard for each chosen insight type?
 - [ ] **Q51.** Are user-configurable thresholds needed? The dedicated Insights experience and no-default-push-notification direction are already settled in [Product §§5.6 and 6][product-insights].
 - [ ] **Q53.** What stale-data thresholds, source-remediation actions, and any optional reminders are appropriate beyond that agreed presentation? Keep institution-source unavailability separate from the already-defined Drive failure behavior.
+- [ ] **Q13.** What report-specific engineering rules implement the confirmed known-amount, date, and coverage-warning behavior? If a missing value prevents a trustworthy complete total, show a clearly labeled known subtotal and withhold the complete total. Preserve stale-value qualifications; define exact reliability thresholds and estimate treatment without treating missing data as zero. See [Product §7][product-quality].
+- [ ] **Q54.** What detailed timeline presentation and reliability thresholds should govern coverage gaps and budget estimates? How should engineering implement the confirmed dated-value and coverage-warning rules when combining account data? Complete totals must be withheld when missing values prevent a trustworthy total, with known subtotals clearly labeled. Exact thresholds and treatment of other reports or projections remain to be specified alongside the settled budget and baseline-forecast gates. Storage-integrity failures already have fail-closed constraints under [database lifecycle §§39 to 42][database-integrity].
 
 </details>
 
 ### E4. Acceptance criteria and delivery plan
 
-Turn the settled minimum scope into measurable checks, estimates, dependencies, and a realistic schedule. Bring consequential scope or residual-risk choices back under O5.
+Turn the settled minimum scope into measurable checks, estimates, dependencies, and a realistic schedule. Preserve the confirmed release boundary and obtain the owner's evidence review and explicit release approval; preparation does not approve release.
 
 <details>
-<summary>2 preserved detailed entries</summary>
+<summary>3 remaining detailed entries</summary>
 
 - [ ] **Q6.** What measurable acceptance criteria demonstrate completion of each minimum-scope capability? Reuse the existing import, storage, and recovery contracts rather than asking the owner to redefine them.
 - [ ] **Q7.** What dependency-aware schedule and sequencing complete Alpha, Beta, integration, and owner validation toward January 1, 2027? The milestone order and dependency rules are settled, but task estimates, dates, and critical dependencies are not. See [Roadmap sequencing][roadmap-sequencing].
+- [ ] **Q22.** What remaining acceptance criteria demonstrate a useful complete initial cash-balance projection under the confirmed averaging method, recalculation behavior, cash boundary, coverage gate, and three-month horizon? Later projection types need separate prioritization.
 
 </details>
 
@@ -250,17 +226,23 @@ The current policy is already usable: canonical financial history defaults to in
 
 - [x] ~~What is the minimum coherent release scope and overall release gate?~~ The [owner-confirmed minimum][product-minimum] and [Roadmap][roadmap-minimum] fix the scope. Alpha establishes trustworthy data; Beta validates the scoped experience with synthetic data; integration and real-data acceptance follow only after storage/security authorization. January 1, 2027 is conditional on functional completeness, integrity, security, recovery, and explicit owner acceptance. Move the date if those gates are unmet.
 
+- [x] **Q8.** ~~Which residual limitations are acceptable, and which block release?~~ Owner-confirmed 2026-11-06: documented cosmetic issues may be acceptable, but incorrect totals, data loss, and privacy failures block release. The owner reviews evidence before approving. Existing mandatory security, cost, recovery, and production-authorization gates remain in force. This is an acceptance boundary, not release or merge approval. See [Product §11][product-release].
+
 ### Financial definitions and reporting
 
 - [x] ~~Are income, spending, transfers, investment activity, cash movement, and net worth interchangeable, and what is the basic net-worth formula?~~ Their economic meanings are distinct. Net worth is assets minus liabilities; its change is not simply income minus spending. Internal transfers and investment purchases are not spending; card payments and debt principal are not second expenses. Investment income remains income, while market-value changes are not cash income. Net external cash flow excludes internal transfers. See [Product §4.4][product-financial].
 - [x] ~~Should corrections and reversals overwrite history or count as unrelated extra economic events?~~ Preserve append-only events and derive effective reporting state without double-counting. Manual category corrections affect the transaction's original reporting period and retain an audit trail. Source, effective, and posted/settlement dates remain distinct. See [canonical ledger §§2 and 4][ledger-financial], [Product §4.6][product-categories], and [PR25 correction decisions][pr25-history].
 - [x] ~~Should pending transactions appear in Activity and finalized income/spending totals?~~ Owner-confirmed 2026-11-06: show pending transactions clearly in Activity and exclude them from finalized income and spending totals until they post. See [Product §4.4][product-financial].
+- [x] ~~What is the general activity basis for reporting totals?~~ Owner-confirmed 2026-11-06: use posted activity, preserving the existing refund and original-period bank/category-correction rules and audit trail. Trade versus settlement dates and remaining date-treatment edge cases are not settled by this decision. See [Product §4.4][product-financial].
+- [x] ~~What savings-rate formula applies, do savings/investment transfers count as spending, and what happens in zero-income months?~~ Owner-confirmed 2026-11-06: income minus spending, divided by income. Savings/investment transfers are not spending; zero-income months show not applicable. Gross versus net income, employer contributions, and negative-income edge cases remain open. See [Product §4.4][product-financial].
 - [x] ~~Should refunds count as income or reduce spending, and in which reporting month?~~ Owner-confirmed 2026-11-06: apply the refund against its original spending category in the month it posts, preserving earlier months. For a partial refund, reduce spending only by the refunded amount. A persistent, navigable link to the original expense is a desired capability when the relationship can be established. See [Product §4.4][product-financial].
 - [x] ~~How should an unmatched refund be handled?~~ Owner-confirmed 2026-11-06: retain a refund type label, visibly mark it for review, and allow manual spending-category assignment instead of guessing or treating it as income. Type, category, and review status remain distinct. See [Product §4.4][product-financial].
 - [x] ~~How should a bank correction of a duplicate or erroneous charge affect reporting?~~ Owner-confirmed 2026-11-06: correct the original period's effective totals, preserve the audit trail, and clearly label the bank correction and original error. Do not present it as genuine spending followed by a refund or assume that every credit is a correction. See [Product §4.4][product-financial].
 - [x] ~~May incomplete, stale, estimated, or unknown data look like verified complete data or zero?~~ No. Show material limitations and distinguish these states. Declared import coverage, observed dates, and import time remain separate; claimed coverage does not by itself prove completeness. See [Product §§2.1, 7.1 and 10][product-quality], [database lifecycle §§3 to 6][database-coverage], and [Product import safeguards][product-imports].
 - [x] ~~Which standard report families are required in v1.0.0?~~ Income, spending, cash flow, savings, and net worth are required, with monthly historical trends that identify workbook summaries separately from transaction imports. See [minimum v1.0.0 scope][product-minimum].
 - [x] ~~What is the default reporting period for income, spending, and cash flow, and which broader history views should be easy to reach?~~ Owner-confirmed 2026-11-06: default to the current calendar month, with equally accessible previous-month, year, and lifetime views. Lifetime covers available recorded history and retains coverage and source-detail qualifications. See [Product §6][product-ux].
+- [x] ~~What annual period and optional date-range support should reports offer?~~ Owner-confirmed 2026-11-06: annual views use calendar years, with optional custom date ranges. The exact controls remain design work. See [Product §6][product-ux].
+- [x] ~~Which historical source should reports use when workbook summaries overlap imported activity?~~ Owner-confirmed 2026-11-06: use transaction detail only when that month has been reconciled as complete; otherwise retain workbook summaries and label coverage. Never double-count the same activity or infer unsupported workbook detail. Completeness criteria, reconciliation, and differing source scopes still need specification. See [Product §11.1][product-migration].
 
 ### Projection methodology
 
@@ -268,8 +250,11 @@ The current policy is already usable: canonical financial history defaults to in
 - [x] ~~What forecast granularity should v1.0.0 show?~~ Owner-confirmed 2026-11-06: show projected month-end cash balances for each of the next three months. Daily projected balances are deferred; no implementation-effort estimate is established. See [Product §5.1][product-planning].
 - [x] ~~Must scenarios change actual records, and may old forecasts be replaced silently?~~ Named alternatives leave actual records unchanged. Historical forecasts retain their assumptions and then-available information for comparison with actual outcomes. See [Product §§5.3 and 5.4][product-planning].
 - [x] ~~What minimum history permits a v1.0.0 baseline forecast?~~ Owner-confirmed 2026-11-06: require confirmed coverage across the included accounts for the three most recent completed calendar months, consecutively. Otherwise show missing coverage instead of a projection, without a manual-assumption bypass. See [Product §5.1][product-planning].
+- [x] **Q15.** ~~What update cadence should the baseline projection use?~~ Owner-confirmed 2026-11-06: recalculate after changes. See [Product §5.1][product-planning].
+- [x] **Q46b.** ~~How should debt-payment assumptions affect the initial cash-balance forecast?~~ Owner-confirmed 2026-11-06: include debt payments in the three qualifying months' inflows/outflows used for the baseline, with editable assumptions. See [Product §5.1][product-planning].
+- [x] ~~Which baseline calculation and assumption behavior should v1.0.0 use?~~ Owner-confirmed 2026-11-06: average the three qualifying months' inflows and outflows, include debt payments, exclude transfers between included checking and savings accounts, allow editable assumptions, recalculate after changes, and label the result as a baseline estimate. The latest-three-completed-consecutive-month coverage gate remains mandatory; seasonality, one-off activity, and confidence-band choices remain open. See [Product §5.1][product-planning].
 - [x] ~~Are sophisticated forecasts and scenario-management capabilities required for the initial release?~~ v1.0.0 requires a straightforward baseline cash-balance projection with stated assumptions. Goals and saved what-if scenarios are explicitly deferred, as is sophisticated forecasting. See [minimum v1.0.0 scope][product-minimum] and [Roadmap Beta scope][roadmap-beta].
-- [x] ~~Which outcome should the first baseline projection estimate?~~ Owner-confirmed 2026-11-06: start with cash balance. Net-worth projection is lower priority. Calculation methodology remains open. See [Product §5.1][product-planning].
+- [x] ~~Which outcome should the first baseline projection estimate?~~ Owner-confirmed 2026-11-06: start with cash balance. Net-worth projection is lower priority. Apply the subsequently confirmed baseline method while preserving its remaining calculation edge cases. See [Product §5.1][product-planning].
 - [x] ~~Which accounts and movements define cash for the baseline projection?~~ Owner-confirmed 2026-11-06: combine checking and savings accounts, exclude investments and available credit, and treat transfers between included accounts as having no effect on the combined balance. See [Product §5.1][product-planning].
 
 ### Goals
@@ -293,13 +278,15 @@ The current policy is already usable: canonical financial history defaults to in
 
 ### Investments
 
-- [x] ~~Which broad investment capabilities are required initially?~~ v1.0.0 includes account balances, holdings, contributions, distributions, dividends, and basic investment activity. Advanced performance and tax-lot analysis are not release requirements. See [minimum scope][product-minimum].
+- [x] ~~Which broad investment capabilities are required initially?~~ v1.0.0 includes account balances, holdings, contributions, distributions, dividends, and basic investment activity. Live pricing and performance calculations are excluded from v1.0.0; advanced tax-lot analysis is not a release requirement. See [minimum scope][product-minimum].
+- [x] **Q37.** ~~What investment price-input approach should v1.0.0 use?~~ Owner-confirmed 2026-11-06: use imported balances and dated values, with no live pricing. Exact source formats remain engineering research; do not infer unsupported security-level inputs. See [Product §4.8][product-investments].
+- [x] **Q39a.** ~~What performance calculations belong in v1.0.0?~~ Owner-confirmed 2026-11-06: none. Preserve the holdings/activity baseline and retained historical components without requiring performance calculations. See [Product §4.8][product-investments].
 - [x] ~~Are Fidelity transaction and holdings exports available at all?~~ The owner confirmed brokerage and workplace-retirement transaction/holdings exports. The provider spec records a sanitized Accounts History sample covering brokerage and employer 401(k) activity. See [data-source evidence][provider-sources] and [Fidelity format observations][provider-fidelity]. These are availability confirmations and sample observations, not complete production parser validation.
 - [x] ~~Can portfolio-value change alone represent investment return, or can investment purchases become ordinary spending?~~ No. Keep external flows, trades, dividends, interest, fees, distributions, and market changes distinguishable. Monthly retained history includes portfolio value, holdings, and specified cash-flow/performance components, including realized gains/losses; nominal values remain authoritative. See [Product §§4.4 and 4.8][product-financial], [canonical reporting boundaries][ledger-financial], and [PR25 monthly-history decisions][pr25-history]. Retaining components does not select a performance formula or require advanced analysis in v1.0.0.
 
 ### Liabilities
 
-- [x] ~~Which standard debt examples and input approach are already agreed?~~ Credit cards, mortgages, and auto loans are named initial debt types. Manual liability creation and periodic balance updates are acceptable; use supported imports where available. See [Product §4.9][product-liabilities].
+- [x] ~~Which initial debt types and input approach are agreed?~~ Owner-confirmed 2026-11-06: credit cards, mortgages, and auto loans with manual updates and no debt-payoff modelling in v1.0.0. Preserve supported imports where available. Required fields and remaining interest/payment/amortization details are still open. See [Product §4.9][product-liabilities].
 - [x] ~~Are credit-card payments a second expense, and is debt principal repayment spending?~~ Card purchases count as spending when incurred; payments settle the liability. Principal repayment reduces debt; interest and fees are expenses. See [Product §4.4][product-financial].
 
 ### Insights
@@ -308,6 +295,7 @@ The current policy is already usable: canonical financial history defaults to in
 
 ### Data quality
 
+- [x] **Q38.** ~~How should missing or stale values and unpriced assets affect the display?~~ Owner-confirmed 2026-11-06: show known amounts with dates and coverage warnings. If a missing value prevents a trustworthy complete total, show the known subtotal, explicitly label it as a subtotal, and withhold the complete total. Missing is not zero; preserve stale-value qualifications. Exact thresholds remain engineering detail. See [Product §7][product-quality].
 - [x] ~~What does the Health Score measure, and what is the v1.0.0 minimum?~~ It concerns underlying data quality, not personal financial health. The wider product direction calls for an explainable overall score with component drill-down; listed dimensions are candidates. The minimum release explicitly requires stale-import, missing-coverage, and reconciliation indicators. See [Product §7.1][product-quality] and [minimum scope][product-minimum].
 - [x] ~~Is a numerical Health Score needed in v1.0.0?~~ Owner-confirmed 2026-11-06: use clear coverage-gap, stale-balance, and reconciliation indicators for the initial release. Defer the numerical score until its method is defined, retaining it as longer-term product direction. See [Product §7.1][product-quality].
 - [x] ~~May an unavailable institution source imply account closure, and may unavailable Drive storage trigger silent fallback?~~ No. Keep account identity/history and distinguish stale data from closure. If the primary cannot be verified, stop database operations, offer retry/reauthorization, and follow recovery. Do not silently switch copies or perform offline writes. See [Product §4.3][product-accounts] and [database lifecycle §§11, 47 and 48][database-setup].
@@ -339,7 +327,7 @@ The current policy is already usable: canonical financial history defaults to in
 
 These are documentation or engineering follow-ups, not new owner decisions:
 
-1. **Resolved: Beta planning scope.** The owner confirmed on 2026-11-06 that v1.0.0 planning is limited to basic category budgets and a baseline cash-balance projection. Goals and saved what-if scenarios are deferred. [Product §11's Beta paragraph][product-milestones] and [Roadmap Beta][roadmap-beta] now match that scope. The baseline projection's methodology and update cadence remain open.
+1. **Resolved: Beta planning scope.** The owner confirmed on 2026-11-06 that v1.0.0 planning is limited to basic category budgets and a baseline cash-balance projection. Goals and saved what-if scenarios are deferred. [Product §11's Beta paragraph][product-milestones] and [Roadmap Beta][roadmap-beta] now match that scope. The baseline averaging method and recalculation after changes are now confirmed; remaining calculation edge cases and confidence methodology still need specification.
 2. **Later versions.** The "2.0.0 expanded capabilities" paragraphs may read as reserving all refinements for 2.0.0, while [Product §11][product-minimum] and [Roadmap minimum scope][roadmap-minimum] explicitly allow compatible 1.x additions. Later capabilities are candidates, not automatic commitments to a major version.
 3. **Historical migration.** [Data Model's annual-summary proposal][data-model-history] is stale against the later [monthly migration decision][product-migration]. Preserve monthly summaries from 2023 onward. Workbook refund labels are historical evidence, not approval to count refunds as income in the new tracker. Expense-subcategory migration remains subject to workbook inspection, as §11.1 already states.
 4. **Liability schema.** The [canonical account-type enum][ledger-account] lists checking, savings, credit card, brokerage, retirement, and other, while [Product §4.9][product-liabilities] names mortgages and auto loans. Engineering must specify a compatible representation; neither list silently cancels the other.
@@ -408,3 +396,7 @@ Compatible additions may fit a minor release. No feature or date is committed me
 [data-model-history]: DATA_MODEL.md#historical-annual-summaries
 [pr25-history]: https://github.com/AeroVega/finance-tracker/blob/8e8644e00bbb6c985e20f966020eaaf8a4cadcab/docs/PR25_ACCEPTANCE.md#L67-L77
 [pr25-acceptance]: https://github.com/AeroVega/finance-tracker/blob/8e8644e00bbb6c985e20f966020eaaf8a4cadcab/docs/PR25_ACCEPTANCE.md#release-decision
+
+[product-investments]: PRODUCT_DEFINITION.md#48-investments
+
+[product-release]: PRODUCT_DEFINITION.md#11-delivery-and-release-philosophy
