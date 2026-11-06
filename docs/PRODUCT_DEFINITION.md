@@ -96,6 +96,8 @@ Use a controlled standard set of account types in v1.0.0. Users may give account
 
 Financial accounts are persistent entities. Once an account has been created or recognized and associated with financial history, it remains available even when the user stops importing data from that institution or account. The absence of a new import is not evidence that an account has closed, been deleted, or ceased to exist. Preserve its identity and historical relationships, and distinguish stale or missing recent data from an explicitly closed or inactive account. Any future closure, archival, deletion, or status change must be explicit and preserve historical integrity; do not infer it from import inactivity.
 
+**Owner-confirmed 2026-11-06:** When an account has not been updated recently, keep its last known balance visible with an "as of" date. Mark combined net worth as containing stale values rather than making it appear fully current. The threshold for considering an account stale remains open.
+
 ### 4.4 Financial activity and reporting semantics
 
 The application must distinguish the economic meaning of financial activity from the movement of money between accounts. A transaction must not be classified as income or expense merely because cash entered or left an account.
@@ -191,6 +193,8 @@ A lightweight initial budget experience may include periodic category targets, a
 
 **Owner-confirmed 2026-11-06:** Show each budget's target, actual spending, and amount remaining or over target. Include an estimated month-end total when there is enough data, clearly label it as an estimate, and use neutral wording. The exact visualization and the criteria for sufficient forecast data remain to be designed.
 
+**Owner-confirmed 2026-11-06:** When import coverage is incomplete, show recorded spending with a clear coverage warning. Withhold the budget's month-end estimate when the gaps make it unreliable. The reliability thresholds and aggregation rules remain to be specified.
+
 ### 5.6 Insights
 
 Provide a dedicated Insights experience that the user can visit. Do not default to unsolicited push notifications. Insights should identify meaningful patterns and risks—such as spending changes, savings pace, cash-flow risk, unusual activity, or projection outcomes—and explain the evidence and assumptions.
@@ -238,9 +242,13 @@ Once the authoritative Drive data is accessible, show the user's migrated histor
 
 ### 7.1 Data quality health
 
-Provide an explicit **Data Quality Health Score** describing the quality of the underlying financial data—not the user's personal financial health. Provide one overall score with component-level explanations available on drill-down. Candidate dimensions include freshness, completeness, reconciliation, import integrity, and source availability.
+The longer-term product direction includes an explicit **Data Quality Health Score** describing the quality of the underlying financial data, not the user's personal financial health. It should provide one overall score with component-level explanations available on drill-down. Candidate dimensions include freshness, completeness, reconciliation, import integrity, and source availability.
+
+**Owner-confirmed 2026-11-06:** v1.0.0 uses clear data-quality indicators such as coverage gaps, stale balances, and reconciliation issues. Defer the numerical Health Score until its scoring method is defined. This defers the score from the initial release without abandoning the longer-term capability or committing it to a particular later release.
 
 The score must be explainable; it must not be a mysterious algorithm. Reports and projections should make material data-quality limitations visible.
+
+**Owner-confirmed 2026-11-06:** Show import coverage per account so one account's imports do not hide another account's gaps. Mark uncovered time spans with red gaps and text labels, so color is not the only cue. Preserve the existing distinctions between declared import coverage, observed transaction dates, import time, and verified completeness. A day without transactions is not itself proof of missing coverage, and a declared period is not proof of complete data. The detailed timeline visualization and reliability thresholds remain open; showing coverage per account does not settle every rule for combining account data in reports.
 
 ### 7.2 Historical retention
 

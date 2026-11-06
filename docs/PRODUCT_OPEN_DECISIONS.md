@@ -85,6 +85,7 @@ Goals are optional. Purchase savings, emergency reserves, debt payoff, and inves
 - [x] ~~Are subcategory budgets part of the initial release?~~ Owner-confirmed 2026-11-06: keep initial budgets at the main category level. Subcategory budgeting may be considered for a compatible 1.x release; no date or shared-allowance allocation design was approved. See [Product §5.5][product-planning].
 - [ ] For later subcategory budgeting, how should parent and child targets interact, share limits, and handle historical parent-level actuals? The category rules settle actuals classification, not budget allocation. This is not a v1.0.0 requirement.
 - [x] ~~Which values and wording should the budget display use?~~ Owner-confirmed 2026-11-06: show the target, actual spending, and remaining or over-target amount, plus a clearly labeled estimated month-end total when enough data is available. Use neutral wording. See [Product §5.5][product-planning].
+- [x] ~~What should a budget show when import coverage is incomplete?~~ Owner-confirmed 2026-11-06: show recorded spending with a warning and withhold the month-end estimate if coverage gaps make it unreliable. See [Product §5.5][product-planning].
 - [ ] What exact visualization communicates those values, and what forecast-data sufficiency criteria should govern month-end estimates? Overspend carryover behavior remains open.
 
 ### Multi-currency
@@ -131,10 +132,13 @@ Goals are optional. Purchase savings, emergency reserves, debt payoff, and inves
 ### Data quality
 
 - [x] ~~What does the Health Score measure, and what is the v1.0.0 minimum?~~ It concerns underlying data quality, not personal financial health. The wider product direction calls for an explainable overall score with component drill-down; listed dimensions are candidates. The minimum release explicitly requires stale-import, missing-coverage, and reconciliation indicators. See [Product §7.1][product-quality] and [minimum scope][product-minimum].
-- [ ] Is a numeric overall score needed in v1.0.0 beyond those indicators? If and when a score is implemented, what components, weights, thresholds, and interpretation should it use?
+- [x] ~~Is a numerical Health Score needed in v1.0.0?~~ Owner-confirmed 2026-11-06: use clear coverage-gap, stale-balance, and reconciliation indicators for the initial release. Defer the numerical score until its method is defined, retaining it as longer-term product direction. See [Product §7.1][product-quality].
+- [ ] For the later numerical Health Score, what components, weights, thresholds, and interpretation should it use? No later release or date is committed.
 - [x] ~~May an unavailable institution source imply account closure, and may unavailable Drive storage trigger silent fallback?~~ No. Keep account identity/history and distinguish stale data from closure. If the primary cannot be verified, stop database operations, offer retry/reauthorization, and follow recovery. Do not silently switch copies or perform offline writes. See [Product §4.3][product-accounts] and [database lifecycle §§11, 47 and 48][database-setup].
-- [ ] How should prolonged institution-source unavailability be shown and remedied, including freshness thresholds and any optional reminders? Keep this separate from the already-defined Drive failure behavior.
-- [ ] When should financial-data quality suppress a report or projection rather than add a warning? Storage-integrity failures already have fail-closed constraints under [database lifecycle §§39 to 42][database-integrity].
+- [x] ~~Should a stale account's balance disappear or look current in combined net worth?~~ Owner-confirmed 2026-11-06: keep the last known balance visible with an "as of" date, and mark combined net worth as containing stale values. See [Product §4.3][product-accounts].
+- [ ] What stale-data thresholds, source-remediation actions, and any optional reminders are appropriate beyond that agreed presentation? Keep institution-source unavailability separate from the already-defined Drive failure behavior.
+- [x] ~~How should uncovered import periods be shown?~~ Owner-confirmed 2026-11-06: show coverage per account, with red gaps and text labels, so one account's imports cannot hide another's gaps and color is not the only cue. Preserve declared coverage, observed dates, import time, and completeness distinctions; transaction-free days alone do not establish a gap. See [Product §7.1][product-quality].
+- [ ] What detailed timeline presentation and reliability thresholds should govern coverage gaps and budget estimates? What rules should govern combining account data in reports beyond the confirmed per-account coverage view? Beyond the settled budget behavior, when should financial-data quality suppress other reports or projections rather than add a warning? Storage-integrity failures already have fail-closed constraints under [database lifecycle §§39 to 42][database-integrity].
 - [x] ~~Must resolving a quality issue discard evidence or overwrite prior decisions?~~ Review decisions preserve evidence and history. The contract supports confirming a match, keeping records separate, and correction handling; category corrections and undo are auditable events. See [canonical review decisions][ledger-review] and [PR25 correction decisions][pr25-history].
 - [ ] What remaining resolution screens and actions are needed for each quality finding, and how should the user see its effect on indicators, scores, reports, and projections?
 
@@ -177,6 +181,7 @@ These remain candidates unless separately prioritized. They are not unanswered p
 - Advanced investment analysis, pricing, tax-lot, and performance features.
 - More sophisticated budgets, goal planning, projections, and scenarios.
 - Full multi-currency capability.
+- A numerical Data Quality Health Score once its scoring method is defined.
 - Broader dashboard/report customization.
 - Additional automation and categorization capabilities as deterministic rules mature.
 
