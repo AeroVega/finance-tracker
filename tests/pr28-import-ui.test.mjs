@@ -10,7 +10,7 @@ test('workbench confines CSV selection to fixed bundled invented sources',async(
   assert.doesNotMatch(html,/type=["']file["']/);
   assert.doesNotMatch(script,/innerHTML|insertAdjacentHTML|console\.|saveSyntheticSnapshot/);
   const paths = [...script.matchAll(/'\.\.\/(fixtures\/[^']+\.csv)'/g)].map(match=>match[1]);
-  assert.equal(paths.length,5);
+  assert.equal(paths.length,6);
   for(const path of paths) assert.ok((await readFile(new URL('../'+path,import.meta.url))).length);
   assert.match(script,/new CanonicalLedgerStore/); assert.match(script,/await store\.save\(ledger\)/);
 });

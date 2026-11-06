@@ -7,10 +7,12 @@ const $ = id => document.getElementById(id);
 const fixtures = Object.freeze({
   'wells-foundation': ['../fixtures/pr28/wells-fargo-foundation.csv', 'wells-fargo-csv-v1'],
   'wells-review': ['../fixtures/pr28/wells-fargo-review.csv', 'wells-fargo-csv-v1'],
+  'wells-future': ['../fixtures/pr28/wells-fargo-future-coffee.csv', 'wells-fargo-csv-v1'],
   'wells-fargo': ['../fixtures/wells-fargo.csv', 'wells-fargo-csv-v1'],
   sofi: ['../fixtures/sofi.csv', 'sofi-csv-v1'],
   fidelity: ['../fixtures/fidelity.csv', 'fidelity-accounts-history-csv-v1']
 });
+let pauseAfterFirstWrite = false;
 let busy = false, configured = false, ledger = null, store = null, parsed = null, dirty = false;
 let mappingForms = [];
 let previewGeneration = 0, parsedFixture = null;
@@ -38,7 +40,7 @@ const message = (text, error = false) => { $('result').textContent = text; $('re
 function refresh() {
   const lifecycle = storage.lifecycle;
   const ready = lifecycle?.state === 'ready' && lifecycle.acceptingWrites && navigator.onLine !== false;
-  for (const control of document.querySelectorAll('button,input,select')) control.disabled = busy;
+  for (const control of (document.getElementById('workbench') || document).querySelectorAll('button,input,select')) control.disabled = busy;
   $('connect').disabled = busy || !configured;
   $('stale').disabled = busy || lifecycle?.state !== 'stale-session';
   $('recover').disabled = busy || lifecycle?.state !== 'recovery-required' || !lifecycle?.coordinator?.canWrite;
@@ -46,11 +48,21 @@ function refresh() {
   for (const id of ['parse', 'reopen']) $(id).disabled = busy || !ready || !store;
   $('stage').disabled = busy || !ready || !store || !parsed || parsedFixture !== $('fixture').value || !ledger;
   $('save').disabled = busy || !ready || !store || !ledger || !dirty;
+  if ($('pause-canonical')) $('pause-canonical').disabled = $('save').disabled;
   $('event').disabled = busy || !ready || !store || !$('activity').value;
   $('summarize').disabled = busy || !ledger;
   $('dirty').textContent = !ledger ? 'No ledger loaded.' : dirty ? 'Unsaved local changes. Closing this tab loses them.' : 'No unsaved changes. This is a new empty ledger or verified saved records.';
 }
-const storage = new DashboardSyntheticStorage({ onStatus: status => { $('connection').textContent = status.message; refresh(); } });
+const storage = new DashboardSyntheticStorage({
+  onStatus: status => { $('connection').textContent = status.message === 'Synthetic storage connected. CSV imports remain local to this page.' ? 'Synthetic storage connected. Staged changes remain local until you choose Save canonical ledger.' : status.message; refresh(); },
+  afterMutation: async () => {
+    if (!pauseAfterFirstWrite) return;
+    pauseAfterFirstWrite = false;
+    message('PAUSED after the first durable write of this canonical save. Fully close this tab now. Reopen this testing page, reconnect to the same disposable folder, recover only when offered, then reopen verified saved records. This pause is not a successful save.');
+    // Explicit synthetic rehearsal only. No subsequent transaction write proceeds.
+    await new Promise(() => {});
+  }
+});
 async function run(operation) {
   if (busy) return;
   busy = true; refresh();
@@ -154,6 +166,12 @@ action('stage', async () => {
   changed(result.ledger); clearPreview(); message('Import staged locally. Review before saving. '+JSON.stringify(result.summary));
 });
 action('save', async () => { ledger=await store.save(ledger); dirty=false; renderLedger(); message('Canonical ledger saved and verified. ' + recordCounts() + ' Reopen to independently reload saved records.'); });
+if ($('pause-canonical')) action('pause-canonical', async () => {
+  if (!confirm('Pause a canonical save after its first durable write in this disposable synthetic folder? You must fully close this tab to continue, then reconnect and verify recovery.')) return;
+  pauseAfterFirstWrite = true;
+  try { ledger = await store.save(ledger); dirty = false; renderLedger(); message('No durable write was paused. The ledger was unchanged or the save completed. Do not record interruption as passed.'); }
+  finally { pauseAfterFirstWrite = false; }
+});
 action('reopen', async () => { if (dirty && !confirm('Discard unsaved local changes and reopen the saved ledger?')) return; await loadLedger(); message('Saved canonical records reopened and verified. ' + recordCounts()); });
 action('event', async () => {
   if (!$('evidence').value.trim()) inputError('evidence-required');
@@ -191,7 +209,7 @@ function renderReviews() {
   for (const review of pending) {
     const fieldset=element('fieldset'); fieldset.append(element('legend',review.observationId),element('pre',JSON.stringify(review,null,2)));
     const target=labelled(fieldset,'Match to activity',element('select')); option(target,'','Choose activity');
-    for (const activity of getEffectiveActivities(ledger).filter(activity=>activity.active)) option(target,activity.activityId,activity.activityId);
+    for (const activity of getEffectiveActivities(ledger).filter(activity=>activity.active)) option(target,activity.activityId,activity.sourceDescription+' · '+activity.effectiveDate+' · '+activity.activityId);
     let currency = null;
     if (review.reasonCode==='missing-currency') {
       fieldset.append(element('p','The original source row has no currency. To keep it separately, explicitly enter its ISO currency and explain your evidence. The blank source field is preserved; unknown lifecycle status stays unknown.'));

@@ -6,7 +6,7 @@
 
 `provider-csv.mjs` reads source bytes and emits preserved source records. `canonical-import.mjs` maps explicit accounts and coverage, allocates UUID v4 identities, reconciles observations, and applies auditable decisions. `canonical-ledger-storage.mjs` serializes that application state for the existing `ApplicationStorageLifecycle` and `CatalogTransactionEngine`. The storage adapter adds no journal, session, manifest-publication, or recovery protocol.
 
-The workbench at `prototype/pr28-import.html` fetches only five fixed, invented CSV fixtures. It requires the existing dedicated synthetic folder and does not accept arbitrary financial uploads. Locally staged work is distinct from a saved commit; a failed or uncertain save requires recovery and reopening before recomputing another proposal.
+The workbench at `prototype/pr28-import.html` fetches only fixed, invented CSV fixtures, including a later coffee purchase for prospective-category acceptance. It requires the existing dedicated synthetic folder and does not accept arbitrary financial uploads. Locally staged work is distinct from a saved commit; a failed or uncertain save requires recovery and reopening before recomputing another proposal.
 
 ## Records and evidence
 
@@ -50,6 +50,20 @@ The fixtures and adapter tests cover UTF-8 with optional BOM, comma-delimited fi
 Wells Fargo's documented US date form and the existing invented ISO fixture variant are recognized. SoFi uses the documented ISO form. Fidelity preserves run and settlement dates separately. Only the exact invented Fidelity explanatory footer is ignored; unknown nonblank footer-like text remains rejected evidence. Missing currency or lifecycle is not inferred from provider name. These are synthetic-tested variants, not validation of every original provider export.
 
 ## Verification
+
+### Guided human acceptance
+
+Open [PR28 guided acceptance](../prototype/pr28-testing.html) from the prototype hub. The guide loads the existing workbench in the same document and uses one storage session. Its recipe starts in a fresh empty synthetic folder, preserves both identical coffee purchases, tests repeat and unresolved imports, records explicit review decisions, probes missing refund-date evidence without saving it, and verifies a dated refund, amount correction, and prospective category rule through save and reopen.
+
+Bundled fixture checks run only in memory. They do not connect to Drive or mark human acceptance checks as passed. Manual checks start at Not run and are recorded by the tester. The report accepts only fixed check statuses, a browser label, a date, and an explicitly confirmed source commit. It excludes financial records, account/folder/file identifiers, provider errors, credentials, and free-form notes. Saving or resetting checklist choices does not save, remove, or reset a financial ledger.
+
+The optional canonical pause rehearsal uses the existing storage adapter's mutation hook. Use a separate disposable synthetic folder, save the prescribed baseline, stage one change, and explicitly choose the pause action. It stops after the first durable mutation and waits for whole-tab termination. Reconnect and recover before inspecting the complete prior or committed state. This is one live boundary rehearsal, not proof of every boundary or of iOS process termination. The automated suite remains the evidence for all exercised canonical write boundaries. Backup and restore checks use the existing PR25 page after releasing the current session, then reopen each copy in the PR28 workbench.
+
+The public Pages URL can serve a different branch after another deployment. Compare the deployed source with the intended branch before recording results; missing or unverified build metadata must remain unverified. The guide cannot substitute a successful CI run or deployment for browser, OAuth, or live Drive acceptance.
+
+**Guided-page verification, November 6, 2026:** the complete Node 24.22.1 and Node 26.13.0 suites each passed 410 tests, including 13 new guide tests. All 13 runnable fixture checks pass. A DOM simulation exercised the actual guide and workbench through the complete recipe and verified the qualified combined spending subtotal of `66.00`, source-specific checklist restore, clipboard fallback, and checklist reset without financial changes. The optional pause stopped after one in-memory catalog mutation; a fresh simulated page recovered the complete prior state and saved one classification without duplication. These results do not claim live Drive, OAuth, Safari, device, or real process-termination acceptance.
+
+### Automated and live verification
 
 Run `node --test tests/*.test.mjs` and syntax checks for the new application/browser modules. The existing CI uses Node 26. The development workspace provides Node 24.22.1; Node 26.13.0 is also available for CI-equivalent local checks. Local results and remote CI evidence must be reported separately.
 

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Guided PR28 acceptance · Finance Tracker</title>
+  <link rel="stylesheet" href="./pr28-import.css">
+  <link rel="stylesheet" href="./pr28-testing.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+  <script src="../js/build-info.js" defer></script>
+  <script type="module" src="./pr28-testing.mjs"></script>
+</head>
+<body><main>
+  <a href="./index.html">Back to prototype tools</a>
+  <header>
+    <p class="eyebrow">PR28 · Development only</p>
+    <h1>Guided import acceptance</h1>
+    <p>Follow one step at a time, use the workbench on this page, then record what you observed. No console needed.</p>
+    <p class="notice">Use only the bundled invented fixtures and dedicated synthetic Drive folders. Production data remains disabled. The guide never marks a live test passed for you.</p>
+    <p>Deployed source: <span id="build-sha">development (not deployed)</span></p>
+    <label><input id="source-confirmed" type="checkbox"> I compared this full commit SHA with the branch deployment I intended to test.</label>
+    <label for="test-browser">Device and browser for this run</label>
+    <select id="test-browser"></select>
+    <p id="checklist-storage" role="status">Checklist results are kept only in this tab's session storage when available. No ledger, account, folder, token or free-text notes are stored by this guide.</p>
+  </header>
+  <nav class="test-jumps" aria-label="Testing sections">
+    <a href="#guided-step">Current step</a><a href="#workbench">Workbench</a><a href="#results-report">Safe report</a>
+  </nav>
+  <section aria-labelledby="quick-check-title">
+    <h2 id="quick-check-title">Start with a local fixture check</h2>
+    <p>This runs the real parser and reconciliation functions on bundled invented CSVs. It needs no Google login and writes nothing to Drive. It does not test browser layout, OAuth, save/reopen or recovery.</p>
+    <button id="run-fixture-checks">Run bundled fixture checks</button>
+    <p id="fixture-check-result" role="status" aria-live="polite">Not run in this page.</p>
+    <details><summary>Test provenance and remaining acceptance</summary>
+      <p>The repository's Node suite covers parser variants, review, exact calculations, canonical save/reopen, interrupted durable writes and portable restore. Run-specific CI evidence belongs to the published commit. It is separate from the checks you run on this page.</p>
+      <p>Every manual check starts Not run. A local check passing does not change that. Restore/reload retains manual choices only for this tab and this source stamp. Browser checks and OAuth/Drive acceptance are still pending until a human completes them.</p>
+      <a href="../docs/PR28_CANONICAL_IMPORT.md">Read the implementation and verification record</a>
+    </details>
+  </section>
+  <section id="guided-step" aria-labelledby="step-title">
+    <p id="manual-progress" role="status" aria-live="polite"></p>
+    <label for="step-choice">Choose a step</label><select id="step-choice"></select>
+    <h2 id="step-title" tabindex="-1"></h2>
+    <ol id="step-actions"></ol>
+    <div class="expected"><h3>Expected result</h3><p id="step-expected"></p></div>
+    <a id="step-workbench" class="jump-button" href="#workbench">Go to these controls</a>
+    <label for="step-status">My result for this step</label><select id="step-status"></select>
+    <div class="step-navigation"><button id="previous-step">Previous step</button><button id="next-step">Next step</button></div>
+    <details><summary>All manual results</summary><ul id="manual-results"></ul></details>
+    <p>Steps 1–11 are the core recipe. Finish the saved core before checks that use another folder. No test status sends anything to anyone.</p>
+  </section>
+  <div id="workbench" aria-label="Shared invented import workbench">
+    <p id="workbench-loading" role="status">Loading the existing import workbench…</p>
+  </div>
+  <section aria-labelledby="extended-tools-title">
+    <h2 id="extended-tools-title">Existing storage tools</h2>
+    <p>Save and verify release before navigating away or opening another tool on the same folder. The PR25 page uses the same version-2 storage machinery. Its backup/export/restore actions validate canonical records; its pause fixture is a separate dashboard test.</p>
+    <a href="./pr25-acceptance.html">PR25 Storage acceptance for backup, export and restore</a>
+  </section>
+  <section id="results-report" aria-labelledby="report-title">
+    <h2 id="report-title">Copy a safe results report</h2>
+    <p>The report includes only fixed check IDs and statuses, this date, a browser label, and a full source commit if you confirmed it. It excludes ledger contents, account/folder/file IDs, tokens, URLs and free-text notes. Do not append private notes or screenshots.</p>
+    <button id="copy-report">Copy report</button><button id="select-report">Select report for manual copy</button><button id="reset-checklist">Reset checklist only</button>
+    <p id="report-status" role="status" aria-live="polite">Review the text before sharing. Copying does not send it.</p>
+    <label for="safe-report">Sanitized report text</label><textarea id="safe-report" readonly rows="18" spellcheck="false"></textarea>
+    <p>Reset clears only this tab's test choices and local-check results. It does not release a session, discard staged changes, delete saved data or reset a Drive folder. Use a fresh folder for a clean new core run.</p>
+  </section>
+  <noscript><p class="notice">JavaScript is required for these tests. No tests have run. Enable JavaScript, then reload.</p></noscript>
+</main></body></html>

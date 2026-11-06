@@ -31,5 +31,8 @@ jobs:
           node --check prototype/application-storage-lifecycle-test.mjs
           node --check prototype/pr25-acceptance.mjs
           node --check prototype/pr28-import.mjs
+          node --check prototype/pr28-testing.mjs
+          node --check prototype/pr28-testing-plan.mjs
+          node --check prototype/pr28-testing-checks.mjs
       - name: Run complete Node contract suite
         run: node --test tests/*.test.mjs
