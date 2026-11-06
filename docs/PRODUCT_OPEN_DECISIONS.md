@@ -375,7 +375,7 @@ Compatible additions may fit a minor release. No feature or date is committed me
 [product-minimum]: PRODUCT_DEFINITION.md#minimum-coherent-v100-scope--owner-confirmed-2026-11-05
 [product-milestones]: PRODUCT_DEFINITION.md#development-milestones-alpha--beta--100--200
 [product-migration]: PRODUCT_DEFINITION.md#111-one-time-migration-of-first-generation-excel-history
-[product-pr25]: PRODUCT_DEFINITION.md#12-pr-25-scope-boundary--synthetic-implementation-merged-production-remains-gated
+[product-pr25]: PRODUCT_DEFINITION.md#12-pr-25-scope-boundary-synthetic-implementation-merged-production-remains-gated
 [roadmap-beta]: ROADMAP.md#beta--visual-and-analytical-experience
 [roadmap-minimum]: ROADMAP.md#owner-confirmed-minimum-v100-scope--2026-11-05
 [roadmap-sequencing]: ROADMAP.md#milestone-and-pr-sequencing-rules
