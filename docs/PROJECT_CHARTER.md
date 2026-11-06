@@ -22,7 +22,7 @@ The current annual spreadsheet workflow is flexible but requires repeated manual
 
 ## Historical MVP1 baseline — superseded by the v1.0.0 scope
 
-The outcomes, success criteria, and non-goals below preserve the original file-based MVP1 planning baseline for historical context. They are not the current v1.0.0 release specification. The owner-confirmed minimum coherent v1.0.0 scope is now recorded in [Product Definition §11](PRODUCT_DEFINITION.md#11-delivery-and-release-philosophy) and the [Roadmap](ROADMAP.md). Do not silently expand active PR scopes. PR #25 retains its original synthetic-only production-readiness responsibilities.
+The outcomes, success criteria, and non-goals below preserve the original file-based MVP1 planning baseline for historical context. They are not the current v1.0.0 release specification. The owner-confirmed minimum coherent v1.0.0 scope is now recorded in [Product Definition §11](PRODUCT_DEFINITION.md#11-delivery-and-release-philosophy) and the [Roadmap](ROADMAP.md). Do not silently expand active PR scopes. PR #25's synthetic-only implementation is merged; its remaining owner-review items and the separate production-authorization gate are documented in the Product Definition and PR #25 acceptance record.
 
 ## Historical MVP1 outcomes
 - Import supported CSVs from Wells Fargo, SoFi, and Fidelity.
