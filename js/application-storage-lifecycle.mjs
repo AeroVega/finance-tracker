@@ -4,6 +4,7 @@ import { SessionCoordinator } from "./session-coordination.mjs";
 import { CatalogTransactionEngine } from "./catalog-transaction-engine.mjs";
 import { verifyCatalogHistory } from "./catalog-storage.mjs";
 import { resolveSnapshotLocators } from "./drive-locator-catalog.mjs";
+import { canonicalizeJcs } from "./transaction-protocol.mjs";
 
 export class ApplicationStorageError extends Error {
   constructor(code, message) {
@@ -282,6 +283,29 @@ export class ApplicationStorageLifecycle {
   async readObject(logicalPath) {
     try { return await this.readObjectVerified(logicalPath); }
     catch (error) { this.pauseAfterReadFailure(error); throw error; }
+  }
+
+  /** One verified, pinned catalog snapshot per call. No cross-operation cache. */
+  async readVerifiedSnapshot() {
+    try {
+      await this.requireReady();
+      if (!this.catalogProtocol) fail("catalog-required", "A verified snapshot requires the version-2 catalog protocol.");
+      const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
+      if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Complete catalog finalization before reading a snapshot.");
+      const verified = await verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto);
+      // This validates every selected logical path and its catalog binding.
+      const references = resolveSnapshotLocators(manifest.snapshot, verified.catalog);
+      const objects = Object.create(null);
+      for (const path of Object.keys(references)) {
+        const bytes = verified.objects.get("data-object:" + manifest.snapshot[path]);
+        if (!(bytes instanceof Uint8Array)) fail("object-not-found", "A selected snapshot object was not verified.");
+        objects[path] = bytes.slice();
+      }
+      const current = await this.transactionAdapter.readJson(this.manifestFileId);
+      if (canonicalizeJcs(current) !== canonicalizeJcs(manifest)) fail("base-conflict", "Storage changed while the snapshot was being verified. Reopen before continuing.");
+      await this.requireReady();
+      return { manifest: structuredClone(manifest), objects };
+    } catch (error) { this.pauseAfterReadFailure(error); throw error; }
   }
 
   pauseAfterReadFailure(error) {

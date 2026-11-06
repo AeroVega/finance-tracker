@@ -67,4 +67,4 @@ Apply these checks when implementation or release work is authorized; they do no
 For each significant change, report what changed and why, the checks actually run and their results, the diff/PR status, deployment status, known limitations, and remaining work. Clearly distinguish **implemented**, **validated**, and **deployed and verified**. Mark unmet acceptance criteria as outstanding rather than claiming completion.
 
 ## Current phase
-This is a documentation and discovery phase. Do not begin production implementation until data access, private storage, authentication, privacy, deployment, and backup/recovery architecture is documented and reviewed. Do not modify the archived `Finances.xlsx` workbook.
+The owner has authorized the bounded synthetic-only PR28 canonical import implementation described in `docs/PR28_IMPLEMENTATION_SCOPE.md`. Reuse the merged PR20–25 storage machinery. Production financial-data activation remains gated by PR27 and separate owner review; this authorization does not permit real-data tests, merge, or deployment. Do not modify the archived `Finances.xlsx` workbook.

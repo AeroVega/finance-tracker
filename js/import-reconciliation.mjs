@@ -1,4 +1,4 @@
-const CURRENCY_EXPONENTS = Object.freeze({ USD: 2, CAD: 2, EUR: 2, GBP: 2, JPY: 0, KRW: 0, KWD: 3, BHD: 3 });
+export const CURRENCY_EXPONENTS = Object.freeze({ USD: 2, CAD: 2, EUR: 2, GBP: 2, JPY: 0, KRW: 0, KWD: 3, BHD: 3 });
 
 export function parseMoney(value, currency) {
   if (typeof value !== "string" || !/^-?\d+(?:\.\d+)?$/.test(value.trim())) {
@@ -11,8 +11,9 @@ export function parseMoney(value, currency) {
     const unsigned = negative ? text.slice(1) : text;
     const [whole, fraction = ""] = unsigned.split(".");
     if (fraction.length > exponent && /[^0]/.test(fraction.slice(exponent))) throw new TypeError("unsupported-money-precision");
-    const minor = Number(whole) * (10 ** exponent) + Number((fraction + "0".repeat(exponent)).slice(0, exponent) || "0");
-    if (!Number.isSafeInteger(minor)) {
+    const exactMinor = BigInt(whole) * (10n ** BigInt(exponent)) + BigInt((fraction + "0".repeat(exponent)).slice(0, exponent) || "0");
+    const minor = Number(exactMinor);
+    if (exactMinor > BigInt(Number.MAX_SAFE_INTEGER)) {
       // Preserve the exact source decimal rather than rounding through Number.
       // Adapters should retain the original source text in sourceFields as well.
       return { amountMinor: null, amountDecimal: text, currency };
@@ -26,7 +27,7 @@ export function recognizeFormat(sourceFormat) {
   return new Set(["wells-fargo-csv-v1", "sofi-csv-v1", "fidelity-accounts-history-csv-v1"]).has(sourceFormat);
 }
 
-function isCalendarDate(value) {
+export function isCalendarDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -45,7 +46,7 @@ function sameComposite(a, b) {
 }
 
 
-function exactSignedDecimal(activity) {
+export function exactSignedDecimal(activity) {
   if (Number.isSafeInteger(activity.amountMinor)) {
     const exponent = CURRENCY_EXPONENTS[activity.currency];
     if (!Number.isInteger(exponent)) return null;
@@ -106,6 +107,7 @@ function isPendingPostedTransition(oldRow, newRow) {
 export function reconcileImport({
   institutionId, accountId, sourceFormat, fileFingerprint, rows,
   existingActivities = [], existingObservations = [], completedRuns = [],
+  idFactory = () => globalThis.crypto.randomUUID(),
 }) {
   if (!accountId) throw new TypeError("explicit-account-mapping-required");
   if (!recognizeFormat(sourceFormat)) throw new TypeError("unsupported-source-format");
@@ -138,6 +140,7 @@ export function reconcileImport({
       candidate.currency ?? null,
       candidate.amountMinor ?? null,
       candidate.amountDecimal ?? null,
+      candidate.lifecycleStatus === 'posted' ? [candidate.effectiveDate, candidate.postedDate ?? null, candidate.settlementDate ?? null] : null,
     ]);
     if (!sourceIdRows.has(candidate.sourceRecordId)) sourceIdRows.set(candidate.sourceRecordId, new Map());
     const signatures = sourceIdRows.get(candidate.sourceRecordId);
@@ -151,6 +154,18 @@ export function reconcileImport({
     }
   }
 
+  const workingActivity = (activity) => {
+    if (!activity) return activity;
+    const current = { ...activity };
+    for (const event of events.filter(event => event.activityId === activity.activityId && event.eventType === 'lifecycle-transition')) {
+      current.lifecycleStatus = event.to;
+      current.effectiveDate = event.effectiveDate;
+      current.postedDate = event.postedDate;
+      current.settlementDate = event.settlementDate;
+    }
+    return current;
+  };
+
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
     const row = rows[rowIndex];
     if (!row || row.valid === false || !isCalendarDate(row.effectiveDate) ||
@@ -162,7 +177,7 @@ export function reconcileImport({
         (row.amountMinor !== null && row.amountMinor !== undefined && row.amountDecimal !== null && row.amountDecimal !== undefined)) {
       counts.rejected++;
       counts.rowsRecognized++;
-      observations.push({ rowOrdinal: row?.rowOrdinal ?? null, activityId: null, disposition: "rejected", reasonCode: row?.errorCode ?? "invalid-row" });
+      observations.push({ rowOrdinal: row?.rowOrdinal ?? rowIndex + 1, accountId, institutionId, sourceRecordId: row?.sourceRecordId ?? null, sourceFields: row?.sourceFields ?? {}, sourceRowFingerprint: row?.sourceRowFingerprint ?? null, activityId: null, disposition: "rejected", reasonCode: row?.errorCode ?? "invalid-row" });
       continue;
     }
 
@@ -209,7 +224,7 @@ export function reconcileImport({
     } else if (row.sourceRecordId) {
       const candidates = [...existingObservations, ...observations]
         .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.activityId)
-        .map((obs) => existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId))
+        .map((obs) => workingActivity(existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId)))
         .filter((activity) => activity && activity.institutionId === institutionId && activity.accountId === accountId);
       const unique = [...new Map(candidates.map((a) => [a.activityId, a])).values()];
       if (unique.length > 1) {
@@ -224,9 +239,12 @@ export function reconcileImport({
           } else {
             disposition = "review"; reasonCode = "source-id-conflict";
           }
+        } else if (match.lifecycleStatus === 'posted' && incoming.lifecycleStatus === 'posted' &&
+            (match.effectiveDate !== incoming.effectiveDate || (match.postedDate ?? null) !== (incoming.postedDate ?? null) || (match.settlementDate ?? null) !== (incoming.settlementDate ?? null))) {
+          disposition = 'review'; reasonCode = 'source-id-date-conflict';
         } else if (isPendingPostedTransition(match, incoming)) {
           disposition = "matched";
-          events.push({ eventType: "lifecycle-transition", activityId: match.activityId, from: "pending", to: "posted", observationRowOrdinal: row.rowOrdinal, appendOnly: true });
+          events.push({ eventType: "lifecycle-transition", activityId: match.activityId, from: "pending", to: "posted", effectiveDate: row.effectiveDate, postedDate: row.postedDate ?? null, settlementDate: row.settlementDate ?? null, observationRowOrdinal: row.rowOrdinal, appendOnly: true });
         } else {
           disposition = "matched";
         }
@@ -234,8 +252,7 @@ export function reconcileImport({
     } else {
       const candidates = existingActivities.filter((a) => sameComposite(a, incoming));
       if (candidates.length === 1) {
-        match = candidates[0];
-        disposition = "matched";
+        disposition = "review"; reasonCode = "insufficient-composite-evidence";
       } else if (candidates.length > 1) {
         disposition = "review"; reasonCode = "ambiguous-composite-match";
       }
@@ -243,7 +260,7 @@ export function reconcileImport({
 
     let activityId = match?.activityId ?? null;
     if (disposition === "created") {
-      activityId = "synthetic-activity-" + String(activities.length + 1);
+      activityId = idFactory();
       activities.push({ ...incoming, activityId, processingStatus: "processed" });
       counts.created++;
     } else if (disposition === "matched") {
