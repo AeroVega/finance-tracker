@@ -3,9 +3,9 @@
 **Status:** Owner-reviewed design baseline in progress  
 **Product:** Second Generation Finance Tracker (working name)  
 **Target release:** v1.0.0  
-**Last updated:** 2026-11-05
+**Last updated:** 2026-11-06
 
-This document captures the product direction and owner-approved principles established during the November 2–5, 2026 product-design discussions. It is intended to guide future product, architecture, implementation, and review sessions.
+This document captures the product direction and owner-approved principles established during the November 2–6, 2026 product-design discussions. It is intended to guide future product, architecture, implementation, and review sessions.
 
 It is a product specification, not an implementation plan or authorization to enable production financial-data persistence. Detailed technical contracts and release gates remain in their existing architecture and acceptance documents. Where this document identifies a conflict with an existing approved technical constraint, the conflict is called out rather than silently resolved.
 
@@ -112,6 +112,12 @@ Use these distinct concepts throughout the ledger, calculations, dashboards, and
 
 Provide separate, complementary views for **spending** and **total cash movement**. Spending reports answer what the user consumed or paid for; cash-flow reports answer how money moved through accounts and distinguish internal transfers from external inflows and outflows. Investment activity and performance must remain separately inspectable rather than being folded into ordinary spending.
 
+**Owner-confirmed 2026-11-06:** Show pending transactions clearly in Activity, but exclude them from finalized income and spending totals until they post. This decision does not settle pending balances, cash-flow or projection treatment, or posted-date versus effective-date reporting.
+
+**Owner-confirmed 2026-11-06:** Count a refund against its original spending category in the month the refund posts. A partial refund reduces spending only by the refunded amount, in the month it posts. Do not treat refunds as income or restate the earlier purchase month solely because of the refund. The desired experience includes a persistent, navigable link to the original expense when the relationship can be established. Engineering must assess how the storage model can support that link and specify feasibility, matching, and implementation details; this is a desired capability, not a claim that it is implemented.
+
+**Owner-confirmed 2026-11-06:** When the bank corrects a duplicate or erroneous charge, correct the original reporting period's effective totals while preserving the audit trail. Clearly label the bank correction and its relationship to the original error, so the error is not presented as real spending followed by a refund. This treatment applies to identified bank corrections; a credit alone does not establish that it is a correction.
+
 These distinctions are foundational reporting semantics. They must be applied consistently across categorization, account activity, summaries, charts, and projections. The first-generation workbook is a historical data source for migration, not the mathematical authority for the new application: do not mechanically reproduce its formulas or calculation quirks. Design new formulas using sound, consistent, explainable financial methodology. Detailed formulas and date-treatment edge cases remain open where identified in the product-decision register.
 
 ### 4.5 Transfers
@@ -210,7 +216,9 @@ Home should use a flexible two-column bento-style arrangement of dashboard cards
 
 CSV upload should be a prominent, readily accessible Home action because importing data is a frequent and essential task during the initial release.
 
-Insights should have a dedicated experience that is easy to reach, not be buried among infrequently used settings. A prominent Home card may serve as an entry point to that experience; whether Insights ultimately warrants a separate primary navigation destination remains open.
+**Owner-confirmed 2026-11-06:** A prominent Home card opens the dedicated Insights page. Keep the five primary tabs: Home / Activity / Accounts / Planning / More. Insights does not add a sixth tab and must not be buried among infrequently used settings.
+
+**Owner-confirmed 2026-11-06:** Income, spending, and cash-flow reports default to the current calendar month. Views for previous months, the year, and lifetime must be equally easy to access. Lifetime means all available recorded history, with incomplete coverage, missing periods, and differences between workbook-derived summaries and transaction-level data still made clear. It does not imply a complete lifetime financial record.
 
 The first-run experience should prioritize getting useful financial history into the application. Initial setup should be lightweight and should not require a lengthy guided tutorial. Without imported or migrated data, most of the product has little value.
 
