@@ -169,6 +169,10 @@ Projections are a core capability. They estimate likely future outcomes using ob
 
 **Owner-confirmed 2026-11-06:** The initial baseline projection estimates the combined cash balance of checking and savings accounts, excluding investments and available credit. Transfers between included accounts do not change that combined balance. Net-worth projection is a lower-priority candidate for later work. The v1.0.0 forecast horizon is three months. The owner wants to extend it to at least a full year eventually, without a committed date or later release. For v1.0.0, show projected month-end cash balances for each of the next three months. Daily projected balances are deferred. Update cadence and calculation methodology remain open.
 
+**Owner-confirmed 2026-11-06:** Before generating the baseline forecast, require three complete calendar months of confirmed coverage across the included accounts. If that coverage is missing, show what is missing instead of generating a projection. Manual assumptions must not bypass this coverage gate. The qualifying-month selection, including whether months must be consecutive or the latest months, remains open. Apply the established coverage distinctions rather than treating observed transaction dates or a declared period alone as proof of completeness.
+
+**Tentative approach, not a finalized calculation decision:** A three-month historical average of inflows and outflows, with starting amounts visible and editable, was discussed. The averaging method, qualifying history window, and detailed cash-flow treatment still need definition. The confirmed coverage gate replaces the earlier proposed manual fallback when history is insufficient.
+
 ### 5.2 Goals
 
 Goals provide measurable desired outcomes for projections to evaluate. They may include saving for a purchase, building or maintaining an emergency reserve, paying off debt, or reaching an investment milestone. Goals should be optional and should help users understand whether, when, and under what assumptions an outcome may be reached.
