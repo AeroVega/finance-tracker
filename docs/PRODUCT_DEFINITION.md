@@ -161,9 +161,13 @@ For v1.0.0, manual liability creation and periodic balance updates are acceptabl
 
 ## 5. Planning and decision support
 
+**Owner-confirmed 2026-11-06:** v1.0.0 planning consists of basic category budgets and the baseline projection. Defer goals and saved what-if scenarios to later development, with no committed later version or date. Their descriptions below preserve the longer-term product direction.
+
 ### 5.1 Projections
 
 Projections are a core capability. They estimate likely future outcomes using observed financial history, current circumstances, and explicit future assumptions. They should remain useful even when the user has not created budgets or goals.
+
+**Owner-confirmed 2026-11-06:** The initial baseline projection estimates cash balance. Net-worth projection is a lower-priority candidate for later work. The forecast horizon, update cadence, and calculation methodology remain open.
 
 ### 5.2 Goals
 
@@ -219,7 +223,7 @@ The intended primary navigation is:
 - **Home:** a present-day, bird's-eye overview of financial position, recent developments, and broad trends.
 - **Activity:** historical transactions, transfers, and day-to-day financial history.
 - **Accounts:** institutions, individual accounts, balances, holdings, assets, and liabilities.
-- **Planning:** goals, budgets, projections, and scenarios.
+- **Planning:** basic category budgets and the baseline cash-balance projection in v1.0.0, with goals and saved what-if scenarios deferred.
 - **More:** settings, data management, diagnostics, and less frequently used functions.
 
 **Owner-confirmed 2026-11-06:** Activity must let the user search, filter, sort, and group transactions by clear, consistent built-in transaction type labels in v1.0.0. Refund, bank correction, paycheck, and purchase are examples, not an exhaustive taxonomy. Transaction type is separate from categories such as groceries and from review status, so the user can find all refunds or just grocery refunds. Arbitrary custom tags are deferred to later releases. The complete built-in type set, its mapping to the canonical ledger, and the detailed controls remain to be specified; this records the intended behavior, not an implemented feature.
@@ -332,10 +336,10 @@ The following capabilities should have useful but deliberately limited initial i
 - **Insights:** meaningful observations and evidence-based, optional recommendations.
 - **Investments:** account balances, holdings, contributions, distributions, dividends, and basic investment activity; advanced performance analysis may follow.
 - **Budgets:** basic category budgets and spending comparisons.
-- **Projections:** a straightforward baseline projection with clearly stated assumptions.
+- **Projections:** a straightforward baseline cash-balance projection with clearly stated assumptions.
 - **Data quality:** clear indicators for stale imports, missing coverage, and reconciliation problems.
 
-Advanced investment performance and tax-lot analysis, sophisticated forecasting, complex goal hierarchies and optimization, advanced budget rollover/customization, multi-currency support, extensive dashboard/report customization, additional institution integrations, and simultaneous multi-device operation are not v1.0.0 release requirements. They may be considered for later releases subject to compatibility, correctness, privacy, cost, and product review.
+Advanced investment performance and tax-lot analysis, sophisticated forecasting, goals and saved what-if scenarios, advanced budget rollover/customization, multi-currency support, extensive dashboard/report customization, additional institution integrations, and simultaneous multi-device operation are not v1.0.0 release requirements. They may be considered for later releases subject to compatibility, correctness, privacy, cost, and product review.
 
 The minor-version sequence is an opportunity, not an automatic commitment to a particular feature or date. A refinement belongs in a 1.1.x or 1.2.x release when it can be added compatibly without weakening established financial meaning or requiring an unplanned breaking migration. The v1.0.0 release remains conditional on functional completeness, data integrity/security/recovery acceptance, and explicit owner acceptance after reconciliation. If those gates are not met by January 1, move the release date rather than lower the standard.
 
@@ -346,7 +350,7 @@ This scope baseline does not authorize production financial-data persistence or 
 Use the following progression to separate foundational correctness from the richer analytical experience:
 
 - **Alpha — trustworthy financial foundation.** Establish supported CSV imports, migration of the prior-generation monthly financial history, the canonical ledger and reconciliation, categorization and auditable corrections, accurate account balances/assets/liabilities/net worth, and dependable storage, backup, recovery, and portability. Alpha is successful when the owner can load and review financial history, correct it, and trust that the information is preserved and represented honestly.
-- **Beta — visual and analytical experience.** Build the dashboard and navigation, present-day overview, historical trends and reports, insights, and the initial goals/budgets/projections/scenarios experience on top of the trusted foundation. Use controlled synthetic datasets to test chart layouts, uncertainty cones, edge cases, and interactions. Beta is successful when the experience works on target devices against those controlled datasets and is usable.
+- **Beta — visual and analytical experience.** Build the dashboard and navigation, present-day overview, historical trends and reports, insights, basic category budgets, and the baseline cash-balance projection on top of the trusted foundation. Goals and saved what-if scenarios are deferred beyond v1.0.0. Use controlled synthetic datasets to test chart layouts, missing data, edge cases, and interactions. Beta is successful when the experience works on target devices against those controlled datasets and is usable.
 - **1.0.0 — integrated first product release.** Combine the Alpha foundation and Beta experience, then validate the integrated application against actual financial data. Release requires reliable import, historical migration, categorization, storage/recovery, and the user-facing experience to work together.
 - **2.0.0 — expanded capabilities.** Reserve deeper investment analysis, more advanced planning and projection methods, expanded automation, additional integrations, and other deliberately deferred ambitions for later development.
 
