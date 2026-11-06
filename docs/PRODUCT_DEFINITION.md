@@ -395,7 +395,7 @@ Before importing, the conversion must produce a reviewable output and reconcilia
 
 The actual workbook inspection, conversion script, reconciliation, and import will be implemented in a separate, dedicated engineering PR. PR #26 records the product decision and migration approach only; it does not perform the migration or authorize use of real financial data before the applicable storage/security gates.
 
-## 12. PR #25 scope boundary — synthetic implementation merged; production remains gated
+## 12. PR #25 scope boundary: synthetic implementation merged, production remains gated
 
 PR #25's synthetic-only storage-readiness implementation is merged. Its scope included backup/restore portability, immutable snapshot verification, source-retention primitives, and synthetic acceptance workflows. The product vision in this document does **not** add reporting, investments, debt, budgeting, goals, projections, insights, or other product features to PR #25.
 
