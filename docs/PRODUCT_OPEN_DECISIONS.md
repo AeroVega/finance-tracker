@@ -57,12 +57,12 @@ This register preserves unanswered product questions without reopening decisions
 - [x] ~~What forecast horizon should v1.0.0 use?~~ Owner-confirmed 2026-11-06: use three months initially. Extending to at least a full year is a later aspiration, without a committed date or release. See [Product §5.1][product-planning].
 - [x] ~~What forecast granularity should v1.0.0 show?~~ Owner-confirmed 2026-11-06: show projected month-end cash balances for each of the next three months. Daily projected balances are deferred; no implementation-effort estimate is established. See [Product §5.1][product-planning].
 - [ ] What update cadence should the baseline projection use?
-- [ ] How should historical activity become baseline assumptions, including seasonality and unusual one-off activity? A three-month average of inflows/outflows with visible, editable amounts is a tentative approach, not a finalized method. The history window and detailed cash-flow treatment remain open.
+- [ ] How should historical activity become baseline assumptions, including seasonality and unusual one-off activity? A three-month average of inflows/outflows with visible, editable amounts is a tentative approach, not a finalized method. The averaging method and detailed cash-flow treatment remain open.
 - [ ] How should users enter and revise future assumptions once the confirmed coverage gate is met? Manual assumptions cannot bypass missing required coverage.
 - [x] ~~Must scenarios change actual records, and may old forecasts be replaced silently?~~ Named alternatives leave actual records unchanged. Historical forecasts retain their assumptions and then-available information for comparison with actual outcomes. See [Product §§5.3 and 5.4][product-planning].
 - [ ] What statistical meaning and calibration should the uncertainty cone have when implemented? The intended widening-cone presentation is settled; the methodology is not.
-- [x] ~~What minimum history permits a v1.0.0 baseline forecast?~~ Owner-confirmed 2026-11-06: require three complete calendar months of confirmed coverage across the included accounts. Otherwise show missing coverage instead of a projection, without a manual-assumption bypass. See [Product §5.1][product-planning].
-- [ ] Which months qualify for that gate, including whether they must be consecutive or the latest months, and how should projection confidence reflect remaining data-quality limitations after the gate is met?
+- [x] ~~What minimum history permits a v1.0.0 baseline forecast?~~ Owner-confirmed 2026-11-06: require confirmed coverage across the included accounts for the three most recent completed calendar months, consecutively. Otherwise show missing coverage instead of a projection, without a manual-assumption bypass. See [Product §5.1][product-planning].
+- [ ] How should projection confidence reflect remaining data-quality limitations after the confirmed coverage gate is met?
 - [ ] For later saved what-if scenarios, how should they be versioned and compared beyond the agreed named-alternative behavior?
 - [ ] Which error measures and presentation should compare retained forecasts with subsequent actual outcomes, including systematic over- or under-estimation?
 - [x] ~~Are sophisticated forecasts and scenario-management capabilities required for the initial release?~~ v1.0.0 requires a straightforward baseline cash-balance projection with stated assumptions. Goals and saved what-if scenarios are explicitly deferred, as is sophisticated forecasting. See [minimum v1.0.0 scope][product-minimum] and [Roadmap Beta scope][roadmap-beta].
@@ -125,7 +125,7 @@ The questions below concern later goals. Purchase savings, emergency reserves, d
 - [ ] Should v1.0.0 include interest rates, minimum payments, scheduled payments, and amortization, or defer some of them?
 - [x] ~~Are credit-card payments a second expense, and is debt principal repayment spending?~~ Card purchases count as spending when incurred; payments settle the liability. Principal repayment reduces debt; interest and fees are expenses. See [Product §4.4][product-financial].
 - [ ] How should purchases, statements, payments, and liability-balance snapshots reconcile, beyond those settled classifications?
-- [ ] What debt-payoff projection, if any, belongs in the initial baseline projection?
+- [ ] What debt-payoff projection should be considered later? How debt-payment assumptions affect the initial cash-balance forecast remains part of its open methodology.
 
 ### Insights
 
