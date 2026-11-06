@@ -417,6 +417,6 @@ This document captures product-level intent. Detailed technical decisions remain
 - [Database identity and lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md)
 - [Data model and reconciliation principles](DATA_MODEL.md)
 - [Security and privacy requirements](SECURITY.md)
-- [PR #25 acceptance evidence](https://github.com/AeroVega/finance-tracker/blob/feat/production-readiness-acceptance/docs/PR25_ACCEPTANCE.md) (on the active PR #25 branch until merged)
+- [PR #25 acceptance evidence](https://github.com/AeroVega/finance-tracker/blob/main/docs/PR25_ACCEPTANCE.md)
 
 When a future implementation proposal appears to conflict with an established decision, identify the conflict and bring it forward for resolution. Do not silently reinterpret this document or an existing technical contract.
