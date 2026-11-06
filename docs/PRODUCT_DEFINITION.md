@@ -3,9 +3,9 @@
 **Status:** Owner-reviewed design baseline in progress  
 **Product:** Second Generation Finance Tracker (working name)  
 **Target release:** v1.0.0  
-**Last updated:** 2026-11-06
+**Last updated:** 2026-11-05
 
-This document captures the product direction and owner-approved principles established during the November 2–6, 2026 product-design discussions. It is intended to guide future product, architecture, implementation, and review sessions.
+This document captures the product direction and owner-approved principles established during the November 2–5, 2026 product-design discussions. It is intended to guide future product, architecture, implementation, and review sessions.
 
 It is a product specification, not an implementation plan or authorization to enable production financial-data persistence. Detailed technical contracts and release gates remain in their existing architecture and acceptance documents. Where this document identifies a conflict with an existing approved technical constraint, the conflict is called out rather than silently resolved.
 
@@ -96,7 +96,7 @@ Use a controlled standard set of account types in v1.0.0. Users may give account
 
 Financial accounts are persistent entities. Once an account has been created or recognized and associated with financial history, it remains available even when the user stops importing data from that institution or account. The absence of a new import is not evidence that an account has closed, been deleted, or ceased to exist. Preserve its identity and historical relationships, and distinguish stale or missing recent data from an explicitly closed or inactive account. Any future closure, archival, deletion, or status change must be explicit and preserve historical integrity; do not infer it from import inactivity.
 
-**Owner-confirmed 2026-11-06:** When an account has not been updated recently, keep its last known balance visible with an "as of" date. Mark combined net worth as containing stale values rather than making it appear fully current. The threshold for considering an account stale remains open.
+**Owner-confirmed 2026-11-05:** When an account has not been updated recently, keep its last known balance visible with an "as of" date. Mark combined net worth as containing stale values rather than making it appear fully current. The threshold for considering an account stale remains open.
 
 ### 4.4 Financial activity and reporting semantics
 
@@ -114,17 +114,17 @@ Use these distinct concepts throughout the ledger, calculations, dashboards, and
 
 Provide separate, complementary views for **spending** and **total cash movement**. Spending reports answer what the user consumed or paid for; cash-flow reports answer how money moved through accounts and distinguish internal transfers from external inflows and outflows. Investment activity and performance must remain separately inspectable rather than being folded into ordinary spending.
 
-**Owner-confirmed 2026-11-06:** Show pending transactions clearly in Activity, but exclude them from finalized income and spending totals until they post. Pending balances, projection treatment, and cash-flow presentation beyond the reporting-total rule below remain open.
+**Owner-confirmed 2026-11-05:** Show pending transactions clearly in Activity, but exclude them from finalized income and spending totals until they post. Pending balances, projection treatment, and cash-flow presentation beyond the reporting-total rule below remain open.
 
-**Owner-confirmed 2026-11-06:** Count a refund against its original spending category in the month the refund posts. A partial refund reduces spending only by the refunded amount, in the month it posts. Do not treat refunds as income or restate the earlier purchase month solely because of the refund. The desired experience includes a persistent, navigable link to the original expense when the relationship can be established. Engineering must assess how the storage model can support that link and specify feasibility, matching, and implementation details; this is a desired capability, not a claim that it is implemented.
+**Owner-confirmed 2026-11-05:** Count a refund against its original spending category in the month the refund posts. A partial refund reduces spending only by the refunded amount, in the month it posts. Do not treat refunds as income or restate the earlier purchase month solely because of the refund. The desired experience includes a persistent, navigable link to the original expense when the relationship can be established. Engineering must assess how the storage model can support that link and specify feasibility, matching, and implementation details; this is a desired capability, not a claim that it is implemented.
 
-**Owner-confirmed 2026-11-06:** An unmatched refund keeps a clear refund type label, is visibly marked for review, and allows the user to assign a spending category manually. Do not guess its category or original expense, or classify it as income. Its transaction type, spending category, and review status are separate concepts.
+**Owner-confirmed 2026-11-05:** An unmatched refund keeps a clear refund type label, is visibly marked for review, and allows the user to assign a spending category manually. Do not guess its category or original expense, or classify it as income. Its transaction type, spending category, and review status are separate concepts.
 
-**Owner-confirmed 2026-11-06:** When the bank corrects a duplicate or erroneous charge, correct the original reporting period's effective totals while preserving the audit trail. Clearly label the bank correction and its relationship to the original error, so the error is not presented as real spending followed by a refund. This treatment applies to identified bank corrections; a credit alone does not establish that it is a correction.
+**Owner-confirmed 2026-11-05:** When the bank corrects a duplicate or erroneous charge, correct the original reporting period's effective totals while preserving the audit trail. Clearly label the bank correction and its relationship to the original error, so the error is not presented as real spending followed by a refund. This treatment applies to identified bank corrections; a credit alone does not establish that it is a correction.
 
-**Owner-confirmed 2026-11-06:** Base reporting totals on posted activity. Preserve the established exceptions and financial meanings: refunds reduce spending in the month they post, while identified bank corrections and manual category corrections adjust the original period's effective totals with an audit trail. Preserve source, effective, posted, and settlement dates separately. Trade-date versus settlement-date reporting and other date-treatment edge cases remain open.
+**Owner-confirmed 2026-11-05:** Base reporting totals on posted activity. Preserve the established exceptions and financial meanings: refunds reduce spending in the month they post, while identified bank corrections and manual category corrections adjust the original period's effective totals with an audit trail. Preserve source, effective, posted, and settlement dates separately. Trade-date versus settlement-date reporting and other date-treatment edge cases remain open.
 
-**Owner-confirmed 2026-11-06:** Calculate savings rate as income minus spending, divided by income. Transfers into savings or investments do not count as spending. For months with zero income, show savings rate as not applicable. The formula does not settle gross versus net income, employer-contribution treatment, or negative-income edge cases.
+**Owner-confirmed 2026-11-05:** Calculate savings rate as income minus spending, divided by income. Transfers into savings or investments do not count as spending. For months with zero income, show savings rate as not applicable. The formula does not settle gross versus net income, employer-contribution treatment, or negative-income edge cases.
 
 These distinctions are foundational reporting semantics. They must be applied consistently across categorization, account activity, summaries, charts, and projections. The first-generation workbook is a historical data source for migration, not the mathematical authority for the new application: do not mechanically reproduce its formulas or calculation quirks. Design new formulas using sound, consistent, explainable financial methodology. Detailed formulas and date-treatment edge cases remain open where identified in the product-decision register.
 
@@ -155,29 +155,29 @@ Investments are a first-class financial domain, not merely a balance displayed b
 - Contributions/deposits, withdrawals, dividends, interest, fees, trades, and other investment activity.
 - Performance reporting that distinguishes external cash flows from investment returns.
 
-**Owner-confirmed 2026-11-06:** For v1.0.0, use imported investment balances and dated values, without live pricing or performance calculations. Retain the agreed holdings and basic investment-activity scope. This narrows the initial presentation, not the historical records to preserve. Cost-basis, employer-match, and detailed field requirements remain open where listed in the decision register.
+**Owner-confirmed 2026-11-05:** For v1.0.0, use imported investment balances and dated values, without live pricing or performance calculations. Retain the agreed holdings and basic investment-activity scope. This narrows the initial presentation, not the historical records to preserve. Cost-basis, employer-match, and detailed field requirements remain open where listed in the decision register.
 
 The user should be able to move from an overall portfolio view to accounts, holdings, and activity. Existing historical-retention decisions for monthly investment values, holdings, and cash-flow/performance components remain applicable.
 
 ### 4.9 Liabilities and debt
 
-Liabilities are first-class financial entities and contribute to net worth. **Owner-confirmed 2026-11-06:** The initial debt scope covers credit cards, mortgages, and auto loans with manual updates, without debt-payoff modelling in v1.0.0. Required fields, interest-rate and payment-schedule treatment, and amortization details were not decided by this scope confirmation.
+Liabilities are first-class financial entities and contribute to net worth. **Owner-confirmed 2026-11-05:** The initial debt scope covers credit cards, mortgages, and auto loans with manual updates, without debt-payoff modelling in v1.0.0. Required fields, interest-rate and payment-schedule treatment, and amortization details were not decided by this scope confirmation.
 
 For v1.0.0, manual liability creation and periodic balance updates are acceptable. Use supported file imports where available. Additional institution-specific integrations are deferred rather than expanding the initial integration scope. The interface should establish the intended long-term experience without pretending unsupported automatic feeds exist.
 
 ## 5. Planning and decision support
 
-**Owner-confirmed 2026-11-06:** v1.0.0 planning consists of basic category budgets and the baseline projection. Defer goals and saved what-if scenarios to later development, with no committed later version or date. Their descriptions below preserve the longer-term product direction.
+**Owner-confirmed 2026-11-05:** v1.0.0 planning consists of basic category budgets and the baseline projection. Defer goals and saved what-if scenarios to later development, with no committed later version or date. Their descriptions below preserve the longer-term product direction.
 
 ### 5.1 Projections
 
 Projections are a core capability. They estimate likely future outcomes using observed financial history, current circumstances, and explicit future assumptions. They should remain useful even when the user has not created budgets or goals.
 
-**Owner-confirmed 2026-11-06:** The initial baseline projection estimates the combined cash balance of checking and savings accounts, excluding investments and available credit. Transfers between included accounts do not change that combined balance. Net-worth projection is a lower-priority candidate for later work. The v1.0.0 forecast horizon is three months. The owner wants to extend it to at least a full year eventually, without a committed date or later release. For v1.0.0, show projected month-end cash balances for each of the next three months. Daily projected balances are deferred. Apply the baseline method and recalculation behavior below; detailed calculation edge cases remain open.
+**Owner-confirmed 2026-11-05:** The initial baseline projection estimates the combined cash balance of checking and savings accounts, excluding investments and available credit. Transfers between included accounts do not change that combined balance. Net-worth projection is a lower-priority candidate for later work. The v1.0.0 forecast horizon is three months. The owner wants to extend it to at least a full year eventually, without a committed date or later release. For v1.0.0, show projected month-end cash balances for each of the next three months. Daily projected balances are deferred. Apply the baseline method and recalculation behavior below; detailed calculation edge cases remain open.
 
-**Owner-confirmed 2026-11-06:** Before generating the baseline forecast, require confirmed coverage across the included accounts for the three most recent completed calendar months, consecutively. If that coverage is missing, show what is missing instead of generating a projection. Manual assumptions must not bypass this coverage gate. Apply the established coverage distinctions rather than treating observed transaction dates or a declared period alone as proof of completeness.
+**Owner-confirmed 2026-11-05:** Before generating the baseline forecast, require confirmed coverage across the included accounts for the three most recent completed calendar months, consecutively. If that coverage is missing, show what is missing instead of generating a projection. Manual assumptions must not bypass this coverage gate. Apply the established coverage distinctions rather than treating observed transaction dates or a declared period alone as proof of completeness.
 
-**Owner-confirmed 2026-11-06:** Average inflows and outflows from the three qualifying months to form the baseline forecast, including debt payments and excluding transfers between the included checking and savings accounts. Assumptions are editable. Recalculate after changes and label the result as a baseline estimate. The confirmed coverage gate still applies, with no manual-assumption bypass. Seasonality, unusual one-off activity, remaining calculation edge cases, and confidence-band methodology are not settled by this decision.
+**Owner-confirmed 2026-11-05:** Average inflows and outflows from the three qualifying months to form the baseline forecast, including debt payments and excluding transfers between the included checking and savings accounts. Assumptions are editable. Recalculate after changes and label the result as a baseline estimate. The confirmed coverage gate still applies, with no manual-assumption bypass. Seasonality, unusual one-off activity, remaining calculation edge cases, and confidence-band methodology are not settled by this decision.
 
 ### 5.2 Goals
 
@@ -203,11 +203,11 @@ Budgeting is optional. The application must be useful without user-created budge
 
 A lightweight initial budget experience may include periodic category targets, actual-versus-target comparisons, remaining budget, projected end-of-period spending, and historical comparisons. Exceeding a target is information, not a moral judgment or product failure.
 
-**Owner-confirmed 2026-11-06:** Initial budgets cover spending categories only, at the main category level. Income targets and savings goals belong to separate later planning features; no later release date or v1.0.0 goals requirement is implied. Subcategory budgets are deferred as a possible compatible 1.x addition, without a committed date or allocation design. Category budgets use calendar months, with each month starting fresh. Unused budget does not carry forward into the next month. Keep previous months available for comparison. Budget-target changes apply to the current month onward, while previous months retain their targets for honest comparisons. Savings transfers, overspend carryover, retroactive target overrides, and prorating remain unspecified.
+**Owner-confirmed 2026-11-05:** Initial budgets cover spending categories only, at the main category level. Income targets and savings goals belong to separate later planning features; no later release date or v1.0.0 goals requirement is implied. Subcategory budgets are deferred as a possible compatible 1.x addition, without a committed date or allocation design. Category budgets use calendar months, with each month starting fresh. Unused budget does not carry forward into the next month. Keep previous months available for comparison. Budget-target changes apply to the current month onward, while previous months retain their targets for honest comparisons. Savings transfers, overspend carryover, retroactive target overrides, and prorating remain unspecified.
 
-**Owner-confirmed 2026-11-06:** Show each budget's target, actual spending, and amount remaining or over target. Include an estimated month-end total when there is enough data, clearly label it as an estimate, and use neutral wording. The exact visualization and the criteria for sufficient forecast data remain to be designed.
+**Owner-confirmed 2026-11-05:** Show each budget's target, actual spending, and amount remaining or over target. Include an estimated month-end total when there is enough data, clearly label it as an estimate, and use neutral wording. The exact visualization and the criteria for sufficient forecast data remain to be designed.
 
-**Owner-confirmed 2026-11-06:** When import coverage is incomplete, show recorded spending with a clear coverage warning. Withhold the budget's month-end estimate when the gaps make it unreliable. The reliability thresholds and aggregation rules remain to be specified.
+**Owner-confirmed 2026-11-05:** When import coverage is incomplete, show recorded spending with a clear coverage warning. Withhold the budget's month-end estimate when the gaps make it unreliable. The reliability thresholds and aggregation rules remain to be specified.
 
 ### 5.6 Insights
 
@@ -236,15 +236,15 @@ The intended primary navigation is:
 - **Planning:** basic category budgets and the baseline cash-balance projection in v1.0.0, with goals and saved what-if scenarios deferred.
 - **More:** settings, data management, diagnostics, and less frequently used functions.
 
-**Owner-confirmed 2026-11-06:** Activity must let the user search, filter, sort, and group transactions by clear, consistent built-in transaction type labels in v1.0.0. Refund, bank correction, paycheck, and purchase are examples, not an exhaustive taxonomy. Transaction type is separate from categories such as groceries and from review status, so the user can find all refunds or just grocery refunds. Arbitrary custom tags are deferred to later releases. The complete built-in type set, its mapping to the canonical ledger, and the detailed controls remain to be specified; this records the intended behavior, not an implemented feature.
+**Owner-confirmed 2026-11-05:** Activity must let the user search, filter, sort, and group transactions by clear, consistent built-in transaction type labels in v1.0.0. Refund, bank correction, paycheck, and purchase are examples, not an exhaustive taxonomy. Transaction type is separate from categories such as groceries and from review status, so the user can find all refunds or just grocery refunds. Arbitrary custom tags are deferred to later releases. The complete built-in type set, its mapping to the canonical ledger, and the detailed controls remain to be specified; this records the intended behavior, not an implemented feature.
 
 Home should use a flexible two-column bento-style arrangement of dashboard cards rather than a rigid uniform grid. Cards may vary in size and height. A net-worth trend chart is one card among others, not a mandatory full-width banner. Other useful cards may include a category breakdown, recent transactions, and current financial-position summaries. Each card should open the relevant detailed experience when selected.
 
 CSV upload should be a prominent, readily accessible Home action because importing data is a frequent and essential task during the initial release.
 
-**Owner-confirmed 2026-11-06:** A prominent Home card opens the dedicated Insights page. Keep the five primary tabs: Home / Activity / Accounts / Planning / More. Insights does not add a sixth tab and must not be buried among infrequently used settings.
+**Owner-confirmed 2026-11-05:** A prominent Home card opens the dedicated Insights page. Keep the five primary tabs: Home / Activity / Accounts / Planning / More. Insights does not add a sixth tab and must not be buried among infrequently used settings.
 
-**Owner-confirmed 2026-11-06:** Income, spending, and cash-flow reports default to the current calendar month. Views for previous months, the year, and lifetime must be equally easy to access. Annual views use calendar years, and optional custom date ranges are available. Lifetime means all available recorded history, with incomplete coverage, missing periods, and differences between workbook-derived summaries and transaction-level data still made clear. It does not imply a complete lifetime financial record.
+**Owner-confirmed 2026-11-05:** Income, spending, and cash-flow reports default to the current calendar month. Views for previous months, the year, and lifetime must be equally easy to access. Annual views use calendar years, and optional custom date ranges are available. Lifetime means all available recorded history, with incomplete coverage, missing periods, and differences between workbook-derived summaries and transaction-level data still made clear. It does not imply a complete lifetime financial record.
 
 The first-run experience should prioritize getting useful financial history into the application. Initial setup should be lightweight and should not require a lengthy guided tutorial. Without imported or migrated data, most of the product has little value.
 
@@ -254,17 +254,17 @@ Once the authoritative Drive data is accessible, show the user's migrated histor
 
 ## 7. Data quality, history, and trust
 
-**Owner-confirmed 2026-11-06:** Show known amounts with clear dates and coverage warnings. If a missing value prevents a trustworthy complete total, show the known subtotal and withhold the complete total. Explicitly label that result as a subtotal, not a complete total. Missing values are not zero. Keep stale values qualified by their "as of" dates and existing stale-value warnings. Exact reliability thresholds and report-specific implementation remain engineering detail.
+**Owner-confirmed 2026-11-05:** Show known amounts with clear dates and coverage warnings. If a missing value prevents a trustworthy complete total, show the known subtotal and withhold the complete total. Explicitly label that result as a subtotal, not a complete total. Missing values are not zero. Keep stale values qualified by their "as of" dates and existing stale-value warnings. Exact reliability thresholds and report-specific implementation remain engineering detail.
 
 ### 7.1 Data quality health
 
 The longer-term product direction includes an explicit **Data Quality Health Score** describing the quality of the underlying financial data, not the user's personal financial health. It should provide one overall score with component-level explanations available on drill-down. Candidate dimensions include freshness, completeness, reconciliation, import integrity, and source availability.
 
-**Owner-confirmed 2026-11-06:** v1.0.0 uses clear data-quality indicators such as coverage gaps, stale balances, and reconciliation issues. Defer the numerical Health Score until its scoring method is defined. This defers the score from the initial release without abandoning the longer-term capability or committing it to a particular later release.
+**Owner-confirmed 2026-11-05:** v1.0.0 uses clear data-quality indicators such as coverage gaps, stale balances, and reconciliation issues. Defer the numerical Health Score until its scoring method is defined. This defers the score from the initial release without abandoning the longer-term capability or committing it to a particular later release.
 
 The score must be explainable; it must not be a mysterious algorithm. Reports and projections should make material data-quality limitations visible.
 
-**Owner-confirmed 2026-11-06:** Show import coverage per account so one account's imports do not hide another account's gaps. Mark uncovered time spans with red gaps and text labels, so color is not the only cue. Preserve the existing distinctions between declared import coverage, observed transaction dates, import time, and verified completeness. A day without transactions is not itself proof of missing coverage, and a declared period is not proof of complete data. The detailed timeline visualization and reliability thresholds remain open; showing coverage per account does not settle every rule for combining account data in reports.
+**Owner-confirmed 2026-11-05:** Show import coverage per account so one account's imports do not hide another account's gaps. Mark uncovered time spans with red gaps and text labels, so color is not the only cue. Preserve the existing distinctions between declared import coverage, observed transaction dates, import time, and verified completeness. A day without transactions is not itself proof of missing coverage, and a declared period is not proof of complete data. The detailed timeline visualization and reliability thresholds remain open; showing coverage per account does not settle every rule for combining account data in reports.
 
 ### 7.2 Historical retention
 
@@ -326,7 +326,7 @@ Use semantic versioning:
 
 Preserve backward compatibility where reasonable, keep financial history portable, and make breaking changes deliberate and explainable.
 
-**Owner-confirmed 2026-11-06:** Documented cosmetic issues may be accepted for release. Incorrect totals, data loss, and privacy failures block release. The owner must review the evidence before approving release. Existing mandatory security, cost, recovery, and production-authorization gates remain in force. This defines the acceptance boundary; it does not approve a release, merge, or production use.
+**Owner-confirmed 2026-11-05:** Documented cosmetic issues may be accepted for release. Incorrect totals, data loss, and privacy failures block release. The owner must review the evidence before approving release. Existing mandatory security, cost, recovery, and production-authorization gates remain in force. This defines the acceptance boundary; it does not approve a release, merge, or production use.
 
 The January 1, 2027 v1.0.0 target is a planning target, not permission to weaken correctness, privacy, recovery, or production-readiness requirements. The owner-confirmed minimum feature scope is recorded below; the detailed dependency-aware delivery schedule and measurable acceptance criteria remain to be established.
 
@@ -389,7 +389,7 @@ Do not reconstruct individual transactions or imply that monthly aggregates are 
 
 Represent these records as a distinct historical monthly-summary record type, separate from the canonical transaction/activity ledger. This allows historical net-worth and cash-flow trends to extend back to 2023 without confusing aggregates with imported transactions or double-counting them in ledger reports. The user-facing experience must preserve and communicate this distinction: historical monthly summaries must be identifiable as workbook-derived aggregate records, while institution-imported activity is presented as transaction-level or other source-supported detail. Do not place monthly totals in a transaction list as though they were individual transactions. Where a report or chart combines both periods, make the change in source and level of detail clear rather than implying uniform transaction coverage.
 
-**Owner-confirmed 2026-11-06:** Where workbook history overlaps imported activity, use transaction detail for a month only when that month has been reconciled as complete. Otherwise retain the workbook summary and label its coverage. Never add both sources for the same economic activity. Preserve the workbook's actual level of detail rather than assuming it contains per-account monthly summaries. The completeness evidence, reconciliation criteria, and handling of different source scopes or detail still need an engineering contract.
+**Owner-confirmed 2026-11-05:** Where workbook history overlaps imported activity, use transaction detail for a month only when that month has been reconciled as complete. Otherwise retain the workbook summary and label its coverage. Never add both sources for the same economic activity. Preserve the workbook's actual level of detail rather than assuming it contains per-account monthly summaries. The completeness evidence, reconciliation criteria, and handling of different source scopes or detail still need an engineering contract.
 
 Before importing, the conversion must produce a reviewable output and reconciliation report. Validate month coverage, source-to-output values, income-source sums against monthly income totals, expense-category sums against monthly expense totals, and any available net-cash-flow totals. Treat monthly net worth as its own reported snapshot; do not assume changes in net worth must equal monthly income minus expenses, since transfers, market movements, valuation changes, and other factors may affect it. Flag missing months, ambiguous labels, formula errors, and mismatches; do not silently fill, interpolate, or correct source values. Retain the original workbook unchanged and record source workbook/worksheet and migration provenance for each output record.
 
