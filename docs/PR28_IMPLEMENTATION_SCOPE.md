@@ -1,31 +1,30 @@
-# PR28 — Financial Tracker Application Implementation
+# PR28: canonical import foundation
 
-**Status:** Draft reservation only. No product implementation or production-persistence authorization is included in this placeholder.
+**Status: implemented for synthetic review; live acceptance remains outstanding.** The owner approved this five-part scope on November 6, 2026. PR26 supplies product decisions for this and subsequent work. PR20–25 supply the existing persistence, recovery, session, backup, and portability machinery.
 
-## Intended workstream
+## Included implementation
 
-PR28 is reserved for building the actual financial-tracking application: turning the existing canonical import and reconciliation contracts into useful, user-visible functionality.
+1. **Read the three documented CSV formats.** Parse Wells Fargo, SoFi, and Fidelity source shapes strictly; explicitly map accounts; preserve source fields, descriptions, original row positions, exact amounts, currencies, and distinct dates. Report malformed rows and distinguish a valid empty export from an unsupported file. The fixtures are invented and establish tested behavior, not provider-wide format guarantees.
+2. **Keep identities and coverage trustworthy.** Allocate durable UUID identities. Fingerprint the original file bytes independently of its name. Store confirmed declared coverage separately from observed dates, import time, and completeness assessment. Require resolution of usable dates outside the declared period.
+3. **Reconcile and review conservatively.** Prevent repeat imports and repeated event application while preserving genuinely separate transactions. Unique composite similarity is insufficient evidence for automatic identity matching. Preserve rejected and ambiguous observations and scoped, auditable review decisions, with safe append-only reversal when no later dependent work prevents it. Reevaluate unresolved imports without duplicating accepted effects.
+4. **Preserve correction history and refund links.** Apply explicit classifications, category corrections, bank corrections, and evidence-backed refund links as events. Category corrections also create inspectable exact-match rules for future activity while leaving already-imported peers unchanged. Preserve original source facts. Calculate exact known subtotals with exclusions and qualifications; declared coverage alone never establishes a complete financial total.
+5. **Connect import, review, save, and reopen.** A minimal invented-data workbench stages the changes locally and saves canonical records through the existing application lifecycle and catalog engine. Read-back and reopen verify the same records and financial meaning. Canonical records are individually partitioned so unchanged records reuse existing objects. Existing backup and restore mechanisms validate these records through a shared application validator, including copies with retained dashboard and canonical history.
 
-The expected implementation scope will be refined after the owner completes the PR26 product-definition discussion and the deeper PR27 production-persistence design discussion. Likely areas include:
+## Acceptance criteria
 
-- Provider-specific CSV parsing and normalization for the supported Wells Fargo, SoFi, and Fidelity export formats.
-- Canonical ledger integration, import provenance, duplicate/overlap handling, pending-to-posted matching, and explicit correction/review paths.
-- Deterministic categorization and a human-review workflow.
-- Trustworthy cash-flow and wealth reporting with documented calculation definitions.
-- Synthetic fixtures and regression tests as permanent first-class development capabilities.
+- The three adapters preserve quoted/multiline descriptions, optional blanks, exact decimal text, account distinctions, source ordinals, and Fidelity header/footer boundaries. Unknown nonblank rows remain explicit failures or review evidence.
+- Declared periods, observed dates, import times, and verification state remain distinct, including empty files and coverage gaps.
+- Reimporting identical bytes in the same account/format context does not repeat financial effects. A renamed file is still identical. A needs-review attempt can be reevaluated without duplicating its accepted occurrences.
+- Two legitimate identical-looking rows remain separate or explicitly reviewed, including two incoming rows against one prior candidate.
+- Review decisions, evidence, corrections, links, and import counts survive save and reopen. Original observations are not rewritten to conceal corrections.
+- Posted/pending transitions remain auditable. Explicit corrections affect the original effective period; linked partial refunds reduce spending in their posting period. Uncertain activity is qualified rather than guessed.
+- Reports use exact arithmetic, preserve currency boundaries, and label known subtotals. Missing information never becomes zero or an unlabeled complete total.
+- Interruption at every durable boundary exercised by the canonical payload restores either the full committed result or the unchanged prior state. Retrying after verified recovery does not repeat effects.
+- Existing portable export/restore preserves canonical identity, record order, event history, and logical financial results while assigning new physical copy locators.
+- The full Node regression suite and module syntax checks pass. Browser/device and live synthetic Drive acceptance are recorded separately from automated results.
 
-This is an initial reservation, not a final implementation specification. The precise sequencing and acceptance criteria must be agreed before substantial coding begins.
+## Safety and review gates
 
-## Dependencies and boundaries
+The workbench accepts only bundled invented fixtures and a dedicated synthetic folder. Production data remains disabled under the PR27 gate. The accepted single-active-device model, offline-write prohibition, $0 recurring-cost constraint, privacy rules, and separate 540-day original-source policy remain in force. Original-file retention is reported honestly and is not inferred from a successful canonical commit.
 
-- Complete and review PR26's product definition and consequential open decisions.
-- Hold the PR27 design discussion and record the decisions that determine whether/how production financial-data persistence can be implemented safely.
-- Do not treat PR27's draft or this PR as authorization to store real financial data.
-- Preserve the permanent manual CSV import path and the $0 recurring-cost constraint.
-- No real financial data, account exports, credentials, tokens, or private identifiers may enter this public repository, CI, or synthetic fixtures.
-- Keep synthetic test data usable for routine development, regression, recovery, and acceptance.
-- Do not weaken privacy, financial correctness, or recovery guarantees to meet the January 1, 2027 target.
-
-## Reservation-only validation
-
-This PR intentionally contains documentation only. It introduces no application code, schema, migration, production configuration, deployment, or persistence behavior. It is a placeholder to reserve the PR number and establish a clear workstream boundary. The implementation scope and branch contents will be expanded only after the prerequisite discussions.
+Implementation, automated verification, live acceptance, and owner approval are distinct states. PR28 stays draft until its final evidence and remaining limitations have been reviewed. No merge, deployment, or production activation is authorized by these implementation changes.

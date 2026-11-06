@@ -28,6 +28,10 @@ MVP1 uses user-provided CSV imports. Google Drive is the **selected private-stor
 - [Data model and reconciliation principles](docs/DATA_MODEL.md)
 - [Contributor and agent instructions](AGENTS.md)
 
+## PR28 canonical import foundation
+
+The [approved PR28 scope](docs/PR28_IMPLEMENTATION_SCOPE.md) implements a synthetic-only CSV → account/coverage mapping → review → canonical save → reopen flow using the merged storage machinery. The [implementation contract and verification guide](docs/PR28_CANONICAL_IMPORT.md) describe the record model, tested provider variants, and acceptance evidence. The development-only [invented import workbench](prototype/pr28-import.html) accepts bundled fixtures only. Production activation remains gated by PR27.
+
 ## Temporary prototype navigation
 
 During development, the app footer links to a temporary [Prototype Tools hub](prototype/), which indexes the browser-based Drive and session experiments. The hub and all browser prototype pages are development-only. **They are not MVP1 product features.** Before MVP1 completion, remove the app entry point and ensure the `prototype/` pages are excluded from the user-facing GitHub Pages deployment. Retain only the automated tests and engineering documentation needed to support the shipped product.

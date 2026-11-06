@@ -1,4 +1,5 @@
-import { DashboardSyntheticStorage, isSyntheticDashboardSnapshot } from "../js/dashboard-synthetic-storage.mjs";
+import { DashboardSyntheticStorage } from "../js/dashboard-synthetic-storage.mjs";
+import { validateSyntheticApplicationSnapshot } from "../js/synthetic-application-structure.mjs";
 import { GoogleDriveTransactionAdapter } from "../js/drive-transaction-engine.mjs";
 import { SessionCoordinator } from "../js/session-coordination.mjs";
 import { createDriveSessionAdapter } from "../js/drive-session-adapter.mjs";
@@ -42,8 +43,7 @@ const storage = new DashboardSyntheticStorage({
   }
 });
 
-const validateStructure = ({ objects }) => Object.entries(objects).every(([path, bytes]) =>
-  path === "synthetic/dashboard-transactions.json" && isSyntheticDashboardSnapshot(JSON.parse(new TextDecoder().decode(bytes))));
+const validateStructure = validateSyntheticApplicationSnapshot;
 function sourceOptions() {
   const lifecycle = storage.lifecycle;
   return { sourceAdapter: lifecycle.transactionAdapter, sourceManifestFileId: lifecycle.manifestFileId,
@@ -130,7 +130,7 @@ action("export", "copy-result", async () => {
 $("archive").addEventListener("change", async () => {
   loadedArchive = null; refresh();
   try { const file = $("archive").files[0]; if (file) { const archive = JSON.parse(await file.text()); await verifyCatalogArchive(archive, { validateStructure }); loadedArchive = archive; result("copy-result", "PASS: local archive independently verified."); } }
-  catch { result("copy-result", "Archive rejected. Use a verified version-2 synthetic dashboard archive.", "error"); }
+  catch { result("copy-result", "Archive rejected. Use a verified version-2 synthetic application archive.", "error"); }
   refresh();
 });
 action("verify-archive", "copy-result", async () => { await verifyCatalogArchive(loadedArchive, { validateStructure }); result("copy-result", "PASS: loaded archive integrity, history, and application structure verified."); });

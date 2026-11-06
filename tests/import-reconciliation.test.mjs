@@ -67,11 +67,11 @@ test("needs-review prior run does not suppress retry of the identical file", () 
   assert.equal(result.activities.length, 1);
 });
 
-test("overlapping import with one unique composite candidate attaches provenance instead of duplicating", () => {
+test("overlapping import with one unique composite candidate requires corroboration", () => {
   const result = reconcileImport({ ...base, rows: [row()], existingActivities: [activity()] });
-  assert.equal(result.counts.matched, 1);
+  assert.equal(result.counts.review, 1);
   assert.equal(result.activities.length, 0);
-  assert.equal(result.observations[0].activityId, "activity-1");
+  assert.equal(result.observations[0].activityId, null);
 });
 
 test("same-day same-amount same-description collision with multiple candidates requires review", () => {
@@ -175,8 +175,8 @@ test("valid empty file succeeds with every data-row count zero and unknown cover
 });
 
 test("re-execution of the pure reconciliation function is deterministic and has no external side effects", () => {
-  const first = reconcileImport({ ...base, rows: [row()] });
-  const retry = reconcileImport({ ...base, rows: [row()] });
+  const first = reconcileImport({ ...base, rows: [row()], idFactory: () => "test-id" });
+  const retry = reconcileImport({ ...base, rows: [row()], idFactory: () => "test-id" });
   assert.deepEqual(retry, first);
   assert.equal(retry.activities.length, 1);
 });
