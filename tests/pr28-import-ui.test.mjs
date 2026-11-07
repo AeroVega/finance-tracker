@@ -12,7 +12,7 @@ test('workbench confines CSV selection to fixed bundled invented sources',async(
   const paths = [...script.matchAll(/'\.\.\/(fixtures\/[^']+\.csv)'/g)].map(match=>match[1]);
   assert.equal(paths.length,6);
   for(const path of paths) assert.ok((await readFile(new URL('../'+path,import.meta.url))).length);
-  assert.match(script,/new CanonicalLedgerStore/); assert.match(script,/await store\.save\(ledger\)/);
+  assert.match(script,/new CanonicalLedgerStore/); assert.match(script,/await store\.save\(next\)/);
 });
 
 test('coverage controls provide independent month navigation and explicit confirmation',()=>{

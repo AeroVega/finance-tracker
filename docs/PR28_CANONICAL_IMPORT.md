@@ -8,6 +8,18 @@
 
 The workbench at `prototype/pr28-import.html` fetches only fixed, invented CSV fixtures, including a later coffee purchase for prospective-category acceptance. It requires the existing dedicated synthetic folder and does not accept arbitrary financial uploads. Locally staged work is distinct from a saved commit; a failed or uncertain save requires recovery and reopening before recomputing another proposal.
 
+### Manual save and leaving the page
+
+Imports, review decisions, and corrections stay in memory until an explicit save. A prominent save-status callout remains visible on the guided page even when its optional workbench is collapsed. It distinguishes unsaved local changes, a save in progress, an unverified or deliberately paused save, and verified saved state. There is no background financial autosave or browser-storage copy of the ledger.
+
+A save clears the unsaved state only after successful verification. A failed or unverified save keeps the local changes and warning. The write may already have reached Drive, so an error is not proof that nothing was saved; follow the existing recovery/reopen flow before another attempt. Connect, reopen, and recovery actions retain their explicit discard confirmations. Releasing the session does not save or erase the in-tab draft.
+
+The existing `beforeunload` guard requests a generic browser warning while changes are unsaved or an operation is in progress. Browsers control that prompt and may require prior interaction. iPhone app switching, process termination, crashes, or some tab-closing paths can bypass it. The app cannot promise a warning or save changes after termination. Save before leaving; cancelling a supported warning leaves the draft in the current tab.
+
+Ownership heartbeats, offline refusal, exact-base checks, crash recovery, and page-hide session release are unchanged. The callout does not authorize a background write, bypass recovery, or replace a confirmed save.
+
+**Verified locally for these callouts:** the complete Node 24.22.1 and Node 26.13.0 suites each passed 541/541 tests with no failures or skips. Fourteen behavioral UI cases cover unsaved/busy leave guards, cancelled discard and recovery actions, pending/repeated/failed saves, verified save/reopen, dirty release, offline state, keyboard focus, and the intentional interruption rehearsal. Independent review found no blocker. Real browser layout and native warning behavior, especially on Safari/iPhone, remain **Open**.
+
 ## Records and evidence
 
 The synthetic envelope is `finance-tracker-canonical-ledger`, version 1, with a UUID `ledgerId`, `createdAt`, `syntheticOnly: true`, and these collections:

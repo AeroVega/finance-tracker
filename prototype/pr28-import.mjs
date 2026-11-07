@@ -16,6 +16,7 @@ const fixtures = Object.freeze({
 });
 let pauseAfterFirstWrite = false;
 let busy = false, configured = false, ledger = null, store = null, parsed = null, dirty = false;
+let saveState = 'idle';
 let mappingForms = [];
 let previewGeneration = 0, parsedFixture = null;
 let acceptanceListener = null;
@@ -40,6 +41,27 @@ const inputMessages = Object.freeze({
 function inputError(code) { throw Object.assign(new Error(code), { code }); }
 function recordCounts() { return `${ledger.accounts.length} accounts, ${ledger.imports.length} import runs, ${ledger.observations.length} source observations, ${ledger.activities.length} activities, ${ledger.events.length} audit events, and ${ledger.reviewDecisions.length} review decisions.`; }
 const message = (text, error = false) => { $('result').textContent = text; $('result').dataset.error = String(error); };
+function refreshSaveStatus(ready) {
+  let state, text;
+  if (saveState === 'paused') {
+    state = 'paused'; text = 'Interruption test paused. This is not a verified save. For this rehearsal only, close the tab as instructed in Save and reopen.';
+  } else if (saveState === 'saving') {
+    state = 'saving'; text = 'Saving and verifying changes. Keep this tab open until verification finishes.';
+  } else if (saveState === 'unverified') {
+    state = 'unverified'; text = 'Save did not finish and verify. ' + (dirty ? 'Your staged changes are still in this tab. ' : '') + 'Use recovery if offered, then reopen verified saved records before retrying.';
+  } else if (dirty) {
+    state = 'dirty'; text = 'Unsaved changes. ' + (busy ? 'An operation is in progress. Keep this tab open.' : ready && store ? 'Choose Save canonical ledger before leaving this page.' : 'Saving is unavailable. Check the connection controls and keep this tab open.');
+  } else if (busy) {
+    state = 'busy'; text = 'Operation in progress. Keep this tab open until it finishes.';
+  } else {
+    state = ledger ? 'clean' : 'empty'; text = ledger ? 'No unsaved changes. This is a new empty ledger or verified saved records.' : 'No ledger loaded. Connect a synthetic folder to begin.';
+  }
+  $('save-status').dataset.state = state;
+  // Heartbeats and other refreshes must not repeat an unchanged announcement.
+  for (const id of ['save-status-text', 'dirty']) if ($(id).textContent !== text) $(id).textContent = text;
+  $('show-save').hidden = !dirty && saveState !== 'unverified';
+  $('show-save').textContent = dirty ? 'Review and save changes' : 'Review save status';
+}
 function refresh() {
   const lifecycle = storage.lifecycle;
   const ready = lifecycle?.state === 'ready' && lifecycle.acceptingWrites && navigator.onLine !== false;
@@ -55,13 +77,14 @@ function refresh() {
   $('event').disabled = busy || !ready || !store || !$('activity').value;
   $('summarize').disabled = busy || !ledger;
   acceptanceListener?.({ ready: Boolean(ready && store && ledger && !dirty), busy });
-  $('dirty').textContent = !ledger ? 'No ledger loaded.' : dirty ? 'Unsaved local changes. Closing this tab loses them.' : 'No unsaved changes. This is a new empty ledger or verified saved records.';
+  refreshSaveStatus(ready);
 }
 const storage = new DashboardSyntheticStorage({
   onStatus: status => { $('connection').textContent = status.message === 'Synthetic storage connected. CSV imports remain local to this page.' ? 'Synthetic storage connected. Staged changes remain local until you choose Save canonical ledger.' : status.message; refresh(); },
   afterMutation: async () => {
     if (!pauseAfterFirstWrite) return;
     pauseAfterFirstWrite = false;
+    saveState = 'paused'; refresh();
     message('PAUSED after the first durable write of this canonical save. Fully close this tab now. Reopen this testing page, reconnect to the same disposable folder, recover only when offered, then reopen verified saved records. This pause is not a successful save.');
     // Explicit synthetic rehearsal only. No subsequent transaction write proceeds.
     await new Promise(() => {});
@@ -74,7 +97,7 @@ async function run(operation) {
   catch (error) {
     const candidate = error.code || (error instanceof TypeError ? error.message : '');
     const code = typeof candidate === 'string' && /^[a-z][a-z0-9-]{0,95}$/.test(candidate) ? candidate : 'invalid-input-or-unavailable';
-    message((inputMessages[code] || 'Action did not complete: ' + code + '. Check inputs or reconnect and reopen before retrying.') + ' Unsaved changes remain local.', true);
+    message((inputMessages[code] || 'Action did not complete: ' + code + '. Check inputs or reconnect and reopen before retrying.') + (dirty ? ' Staged changes remain in this tab.' : ''), true);
   }
   finally { busy = false; refresh(); }
 }
@@ -137,7 +160,19 @@ function renderMappings() {
     $('mappings').append(fieldset); mappingForms.push({key,select,name,currency,type,start,end,confirm});
   }
 }
-async function loadLedger() { const nextStore = new CanonicalLedgerStore({ lifecycle: storage.lifecycle }); const nextLedger = await nextStore.load() || createLedger(); store = nextStore; ledger = nextLedger; dirty = false; clearPreview(); renderLedger(); }
+async function loadLedger() { const nextStore = new CanonicalLedgerStore({ lifecycle: storage.lifecycle }); const nextLedger = await nextStore.load() || createLedger(); store = nextStore; ledger = nextLedger; dirty = false; saveState = 'idle'; clearPreview(); renderLedger(); }
+async function saveLedger(next = ledger) {
+  saveState = 'saving'; refresh();
+  try {
+    const saved = await store.save(next);
+    ledger = saved; dirty = false; saveState = 'idle'; renderLedger();
+    return saved;
+  } catch (error) {
+    // A rejected or interrupted save is not evidence that nothing reached Drive.
+    // Keep the staged ledger until a verified save or explicit reopen succeeds.
+    saveState = 'unverified'; refresh(); throw error;
+  }
+}
 action('connect', async () => { if (dirty && !confirm('Discard unsaved local changes and connect?')) return; store=null; await storage.connect(); if (storage.lifecycle?.state === 'ready') await loadLedger(); });
 action('stale', async () => { if (confirm('Confirm all prior tabs and devices using this synthetic folder have stopped.')) { await storage.recoverStaleSession(); if (!dirty || confirm('Session recovered. Discard unsaved local changes and reopen?')) await loadLedger(); } });
 action('recover', async () => { await storage.lifecycle.recover(); if (!dirty || confirm('Recovery completed. Discard unsaved local changes and reopen?')) await loadLedger(); });
@@ -169,11 +204,11 @@ action('stage', async () => {
   const result = await prepareCanonicalImport(next,{parsed,accountMappings,coverageByAccount,syntheticOnly:true});
   changed(result.ledger); clearPreview(); message('Import staged locally. Review before saving. '+JSON.stringify(result.summary));
 });
-action('save', async () => { ledger=await store.save(ledger); dirty=false; renderLedger(); message('Canonical ledger saved and verified. ' + recordCounts() + ' Reopen to independently reload saved records.'); });
+action('save', async () => { await saveLedger(); message('Canonical ledger saved and verified. ' + recordCounts() + ' Reopen to independently reload saved records.'); });
 if ($('pause-canonical')) action('pause-canonical', async () => {
   if (!confirm('Pause a canonical save after its first durable write in this disposable synthetic folder? You must fully close this tab to continue, then reconnect and verify recovery.')) return;
   pauseAfterFirstWrite = true;
-  try { ledger = await store.save(ledger); dirty = false; renderLedger(); message('No durable write was paused. The ledger was unchanged or the save completed. Do not record interruption as passed.'); }
+  try { await saveLedger(); message('No durable write was paused. The ledger was unchanged or the save completed. Do not record interruption as passed.'); }
   finally { pauseAfterFirstWrite = false; }
 });
 action('reopen', async () => { if (dirty && !confirm('Discard unsaved local changes and reopen the saved ledger?')) return; await loadLedger(); message('Saved canonical records reopened and verified. ' + recordCounts()); });
@@ -245,6 +280,7 @@ function renderReviews(activeActivities) {
 $('fixture').addEventListener('change',clearPreview);
 $('activity').addEventListener('change',refresh);
 $('event-type').addEventListener('change',()=>{ $('refund-posting-fields').hidden=$('event-type').value!=='refund-link'; });
+$('show-save').addEventListener('click', () => { if ($('workbench-details')) $('workbench-details').open = true; $('save-title').focus(); });
 window.addEventListener('beforeunload',event=>{ if(dirty||busy){event.preventDefault();event.returnValue='';} });
 window.addEventListener('online',refresh); window.addEventListener('offline',refresh);
 storage.prepare().then(()=>{configured=true;refresh();}).catch(()=>{$('connection').textContent='Google configuration unavailable. No data saved. Use the configured synthetic deployment.';refresh();});
@@ -273,7 +309,7 @@ export async function withAcceptanceWorkbench(operation) {
       },
       async identity() { ready(); const manifest = await lifecycle.readManifest(); return { databaseId: manifest.databaseId, copyId: manifest.copyId, folderId: lifecycle.folderId }; },
       stage(next) { ready(); changed(next); },
-      async save(next) { ready(); const saved = await store.save(next); ledger = saved; dirty = false; renderLedger(); return structuredClone(saved); },
+      async save(next) { ready(); return structuredClone(await saveLedger(next)); },
       reopen,
       async verifyPortable() {
         ready();

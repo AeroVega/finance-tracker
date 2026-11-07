@@ -23,6 +23,7 @@
 - Existing portable export/restore preserves canonical identity, record order, event history, and logical financial results while assigning new physical copy locators.
 - The full Node regression suite and module syntax checks pass. Browser/device and live synthetic Drive acceptance are recorded separately from automated results.
 - Request counters expose aggregate per-step cost without recording credentials, identifiers, or financial data. The real-adapter synthetic recipe has a regression request budget. Bounded read concurrency and removal of duplicate work preserve all integrity, recovery, ownership, and acceptance checks described in [the performance follow-up](PR28_STORAGE_PERFORMANCE.md).
+- Manual-save status is visible, including unsaved changes, saving, and an unverified result. Leaving with changes or an operation in progress requests the browser's supported warning. Cancelled discard actions and failed saves retain the local draft. Mobile termination limits are documented; the existing ownership heartbeat remains unchanged.
 
 ## Safety and review gates
 
