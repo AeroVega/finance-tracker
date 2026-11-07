@@ -1,4 +1,5 @@
 import { blankLive, safeLiveMetrics } from './pr28-live-checks.mjs';
+import { safeElapsedMs } from './pr28-testing-timing.mjs';
 // Public, invented acceptance instructions only. No ledger or provider data belongs here.
 export const PLAN_VERSION = 'pr28-assisted-v2';
 export const STATUS_LABELS = Object.freeze({ 'not-run': 'Not run', passed: 'Passed by me', failed: 'Failed', blocked: 'Blocked', skipped: 'Skipped' });
@@ -60,7 +61,7 @@ export const MANUAL_RECIPE = Object.freeze([
   {
     id: 'review-decisions', title: 'Resolve the overlap and reject the bad amount', target: 'review-records',
     actions: [
-      'In the market overlap review item, select the original INVENTED MARKET PURCHASE in Match to activity. Enter Same invented market receipt and choose match. Match choices include descriptions and dates.',
+      'In the market overlap review item, open Choose a match target, then select the original INVENTED MARKET PURCHASE in Match to activity. Search or browse pages if needed. Enter Same invented market receipt and choose match. Selecting a target alone applies no decision.',
       'In the malformed amount item, enter Invented malformed amount retained as rejected evidence and choose reject. Do not turn it into a zero or invent an amount.',
       'Select INVENTED PENDING PURCHASE in Activity, choose Classification, Spending, category invented-default, and evidence Invented pending classification. Stage once, then save and reopen.'
     ],
@@ -186,6 +187,7 @@ export const CHECKS = Object.freeze([
 ]);
 
 export const AUTOMATED_IDS = Object.freeze(['fixture-foundation', 'canonical-foundation', 'classifications', 'category-rule', 'repeat-import', 'review-import', 'review-retry', 'review-decisions', 'missing-refund-date', 'refund-period', 'amount-correction', 'future-category', 'provider-shapes']);
+export const AUTOMATED_LABELS = Object.freeze(['Parse the foundation fixture', 'Import the canonical foundation', 'Classify income and spending', 'Apply the prospective category rule', 'Refuse duplicate import effects', 'Import overlapping review evidence', 'Retry unresolved review', 'Apply review decisions and pending exclusion', 'Exclude a refund without posting evidence', 'Use the confirmed refund posting period', 'Preserve source amounts after correction', 'Apply the rule to a later import', 'Parse all three provider shapes']);
 export const blankResults = () => Object.fromEntries(CHECKS.map(check => [check.id, 'not-run']));
 export function safeStatuses(input) {
   return Object.fromEntries(CHECKS.map(check => [check.id, typeof input?.[check.id] === 'string' && Object.hasOwn(STATUS_LABELS, input[check.id]) ? input[check.id] : 'not-run']));
@@ -196,7 +198,7 @@ export function safeAutomated(input) {
 export function verifiedSource(text, confirmed) {
   return confirmed === true && typeof text === 'string' && /^[0-9a-f]{40}$/.test(text) ? text : 'unverified';
 }
-export function createSafeReport({ manual, automated, browser, source, sourceConfirmed, date, live, liveState, metrics }) {
+export function createSafeReport({ manual, automated, browser, source, sourceConfirmed, date, live, liveState, metrics, fixtureElapsedMs }) {
   // Deliberate allowlist. Never serialize DOM, URLs, errors, storage objects or free text.
   const isoDate = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date ? date : 'not-recorded';
   return JSON.stringify({ plan: PLAN_VERSION, date: isoDate,
@@ -204,6 +206,8 @@ export function createSafeReport({ manual, automated, browser, source, sourceCon
     sourceCommit: verifiedSource(source, sourceConfirmed),
     manualProvenance: 'Tester selections, not automatically verified', manual: safeStatuses(manual),
     automatedProvenance: 'Bundled-fixture checks only; no browser-layout, OAuth or Drive verification', automated: safeAutomated(automated),
+    fixtureTimingProvenance: 'One shared fixture-run duration, including fixture loading and common setup. Not independent or additive check times. Unmeasured after reload.',
+    fixtureElapsedMs: safeElapsedMs(fixtureElapsedMs),
     liveProvenance: 'Programmatic assertions in the connected synthetic session; save/reopen, export validation and release have separate results. No layout, OAuth cancellation, whole-tab interruption or new-folder restore claim.',
     liveEvidence: ['not-run', 'running', 'complete', 'failed', 'stopped', 'historical', 'blocked'].includes(liveState) ? liveState : 'not-run', live: blankLive(live),
     requestMetricsProvenance: 'In-memory API fetch attempts started in the live-run and reconnect-verification windows, including session traffic. Excludes connection/setup, idle gaps, fixture downloads and browser CORS traffic. HTTP status is not an acceptance result. Request time ends at response headers, excludes body reading and hashing; elapsed time covers the operation. In-flight attempts remain in their starting phase. Repeated reconnect attempts are cumulative. Metrics are unavailable after reload.',

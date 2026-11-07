@@ -6,6 +6,7 @@ import * as plan from '../prototype/pr28-testing-plan.mjs';
 import * as liveChecks from '../prototype/pr28-live-checks.mjs';
 import { runFixtureChecks } from '../prototype/pr28-testing-checks.mjs';
 import { createDriveRequestMetrics } from '../js/drive-request-metrics.mjs';
+import * as timing from '../prototype/pr28-testing-timing.mjs';
 
 const [html, script, workbench, controls, css, hub] = await Promise.all([
   'prototype/pr28-testing.html', 'prototype/pr28-testing.mjs', 'prototype/pr28-import.mjs', 'prototype/pr28-import.html', 'prototype/pr28-testing.css', 'prototype/index.html'
@@ -79,11 +80,14 @@ test('guidance distinguishes live coverage, missing refund evidence, prior check
   assert.match(css, /min-height:44px/); assert.match(css, /focus-visible/); assert.match(css, /prefers-reduced-motion/);
 });
 
-function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage = false, clipboardFails = false, workbenchModule = null } = {}) {
-  const nodes = new Map(), stored = new Map(), copied = [], calls = { imports: 0, fetches: 0, checks: 0 };
+function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage = false, clipboardFails = false, workbenchModule = null, runFixtures = null, now = () => performance.now() } = {}) {
+  const nodes = new Map(), stored = new Map(), copied = [], intervals = [], calls = { imports: 0, fetches: 0, checks: 0 };
   if (saved) stored.set('finance-tracker-' + plan.PLAN_VERSION, JSON.stringify(saved));
   function element(tag = '') {
-    return { tag, textContent: '', value: '', checked: false, disabled: false, dataset: {}, children: [], attributes: {},
+    let text = '';
+    return { tag, value: '', checked: false, disabled: false, dataset: {}, children: [], attributes: {},
+      get textContent() { return text + this.children.map(item => item.textContent).join(''); },
+      set textContent(value) { text = value; this.children = []; },
       append(...items) { this.children.push(...items); if (this.tag === 'select' && this.value === '' && items[0]) this.value = items[0].value; },
       replaceChildren(...items) { this.children = items; }, setAttribute(key, value) { this.attributes[key] = value; },
       addEventListener(name, handler) { this[name] = handler; }, focus() { this.focused = true; }, select() { this.selected = true; },
@@ -97,7 +101,9 @@ function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage =
   get('build-sha').textContent = stamp;
   const sections = Array.from({ length: 6 }, () => { const item = element('section'); return item; });
   get('workbench').querySelectorAll = () => sections;
-  const context = { ...plan, ...liveChecks, URL, Date, JSON, Promise, Object, Number,
+  const context = { ...plan, ...liveChecks, ...timing, URL, Date, JSON, Promise, Object, Number,
+    createElapsedTimer: () => timing.createElapsedTimer(now),
+    setInterval: callback => { intervals.push(callback); },
     document: { getElementById: get, createElement: element, importNode: item => item },
     DOMParser: class { parseFromString() { return { querySelectorAll: () => sections, getElementById: () => ({}) }; } },
     sessionStorage: { getItem(key) { if (unavailableStorage) throw new Error('unavailable'); return stored.get(key) || null; }, setItem(key, value) { if (unavailableStorage) throw new Error('unavailable'); stored.set(key, value); } },
@@ -106,11 +112,11 @@ function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage =
     fetch: async () => { calls.fetches++; return { ok: true, text: async () => controls }; },
     mountModule: async () => { calls.imports++; return workbenchModule || { withAcceptanceWorkbench: async () => { throw new Error('not-connected'); }, subscribeAcceptanceStatus: listener => listener({ ready: false, busy: false }) }; },
     createLiveRunner: options => liveChecks.createLiveRunner({ ...options, loadBytes }),
-    runFixtureChecks: async () => { calls.checks++; return Object.fromEntries(plan.AUTOMATED_IDS.map(id => [id, 'passed'])); }
+    runFixtureChecks: async () => { calls.checks++; return runFixtures ? runFixtures() : Object.fromEntries(plan.AUTOMATED_IDS.map(id => [id, 'passed'])); }
   };
   const source = script.replace(/^import .*;$/gm, '').replaceAll('import.meta.url', JSON.stringify(new URL('../prototype/pr28-testing.mjs', import.meta.url).href)).replace("import('./pr28-import.mjs')", 'mountModule()');
   vm.runInNewContext(source, context);
-  return { get, stored, copied, calls, context };
+  return { get, stored, copied, calls, context, intervals };
 }
 const tick = () => new Promise(setImmediate);
 
@@ -168,6 +174,9 @@ test('restored live evidence is explicitly historical, source-scoped, and never 
   assert.equal(report.liveEvidence, 'historical'); assert.equal(report.live['first-save-reopen'], 'passed');
   assert.equal(report.requestMetrics.available, false);
   assert.match(h.get('live-result').textContent, /No live checks ran after reload/);
+  assert.match(h.get('live-elapsed').textContent, /unmeasured/);
+  assert.match(h.get('live-results').children[5].textContent, /Passed earlier · time unmeasured/);
+  assert.doesNotMatch(h.get('live-results').textContent, /Passed in|0 seconds/);
   assert.equal(h.get('verify-live-reconnect').disabled, true);
   assert.equal(h.calls.checks, 0);
   const different = controller({ stamp: 'b'.repeat(40), saved });
@@ -227,7 +236,9 @@ test('actual guide handlers display measured totals and phases, copy aggregates,
   assert.equal(report.requestMetrics.total.requests, collector.snapshot().requests);
   assert.equal(report.requestMetrics.phases['first-save-reopen'].requests, 2);
   assert.match(h.get('request-totals').textContent, /requests.*completed.*in flight.*peak.*elapsed.*HTTP/);
-  assert.match(h.get('live-results').children[liveChecks.LIVE_IDS.indexOf('first-save-reopen')].textContent, /2 requests/);
+  assert.match(h.get('live-results').children[liveChecks.LIVE_IDS.indexOf('first-save-reopen')].textContent, /Passed in/);
+  assert.doesNotMatch(h.get('live-results').textContent, /requests|HTTP|Checking/);
+  assert.match(h.get('request-phase-results').children[liveChecks.LIVE_IDS.indexOf('first-save-reopen')].textContent, /2 requests/);
   assert.doesNotMatch([...h.stored.values()].join(''), /requestMetrics|requestMs|peakConcurrency|private-/);
   await h.get('copy-report').click(); assert.doesNotMatch(h.copied[0], /private-/);
   await h.get('verify-live-reconnect').click();
@@ -239,4 +250,164 @@ test('actual guide handlers display measured totals and phases, copy aggregates,
   assert.equal(JSON.parse(h.get('safe-report').value).requestMetrics.available, false);
   assert.equal(releases, 1); assert.ok(savedLedger);
   assert.match(h.get('request-totals').textContent, /unavailable/);
+});
+
+test('timed live rows are visible without expanding details, with full metrics kept separately', () => {
+  const resultIndex = html.indexOf('id="live-results"');
+  const detailsIndex = html.indexOf('<details', html.indexOf('id="live-checks"'));
+  assert.ok(resultIndex < detailsIndex);
+  assert.match(html, /id="request-phase-results"/);
+  assert.match(html, /Save and reopen share one time/);
+  assert.match(html, /last row totals all reconnect verification attempts/);
+  assert.equal(plan.AUTOMATED_LABELS.length, plan.AUTOMATED_IDS.length);
+  assert.match(css, /minmax\(0,1fr\)/);
+  assert.match(css, /font-variant-numeric:tabular-nums/);
+});
+
+test('fixture results show one measured shared run without inventing independent assertion times', async () => {
+  let time = 100;
+  const h = controller({ now: () => time, runFixtures: async () => {
+    time += 12000;
+    return Object.fromEntries(plan.AUTOMATED_IDS.map(id => [id, 'passed']));
+  } });
+  await h.get('run-fixture-checks').click();
+  assert.equal(h.get('fixture-results').hidden, false);
+  assert.equal(h.get('fixture-results').children.length, 13);
+  for (const row of h.get('fixture-results').children) assert.match(row.textContent, /Passed · shared run 12 seconds$/);
+  assert.match(h.get('fixture-check-result').textContent, /13\/13.*Shared run time: 12 seconds/);
+  assert.equal(JSON.parse(h.get('safe-report').value).fixtureElapsedMs, 12000);
+  assert.doesNotMatch([...h.stored.values()].join(''), /fixtureElapsedMs|elapsedMs/);
+  h.get('reset-checklist').click();
+  assert.equal(JSON.parse(h.get('safe-report').value).fixtureElapsedMs, null);
+  assert.equal(h.get('fixture-results').hidden, true);
+});
+
+test('failed fixture run keeps later assertions not-run and shared timing cannot mark them passed', async () => {
+  let time = 0;
+  const h = controller({ now: () => time, runFixtures: async () => {
+    time = 2500;
+    return plan.safeAutomated({ 'fixture-foundation': 'passed', 'canonical-foundation': 'failed' });
+  } });
+  await h.get('run-fixture-checks').click();
+  const rows = h.get('fixture-results').children;
+  assert.match(rows[0].textContent, /Passed · shared run 3 seconds/);
+  assert.match(rows[1].textContent, /Failed · shared run 3 seconds/);
+  for (const row of rows.slice(2)) { assert.match(row.textContent, /Not run$/); assert.doesNotMatch(row.textContent, /shared run|Passed/); }
+  assert.match(h.get('fixture-check-result').textContent, /later checks were not run/);
+});
+
+test('fixture clock failure leaves real assertion results intact and time unmeasured', async () => {
+  const h = controller({ now: () => { throw new Error('clock-unavailable'); } });
+  await h.get('run-fixture-checks').click();
+  assert.match(h.get('fixture-check-result').textContent, /13\/13.*unmeasured/);
+  assert.match(h.get('fixture-results').children[0].textContent, /Passed · time unmeasured/);
+  assert.equal(JSON.parse(h.get('safe-report').value).fixtureElapsedMs, null);
+});
+
+test('fixture report accepts only measured integer duration and never caller payloads', () => {
+  for (const fixtureElapsedMs of [undefined, null, -1, NaN, Infinity, '12000', ['12000'], { elapsedMs: 12000, secret: 'private-clock' }]) {
+    const report = plan.createSafeReport({ fixtureElapsedMs });
+    assert.equal(JSON.parse(report).fixtureElapsedMs, null);
+    assert.doesNotMatch(report, /private-clock|"secret"/);
+  }
+  assert.equal(JSON.parse(plan.createSafeReport({ fixtureElapsedMs: 0 })).fixtureElapsedMs, 0);
+});
+
+const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+function timedWorkbench() {
+  const state = { time: 0, saved: null, wrongCopy: false, gate: null, reached: null, preflightFails: false };
+  const collector = createDriveRequestMetrics({ now: () => state.time });
+  const request = collector.wrapFetch(async () => { state.time += 1000; return { status: 200 }; });
+  const driver = { requestMetrics: collector,
+    async requireFresh() { if (state.preflightFails) throw new Error('not-fresh'); },
+    async identity() { await request('private-identity'); return { copyId: state.wrongCopy ? 'other-private-copy' : 'private-copy' }; },
+    stage() {},
+    async save(value) {
+      await request('private-save', { method: 'POST' });
+      if (state.gate) { state.reached.resolve(); await state.gate.promise; state.gate = null; }
+      if (state.saved && value.accounts[0].displayName === 'Invented forbidden rewrite') throw Object.assign(new Error('private-detail'), { code: 'history-rewrite-refused' });
+      state.saved = structuredClone(value); return structuredClone(value);
+    },
+    async reopen() { await request('private-reopen'); return structuredClone(state.saved); },
+    async verifyPortable() { await request('private-export'); }, async revalidate() { await request('private-session'); }, async release() { await request('private-release'); }
+  };
+  return { state, collector, module: { withAcceptanceWorkbench: operation => operation(driver), subscribeAcceptanceStatus: listener => listener({ ready: true, busy: false }) } };
+}
+
+test('running times refresh without requests or status promotion, and stop preserves completed timing', async () => {
+  const setup = timedWorkbench(); setup.state.gate = deferred(); setup.state.reached = deferred();
+  const h = controller({ workbenchModule: setup.module }); await tick();
+  const run = h.get('run-live-checks').click(); await setup.state.reached.promise;
+  setup.state.time = 13000;
+  const count = setup.collector.snapshot().requests;
+  for (const refresh of h.intervals) refresh();
+  assert.match(h.get('live-elapsed').textContent, /13 seconds/);
+  assert.match(h.get('live-results').children[5].textContent, /Checking · 12 seconds elapsed/);
+  assert.equal(setup.collector.snapshot().requests, count);
+  assert.equal(JSON.parse(h.get('safe-report').value).live['first-save-reopen'], 'not-run');
+  await h.get('run-live-checks').click(); // Repeated clicks cannot start another run.
+  assert.equal(setup.collector.snapshot().requests, count);
+  h.get('stop-live-checks').click(); setup.state.gate.resolve(); await run;
+  assert.match(h.get('live-results').children[5].textContent, /Passed in 13 seconds/);
+  assert.match(h.get('live-results').children[6].textContent, /Not run$/);
+  assert.doesNotMatch(h.get('live-results').textContent, /Checking/);
+  assert.equal(JSON.parse(h.get('safe-report').value).liveEvidence, 'stopped');
+});
+
+test('reconnect failure and success show cumulative check time and exclude idle gaps', async () => {
+  const setup = timedWorkbench(), h = controller({ workbenchModule: setup.module }); await tick();
+  await h.get('run-live-checks').click();
+  const original = JSON.parse(h.get('safe-report').value).requestMetrics.total.elapsedMs;
+  setup.state.time += 600000; setup.state.wrongCopy = true;
+  await h.get('verify-live-reconnect').click();
+  assert.match(h.get('live-results').children[24].textContent, /Failed · total check time 1 second/);
+  setup.state.time += 600000; setup.state.wrongCopy = false;
+  await h.get('verify-live-reconnect').click();
+  assert.match(h.get('live-results').children[24].textContent, /Passed · total check time 3 seconds/);
+  assert.doesNotMatch(h.get('live-results').children[24].textContent, /Passed in/);
+  const report = JSON.parse(h.get('safe-report').value);
+  assert.equal(report.requestMetrics.total.elapsedMs, original + 3000);
+  assert.equal(report.requestMetrics.phases['reconnect-same-copy'].elapsedMs, 3000);
+  assert.equal(report.live['reconnect-same-copy'], 'passed');
+  assert.doesNotMatch(h.get('live-results').textContent, /Checking/);
+});
+
+for (const failsBeforeLease of [false, true]) test(`blocked preflight preserves historical provenance, failsBeforeLease=${failsBeforeLease}`, async () => {
+  const setup = timedWorkbench(); setup.state.preflightFails = true;
+  if (failsBeforeLease) setup.module.withAcceptanceWorkbench = async () => { throw new Error('not-connected'); };
+  const saved = { version: plan.PLAN_VERSION, source: 'a'.repeat(40), live: { 'fresh-base': 'passed', 'first-save-reopen': 'passed' } };
+  const h = controller({ saved, workbenchModule: setup.module }); await tick();
+  await h.get('run-live-checks').click();
+  assert.match(h.get('live-results').children[5].textContent, /Passed earlier · time unmeasured/);
+  assert.match(h.get('live-elapsed').textContent, /unmeasured/);
+  const report = JSON.parse(h.get('safe-report').value);
+  assert.equal(report.liveEvidence, 'historical'); assert.equal(report.requestMetrics.available, false);
+});
+
+test('blocked new run restores prior timings; verified new run replaces historical provenance', async () => {
+  const setup = timedWorkbench();
+  const saved = { version: plan.PLAN_VERSION, source: 'a'.repeat(40), live: { 'first-save-reopen': 'passed' } };
+  const h = controller({ saved, workbenchModule: setup.module }); await tick();
+  await h.get('run-live-checks').click();
+  assert.match(h.get('live-results').children[5].textContent, /Passed in 2 seconds/);
+  const previous = JSON.parse(h.get('safe-report').value).requestMetrics;
+  setup.state.preflightFails = true; setup.state.time += 600000;
+  await h.get('run-live-checks').click();
+  assert.match(h.get('live-results').children[5].textContent, /Passed in 2 seconds/);
+  assert.deepEqual(JSON.parse(h.get('safe-report').value).requestMetrics, previous);
+});
+
+test('stopping during an accepted fresh preflight clears historical provenance with its old results', async () => {
+  const gate = deferred(), entered = deferred();
+  const setup = timedWorkbench();
+  const originalLease = setup.module.withAcceptanceWorkbench;
+  setup.module.withAcceptanceWorkbench = operation => originalLease(driver => operation({ ...driver, async requireFresh() { entered.resolve(); await gate.promise; } }));
+  const saved = { version: plan.PLAN_VERSION, source: 'a'.repeat(40), live: { 'first-save-reopen': 'passed' } };
+  const h = controller({ saved, workbenchModule: setup.module }); await tick();
+  const run = h.get('run-live-checks').click(); await entered.promise;
+  h.get('stop-live-checks').click(); gate.resolve(); await run;
+  const report = JSON.parse(h.get('safe-report').value);
+  assert.equal(report.liveEvidence, 'stopped');
+  assert.equal(Object.values(report.live).every(status => status === 'not-run'), true);
+  assert.doesNotMatch(h.get('live-results').textContent, /Passed|earlier|Checking/);
 });

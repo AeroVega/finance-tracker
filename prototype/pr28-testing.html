@@ -37,13 +37,21 @@
     <button id="verify-live-reconnect" disabled>Verify saved run after reconnect</button>
     <p id="live-result" role="status" aria-live="polite">Not run. Connect a fresh empty synthetic folder to begin.</p>
     <progress id="live-progress" value="0" max="25" aria-label="Completed live assertions"></progress>
-    <div class="request-metrics" aria-label="Live Drive request metrics">
-      <h3>Drive request counts and timing</h3>
+    <div class="run-timing" aria-label="Live check elapsed time">
+      <p id="live-elapsed">Active run time: unmeasured.</p>
+      <p id="live-current">No check is running.</p>
+      <p class="metric-note">Active time includes the recipe and all reconnect verification attempts. Connection/setup and time waiting for you to reconnect are excluded. Timings disappear on reload.</p>
+    </div>
+    <h3>Live programmatic results</h3>
+    <ul id="live-results" class="timed-results"></ul>
+    <p class="metric-note">Each time covers the named operation and its assertions together. Save and reopen share one time. The last row totals all reconnect verification attempts, including failed attempts.</p>
+    <details class="request-metrics"><summary>Full Drive request counts and timing</summary>
       <p id="request-totals">Request metrics start with Run live checks.</p>
       <p id="request-phase">No phase is running.</p>
-      <p class="metric-note">Counts cover actual API fetch attempts, including session checks and failed requests. Connection/setup, idle time, fixture downloads and browser CORS requests are excluded. Fetch timing ends at response headers. Elapsed time also includes body reads and verification. HTTP success does not mark a check passed. Measurements stay in memory and disappear on reload.</p>
-    </div>
-    <details><summary>Live assertion results and limits</summary><ul id="live-results"></ul>
+      <ul id="request-phase-results"></ul>
+      <p class="metric-note">Counts cover actual API fetch attempts, including session checks and failed requests. Counts exclude connection/setup, idle gaps, fixture downloads and browser CORS requests. Fetch timing ends at response headers. Operation elapsed time also includes fixture loading, body reads and verification. HTTP success does not mark a check passed. Measurements stay in memory and disappear on reload.</p>
+    </details>
+    <details><summary>Live assertion limits and reconnect instructions</summary>
       <p>Programmatic checks exercise the real financial and storage APIs. They do not press every workbench control or prove mobile layout, OAuth cancellation, whole-tab termination, offline recovery, or a backup/restore into another Drive folder.</p>
       <p>After success, reconnect to the same folder and press Verify saved run after reconnect. This compares the exact saved graph and copy identity from this tab's completed run. After reload, earlier results are historical only; this comparison is unavailable.</p>
     </details>
@@ -54,6 +62,8 @@
     <p>This runs the real parser and reconciliation functions on bundled invented CSVs. It needs no Google login and writes nothing to Drive. It does not test browser layout, OAuth, save/reopen or recovery.</p>
     <button id="run-fixture-checks">Run bundled fixture checks</button>
     <p id="fixture-check-result" role="status" aria-live="polite">Not run in this page.</p>
+    <p class="metric-note">The 13 local assertions use one shared fixture run, including fixture loading and common setup. Their shared times are not independent and must not be added together.</p>
+    <ul id="fixture-results" class="timed-results" hidden></ul>
     <details><summary>Test provenance and remaining acceptance</summary>
       <p>The repository's Node suite covers parser variants, review, exact calculations, canonical save/reopen, interrupted durable writes and portable restore. Run-specific CI evidence belongs to the published commit. It is separate from the checks you run on this page.</p>
       <p>Every manual check starts Not run. Neither local nor live programmatic results change it. Reload restores allowlisted results only for this tab and source stamp, labeled historical. It never resumes writes or reconnects automatically.</p>

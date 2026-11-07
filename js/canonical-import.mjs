@@ -18,16 +18,23 @@ export function createLedger(options = {}) {
 export function validateLedger(ledger) {
   if (!ledger || ledger.format !== 'finance-tracker-canonical-ledger' || ledger.version !== 1 || ledger.syntheticOnly !== true || !uuid.test(ledger.ledgerId) || !Number.isFinite(Date.parse(ledger.createdAt))) fail('invalid-canonical-ledger');
   const ids = new Set([ledger.ledgerId]);
+  // These indexes belong to this validation only. Every record and reference is
+  // still checked below, in the same order, before the ledger can be used.
+  const byId = {accounts:new Map(),imports:new Map(),observations:new Map(),activities:new Map()};
   for (const [collection,key] of Object.entries(collections)) {
     if (!Array.isArray(ledger[collection])) fail('invalid-ledger-collection');
     for (const record of ledger[collection]) {
       if (!record || !uuid.test(record[key]) || ids.has(record[key])) fail('invalid-or-duplicate-record-id');
       ids.add(record[key]);
+      byId[collection]?.set(record[key],record);
     }
   }
+  const findAccount = accountId => byId.accounts.get(accountId) ?? fail('unknown-account');
+  const findActivity = activityId => byId.activities.get(activityId) ?? fail('unknown-activity');
+  const importObservationIds = new Map();
   for (const a of ledger.accounts) if (!['wells-fargo','sofi','fidelity'].includes(a.institutionId) || !/^[A-Z]{3}$/.test(a.currency) || typeof a.displayName !== 'string' || !a.displayName.trim() || !['checking','savings','credit-card','brokerage','retirement','other'].includes(a.accountType)) fail('invalid-account');
   for (const a of ledger.activities) {
-    const account = accountFor(ledger,a.accountId);
+    const account = findAccount(a.accountId);
     if (account.institutionId !== a.institutionId || !isCalendarDate(a.effectiveDate) || typeof a.sourceDescription !== 'string' || !['pending','posted','unknown','reversed','corrected'].includes(a.lifecycleStatus)) fail('invalid-activity');
     if (!['unclassified','cash-transaction','trade','dividend','interest','fee','contribution','distribution','transfer','valuation-change','other','income','spending','refund'].includes(a.activityKind)) fail('invalid-activity-kind');
     if (a.postedDate !== null && !isCalendarDate(a.postedDate)) fail('invalid-posted-date');
@@ -37,25 +44,28 @@ export function validateLedger(ledger) {
     if(monetary) parseMoney(exactSignedDecimal(a),a.currency);
   }
   for (const run of ledger.imports) {
-    accountFor(ledger,run.accountId);
-    if (run.institutionId!==accountFor(ledger,run.accountId).institutionId || !['processed','needs-review'].includes(run.status) || typeof run.fileFingerprint !== 'string' || !run.fileFingerprint || !run.declaredCoverage || !isCalendarDate(run.declaredCoverage.start) || !isCalendarDate(run.declaredCoverage.end) || run.declaredCoverage.start > run.declaredCoverage.end || !['user-confirmed','source-confirmed'].includes(run.declaredCoverage.provenance)) fail('invalid-import');
+    const account = findAccount(run.accountId);
+    if (run.institutionId!==account.institutionId || !['processed','needs-review'].includes(run.status) || typeof run.fileFingerprint !== 'string' || !run.fileFingerprint || !run.declaredCoverage || !isCalendarDate(run.declaredCoverage.start) || !isCalendarDate(run.declaredCoverage.end) || run.declaredCoverage.start > run.declaredCoverage.end || !['user-confirmed','source-confirmed'].includes(run.declaredCoverage.provenance)) fail('invalid-import');
     if(!Array.isArray(run.retryAttempts) || run.retryAttempts.some(attempt=>!uuid.test(attempt.attemptId)||!Number.isFinite(Date.parse(attempt.startedAt))||!Number.isFinite(Date.parse(attempt.completedAt))||!['processed','needs-review'].includes(attempt.priorStatus)||!['processed','needs-review'].includes(attempt.status)||!attempt.priorCounts||!attempt.counts)) fail('invalid-retry-audit');
     for(const attempt of run.retryAttempts) {if(ids.has(attempt.attemptId)) fail('duplicate-attempt-id');ids.add(attempt.attemptId);}
     if(run.sourceFileRetentionStatus!=='not-retained'||run.privateSourceFileRef!==null||run.sourceFileRetainedAt!==null||run.sourceFileRetentionExpiresAt!==null||run.sourceFileDeletedAt!==null||run.coverageReconciled!==false) fail('unsupported-synthetic-retention-or-completeness');
     const c=run.counts;
     if (!c || Object.keys(zeroCounts()).some(k=>!Number.isSafeInteger(c[k]) || c[k]<0) || c.created+c.matched+c.review+c.rejected+c.ignored!==c.rowsRecognized) fail('invalid-import-counts');
-    if (!Array.isArray(run.observationIds) || new Set(run.observationIds).size!==run.observationIds.length || run.observationIds.some(value=>!ledger.observations.some(o=>o.observationId===value))) fail('invalid-import-observations');
-    const sourceObservations=run.observationIds.map(value=>ledger.observations.find(o=>o.observationId===value));
+    const observationIds=Array.isArray(run.observationIds)?new Set(run.observationIds):null;
+    if (!observationIds || observationIds.size!==run.observationIds.length || run.observationIds.some(value=>!byId.observations.has(value))) fail('invalid-import-observations');
+    importObservationIds.set(run.importRunId,observationIds);
+    const sourceObservations=run.observationIds.map(value=>byId.observations.get(value));
     const actual=zeroCounts(); actual.rowsRecognized=sourceObservations.length;
     sourceObservations.forEach(o=>{actual[o.disposition]++;});
     if(['rowsRecognized','created','matched','review','rejected','ignored'].some(k=>actual[k]!==c[k])) fail('import-counts-mismatch');
     const expectedStatus=sourceObservations.some(o=>!o.resolved&&['review','rejected'].includes(o.disposition))?'needs-review':'processed';
     if(expectedStatus!==run.status) fail('import-status-mismatch');
   }
+  const latestDecisionByObservation=new Map();
+  for(const decision of ledger.reviewDecisions) latestDecisionByObservation.set(decision.observationId,decision);
   for (const o of ledger.observations) {
-    accountFor(ledger,o.accountId);
-    if (!ledger.imports.some(r=>r.importRunId===o.importRunId&&r.accountId===o.accountId&&r.observationIds.includes(o.observationId)) || !['created','matched','review','rejected','ignored'].includes(o.disposition) || !o.sourceFields || !o.candidate || !Number.isSafeInteger(o.rowOrdinal) || o.rowOrdinal<1 || typeof o.resolved!=='boolean') fail('invalid-observation');
-    const sourceRun=ledger.imports.find(run=>run.importRunId===o.importRunId);
+    const account=findAccount(o.accountId), sourceRun=byId.imports.get(o.importRunId);
+    if (!sourceRun || sourceRun.accountId!==o.accountId || !importObservationIds.get(o.importRunId).has(o.observationId) || !['created','matched','review','rejected','ignored'].includes(o.disposition) || !o.sourceFields || !o.candidate || !Number.isSafeInteger(o.rowOrdinal) || o.rowOrdinal<1 || typeof o.resolved!=='boolean') fail('invalid-observation');
     if(isCalendarDate(o.candidate.effectiveDate)&&(o.candidate.effectiveDate<sourceRun.declaredCoverage.start||o.candidate.effectiveDate>sourceRun.declaredCoverage.end)) fail('observation-outside-declared-coverage');
     if(canonicalizeJcs(o.sourceFields)!==canonicalizeJcs(o.candidate.sourceFields)) fail('observation-evidence-mismatch');
     if(o.candidate.valid!==false && o.candidate.amountText!==null && o.candidate.amountText!==undefined) {
@@ -63,12 +73,12 @@ export function validateLedger(ledger) {
       if(expected.amountMinor!==o.candidate.amountMinor||expected.amountDecimal!==o.candidate.amountDecimal) fail('candidate-money-mismatch');
     }
     if(o.resolved) {
-      const decision=ledger.reviewDecisions.filter(d=>d.observationId===o.observationId).at(-1);
+      const decision=latestDecisionByObservation.get(o.observationId);
       const dispositions={'keep-separate':'created',match:'matched',reject:'rejected'};
       if(!decision||dispositions[decision.action]!==o.disposition||decision.activityId!==o.activityId) fail('observation-resolution-without-decision');
     }
-    if(o.candidate.accountId!==o.accountId||o.candidate.institutionId!==accountFor(ledger,o.accountId).institutionId||(['created','matched'].includes(o.disposition)&&o.activityId===null)||(['review','rejected'].includes(o.disposition)&&o.activityId!==null)) fail('invalid-observation-state');
-    if (o.activityId !== null && activityFor(ledger,o.activityId).accountId !== o.accountId) fail('observation-account-conflict');
+    if(o.candidate.accountId!==o.accountId||o.candidate.institutionId!==account.institutionId||(['created','matched'].includes(o.disposition)&&o.activityId===null)||(['review','rejected'].includes(o.disposition)&&o.activityId!==null)) fail('invalid-observation-state');
+    if (o.activityId !== null && findActivity(o.activityId).accountId !== o.accountId) fail('observation-account-conflict');
   }
   const validMoney = value => {
     if(!value || Object.keys(value).some(k=>!['amountMinor','amountDecimal','currency'].includes(k)) || !/^[A-Z]{3}$/.test(value.currency) || (value.amountMinor===null)===(value.amountDecimal===null) || exactSignedDecimal(value)===null) fail('invalid-event-money');
@@ -76,11 +86,11 @@ export function validateLedger(ledger) {
   };
   const commands=new Set();
   for (const e of ledger.events) {
-    activityFor(ledger,e.activityId);
+    findActivity(e.activityId);
     if (typeof e.commandId !== 'string' || !e.commandId || commands.has(e.commandId)) fail('invalid-event-command');
     commands.add(e.commandId);
     if (!Number.isFinite(Date.parse(e.recordedAt)) || e.appendOnly!==true) fail('invalid-event-metadata');
-    const a=effective({...ledger,events:ledger.events.slice(0,ledger.events.indexOf(e))},activityFor(ledger,e.activityId));
+    const a=effective({...ledger,events:ledger.events.slice(0,ledger.events.indexOf(e))},findActivity(e.activityId));
     if(e.eventType==='bank-correction') {
       validMoney(e.priorValues); validMoney(e.proposedValues);
       if(e.priorValues.amountMinor!==a.amountMinor||e.priorValues.amountDecimal!==a.amountDecimal) fail('correction-history-mismatch');
@@ -88,22 +98,22 @@ export function validateLedger(ledger) {
     } else if(e.eventType==='category-correction') {
       if(typeof e.categoryId!=='string'||!e.categoryId||e.priorCategoryId!==a.categoryId) fail('invalid-category-correction');
       const rule=e.prospectiveRule;
-      if(!rule || rule.version!==1 || rule.enabled!==Boolean(categoryRuleKey(a).normalizedDescription.trim()) || canonicalizeJcs(rule.key)!==canonicalizeJcs(categoryRuleKey(a)) || !Array.isArray(rule.existingActivityIds) || new Set(rule.existingActivityIds).size!==rule.existingActivityIds.length || !rule.existingActivityIds.includes(a.activityId) || rule.existingActivityIds.some(value=>!ledger.activities.some(activity=>activity.activityId===value))) fail('invalid-prospective-category-rule');
+      if(!rule || rule.version!==1 || rule.enabled!==Boolean(categoryRuleKey(a).normalizedDescription.trim()) || canonicalizeJcs(rule.key)!==canonicalizeJcs(categoryRuleKey(a)) || !Array.isArray(rule.existingActivityIds) || new Set(rule.existingActivityIds).size!==rule.existingActivityIds.length || !rule.existingActivityIds.includes(a.activityId) || rule.existingActivityIds.some(value=>!byId.activities.has(value))) fail('invalid-prospective-category-rule');
     } else if(e.eventType==='classification') {
       if(e.priorActivityKind!==a.activityKind||e.priorCategoryId!==a.categoryId) fail('classification-history-mismatch');
       if(!['income','spending','transfer','refund','unclassified'].includes(e.activityKind) || (e.categoryId!==null&&typeof e.categoryId!=='string')) fail('invalid-classification');
     } else if(e.eventType==='refund-link') {
-      const target=activityFor(ledger,e.originalActivityId);
+      const target=findActivity(e.originalActivityId);
       if(target.currency!==a.currency || a.activityId===target.activityId || !e.evidence) fail('invalid-refund-link');
       if(e.confirmedPostedDate!==null && e.confirmedPostedDate!==undefined && (!isCalendarDate(e.confirmedPostedDate)||(a.postedDate!==null&&a.postedDate!==e.confirmedPostedDate))) fail('invalid-refund-posted-date');
     } else if(e.eventType==='lifecycle-transition') {
-      if(a.lifecycleStatus!=='pending'||e.from!=='pending'||e.to!=='posted'||!isCalendarDate(e.effectiveDate)||(e.postedDate!==null&&!isCalendarDate(e.postedDate))||(e.settlementDate!==null&&!isCalendarDate(e.settlementDate))||!ledger.observations.some(o=>o.observationId===e.sourceObservationId&&o.activityId===e.activityId)) fail('invalid-lifecycle-event');
+      if(a.lifecycleStatus!=='pending'||e.from!=='pending'||e.to!=='posted'||!isCalendarDate(e.effectiveDate)||(e.postedDate!==null&&!isCalendarDate(e.postedDate))||(e.settlementDate!==null&&!isCalendarDate(e.settlementDate))||byId.observations.get(e.sourceObservationId)?.activityId!==e.activityId) fail('invalid-lifecycle-event');
     } else fail('unsupported-persisted-event');
   }
   const refundTotals=new Map(), refundActivities=new Set();
   for(const event of ledger.events.filter(e=>e.eventType==='refund-link')) {
-    const refund=effective(ledger,activityFor(ledger,event.activityId));
-    const target=effective(ledger,activityFor(ledger,event.originalActivityId));
+    const refund=effective(ledger,findActivity(event.activityId));
+    const target=effective(ledger,findActivity(event.originalActivityId));
     const amount=exactSignedDecimal(refund), originalAmount=exactSignedDecimal(target);
     if(refundActivities.has(refund.activityId)||refund.activityKind!=='refund'||target.activityKind!=='spending'||amount===null||originalAmount===null||compare(amount,'0')<=0||compare(originalAmount,'0')>=0) fail('invalid-effective-refund');
     refundActivities.add(refund.activityId);
@@ -111,11 +121,16 @@ export function validateLedger(ledger) {
     if(compare(total,negate(originalAmount))>0) fail('refund-exceeds-original');
     refundTotals.set(target.activityId,total);
   }
+  const priorDecisions=new Map();
   for (const d of ledger.reviewDecisions) {
-    const o=ledger.observations.find(o=>o.observationId===d.observationId);
+    const o=byId.observations.get(d.observationId);
     if(!o || !['keep-separate','match','reject','reverse'].includes(d.action) || d.reviewer!=='user' || !Number.isFinite(Date.parse(d.createdAt))) fail('invalid-review-decision');
-    if(d.activityId!==null && activityFor(ledger,d.activityId).accountId!==o.accountId) fail('invalid-review-target');
-    if(d.action==='reverse' && !ledger.reviewDecisions.slice(0,ledger.reviewDecisions.indexOf(d)).some(prior=>prior.reviewDecisionId===d.supersedesDecisionId&&prior.observationId===d.observationId&&prior.action!=='reverse')) fail('invalid-review-reversal');
+    if(d.activityId!==null && findActivity(d.activityId).accountId!==o.accountId) fail('invalid-review-target');
+    if(d.action==='reverse') {
+      const prior=priorDecisions.get(d.supersedesDecisionId);
+      if(!prior || prior.observationId!==d.observationId || prior.action==='reverse') fail('invalid-review-reversal');
+    }
+    priorDecisions.set(d.reviewDecisionId,d);
   }
   // Storage records must be JSON, not Date/BigInt/undefined or non-finite values.
   const inspect = value => { if (value===undefined || typeof value==='bigint' || typeof value==='function' || typeof value==='symbol' || (typeof value==='number'&&!Number.isFinite(value))) fail('non-json-ledger'); if(value && typeof value==='object') { if(!Array.isArray(value) && Object.getPrototypeOf(value)!==Object.prototype) fail('non-json-ledger'); Object.values(value).forEach(inspect); } };
@@ -138,7 +153,12 @@ function canonicalRow(record, account) {
   return candidate;
 }
 function refreshRun(ledger, run) {
-  const observations=run.observationIds.map(value=>ledger.observations.find(o=>o.observationId===value));
+  const observationById=new Map();
+  for(const observation of ledger.observations) {
+    // Keep find's first-match behavior until the mutated ledger's final ID check.
+    if(!observationById.has(observation.observationId)) observationById.set(observation.observationId,observation);
+  }
+  const observations=run.observationIds.map(value=>observationById.get(value));
   const counts=zeroCounts(); counts.rowsSeen=run.rowsSeen; counts.rowsRecognized=observations.length;
   for(const o of observations) counts[o.disposition]++;
   run.counts=counts;
@@ -230,8 +250,17 @@ export function applyReviewDecision(ledger, {observationId,action,activityId=nul
   validateLedger(next); return next;
 }
 
+function activeActivityIds(ledger) {
+  const ids=new Set();
+  for(const observation of ledger.observations) {
+    if(observation.activityId!==null && ['created','matched'].includes(observation.disposition)) ids.add(observation.activityId);
+  }
+  return ids;
+}
+
 function activeActivities(ledger) {
-  return ledger.activities.filter(activity=>ledger.observations.some(o=>o.activityId===activity.activityId&&['created','matched'].includes(o.disposition)));
+  const ids=activeActivityIds(ledger);
+  return ledger.activities.filter(activity=>ids.has(activity.activityId));
 }
 
 export function reverseReviewDecision(ledger,{reviewDecisionId,rationale=null},options={}) {
@@ -277,7 +306,8 @@ function effective(ledger, activity, visited = new Set()) {
 }
 export function getEffectiveActivities(ledger) {
   validateLedger(ledger);
-  return ledger.activities.map(activity=>({...effective(ledger,activity),active:activeActivities(ledger).some(active=>active.activityId===activity.activityId)}));
+  const activeIds=activeActivityIds(ledger);
+  return ledger.activities.map(activity=>({...effective(ledger,activity),active:activeIds.has(activity.activityId)}));
 }
 
 // Exact decimal arithmetic throughout; BigInts never enter persisted records.

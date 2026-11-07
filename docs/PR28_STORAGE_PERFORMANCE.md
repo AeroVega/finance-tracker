@@ -52,15 +52,42 @@ Request metrics observe the shared fetch path used by both the transaction and s
 
 Metrics are diagnostic evidence, not proof that a financial operation passed. A slow or failed request must not be converted into a successful acceptance result. Instrumentation failure must not change the fetch result or bypass a storage check.
 
+The guided page shows elapsed time beside each live result and an overall active-run time. A phase measures the named operation and its assertions together. Reconnect attempts accumulate in one explicitly labeled total. The 13 local fixture assertions share one measured recipe duration, including fixture loading; those times must not be added together. Missing and historical timings remain unmeasured. Detailed request counts are available separately, and timing values are not persisted across reloads.
+
+## Local ledger work
+
+**Verified with invented data on Node 24.22.1, Linux x64:** repeated activity projection and validation lookups were separate growth bottlenecks. The baseline below is commit `8bc8099a47640a65caec35d6ac2c3af1145e1bad`. Each number is the median of three calls on the same synthetic shape, with one account, one import, one observation per activity, and no existing events or network calls.
+
+| Operation | Activities | Before, ms | After, ms |
+| --- | ---: | ---: | ---: |
+| Effective activity projection | 250 | 34.41 | 2.52 |
+| Effective activity projection | 500 | 255.00 | 4.00 |
+| Effective activity projection | 1,000 | 1,931.94 | 7.44 |
+| Validate ledger | 10,000 | 755.86 | 50.90 |
+| Apply one classification | 10,000 | 2,107.74 | 187.54 |
+| Summarize ledger | 10,000 | 1,143.59 | 85.86 |
+
+Activity projection now scans observation membership once per call. Validation builds temporary ID and membership indexes while retaining its validation order and checks. These indexes are discarded after the call. No ledger or verification result is cached between operations.
+
+Run `node tests/benchmark-canonical.mjs` to repeat the synthetic CPU measurements. The regression suite checks bounded access counts instead of imposing machine-dependent timing thresholds.
+
+**Verified in an actual-handler DOM simulation:** the review screen previously created 1,001,000 match options for 1,000 activities and 1,000 pending observations. It now renders ten pending items at a time and creates no match options until their native controls are opened. Each picker displays 50 scoped activities per page, a blank choice and, when needed, one selected target from another page. All ten open pickers therefore contain at most 520 options. Search and page controls keep every eligible target accessible. Previous decisions are also paginated. Typed review fields survive paging and unrelated edits in this tab; a successful explicit reopen clears them. A selected target remains subject to the financial engine's current-state checks when the user applies the decision.
+
+Collapsed collection and rule JSON is generated only when opened. The evidence remains available; its serialization is no longer repeated for every closed section after each edit. Observation and activity tables still render their full contents, so the entire page does not have a constant DOM size.
+
+These measurements do not explain the tiny bundled fixture's live Drive delay and are not device responsiveness measurements. Event-heavy replay, full-ledger cloning and retained storage history still grow with the ledger. This change does not redesign their audit records or recovery boundaries.
+
 ## Acceptance
 
-**Verified locally:** the complete suite passed 527/527 tests on Node 24.22.1 and Node 26.13.0, with no failures or skips. Module syntax and diff checks passed. Independent safety review found no blocker in the metadata brackets, bounded reads, create receipts, exact-base handoff, recovery, ID batching, or metric privacy. These results do not replace live Google/Safari acceptance of the published commit.
+**Verified locally after the timing and local-performance follow-up:** the complete suite passed 599/599 tests on Node 24.22.1 and Node 26.13.0, with no failures or skips. Module syntax and diff checks passed. Independent safety review found no blocker in the metadata brackets, bounded reads, create receipts, exact-base handoff, recovery, ID batching, or metric privacy. The later canonical/UI review compared 22 workflow snapshots and 6,641 malformed-ledger cases against the prior implementation with identical financial results and validation errors. These results do not replace live Google/Safari acceptance of the published commit.
 
 - The same 25 live assertions remain, including the separate human reconnect check. The manual device, interruption, and new-folder backup/restore checks remain separate.
 - Synthetic regression tests use the real HTTP adapters and the bulk snapshot path, and enforce request budgets for the complete recipe and repeated small saves.
 - Concurrency tests check the bound, out-of-order completion, deterministic results, and drainage after failures.
 - Integrity tests retain corrupted historical objects, changed manifests, mismatched journal bindings, ambiguous creates, interrupted writes, and lost ownership as failures or recovery-required states.
 - Metrics tests cover rejected fetches, observer failures, overlapping or closed measurement windows, and sanitized output.
+- Timing tests cover unavailable clocks, shared fixture runs, cumulative reconnect retries, interruption and historical evidence without changing acceptance outcomes.
+- Canonical tests bound lookup work without timing thresholds. Review UI tests cover every page, retained choices and drafts, explicit matching, invalid or inactive targets, reversals, busy controls, successful and failed reopen, and lazy evidence.
 - Live elapsed time, Google throttling, Safari responsiveness, and device memory remain **Open** until tested on the published commit. Local request counts do not establish those results.
 
 The work remains synthetic-only under the PR27 production gate. This change does not authorize real-data activation, merging, deployment, or changes to Drive sharing.

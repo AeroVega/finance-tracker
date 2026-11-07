@@ -20,6 +20,10 @@ let saveState = 'idle';
 let mappingForms = [];
 let previewGeneration = 0, parsedFixture = null;
 let acceptanceListener = null;
+const REVIEW_PAGE_SIZE = 10, MATCH_PAGE_SIZE = 50;
+let reviewPage = 0, decisionPage = 0;
+const reviewDrafts = new Map(), reversalDrafts = new Map();
+function resetReviewState() { reviewPage = 0; decisionPage = 0; reviewDrafts.clear(); reversalDrafts.clear(); }
 const element = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
 const inputMessages = Object.freeze({
   'account-mapping-required': 'Choose a destination for every source account.',
@@ -65,7 +69,7 @@ function refreshSaveStatus(ready) {
 function refresh() {
   const lifecycle = storage.lifecycle;
   const ready = lifecycle?.state === 'ready' && lifecycle.acceptingWrites && navigator.onLine !== false;
-  for (const control of (document.getElementById('workbench') || document).querySelectorAll('button,input,select')) control.disabled = busy;
+  for (const control of (document.getElementById('workbench') || document).querySelectorAll('button,input,select')) control.disabled = busy || control.dataset.pageBoundary === 'true';
   $('connect').disabled = busy || !configured;
   $('stale').disabled = busy || lifecycle?.state !== 'stale-session';
   $('recover').disabled = busy || lifecycle?.state !== 'recovery-required' || !lifecycle?.coordinator?.canWrite;
@@ -102,9 +106,32 @@ async function run(operation) {
   finally { busy = false; refresh(); }
 }
 function action(id, operation) { $(id).addEventListener('click', () => run(operation)); }
-function changed(next) { ledger = next; dirty = true; renderLedger(); }
+function changed(next) { if (ledger?.ledgerId !== next.ledgerId) resetReviewState(); ledger = next; dirty = true; return renderLedger(); }
 function option(select, value, label) { const node = element('option', label); node.value = value; select.append(node); }
 function labelled(parent, text, node) { const label = element('label', text); label.append(node); parent.append(label); return node; }
+function lazyEvidence(title, records) {
+  const details = element('details'); details.append(element('summary', title));
+  let rendered = false;
+  details.addEventListener('toggle', () => {
+    if (!details.open || rendered) return;
+    details.append(element('pre', JSON.stringify(records(), null, 2))); rendered = true;
+  });
+  return details;
+}
+function pageIndex(page, count, size) { return Math.max(0, Math.min(page, Math.ceil(count / size) - 1)); }
+function pageControls(parent, title, page, count, size, navigate) {
+  const last = Math.max(0, Math.ceil(count / size) - 1), nav = element('nav');
+  nav.className = 'review-pagination'; nav.setAttribute('aria-label', title + ' pages');
+  const status = element('p', `${title}: ${count ? page * size + 1 : 0}–${Math.min((page + 1) * size, count)} of ${count}. Page ${page + 1} of ${last + 1}.`);
+  status.tabIndex = -1; status.setAttribute('role', 'status'); nav.append(status);
+  for (const [label, destination, boundary] of [['First', 0, page === 0], ['Previous', page - 1, page === 0], ['Next', page + 1, page === last], ['Last', last, page === last]]) {
+    const button = element('button', label); button.type = 'button';
+    button.setAttribute('aria-label', title + ' ' + label.toLowerCase() + ' page');
+    button.dataset.pageBoundary = String(boundary); button.disabled = busy || boundary;
+    button.addEventListener('click', () => { if (!busy && !boundary) navigate(destination); }); nav.append(button);
+  }
+  parent.append(nav); return status;
+}
 function calendar(parent, title, initialMonth) {
   const root = element('div'); root.className = 'calendar'; parent.append(root);
   const input = labelled(root, title, element('input')); input.type = 'date'; input.required = true;
@@ -160,7 +187,7 @@ function renderMappings() {
     $('mappings').append(fieldset); mappingForms.push({key,select,name,currency,type,start,end,confirm});
   }
 }
-async function loadLedger() { const nextStore = new CanonicalLedgerStore({ lifecycle: storage.lifecycle }); const nextLedger = await nextStore.load() || createLedger(); store = nextStore; ledger = nextLedger; dirty = false; saveState = 'idle'; clearPreview(); renderLedger(); }
+async function loadLedger() { const nextStore = new CanonicalLedgerStore({ lifecycle: storage.lifecycle }); const nextLedger = await nextStore.load() || createLedger(); store = nextStore; ledger = nextLedger; resetReviewState(); dirty = false; saveState = 'idle'; clearPreview(); renderLedger(); }
 async function saveLedger(next = ledger) {
   saveState = 'saving'; refresh();
   try {
@@ -233,49 +260,115 @@ function renderLedger() {
   wrap.append(table); $('provenance').append(wrap);
   for (const [key,rows] of Object.entries(ledger)) {
     if (!Array.isArray(rows)) continue;
-    const details=element('details'); details.append(element('summary',key+' · '+rows.length+' records')); const pre=element('pre',JSON.stringify(rows,null,2)); details.append(pre); $('provenance').append(details);
+    $('provenance').append(lazyEvidence(key+' · '+rows.length+' records', () => rows));
   }
   const effectiveTable=element('table'); effectiveTable.append(element('caption','Effective classifications and categories'));
   const effectiveHead=element('tr'); for (const title of ['Record status','Description','Classification','Category','Effective currency','Lifecycle']) {const th=element('th',title);th.scope='col';effectiveHead.append(th);} effectiveTable.append(effectiveHead);
   for (const activity of effectiveActivities) {const tr=element('tr');for(const value of [activity.active ? 'Active' : 'Inactive retained history',activity.sourceDescription,activity.activityKind,activity.categoryId || 'Uncategorized',activity.currency,activity.lifecycleStatus]) tr.append(element('td',value));effectiveTable.append(tr);}
   const effectiveWrap=element('div');effectiveWrap.className='table-wrap';effectiveWrap.append(effectiveTable);$('provenance').prepend(effectiveWrap);
   const rules=ledger.events.filter(event=>event.prospectiveRule);
-  const ruleDetails=element('details');ruleDetails.append(element('summary',rules.length+' prospective category rules'),element('p','A category correction applies to this activity and future exact matches on account, institution, currency, description, and source action. Other existing activities retain their categories.'),element('pre',JSON.stringify(rules.map(event=>({eventId:event.eventId,categoryId:event.categoryId,prospectiveRule:event.prospectiveRule})),null,2)));$('provenance').append(ruleDetails);
-  renderReviews(activeActivities); refresh(); $('summary').textContent='Subtotals need recalculation after changes. No complete-history claim is made.';
+  const ruleDetails=lazyEvidence(rules.length+' prospective category rules', () => rules.map(event=>({eventId:event.eventId,categoryId:event.categoryId,prospectiveRule:event.prospectiveRule})));ruleDetails.append(element('p','A category correction applies to this activity and future exact matches on account, institution, currency, description, and source action. Other existing activities retain their categories.'));$('provenance').append(ruleDetails);
+  const reviews = renderReviews(activeActivities); refresh(); $('summary').textContent='Subtotals need recalculation after changes. No complete-history claim is made.';
+  return reviews;
+}
+function matchLabel(activity) { return activity.sourceDescription+' · '+activity.effectiveDate+' · '+activity.activityId; }
+function matchScope(activity) { return JSON.stringify([activity.accountId, activity.institutionId, activity.currency]); }
+function renderMatchPicker(parent, candidates, draft) {
+  const details = element('details'), heading = element('summary'), body = element('div');
+  details.className = 'review-match'; details.append(heading, body); parent.append(details);
+  const byId = new Map(candidates.map(activity => [activity.activityId, activity]));
+  const updateHeading = () => { heading.textContent = draft.targetId ? 'Match target: ' + (byId.has(draft.targetId) ? matchLabel(byId.get(draft.targetId)) : 'Previously selected activity is unavailable') : 'Choose a match target (optional)'; };
+  let drawn = false;
+  function draw(focusStatus = false) {
+    drawn = true; body.replaceChildren();
+    body.append(element('p', 'Only active activities in the same account, institution and source currency are listed, 50 per page. Search or browse all pages; an off-page selection stays available. Choosing an activity does not apply a match; enter a rationale and choose match. Amount and source validation still apply.'));
+    const search = labelled(body, 'Search match activities by description, date or activity ID', element('input'));
+    search.type = 'search'; search.value = draft.searchText;
+    search.addEventListener('input', () => { draft.searchText = search.value; });
+    const applySearch = () => { if (busy) return; draft.searchText = search.value; draft.search = search.value.trim().toLowerCase(); draft.targetPage = 0; draw(true); };
+    search.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); applySearch(); } });
+    const searchButton = element('button', 'Search activities'); searchButton.type = 'button'; searchButton.addEventListener('click', applySearch); body.append(searchButton);
+    const filtered = draft.search ? candidates.filter(activity => matchLabel(activity).toLowerCase().includes(draft.search)) : candidates;
+    draft.targetPage = pageIndex(draft.targetPage, filtered.length, MATCH_PAGE_SIZE);
+    const status = pageControls(body, 'Match activities', draft.targetPage, filtered.length, MATCH_PAGE_SIZE, page => { draft.targetPage = page; draw(true); });
+    const target = labelled(body, 'Match to activity', element('select')); option(target, '', 'Choose activity');
+    const visible = filtered.slice(draft.targetPage * MATCH_PAGE_SIZE, (draft.targetPage + 1) * MATCH_PAGE_SIZE);
+    // Keep an explicit selection even when its option is off this page or search.
+    // An unavailable selection remains visible, but the canonical guard rejects it.
+    if (draft.targetId && !visible.some(activity => activity.activityId === draft.targetId)) option(target, draft.targetId, byId.has(draft.targetId) ? 'Selected: ' + matchLabel(byId.get(draft.targetId)) : 'Previously selected activity is unavailable');
+    for (const activity of visible) option(target, activity.activityId, matchLabel(activity));
+    target.value = draft.targetId;
+    target.addEventListener('change', () => { draft.targetId = target.value; updateHeading(); });
+    refresh(); if (focusStatus) status.focus();
+  }
+  details.addEventListener('toggle', () => { draft.matchOpen = details.open; if (details.open && !drawn) draw(); });
+  updateHeading(); details.open = draft.matchOpen; if (details.open) draw();
 }
 function renderReviews(activeActivities) {
   $('reviews').replaceChildren();
   const pending = ledger.observations.filter(review=>['review','rejected'].includes(review.disposition) && !review.resolved);
-  $('reviews').append(element('p',pending.length+' pending review items. Inspect source evidence below.'));
-  for (const review of pending) {
-    const fieldset=element('fieldset'); fieldset.append(element('legend',review.observationId),element('pre',JSON.stringify(review,null,2)));
-    const target=labelled(fieldset,'Match to activity',element('select')); option(target,'','Choose activity');
-    for (const activity of activeActivities) option(target,activity.activityId,activity.sourceDescription+' · '+activity.effectiveDate+' · '+activity.activityId);
+  // Build the scoped candidate lists once, not once per pending observation.
+  const scopes = new Map();
+  for (const activity of activeActivities) {
+    const key = matchScope(activity); if (!scopes.has(key)) scopes.set(key, []); scopes.get(key).push(activity);
+  }
+  $('reviews').append(element('p',pending.length+' pending review items. Inspect source evidence below. Draft fields stay only in this tab across pages. They are not saved decisions: apply a review action, then Save canonical ledger. Reopening or discarding the ledger clears draft fields.'));
+  reviewPage = pageIndex(reviewPage, pending.length, REVIEW_PAGE_SIZE);
+  const pendingStatus = pageControls($('reviews'), 'Pending reviews', reviewPage, pending.length, REVIEW_PAGE_SIZE, page => {
+    reviewPage = page; const status = renderReviews(activeActivities).pendingStatus; refresh(); status.focus();
+  });
+  for (const review of pending.slice(reviewPage * REVIEW_PAGE_SIZE, (reviewPage + 1) * REVIEW_PAGE_SIZE)) {
+    if (!reviewDrafts.has(review.observationId)) reviewDrafts.set(review.observationId, { rationale: '', currency: '', targetId: '', targetPage: 0, search: '', searchText: '', matchOpen: false });
+    const draft = reviewDrafts.get(review.observationId);
+    const fieldset=element('fieldset'); fieldset.dataset.observationId = review.observationId;
+    fieldset.append(element('legend',review.observationId),element('pre',JSON.stringify(review,null,2)));
+    renderMatchPicker(fieldset, scopes.get(matchScope(review.candidate)) || [], draft);
     let currency = null;
     if (review.reasonCode==='missing-currency') {
       fieldset.append(element('p','The original source row has no currency. To keep it separately, explicitly enter its ISO currency and explain your evidence. The blank source field is preserved; unknown lifecycle status stays unknown.'));
-      currency=labelled(fieldset,'Explicit currency for this source row',element('input'));currency.maxLength=3;currency.placeholder='For example USD';
+      currency=labelled(fieldset,'Explicit currency for this source row',element('input'));currency.maxLength=3;currency.placeholder='For example USD';currency.value=draft.currency;
+      currency.addEventListener('input', () => { draft.currency = currency.value; });
     }
-    const rationale=labelled(fieldset,'Decision rationale',element('input'));
+    const rationale=labelled(fieldset,'Decision rationale',element('input')); rationale.value=draft.rationale;
+    rationale.addEventListener('input', () => { draft.rationale = rationale.value; });
     for (const decision of ['keep-separate','match','reject']) {
-      const button=element('button',decision); button.addEventListener('click',()=>run(async()=>{ if (!storage.lifecycle?.acceptingWrites) inputError('reconnect-required'); if (!rationale.value.trim()) inputError('review-rationale-required'); if (decision==='match'&&!target.value) inputError('match-target-required'); if (decision==='keep-separate' && currency && !/^[A-Z]{3}$/.test(currency.value.trim().toUpperCase())) inputError('currency-required'); changed(applyReviewDecision(ledger,{observationId:review.observationId,action:decision,activityId:target.value||undefined,rationale:rationale.value.trim(),...(decision==='keep-separate' && currency ? {currency:currency.value.trim().toUpperCase()} : {})})); message('Review decision staged locally.'); })); fieldset.append(button);
+      const button=element('button',decision); button.type = 'button'; button.addEventListener('click',()=>run(async()=>{
+        if (!storage.lifecycle?.acceptingWrites) inputError('reconnect-required');
+        if (!rationale.value.trim()) inputError('review-rationale-required');
+        if (decision==='match'&&!draft.targetId) inputError('match-target-required');
+        if (decision==='keep-separate' && currency && !/^[A-Z]{3}$/.test(currency.value.trim().toUpperCase())) inputError('currency-required');
+        // applyReviewDecision validates the current ledger, target activity,
+        // active state, account, currency and amount before it stages anything.
+        const status = changed(applyReviewDecision(ledger,{observationId:review.observationId,action:decision,activityId:draft.targetId||undefined,rationale:rationale.value.trim(),...(decision==='keep-separate' && currency ? {currency:currency.value.trim().toUpperCase()} : {})}));
+        status.pendingStatus.focus();
+        reviewDrafts.delete(review.observationId); message('Review decision staged locally.');
+      })); fieldset.append(button);
     }
     $('reviews').append(fieldset);
   }
   $('reviews').append(element('h3','Previous review decisions'),element('p','Return the latest decision to review with an audit record. Later dependent changes can prevent reversal. Save to persist any reversal.'));
-  for (const decision of ledger.reviewDecisions) {
-    const details=element('details');details.append(element('summary',decision.action+' · '+decision.observationId),element('pre',JSON.stringify(decision,null,2)));
-    const latest=ledger.reviewDecisions.filter(item=>item.observationId===decision.observationId).at(-1);
-    if (decision.action!=='reverse' && latest===decision) {
-      const rationale=labelled(details,'Reason for returning to review',element('input'));
-      const button=element('button','Return to review');button.addEventListener('click',()=>run(async()=>{
+  const latestByObservation = new Map();
+  for (const decision of ledger.reviewDecisions) latestByObservation.set(decision.observationId, decision);
+  decisionPage = pageIndex(decisionPage, ledger.reviewDecisions.length, REVIEW_PAGE_SIZE);
+  const decisionStatus = pageControls($('reviews'), 'Previous decisions', decisionPage, ledger.reviewDecisions.length, REVIEW_PAGE_SIZE, page => {
+    decisionPage = page; const status = renderReviews(activeActivities).decisionStatus; refresh(); status.focus();
+  });
+  for (const decision of ledger.reviewDecisions.slice(decisionPage * REVIEW_PAGE_SIZE, (decisionPage + 1) * REVIEW_PAGE_SIZE)) {
+    const details=lazyEvidence(decision.action+' · '+decision.observationId, () => decision); details.dataset.reviewDecisionId = decision.reviewDecisionId;
+    if (decision.action!=='reverse' && latestByObservation.get(decision.observationId)===decision) {
+      const rationale=labelled(details,'Reason for returning to review',element('input')); rationale.value = reversalDrafts.get(decision.reviewDecisionId) || '';
+      rationale.addEventListener('input', () => { reversalDrafts.set(decision.reviewDecisionId, rationale.value); });
+      const button=element('button','Return to review');button.type = 'button';button.addEventListener('click',()=>run(async()=>{
         if (!store || !storage.lifecycle?.acceptingWrites) inputError('reconnect-required');
         if (!rationale.value.trim()) inputError('review-rationale-required');
-        changed(reverseReviewDecision(ledger,{reviewDecisionId:decision.reviewDecisionId,rationale:rationale.value.trim()}));message('Return to review staged locally. Save to persist the audit record.');
+        const status = changed(reverseReviewDecision(ledger,{reviewDecisionId:decision.reviewDecisionId,rationale:rationale.value.trim()}));
+        status.pendingStatus.focus();
+        reversalDrafts.delete(decision.reviewDecisionId); message('Return to review staged locally. Save to persist the audit record.');
       }));details.append(button);
     }
     $('reviews').append(details);
   }
+  return { pendingStatus, decisionStatus };
 }
 $('fixture').addEventListener('change',clearPreview);
 $('activity').addEventListener('change',refresh);

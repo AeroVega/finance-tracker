@@ -1,6 +1,7 @@
 import { LIVE_CHECKS, LIVE_IDS, blankLive, safeLiveMetrics, createLiveRunner, prepareInterruption } from './pr28-live-checks.mjs';
-import { PLAN_VERSION, CHECKS, AUTOMATED_IDS, STATUS_LABELS, BROWSER_LABELS, blankResults, safeStatuses, safeAutomated, verifiedSource, createSafeReport } from './pr28-testing-plan.mjs';
+import { PLAN_VERSION, CHECKS, AUTOMATED_IDS, AUTOMATED_LABELS, STATUS_LABELS, BROWSER_LABELS, blankResults, safeStatuses, safeAutomated, verifiedSource, createSafeReport } from './pr28-testing-plan.mjs';
 import { runFixtureChecks } from './pr28-testing-checks.mjs';
+import { formatElapsed, resultTiming, createElapsedTimer } from './pr28-testing-timing.mjs';
 const $ = id => document.getElementById(id);
 const node = (tag, text) => { const item = document.createElement(tag); if (text !== undefined) item.textContent = text; return item; };
 const sourceStamp = $('build-sha').textContent.trim();
@@ -11,6 +12,7 @@ const sessionKey = 'finance-tracker-' + PLAN_VERSION;
 let live = blankLive(), liveState = 'not-run', liveRunner = null, livePreparing = false, workbenchReady = false;
 let liveMetrics = safeLiveMetrics(), metricPhase = null;
 let selected = 0, manual = blankResults(), automated = safeAutomated(), checking = false;
+let fixtureTimer = null, fixtureElapsedMs = null, checkingBase = false, historicalLive = false;
 let date = new Date().toISOString().slice(0, 10);
 function option(select, value, label) { const item = node('option', label); item.value = value; select.append(item); }
 for (const browser of BROWSER_LABELS) option($('test-browser'), browser, browser);
@@ -28,7 +30,7 @@ try {
   if (hasSourceStamp && saved?.version === PLAN_VERSION && saved.source === currentSource) {
     manual = safeStatuses(saved.manual);
     live = blankLive(saved.live);
-    if (Object.values(live).some(status => status !== 'not-run')) liveState = 'historical';
+    if (Object.values(live).some(status => status !== 'not-run')) { liveState = 'historical'; historicalLive = true; }
     if (Number.isInteger(saved.selected) && saved.selected >= 0 && saved.selected < CHECKS.length) selected = saved.selected;
     if (BROWSER_LABELS.includes(saved.browser)) $('test-browser').value = saved.browser;
     $('source-confirmed').checked = verifiedSource(sourceStamp, saved.sourceConfirmed) !== 'unverified';
@@ -36,7 +38,7 @@ try {
   }
 } catch { $('checklist-storage').textContent = 'Previous checklist choices could not be loaded. All manual checks start Not run. Copy your safe report before closing this tab.'; }
 function report() {
-  $('safe-report').value = createSafeReport({ manual, automated, browser: $('test-browser').value, source: sourceStamp, sourceConfirmed: $('source-confirmed').checked, date, live, liveState, metrics: liveMetrics });
+  $('safe-report').value = createSafeReport({ manual, automated, browser: $('test-browser').value, source: sourceStamp, sourceConfirmed: $('source-confirmed').checked, date, live, liveState: historicalLive ? 'historical' : liveState, metrics: liveMetrics, fixtureElapsedMs });
 }
 function render(focus = false) {
   const check = CHECKS[selected];
@@ -67,16 +69,11 @@ for (const id of ['test-browser', 'source-confirmed']) $(id).addEventListener('c
 $('run-fixture-checks').addEventListener('click', async () => {
   if (checking || liveRunner?.isRunning() || livePreparing) return;
   checking = true; refreshLiveControls(); $('run-fixture-checks').disabled = true; $('reset-checklist').disabled = true;
-  automated = safeAutomated(); report();
-  $('fixture-check-result').textContent = 'Running bundled invented-fixture checks. No Drive operations…';
+  automated = safeAutomated(); fixtureElapsedMs = null; fixtureTimer = createElapsedTimer(); report(); renderFixture();
   $('fixture-check-result').dataset.result = 'running';
   try {
-    automated = await runFixtureChecks();
-    const passed = Object.values(automated).filter(value => value === 'passed').length;
-    const failed = Object.entries(automated).find(([, value]) => value === 'failed');
-    $('fixture-check-result').textContent = failed ? `${passed}/${AUTOMATED_IDS.length} checks passed. Check ${failed[0]} failed or its fixture was unavailable; later checks were not run. Retry when connected. Manual results are unchanged.` : `${passed}/${AUTOMATED_IDS.length} local fixture checks passed in this page. These local checks do not replace the separate live runner or human device checks.`;
-    $('fixture-check-result').dataset.result = failed ? 'failed' : 'passed';
-  } finally { checking = false; refreshLiveControls(); $('run-fixture-checks').disabled = false; $('reset-checklist').disabled = false; report(); }
+    automated = safeAutomated(await runFixtureChecks());
+  } finally { fixtureElapsedMs = fixtureTimer.stop(); fixtureTimer = null; checking = false; renderFixture(); refreshLiveControls(); $('run-fixture-checks').disabled = false; $('reset-checklist').disabled = false; report(); }
 });
 function selectReport() { report(); $('safe-report').focus(); $('safe-report').select(); $('safe-report').setSelectionRange(0, $('safe-report').value.length); }
 $('select-report').addEventListener('click', () => { selectReport(); $('report-status').textContent = 'Report selected. Use your device Copy command, then paste it where you choose.'; });
@@ -91,10 +88,10 @@ $('copy-report').addEventListener('click', async () => {
 $('reset-checklist').addEventListener('click', () => {
   if (checking || liveRunner?.isRunning() || livePreparing || !confirm('Reset only this tab’s recorded test results and same-run comparison? Saved Drive data, staged changes and the active session are unchanged.')) return;
   liveRunner?.forgetResults();
-  liveMetrics = safeLiveMetrics(); metricPhase = null;
+  liveMetrics = safeLiveMetrics(); metricPhase = null; fixtureElapsedMs = null; checkingBase = false; historicalLive = false;
   manual = blankResults(); automated = safeAutomated(); live = blankLive(); liveState = 'not-run'; renderLive(); selected = 0; date = new Date().toISOString().slice(0, 10);
   $('source-confirmed').checked = false; $('test-browser').value = BROWSER_LABELS[0];
-  $('fixture-check-result').textContent = 'Not run in this page.'; $('fixture-check-result').dataset.result = 'not-run';
+  renderFixture();
   $('report-status').textContent = 'Checklist reset. Saved data, staged changes and the session are unchanged.'; render();
 });
 function refreshLiveControls() {
@@ -107,14 +104,53 @@ function refreshLiveControls() {
   $('run-fixture-checks').disabled = active || checking;
 }
 const metricText = value => value ? `${value.requests} requests, ${value.completed} completed, ${value.inFlight} in flight, peak ${value.peakConcurrency}; elapsed ${(value.elapsedMs / 1000).toFixed(1)} s; summed fetch-to-headers ${(value.requestMs / 1000).toFixed(1)} s, slowest ${(value.maxRequestMs / 1000).toFixed(1)} s. HTTP 2xx ${value.http2xx}, 3xx ${value.http3xx}, 4xx ${value.http4xx}, 5xx ${value.http5xx}, other ${value.httpOther}; rejected ${value.networkErrors}.` : 'Not measured.';
+const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
+function resultRows(target, checks) {
+  const rows = new Map(checks.map(({ id, label }) => {
+    const li = node('li'), result = node('span'); result.className = 'check-result';
+    li.append(node('span', label), result);
+    return [id, { li, result }];
+  }));
+  $(target).replaceChildren(...[...rows.values()].map(row => row.li));
+  return rows;
+}
+const liveRows = resultRows('live-results', LIVE_CHECKS);
+const fixtureRows = resultRows('fixture-results', AUTOMATED_IDS.map((id, index) => ({ id, label: AUTOMATED_LABELS[index] })));
+const requestRows = new Map(LIVE_CHECKS.map(check => [check.id, node('li')]));
+$('request-phase-results').replaceChildren(...requestRows.values());
+function renderFixture() {
+  const passed = Object.values(automated).filter(value => value === 'passed').length;
+  const failed = Object.entries(automated).find(([, value]) => value === 'failed');
+  const elapsed = formatElapsed(checking ? fixtureTimer?.elapsedMs() : fixtureElapsedMs);
+  if (checking) $('fixture-check-result').textContent = `Running bundled invented-fixture checks · ${elapsed === 'unmeasured' ? 'time unmeasured' : elapsed + ' elapsed'}. No Drive operations.`;
+  else if (failed) $('fixture-check-result').textContent = `${passed}/${AUTOMATED_IDS.length} checks passed. Shared run time: ${elapsed}. Check ${failed[0]} failed or its fixture was unavailable; later checks were not run. Retry when connected. Manual results are unchanged.`;
+  else if (passed) $('fixture-check-result').textContent = `${passed}/${AUTOMATED_IDS.length} local fixture checks passed. Shared run time: ${elapsed}. These local checks do not replace the separate live runner or human device checks.`;
+  else $('fixture-check-result').textContent = 'Not run in this page.';
+  $('fixture-check-result').dataset.result = checking ? 'running' : failed ? 'failed' : passed ? 'passed' : 'not-run';
+  $('fixture-results').hidden = checking || (!passed && !failed);
+  for (const [id, row] of fixtureRows) {
+    row.li.dataset.result = automated[id];
+    setText(row.result, resultTiming(automated[id], fixtureElapsedMs, { shared: true }));
+  }
+}
 function renderMetrics() {
-  $('request-totals').textContent = liveMetrics.available ? 'Measured run total: ' + metricText(liveMetrics.total) : 'Request metrics are unavailable. They start with Run live checks and are not restored after reload.';
+  setText($('live-elapsed'), 'Active run time: ' + formatElapsed(liveMetrics.available ? liveMetrics.total?.elapsedMs : null) + '.');
+  setText($('request-totals'), liveMetrics.available ? 'Measured run total: ' + metricText(liveMetrics.total) : 'Request metrics are unavailable. They start with Run live checks and are not restored after reload.');
   const label = LIVE_CHECKS.find(check => check.id === metricPhase)?.label;
-  $('request-phase').textContent = label ? label + ': ' + metricText(liveMetrics.phases[metricPhase]) : 'No phase is running.';
+  const active = liveState === 'running' && (checkingBase || live[metricPhase] === 'not-run');
+  setText($('live-current'), active && label ? `${label}: ${resultTiming('not-run', liveMetrics.phases[metricPhase]?.elapsedMs, { running: true, cumulative: metricPhase === 'reconnect-same-copy' })}.` : 'No check is running.');
+  setText($('request-phase'), label ? `${active ? 'Current' : 'Last'} check, ${label}: ${metricText(liveMetrics.phases[metricPhase])}` : 'No phase is running.');
+  for (const check of LIVE_CHECKS) {
+    const row = liveRows.get(check.id), running = active && metricPhase === check.id;
+    // During a fresh-base preflight, previous results still belong to the old run.
+    const historical = !running && (historicalLive || checkingBase);
+    row.li.dataset.result = running ? 'running' : live[check.id];
+    setText(row.result, resultTiming(live[check.id], liveMetrics.phases[check.id]?.elapsedMs, { running, historical, cumulative: check.id === 'reconnect-same-copy' }));
+    setText(requestRows.get(check.id), `${check.label}: ${metricText(liveMetrics.phases[check.id])}`);
+  }
 }
 function renderLive(current = null) {
   metricPhase = current;
-  $('live-results').replaceChildren(...LIVE_CHECKS.map(check => node('li', `${check.label}: ${live[check.id] === 'passed' ? 'Passed programmatically' : live[check.id] === 'failed' ? 'Failed' : 'Not run'}${current === check.id && liveState === 'running' ? ' · checking now' : ''}${liveMetrics.phases[check.id] ? ' · ' + metricText(liveMetrics.phases[check.id]) : ''}`)));
   renderMetrics();
   $('live-progress').value = Object.values(live).filter(status => status === 'passed').length;
   if (liveState === 'historical') $('live-result').textContent = 'Historical results restored from this tab and source. No live checks ran after reload. These results are not evidence about a newly connected folder; same-run reconnect comparison is unavailable.';
@@ -133,10 +169,11 @@ $('verify-live-reconnect').addEventListener('click', async () => {
   if (!liveRunner || checking || livePreparing || liveRunner.isRunning()) return;
   await liveRunner.verifyReconnect(); refreshLiveControls(); persist(); report();
 });
-render(); renderLive();
+render(); renderLive(); renderFixture();
 // Update long in-flight operation time without adding requests or changing any
 // stored acceptance evidence. No metrics are persisted to session storage.
 globalThis.setInterval?.(() => {
+  if (checking) renderFixture();
   if (!liveRunner?.isRunning()) return;
   liveMetrics = safeLiveMetrics(liveRunner.getMetrics()); renderMetrics();
 }, 1000);
@@ -162,6 +199,8 @@ async function mountWorkbench() {
       liveMetrics = safeLiveMetrics(update.metrics);
       if (update.metricsOnly) { renderMetrics(); return; }
       live = blankLive(update.results);
+      checkingBase = update.state === 'checking-base';
+      if (Object.values(live).every(status => status === 'not-run')) historicalLive = false;
       if (update.current === 'fresh-base' && update.state === 'running' && live['fresh-base'] === 'not-run') date = new Date().toISOString().slice(0, 10);
       liveState = update.state === 'checking-base' ? 'running' : update.state;
       const passed = Object.values(live).filter(status => status === 'passed').length;
