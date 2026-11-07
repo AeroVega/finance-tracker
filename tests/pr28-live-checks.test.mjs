@@ -111,3 +111,28 @@ test('historical statuses survive blocked preflight but never authorize reconnec
   runner.forgetResults(); assert.equal(await runner.run(), false);
   assert.equal(last.results['first-save-reopen'], 'not-run'); assert.equal(runner.canVerifyReconnect(), false);
 });
+
+test('request metrics and throwing progress observers cannot alter operations or mark unrun checks passed', async () => {
+  const { createDriveRequestMetrics } = await import('../js/drive-request-metrics.mjs');
+  const requestMetrics = createDriveRequestMetrics();
+  const fetch = requestMetrics.wrapFetch(async () => ({ status: 200 }));
+  let parsed = 0;
+  const runner = createLiveRunner({
+    withWorkbench: operation => operation({ requestMetrics,
+      async requireFresh() { await fetch('private-fresh'); },
+      async identity() { await fetch('private-identity'); return { copyId: 'private-copy' }; }
+    }),
+    loadBytes: async () => { parsed++; throw new Error('private-fixture-failure'); },
+    onUpdate: () => { throw new Error('private-observer-failure'); }
+  });
+  assert.equal(await runner.run(), false);
+  assert.equal(parsed, 1, 'observer failures must not abort the admitted work');
+  const metrics = runner.getMetrics();
+  assert.equal(metrics.available, true); assert.equal(metrics.total.requests, 2);
+  assert.equal(metrics.phases['fresh-base'].requests, 2);
+  assert.equal(metrics.phases['mapping-coverage'].requests, 0);
+  assert.equal(metrics.phases['first-save-reopen'], null);
+  assert.doesNotMatch(JSON.stringify(metrics), /private-/);
+  runner.forgetResults(); assert.equal(runner.getMetrics().available, false);
+  assert.equal(requestMetrics.snapshot().requests, 2, 'reset only forgets reporting windows, not storage state');
+});

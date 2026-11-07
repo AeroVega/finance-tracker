@@ -22,6 +22,7 @@
 - Interruption at every durable boundary exercised by the canonical payload restores either the full committed result or the unchanged prior state. Retrying after verified recovery does not repeat effects.
 - Existing portable export/restore preserves canonical identity, record order, event history, and logical financial results while assigning new physical copy locators.
 - The full Node regression suite and module syntax checks pass. Browser/device and live synthetic Drive acceptance are recorded separately from automated results.
+- Request counters expose aggregate per-step cost without recording credentials, identifiers, or financial data. The real-adapter synthetic recipe has a regression request budget. Bounded read concurrency and removal of duplicate work preserve all integrity, recovery, ownership, and acceptance checks described in [the performance follow-up](PR28_STORAGE_PERFORMANCE.md).
 
 ## Safety and review gates
 

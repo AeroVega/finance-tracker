@@ -1,6 +1,7 @@
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { createLedger, registerAccount, prepareCanonicalImport, applyReviewDecision, reverseReviewDecision, applyFinancialEvent, getEffectiveActivities, summarizeLedger } from '../js/canonical-import.mjs';
 import { canonicalizeJcs } from '../js/transaction-protocol.mjs';
+import { safeRequestMetrics, combineRequestMetrics } from '../js/drive-request-metrics.mjs';
 
 // Fixed synthetic recipe. No OAuth, provider credentials, DOM, or storage engine lives here.
 export const LIVE_CHECKS = Object.freeze([
@@ -32,6 +33,13 @@ export const LIVE_CHECKS = Object.freeze([
 ].map(([id, label]) => Object.freeze({ id, label })));
 export const LIVE_IDS = Object.freeze(LIVE_CHECKS.map(check => check.id));
 export const blankLive = input => Object.fromEntries(LIVE_IDS.map(id => [id, ['passed', 'failed', 'not-run'].includes(input?.[id]) ? input[id] : 'not-run']));
+export function safeLiveMetrics(input) {
+  try {
+    return { available: input?.available === true && safeRequestMetrics(input?.total) !== null,
+      total: input?.available === true ? safeRequestMetrics(input?.total) : null,
+      phases: Object.fromEntries(LIVE_IDS.map(id => [id, input?.available === true ? safeRequestMetrics(input?.phases?.[id]) : null])) };
+  } catch { return { available: false, total: null, phases: Object.fromEntries(LIVE_IDS.map(id => [id, null])) }; }
+}
 const same = (left, right) => canonicalizeJcs(left) === canonicalizeJcs(right);
 const assert = condition => { if (!condition) throw new Error('live-assertion-failed'); };
 const fixtureBytes = async path => {
@@ -45,20 +53,47 @@ const fixtureBytes = async path => {
 export function createLiveRunner({ withWorkbench, loadBytes = fixtureBytes, onUpdate = () => {}, recordedResults }) {
   let stopRequested = false;
   let running = false, results = blankLive(recordedResults), expected = null, expectedIdentity = null;
-  const publish = (current, state) => onUpdate({ current, state, results: blankLive(results) });
+  let captures = [], phaseCaptures = {};
+  const metrics = () => {
+    try { return safeLiveMetrics({ available: captures.length > 0, total: combineRequestMetrics(captures.map(window => window.snapshot())),
+      phases: Object.fromEntries(LIVE_IDS.map(id => [id, combineRequestMetrics((phaseCaptures[id] || []).map(window => window.snapshot()))])) }); }
+    catch { return safeLiveMetrics(); }
+  };
+  // Neither instrumentation nor a UI observer may change a save or assertion.
+  const observe = operation => { try { return operation(); } catch { /* observational only */ } };
+  const publish = (current, state, metricsOnly = false) => observe(() => onUpdate({ current, state, results: blankLive(results), metrics: metrics(), metricsOnly }));
   async function execute(reconnect) {
     if (running) return false;
     if (reconnect && !expected) return false;
     running = true; stopRequested = false;
     let current = reconnect ? 'reconnect-same-copy' : 'fresh-base';
+    let totalWindow, phaseWindow, unsubscribe;
+    const previousCaptures = captures, previousPhases = phaseCaptures;
+    const closePhase = () => { observe(() => phaseWindow?.close()); phaseWindow = null; };
     // A failed preflight does not erase a previous run's evidence.
     let started = reconnect;
     try {
       await withWorkbench(async driver => {
+        const startPhase = id => {
+          closePhase();
+          phaseWindow = observe(() => driver.requestMetrics?.openWindow());
+          if (phaseWindow) (phaseCaptures[id] ||= []).push(phaseWindow);
+        };
+        if (!reconnect) { captures = []; phaseCaptures = {}; }
+        totalWindow = observe(() => driver.requestMetrics?.openWindow());
+        if (totalWindow) captures.push(totalWindow);
+        let lastUpdate = -Infinity;
+        unsubscribe = observe(() => driver.requestMetrics?.subscribe(() => {
+          const time = Date.now();
+          if (time - lastUpdate < 250) return;
+          lastUpdate = time; publish(current, 'running', true);
+        }));
+        startPhase(current);
         if (reconnect) {
           results[current] = 'not-run'; publish(current, 'running');
           assert(same(await driver.identity(), expectedIdentity));
           assert(same(await driver.reopen(), expected));
+          closePhase(); observe(() => totalWindow?.close());
           results[current] = 'passed'; publish(current, 'complete');
           return;
         }
@@ -68,8 +103,9 @@ export function createLiveRunner({ withWorkbench, loadBytes = fixtureBytes, onUp
         const step = async (id, operation) => {
           current = id;
           if (stopRequested) throw new Error('stopped');
+          if (id !== 'fresh-base') startPhase(id);
           publish(id, 'running');
-          await operation(); results[id] = 'passed'; publish(id, 'running');
+          await operation(); closePhase(); results[id] = 'passed'; publish(id, 'running');
         };
         await step('fresh-base', async () => { expectedIdentity = await driver.identity(); });
         let ledger = createLedger();
@@ -225,18 +261,21 @@ export function createLiveRunner({ withWorkbench, loadBytes = fixtureBytes, onUp
         // Keep exact data and copy identity only in this module's memory, never in the report/storage.
         expected = structuredClone(ledger);
         await step('verified-release', () => driver.release());
+        observe(() => totalWindow?.close());
         publish(null, 'complete');
       });
       return true;
     } catch (error) {
       // Never expose error text, IDs, provider bodies, financial data or stack traces.
       const stopped = error.message === 'stopped';
+      closePhase(); observe(() => totalWindow?.close());
+      if (!started) { captures = previousCaptures; phaseCaptures = previousPhases; }
       if (started && !stopped) results[current] = 'failed';
       publish(current, stopped ? 'stopped' : started ? 'failed' : 'blocked');
       return false;
-    } finally { running = false; }
+    } finally { closePhase(); observe(() => totalWindow?.close()); observe(() => unsubscribe?.()); running = false; }
   }
-  return Object.freeze({ forgetResults: () => { if (!running) { results = blankLive(); expected = null; expectedIdentity = null; } }, stop: () => { if (running) stopRequested = true; }, run: () => execute(false), verifyReconnect: () => execute(true), canVerifyReconnect: () => Boolean(expected) && !running, isRunning: () => running });
+  return Object.freeze({ getMetrics: metrics, forgetResults: () => { if (!running) { results = blankLive(); expected = null; expectedIdentity = null; captures = []; phaseCaptures = {}; } }, stop: () => { if (running) stopRequested = true; }, run: () => execute(false), verifyReconnect: () => execute(true), canVerifyReconnect: () => Boolean(expected) && !running, isRunning: () => running });
 }
 
 // Preparation uses the same import and storage APIs. It does not pause a write,

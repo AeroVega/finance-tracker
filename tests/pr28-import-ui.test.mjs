@@ -92,7 +92,10 @@ test('refund posting date is explicit and inactive retained history is not an ac
   assert.match(html,/source activity date is not evidence of the posting date/);
   assert.match(script,/if \(\$\('refund-posted-date'\)\.value\) event\.confirmedPostedDate=/);
   assert.match(script,/refund-posting-fields'\)\.hidden=\$\('event-type'\)\.value!=='refund-link'/);
-  assert.equal((script.match(/getEffectiveActivities\(ledger\)\.filter\(activity=>activity\.active\)/g)||[]).length,2);
+  assert.equal((script.match(/getEffectiveActivities\(ledger\)/g)||[]).length,1);
+  assert.match(script,/const activeActivities = effectiveActivities\.filter\(activity=>activity\.active\)/);
+  assert.match(script,/renderReviews\(activeActivities\)/);
+  assert.equal((script.match(/for \(const activity of activeActivities\)/g)||[]).length,2);
   assert.match(script,/activity\.active \? 'Active' : 'Inactive retained history'/);
 });
 

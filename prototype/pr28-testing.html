@@ -37,6 +37,12 @@
     <button id="verify-live-reconnect" disabled>Verify saved run after reconnect</button>
     <p id="live-result" role="status" aria-live="polite">Not run. Connect a fresh empty synthetic folder to begin.</p>
     <progress id="live-progress" value="0" max="25" aria-label="Completed live assertions"></progress>
+    <div class="request-metrics" aria-label="Live Drive request metrics">
+      <h3>Drive request counts and timing</h3>
+      <p id="request-totals">Request metrics start with Run live checks.</p>
+      <p id="request-phase">No phase is running.</p>
+      <p class="metric-note">Counts cover actual API fetch attempts, including session checks and failed requests. Connection/setup, idle time, fixture downloads and browser CORS requests are excluded. Fetch timing ends at response headers. Elapsed time also includes body reads and verification. HTTP success does not mark a check passed. Measurements stay in memory and disappear on reload.</p>
+    </div>
     <details><summary>Live assertion results and limits</summary><ul id="live-results"></ul>
       <p>Programmatic checks exercise the real financial and storage APIs. They do not press every workbench control or prove mobile layout, OAuth cancellation, whole-tab termination, offline recovery, or a backup/restore into another Drive folder.</p>
       <p>After success, reconnect to the same folder and press Verify saved run after reconnect. This compares the exact saved graph and copy identity from this tab's completed run. After reload, earlier results are historical only; this comparison is unavailable.</p>
@@ -79,7 +85,7 @@
   </section>
   <section id="results-report" aria-labelledby="report-title">
     <h2 id="report-title">Copy a safe results report</h2>
-    <p>The report includes only fixed check IDs and statuses, this date, a browser label, and a full source commit if you confirmed it. Live results describe this recorded run, not whichever folder is currently connected. It excludes ledger contents, account/folder/file IDs, tokens, URLs and free-text notes. Do not append private notes or screenshots.</p>
+    <p>The report includes fixed check IDs and statuses, aggregate request counts and timings, this date, a browser label, and a full source commit if you confirmed it. Live results describe this recorded run, not whichever folder is currently connected. It excludes ledger contents, account/folder/file IDs, tokens, URLs and free-text notes. Do not append private notes or screenshots.</p>
     <button id="copy-report">Copy report</button><button id="select-report">Select report for manual copy</button><button id="reset-checklist">Reset recorded results only</button>
     <p id="report-status" role="status" aria-live="polite">Review the text before sharing. Copying does not send it.</p>
     <label for="safe-report">Sanitized report text</label><textarea id="safe-report" readonly rows="18" spellcheck="false"></textarea>

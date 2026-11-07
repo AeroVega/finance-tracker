@@ -1,4 +1,4 @@
-import { blankLive } from './pr28-live-checks.mjs';
+import { blankLive, safeLiveMetrics } from './pr28-live-checks.mjs';
 // Public, invented acceptance instructions only. No ledger or provider data belongs here.
 export const PLAN_VERSION = 'pr28-assisted-v2';
 export const STATUS_LABELS = Object.freeze({ 'not-run': 'Not run', passed: 'Passed by me', failed: 'Failed', blocked: 'Blocked', skipped: 'Skipped' });
@@ -196,7 +196,7 @@ export function safeAutomated(input) {
 export function verifiedSource(text, confirmed) {
   return confirmed === true && typeof text === 'string' && /^[0-9a-f]{40}$/.test(text) ? text : 'unverified';
 }
-export function createSafeReport({ manual, automated, browser, source, sourceConfirmed, date, live, liveState }) {
+export function createSafeReport({ manual, automated, browser, source, sourceConfirmed, date, live, liveState, metrics }) {
   // Deliberate allowlist. Never serialize DOM, URLs, errors, storage objects or free text.
   const isoDate = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date ? date : 'not-recorded';
   return JSON.stringify({ plan: PLAN_VERSION, date: isoDate,
@@ -205,6 +205,8 @@ export function createSafeReport({ manual, automated, browser, source, sourceCon
     manualProvenance: 'Tester selections, not automatically verified', manual: safeStatuses(manual),
     automatedProvenance: 'Bundled-fixture checks only; no browser-layout, OAuth or Drive verification', automated: safeAutomated(automated),
     liveProvenance: 'Programmatic assertions in the connected synthetic session; save/reopen, export validation and release have separate results. No layout, OAuth cancellation, whole-tab interruption or new-folder restore claim.',
-    liveEvidence: ['not-run', 'running', 'complete', 'failed', 'stopped', 'historical', 'blocked'].includes(liveState) ? liveState : 'not-run', live: blankLive(live)
+    liveEvidence: ['not-run', 'running', 'complete', 'failed', 'stopped', 'historical', 'blocked'].includes(liveState) ? liveState : 'not-run', live: blankLive(live),
+    requestMetricsProvenance: 'In-memory API fetch attempts started in the live-run and reconnect-verification windows, including session traffic. Excludes connection/setup, idle gaps, fixture downloads and browser CORS traffic. HTTP status is not an acceptance result. Request time ends at response headers, excludes body reading and hashing; elapsed time covers the operation. In-flight attempts remain in their starting phase. Repeated reconnect attempts are cumulative. Metrics are unavailable after reload.',
+    requestMetrics: safeLiveMetrics(metrics)
   }, null, 2);
 }

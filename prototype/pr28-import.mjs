@@ -187,7 +187,9 @@ action('event', async () => {
 });
 action('summarize', async () => { const result = summarizeLedger(ledger,{start:$('report-start').value,end:$('report-end').value,currency:'USD',accountIds:ledger.accounts.map(a=>a.accountId)}); $('summary').textContent=JSON.stringify(result,null,2)+'\nDeclared coverage is not independent proof of complete history.'; });
 function renderLedger() {
-  for (const id of ['activity','original']) { $(id).replaceChildren(); option($(id),'','Choose activity'); for (const activity of getEffectiveActivities(ledger).filter(activity=>activity.active)) option($(id),activity.activityId,activity.sourceDescription+' · '+activity.effectiveDate+' · '+activity.activityKind+' · '+(activity.categoryId || 'Uncategorized')+' · '+activity.activityId); }
+  const effectiveActivities = getEffectiveActivities(ledger);
+  const activeActivities = effectiveActivities.filter(activity=>activity.active);
+  for (const id of ['activity','original']) { $(id).replaceChildren(); option($(id),'','Choose activity'); for (const activity of activeActivities) option($(id),activity.activityId,activity.sourceDescription+' · '+activity.effectiveDate+' · '+activity.activityKind+' · '+(activity.categoryId || 'Uncategorized')+' · '+activity.activityId); }
   $('provenance').replaceChildren();
   const wrap=element('div'); wrap.className='table-wrap'; const table=element('table');
   table.append(element('caption','Observation provenance')); const head=element('tr');
@@ -200,20 +202,20 @@ function renderLedger() {
   }
   const effectiveTable=element('table'); effectiveTable.append(element('caption','Effective classifications and categories'));
   const effectiveHead=element('tr'); for (const title of ['Record status','Description','Classification','Category','Effective currency','Lifecycle']) {const th=element('th',title);th.scope='col';effectiveHead.append(th);} effectiveTable.append(effectiveHead);
-  for (const activity of getEffectiveActivities(ledger)) {const tr=element('tr');for(const value of [activity.active ? 'Active' : 'Inactive retained history',activity.sourceDescription,activity.activityKind,activity.categoryId || 'Uncategorized',activity.currency,activity.lifecycleStatus]) tr.append(element('td',value));effectiveTable.append(tr);}
+  for (const activity of effectiveActivities) {const tr=element('tr');for(const value of [activity.active ? 'Active' : 'Inactive retained history',activity.sourceDescription,activity.activityKind,activity.categoryId || 'Uncategorized',activity.currency,activity.lifecycleStatus]) tr.append(element('td',value));effectiveTable.append(tr);}
   const effectiveWrap=element('div');effectiveWrap.className='table-wrap';effectiveWrap.append(effectiveTable);$('provenance').prepend(effectiveWrap);
   const rules=ledger.events.filter(event=>event.prospectiveRule);
   const ruleDetails=element('details');ruleDetails.append(element('summary',rules.length+' prospective category rules'),element('p','A category correction applies to this activity and future exact matches on account, institution, currency, description, and source action. Other existing activities retain their categories.'),element('pre',JSON.stringify(rules.map(event=>({eventId:event.eventId,categoryId:event.categoryId,prospectiveRule:event.prospectiveRule})),null,2)));$('provenance').append(ruleDetails);
-  renderReviews(); refresh(); $('summary').textContent='Subtotals need recalculation after changes. No complete-history claim is made.';
+  renderReviews(activeActivities); refresh(); $('summary').textContent='Subtotals need recalculation after changes. No complete-history claim is made.';
 }
-function renderReviews() {
+function renderReviews(activeActivities) {
   $('reviews').replaceChildren();
   const pending = ledger.observations.filter(review=>['review','rejected'].includes(review.disposition) && !review.resolved);
   $('reviews').append(element('p',pending.length+' pending review items. Inspect source evidence below.'));
   for (const review of pending) {
     const fieldset=element('fieldset'); fieldset.append(element('legend',review.observationId),element('pre',JSON.stringify(review,null,2)));
     const target=labelled(fieldset,'Match to activity',element('select')); option(target,'','Choose activity');
-    for (const activity of getEffectiveActivities(ledger).filter(activity=>activity.active)) option(target,activity.activityId,activity.sourceDescription+' · '+activity.effectiveDate+' · '+activity.activityId);
+    for (const activity of activeActivities) option(target,activity.activityId,activity.sourceDescription+' · '+activity.effectiveDate+' · '+activity.activityId);
     let currency = null;
     if (review.reasonCode==='missing-currency') {
       fieldset.append(element('p','The original source row has no currency. To keep it separately, explicitly enter its ISO currency and explain your evidence. The blank source field is preserved; unknown lifecycle status stays unknown.'));
@@ -261,6 +263,7 @@ export async function withAcceptanceWorkbench(operation) {
   const reopen = async () => { ready(); await loadLedger(); return structuredClone(ledger); };
   try {
     return await operation(Object.freeze({
+      requestMetrics: lifecycle.requestMetrics,
       async requireFresh() {
         ready();
         const manifest = await lifecycle.readManifest();

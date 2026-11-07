@@ -5,6 +5,7 @@ import { CatalogTransactionEngine } from "./catalog-transaction-engine.mjs";
 import { verifyCatalogHistory } from "./catalog-storage.mjs";
 import { resolveSnapshotLocators } from "./drive-locator-catalog.mjs";
 import { canonicalizeJcs } from "./transaction-protocol.mjs";
+import { createDriveRequestMetrics } from "./drive-request-metrics.mjs";
 
 export class ApplicationStorageError extends Error {
   constructor(code, message) {
@@ -56,7 +57,10 @@ export class ApplicationStorageLifecycle {
     this.initializeManifest = initializeManifest || null;
     this.accessToken = accessToken;
     this.makeManifest = makeManifest;
-    this.fetchImpl = fetchImpl;
+    this.requestMetrics = createDriveRequestMetrics();
+    // Both adapters share this one wrapper. Count actual fetch attempts once,
+    // including session checks, retries and requests that reject before headers.
+    this.fetchImpl = this.requestMetrics.wrapFetch(fetchImpl);
     this.crypto = cryptoImpl;
     this.isOnline = isOnline;
     this.onStatus = onStatus;
@@ -278,6 +282,21 @@ export class ApplicationStorageLifecycle {
       }
       return manifest;
     } catch (error) { this.pauseAfterReadFailure(error); throw error; }
+  }
+
+  // Changed-save preflight only. The transaction engine still verifies full
+  // retained history before writing; this is not a replacement snapshot reader.
+  async assertCurrentManifest(expectedManifest) {
+    try {
+      await this.requireReady();
+      const current = await this.transactionAdapter.readJson(this.manifestFileId);
+      if (canonicalizeJcs(current) !== canonicalizeJcs(expectedManifest)) fail("base-conflict", "Storage changed. Reopen before continuing.");
+      await this.requireReady();
+      return current;
+    } catch (error) {
+      if (error?.code !== "base-conflict") this.pauseAfterReadFailure(error);
+      throw error;
+    }
   }
 
   async readObject(logicalPath) {

@@ -219,13 +219,23 @@ export class CanonicalLedgerStore {
           }
         }
       }
-      const current = await this.lifecycle.readManifest();
-      if (canonicalizeJcs(current) !== canonicalizeJcs(this.base)) {
-        this.base = null;
-        fail("base-conflict", "Storage changed after the review. Reopen and recompute the import before saving.");
-      }
       const changed = [...objects].filter(([path, content]) => this.records.get(path) !== content)
         .map(([logicalPath, content]) => ({ logicalPath, content }));
+      if (changed.length && typeof this.lifecycle.assertCurrentManifest === "function") {
+        // The real transaction engine verifies all retained history before its
+        // first mutation. This handoff checks ownership and the exact base
+        // without duplicating that whole-history scan. It is not a data read.
+        try { await this.lifecycle.assertCurrentManifest(this.base); }
+        catch (error) { if (error?.code === "base-conflict") this.base = null; throw error; }
+      } else {
+        // No-op saves still verify storage. Older lifecycle drivers retain the
+        // complete preflight rather than assuming they implement this handoff.
+        const current = await this.lifecycle.readManifest();
+        if (canonicalizeJcs(current) !== canonicalizeJcs(this.base)) {
+          this.base = null;
+          fail("base-conflict", "Storage changed after the review. Reopen and recompute the import before saving.");
+        }
+      }
       if (!changed.length) return structuredClone(this.ledger);
       if (!this.crypto?.randomUUID) fail("crypto-unavailable", "Cryptographic transaction identities are required.");
       const transaction = {

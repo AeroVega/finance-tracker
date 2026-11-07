@@ -1,4 +1,4 @@
-import { LIVE_CHECKS, LIVE_IDS, blankLive, createLiveRunner, prepareInterruption } from './pr28-live-checks.mjs';
+import { LIVE_CHECKS, LIVE_IDS, blankLive, safeLiveMetrics, createLiveRunner, prepareInterruption } from './pr28-live-checks.mjs';
 import { PLAN_VERSION, CHECKS, AUTOMATED_IDS, STATUS_LABELS, BROWSER_LABELS, blankResults, safeStatuses, safeAutomated, verifiedSource, createSafeReport } from './pr28-testing-plan.mjs';
 import { runFixtureChecks } from './pr28-testing-checks.mjs';
 const $ = id => document.getElementById(id);
@@ -9,6 +9,7 @@ $('source-confirmed').disabled = !hasSourceStamp;
 if (!hasSourceStamp) $('checklist-storage').textContent = 'A deployed source stamp is unavailable. Checklist choices will not restore after reload because this source cannot be identified. Copy the safe report before leaving.';
 const sessionKey = 'finance-tracker-' + PLAN_VERSION;
 let live = blankLive(), liveState = 'not-run', liveRunner = null, livePreparing = false, workbenchReady = false;
+let liveMetrics = safeLiveMetrics(), metricPhase = null;
 let selected = 0, manual = blankResults(), automated = safeAutomated(), checking = false;
 let date = new Date().toISOString().slice(0, 10);
 function option(select, value, label) { const item = node('option', label); item.value = value; select.append(item); }
@@ -35,7 +36,7 @@ try {
   }
 } catch { $('checklist-storage').textContent = 'Previous checklist choices could not be loaded. All manual checks start Not run. Copy your safe report before closing this tab.'; }
 function report() {
-  $('safe-report').value = createSafeReport({ manual, automated, browser: $('test-browser').value, source: sourceStamp, sourceConfirmed: $('source-confirmed').checked, date, live, liveState });
+  $('safe-report').value = createSafeReport({ manual, automated, browser: $('test-browser').value, source: sourceStamp, sourceConfirmed: $('source-confirmed').checked, date, live, liveState, metrics: liveMetrics });
 }
 function render(focus = false) {
   const check = CHECKS[selected];
@@ -90,6 +91,7 @@ $('copy-report').addEventListener('click', async () => {
 $('reset-checklist').addEventListener('click', () => {
   if (checking || liveRunner?.isRunning() || livePreparing || !confirm('Reset only this tab’s recorded test results and same-run comparison? Saved Drive data, staged changes and the active session are unchanged.')) return;
   liveRunner?.forgetResults();
+  liveMetrics = safeLiveMetrics(); metricPhase = null;
   manual = blankResults(); automated = safeAutomated(); live = blankLive(); liveState = 'not-run'; renderLive(); selected = 0; date = new Date().toISOString().slice(0, 10);
   $('source-confirmed').checked = false; $('test-browser').value = BROWSER_LABELS[0];
   $('fixture-check-result').textContent = 'Not run in this page.'; $('fixture-check-result').dataset.result = 'not-run';
@@ -104,8 +106,16 @@ function refreshLiveControls() {
   $('reset-checklist').disabled = active || checking;
   $('run-fixture-checks').disabled = active || checking;
 }
+const metricText = value => value ? `${value.requests} requests, ${value.completed} completed, ${value.inFlight} in flight, peak ${value.peakConcurrency}; elapsed ${(value.elapsedMs / 1000).toFixed(1)} s; summed fetch-to-headers ${(value.requestMs / 1000).toFixed(1)} s, slowest ${(value.maxRequestMs / 1000).toFixed(1)} s. HTTP 2xx ${value.http2xx}, 3xx ${value.http3xx}, 4xx ${value.http4xx}, 5xx ${value.http5xx}, other ${value.httpOther}; rejected ${value.networkErrors}.` : 'Not measured.';
+function renderMetrics() {
+  $('request-totals').textContent = liveMetrics.available ? 'Measured run total: ' + metricText(liveMetrics.total) : 'Request metrics are unavailable. They start with Run live checks and are not restored after reload.';
+  const label = LIVE_CHECKS.find(check => check.id === metricPhase)?.label;
+  $('request-phase').textContent = label ? label + ': ' + metricText(liveMetrics.phases[metricPhase]) : 'No phase is running.';
+}
 function renderLive(current = null) {
-  $('live-results').replaceChildren(...LIVE_CHECKS.map(check => node('li', `${check.label}: ${live[check.id] === 'passed' ? 'Passed programmatically' : live[check.id] === 'failed' ? 'Failed' : 'Not run'}${current === check.id && liveState === 'running' ? ' · checking now' : ''}`)));
+  metricPhase = current;
+  $('live-results').replaceChildren(...LIVE_CHECKS.map(check => node('li', `${check.label}: ${live[check.id] === 'passed' ? 'Passed programmatically' : live[check.id] === 'failed' ? 'Failed' : 'Not run'}${current === check.id && liveState === 'running' ? ' · checking now' : ''}${liveMetrics.phases[check.id] ? ' · ' + metricText(liveMetrics.phases[check.id]) : ''}`)));
+  renderMetrics();
   $('live-progress').value = Object.values(live).filter(status => status === 'passed').length;
   if (liveState === 'historical') $('live-result').textContent = 'Historical results restored from this tab and source. No live checks ran after reload. These results are not evidence about a newly connected folder; same-run reconnect comparison is unavailable.';
   if (liveState === 'not-run') $('live-result').textContent = 'Not run. Connect a fresh empty synthetic folder to begin.';
@@ -124,6 +134,12 @@ $('verify-live-reconnect').addEventListener('click', async () => {
   await liveRunner.verifyReconnect(); refreshLiveControls(); persist(); report();
 });
 render(); renderLive();
+// Update long in-flight operation time without adding requests or changing any
+// stored acceptance evidence. No metrics are persisted to session storage.
+globalThis.setInterval?.(() => {
+  if (!liveRunner?.isRunning()) return;
+  liveMetrics = safeLiveMetrics(liveRunner.getMetrics()); renderMetrics();
+}, 1000);
 
 // Mount the existing static controls exactly once, then start their existing module.
 // This is one document/session, not an iframe or another finance/storage engine.
@@ -143,6 +159,8 @@ async function mountWorkbench() {
     for (const section of $('workbench').querySelectorAll('section')) { const back = node('a', 'Back to current test step'); back.href = '#guided-step'; section.append(back); }
     const workbench = await import('./pr28-import.mjs');
     liveRunner = createLiveRunner({ withWorkbench: workbench.withAcceptanceWorkbench, recordedResults: live, onUpdate: update => {
+      liveMetrics = safeLiveMetrics(update.metrics);
+      if (update.metricsOnly) { renderMetrics(); return; }
       live = blankLive(update.results);
       if (update.current === 'fresh-base' && update.state === 'running' && live['fresh-base'] === 'not-run') date = new Date().toISOString().slice(0, 10);
       liveState = update.state === 'checking-base' ? 'running' : update.state;

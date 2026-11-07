@@ -114,3 +114,59 @@ test('bulk reads still verify historical objects that are absent from the select
   await assert.rejects(store.load());
   assert.equal(store.base, null); assert.equal(lifecycle.acceptingWrites, false);
 });
+
+test('changed canonical save hands exact-base checking to the engine without a duplicate preflight history scan', async () => {
+  const { lifecycle, store, ledger } = await setup();
+  assert.equal(typeof lifecycle.assertCurrentManifest, 'function');
+  lifecycle.readManifest = async () => { throw new Error('changed save must use the exact-base handoff'); };
+  const changed = registerAccount(ledger, { institutionId: 'sofi', displayName: 'Invented second account', currency: 'USD', accountType: 'savings' });
+  assert.deepEqual(await store.save(changed), changed);
+  assert.deepEqual(await store.load(), changed);
+});
+
+test('changed save still rejects corrupted unselected history before any new mutation', async () => {
+  const { adapter, lifecycle, store, ledger } = await setup();
+  const previous = await lifecycle.readManifest();
+  const { catalog } = await verifyCatalogHistory(adapter, previous);
+  const oldIndex = resolveSnapshotLocators(previous.snapshot, catalog)[CANONICAL_INDEX];
+  const second = registerAccount(ledger, { institutionId: 'sofi', displayName: 'Invented second account', currency: 'USD', accountType: 'savings' });
+  await store.save(second);
+  assert.notEqual(store.base.snapshot[CANONICAL_INDEX], previous.snapshot[CANONICAL_INDEX]);
+  adapter.files.get(oldIndex.fileId).bytes[0] ^= 1;
+  const mutations = adapter.mutations;
+  const third = registerAccount(second, { institutionId: 'fidelity', displayName: 'Invented third account', currency: 'USD', accountType: 'brokerage' });
+  await assert.rejects(store.save(third), { code: 'immutable-hash-mismatch' });
+  assert.equal(adapter.mutations, mutations);
+  assert.equal(store.base, null);
+  assert.equal(lifecycle.engine.recoveryRequired, true);
+  assert.equal(lifecycle.acceptingWrites, false);
+});
+
+test('unchanged canonical save retains the complete history verification', async () => {
+  const { adapter, lifecycle, store, ledger } = await setup();
+  const manifest = await lifecycle.readManifest();
+  const { catalog } = await verifyCatalogHistory(adapter, manifest);
+  const selected = resolveSnapshotLocators(manifest.snapshot, catalog)[CANONICAL_INDEX];
+  adapter.files.get(selected.fileId).bytes[0] ^= 1;
+  const mutations = adapter.mutations;
+  lifecycle.assertCurrentManifest = async () => { throw new Error('no-op must not use the changed-save handoff'); };
+  await assert.rejects(store.save(ledger), { code: 'immutable-hash-mismatch' });
+  assert.equal(adapter.mutations, mutations);
+  assert.equal(lifecycle.acceptingWrites, false);
+});
+
+test('a valid manifest change after preflight cannot publish the stale canonical proposal', async () => {
+  const { adapter, lifecycle, store, ledger, manifestFileId } = await setup();
+  const assertBase = lifecycle.assertCurrentManifest.bind(lifecycle);
+  let mutationsAfterChange;
+  lifecycle.assertCurrentManifest = async expected => {
+    await assertBase(expected);
+    await lifecycle.engine.transact({ manifestFileId, expectedBase: expected,
+      objects: [{ logicalPath: 'synthetic/dashboard-transactions.json', content: '{"syntheticOnly":true,"transactions":[]}' }] });
+    mutationsAfterChange = adapter.mutations;
+  };
+  const changed = registerAccount(ledger, { institutionId: 'sofi', displayName: 'Invented stale proposal', currency: 'USD', accountType: 'savings' });
+  await assert.rejects(store.save(changed), { code: 'base-conflict' });
+  assert.equal(adapter.mutations, mutationsAfterChange);
+  assert.equal(store.base, null);
+});
