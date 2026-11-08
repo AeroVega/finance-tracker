@@ -139,7 +139,7 @@ export function reconcileImport({
   const observations = [];
   const events = [];
   const counts = { rowsSeen: rows.length, rowsRecognized: 0, created: 0, matched: 0, review: 0, rejected: 0, ignored: 0 };
-  const validDates = [];
+  let coverageStart = null, coverageEnd = null;
   // The caller supplies retained accepted evidence for review only. Never let
   // historical records revive an inactive ID or cross its account/currency.
   const activeById = new Map(existingActivities.map(activity => [activity.activityId, activity]));
@@ -172,16 +172,59 @@ export function reconcileImport({
     }
   }
 
-  const workingActivity = (activity) => {
-    if (!activity) return activity;
-    const current = { ...activity };
-    for (const event of events.filter(event => event.activityId === activity.activityId && event.eventType === 'lifecycle-transition')) {
-      current.lifecycleStatus = event.to;
-      current.effectiveDate = event.effectiveDate;
-      current.postedDate = event.postedDate;
-      current.settlementDate = event.settlementDate;
+  // Array.find uses the first duplicate ID, unlike the last-wins active
+  // evidence map above. Keep both semantics explicitly.
+  const firstActivityById = new Map();
+  for (const activity of existingActivities) {
+    if (!firstActivityById.has(activity.activityId)) firstActivityById.set(activity.activityId, activity);
+  }
+  const existingFirstActivityById = new Map(firstActivityById);
+  const sourceActivities = new Map();
+  const indexObservation = (observation) => {
+    if (observation.accountId !== accountId || !observation.activityId) return;
+    let candidates = sourceActivities.get(observation.sourceRecordId);
+    if (!candidates) sourceActivities.set(observation.sourceRecordId, candidates = new Set());
+    candidates.add(observation.activityId);
+  };
+  for (const observation of existingObservations) indexObservation(observation);
+  const transitions = new Map();
+  const workingActivity = (activity) => transitions.has(activity.activityId)
+    ? { ...activity, ...transitions.get(activity.activityId) } : activity;
+
+  // The serialized key is only a candidate bucket, never evidence of equality.
+  // Recheck sameComposite so null/missing or unusual retained values cannot
+  // accidentally acquire equivalence from serialization.
+  const compositeKey = activity => JSON.stringify([
+    activity.institutionId, activity.accountId, activity.currency,
+    activity.effectiveDate, activity.normalizedDescription ?? activity.sourceDescription ?? "",
+    activity.sourceAction ?? "",
+  ]);
+  const moneyKeys = activity => {
+    const keys = ["raw:" + JSON.stringify([activity.amountMinor, activity.amountDecimal ?? null])];
+    const decimal = exactSignedDecimal(activity);
+    if (decimal !== null) {
+      const negative = decimal.startsWith("-");
+      const [whole, fraction = ""] = (negative ? decimal.slice(1) : decimal).split(".");
+      const normalized = (whole.replace(/^0+/, "") || "0") + "." + fraction.replace(/0+$/, "");
+      keys.push("value:" + (negative && normalized !== "0." ? "-" : "") + normalized);
     }
-    return current;
+    return keys;
+  };
+  let compositeIndex = null;
+  const getCompositeIndex = () => {
+    if (compositeIndex) return compositeIndex;
+    compositeIndex = new Map();
+    for (const evidence of compositeEvidence) {
+      if (evidence.institutionId !== institutionId || evidence.accountId !== accountId) continue;
+      const key = compositeKey(evidence);
+      let amounts = compositeIndex.get(key);
+      if (!amounts) compositeIndex.set(key, amounts = new Map());
+      for (const amount of moneyKeys(evidence)) {
+        if (!amounts.has(amount)) amounts.set(amount, []);
+        amounts.get(amount).push(evidence);
+      }
+    }
+    return compositeIndex;
   };
 
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -200,7 +243,8 @@ export function reconcileImport({
     }
 
     counts.rowsRecognized++;
-    validDates.push(row.effectiveDate);
+    if (coverageStart === null || row.effectiveDate < coverageStart) coverageStart = row.effectiveDate;
+    if (coverageEnd === null || row.effectiveDate > coverageEnd) coverageEnd = row.effectiveDate;
     if (conflictingSourceIdRows.has(rowIndex)) {
       counts.review++;
       observations.push({
@@ -221,7 +265,7 @@ export function reconcileImport({
     let reasonCode = null;
 
     if (row.reversalOfActivityId) {
-      match = existingActivities.find((activity) => activity.activityId === row.reversalOfActivityId) ?? null;
+      match = existingFirstActivityById.get(row.reversalOfActivityId) ?? null;
       if (!match) {
         disposition = "review"; reasonCode = "reversal-target-not-found";
       } else if (match.institutionId !== institutionId || match.accountId !== accountId) {
@@ -240,11 +284,15 @@ export function reconcileImport({
         });
       }
     } else if (row.sourceRecordId) {
-      const candidates = [...existingObservations, ...observations]
-        .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.activityId)
-        .map((obs) => workingActivity(existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId)))
-        .filter((activity) => activity && activity.institutionId === institutionId && activity.accountId === accountId);
-      const unique = [...new Map(candidates.map((a) => [a.activityId, a])).values()];
+      const unique = [];
+      for (const id of sourceActivities.get(row.sourceRecordId) ?? []) {
+        const activity = firstActivityById.get(id);
+        if (activity && activity.institutionId === institutionId && activity.accountId === accountId) {
+          unique.push(workingActivity(activity));
+          // Only uniqueness matters; two candidates already require review.
+          if (unique.length === 2) break;
+        }
+      }
       if (unique.length > 1) {
         disposition = "review"; reasonCode = "source-id-multiple-candidates";
       } else if (unique.length === 1) {
@@ -263,12 +311,20 @@ export function reconcileImport({
         } else if (isPendingPostedTransition(match, incoming)) {
           disposition = "matched";
           events.push({ eventType: "lifecycle-transition", activityId: match.activityId, from: "pending", to: "posted", effectiveDate: row.effectiveDate, postedDate: row.postedDate ?? null, settlementDate: row.settlementDate ?? null, observationRowOrdinal: row.rowOrdinal, appendOnly: true });
+          transitions.set(match.activityId, { lifecycleStatus: "posted", effectiveDate: row.effectiveDate, postedDate: row.postedDate ?? null, settlementDate: row.settlementDate ?? null });
         } else {
           disposition = "matched";
         }
       }
     } else {
-      const candidates = new Set(compositeEvidence.filter((a) => sameComposite(a, incoming)).map(a => a.activityId));
+      const candidates = new Set();
+      const amounts = getCompositeIndex().get(compositeKey(incoming));
+      candidateAmounts: for (const amount of moneyKeys(incoming)) {
+        for (const evidence of amounts?.get(amount) ?? []) {
+          if (sameComposite(evidence, incoming)) candidates.add(evidence.activityId);
+          if (candidates.size === 2) break candidateAmounts;
+        }
+      }
       if (candidates.size === 1) {
         disposition = "review"; reasonCode = "insufficient-composite-evidence";
       } else if (candidates.size > 1) {
@@ -280,6 +336,7 @@ export function reconcileImport({
     if (disposition === "created") {
       activityId = idFactory();
       activities.push({ ...incoming, activityId, processingStatus: "processed" });
+      if (!firstActivityById.has(activityId)) firstActivityById.set(activityId, activities.at(-1));
       counts.created++;
     } else if (disposition === "matched") {
       counts.matched++;
@@ -293,13 +350,13 @@ export function reconcileImport({
       sourceFields: row.sourceFields ?? {}, disposition, reasonCode,
       sourceRowFingerprint: row.sourceRowFingerprint ?? null,
     });
+    indexObservation(observations.at(-1));
   }
 
   const unresolved = counts.review > 0 || counts.rejected > 0;
   return {
     status: unresolved ? "needs-review" : "processed",
     activities, observations, events, counts,
-    coverageStart: validDates.length ? validDates.sort()[0] : null,
-    coverageEnd: validDates.length ? validDates.sort().at(-1) : null,
+    coverageStart, coverageEnd,
   };
 }
