@@ -1,5 +1,5 @@
 import { canonicalizeJcs, verifyJournal } from "./transaction-protocol.mjs";
-import { createLocatorCatalog, locatorKey, resolveSnapshotLocators } from "./drive-locator-catalog.mjs";
+import { createLocatorCatalog, locatorKey, createCatalogResolver, validateLocatorCatalog } from "./drive-locator-catalog.mjs";
 import { encode, hashRaw, writeVerified, verifyCatalogHistory, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
 import { archiveOriginalImports, restoreOriginalImports, validateArchivedOriginalImports } from "./drive-original-retention.mjs";
 
@@ -54,13 +54,18 @@ function decodeBase64(text) {
 
 export async function validateRetainedStructure({ manifest, catalog, objects, validateStructure }) {
   if (typeof validateStructure !== "function") throw storageError("structural-validator-required", "An application structural validator is required.");
+  validateLocatorCatalog(catalog);
+  const originalCatalog = canonicalizeJcs(catalog);
+  const resolver = createCatalogResolver(catalog);
+  const pinned = resolver.bindings();
+  const originalBindings = canonicalizeJcs(pinned);
   const journals = new Map();
-  for (const [key, entry] of Object.entries(catalog.entries)) {
+  for (const [key, entry] of Object.entries(pinned.entries)) {
     if (entry.kind === "commit-record") {
       const record = JSON.parse(new TextDecoder().decode(objects.get(key)));
       validateLogicalCommit(record, manifest.databaseId);
       if (record.commitId !== entry.identity) throw storageError("commit-identity-mismatch", "A commit locator has the wrong logical identity.");
-      const resolved = resolveSnapshotLocators(record.snapshot, catalog);
+      const resolved = resolver.resolveSnapshot(record.snapshot);
       const snapshotObjects = Object.fromEntries(Object.keys(resolved).map((path) => [path, objects.get("data-object:" + record.snapshot[path])]));
       if (await validateStructure({ manifest: { ...manifest, revision: record.revision, commitId: record.commitId }, commitRecord: record, objects: snapshotObjects }) !== true) {
         throw storageError("structural-validation-failed", "A retained historical snapshot failed application validation.");
@@ -79,6 +84,12 @@ export async function validateRetainedStructure({ manifest, catalog, objects, va
     events.sort((a, b) => a.sequence - b.sequence);
     const state = await verifyJournal(events);
     if (!["committed", "aborted"].includes(state.status)) throw storageError("unfinished-history", "Backups require terminal retained journals.");
+  }
+  // Caller-provided asynchronous validators cannot change what a subsequent
+  // copy/export will consume. Reject before returning to either operation.
+  const after = createCatalogResolver(catalog);
+  if (canonicalizeJcs(catalog) !== originalCatalog || canonicalizeJcs(after.bindings()) !== originalBindings) {
+    throw storageError("catalog-changed", "The catalog changed during retained structure verification.");
   }
 }
 

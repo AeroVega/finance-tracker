@@ -1,5 +1,5 @@
 import { canonicalizeJcs, verifyJournal } from "./transaction-protocol.mjs";
-import { createLocatorCatalog, validateLocatorCatalog, resolveLocator, resolveSnapshotLocators } from "./drive-locator-catalog.mjs";
+import { createLocatorCatalog, validateLocatorCatalog, createCatalogResolver } from "./drive-locator-catalog.mjs";
 
 export function storageError(code, message) { return Object.assign(new Error(message), { code }); }
 export const encode = (value) => new TextEncoder().encode(typeof value === "string" ? value : canonicalizeJcs(value));
@@ -168,6 +168,7 @@ export function createCatalogHistoryVerifier({ maxBytes = 16 * 1024 * 1024, maxE
 
 async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
   const catalog = await readCatalog(adapter, manifest, cryptoImpl);
+  const resolver = createCatalogResolver(catalog);
   const objects = new Map();
   const journals = new Map();
   const entries = Object.entries(catalog.entries);
@@ -228,7 +229,7 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
       throw storageError("unfinished-history", "The selected catalog contains an unfinished journal without a pending recovery marker.");
     }
     if (state.status === "committed") {
-      const entry = resolveLocator(catalog, { kind: "commit-record", identity: state.commit.commitId });
+      const entry = resolver.resolve({ kind: "commit-record", identity: state.commit.commitId });
       const record = JSON.parse(new TextDecoder().decode(objects.get("commit-record:" + state.commit.commitId)));
       const base = events[0].payload;
       if (entry.sha256 !== state.commit.recordHash || record.transactionId !== transactionId ||
@@ -244,11 +245,11 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
   while (commitId !== null) {
     if (seen.has(commitId)) throw storageError("commit-history-cycle", "The retained commit history contains a cycle.");
     seen.add(commitId);
-    const entry = resolveLocator(catalog, { kind: "commit-record", identity: commitId });
+    const entry = resolver.resolve({ kind: "commit-record", identity: commitId });
     const record = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(objects.get("commit-record:" + commitId)));
     validateLogicalCommit(record, manifest.databaseId);
     if (record.commitId !== commitId || record.revision !== revision) throw storageError("commit-history-mismatch", "A retained commit has invalid ancestry.");
-    resolveSnapshotLocators(record.snapshot, catalog);
+    resolver.resolveSnapshot(record.snapshot);
     if (!currentRecord) {
       currentRecord = record;
       if (entry.sha256 !== manifest.commitRecordHash || record.parentCommitId !== manifest.parentCommitId ||

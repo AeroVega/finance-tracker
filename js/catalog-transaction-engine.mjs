@@ -1,6 +1,6 @@
 import { DriveTransactionEngine, DriveTransactionError } from "./drive-transaction-engine.mjs";
 import { canonicalizeJcs, createJournalEvent, verifyJournal } from "./transaction-protocol.mjs";
-import { createLocatorCatalog, resolveLocator } from "./drive-locator-catalog.mjs";
+import { createLocatorCatalog, createCatalogResolver } from "./drive-locator-catalog.mjs";
 import { encode, hashRaw, writeVerified, readVerified, mapImmutableReads, writeCatalog, createCatalogHistoryVerifier, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
 
 const equal = (a, b) => canonicalizeJcs(a) === canonicalizeJcs(b);
@@ -150,6 +150,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
     if (!this.isOnline()) throw storageError("offline", "Recovery requires an online connection.");
     let manifest = await this.adapter.readJson(manifestFileId);
     let verified = await this.verifyHistory(manifest);
+    let resolver = createCatalogResolver(verified.catalog);
     const files = await this.adapter.listChildren();
     const groups = new Map();
     const additions = [];
@@ -207,7 +208,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
       }
       let intended = events.find((event) => event.eventType === "manifest-publication-planned")?.payload.nextManifest;
       if (state.status === "committed") {
-        const entry = resolveLocator(verified.catalog, { kind: "commit-record", identity: state.commit.commitId });
+        const entry = resolver.resolve({ kind: "commit-record", identity: state.commit.commitId });
         if (entry.sha256 !== state.commit.recordHash) throw storageError("journal-commit-mismatch", "Terminal journal does not match retained commit history.");
         if (manifest.catalogFinalizationPending === transactionId && (!intended || manifest.commitId !== intended.commitId ||
             !equal(manifest, intended))) throw storageError("pending-manifest-mismatch", "Pending publication does not match the journal's exact intent.");
@@ -275,6 +276,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
         await this.publishExact(manifestFileId, manifest, intended);
         manifest = intended;
         verified = target;
+        resolver = createCatalogResolver(verified.catalog);
       }
       if (state.status === "publishing") await this.journal("manifest-published", { commitId: intended.commitId }, events, additions, transactionId);
       await this.journal("transaction-committed", { commitId: intended.commitId }, events, additions, transactionId);
