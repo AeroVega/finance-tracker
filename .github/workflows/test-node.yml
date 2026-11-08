@@ -25,6 +25,8 @@ jobs:
           node --check js/synthetic-year-seeder.mjs
           node --check prototype/synthetic-year.mjs
           node --check prototype/pr28-import.mjs
+          node --check prototype/acceptance.mjs
+          node --check prototype/acceptance-plan.mjs
           node --check prototype/pr28-testing.mjs
           node --check prototype/pr28-testing-plan.mjs
           node --check prototype/pr28-testing-checks.mjs

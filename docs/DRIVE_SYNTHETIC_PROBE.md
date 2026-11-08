@@ -1,5 +1,7 @@
 # Synthetic Google Drive round-trip prototype
 
+**Historical record:** the first probe UI was retired on November 8, 2026. Use the [current owner acceptance suite](../prototype/acceptance.html) for new tests and the [configuration guide](GOOGLE_CLOUD_SETUP.md) for setup. The recipe and user-confirmed results below describe the original experiment only. Its mocked regression implementation remains in `tests/helpers/legacy-drive-probe-core.mjs`; no active browser page imports it. See [the cleanup inventory](PROTOTYPE_CLEANUP.md).
+
 ## Confirmed decisions
 
 **User-confirmed (2026-10-21):** Use the owner's existing restricted Drive folder as the private home for the canonical ledger. Parse selected CSVs in the browser, merge reviewed results into the ledger, and store the normalized ledger with import provenance in Drive. Do not archive the original CSV files in Drive. The owner accepts short-lived access tokens and interactive reauthorization.

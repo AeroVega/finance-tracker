@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [workflow, dashboard, drivePrototype, buildInfo, readme] = await Promise.all([
+const [workflow, dashboard, acceptanceCenter, buildInfo, readme] = await Promise.all([
   readFile(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8"),
   readFile(new URL("../index.html", import.meta.url), "utf8"),
-  readFile(new URL("../prototype/drive-probe.html", import.meta.url), "utf8"),
+  readFile(new URL("../prototype/acceptance.html", import.meta.url), "utf8"),
   readFile(new URL("../js/build-info.js", import.meta.url), "utf8"),
   readFile(new URL("../README.md", import.meta.url), "utf8")
 ]);
@@ -26,11 +26,11 @@ test("deployment stamps the checked-out source commit into the artifact", () => 
   assert.match(buildInfo, /development \(not deployed\)/);
 });
 
-test("both deployed pages display the generated source commit", () => {
+test("workspace and acceptance center display the generated source commit", () => {
   assert.match(dashboard, /id="build-sha"/);
   assert.match(dashboard, /src="js\/build-info\.js"/);
-  assert.match(drivePrototype, /id="build-sha"/);
-  assert.match(drivePrototype, /src="\.\.\/js\/build-info\.js"/);
+  assert.match(acceptanceCenter, /id="build-sha"/);
+  assert.match(acceptanceCenter, /src="\.\.\/js\/build-info\.js"/);
 });
 
 test("README explains shared-URL branch deployment and restoring main", () => {

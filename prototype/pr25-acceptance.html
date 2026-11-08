@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>PR25 acceptance · Finance Tracker</title>
+  <title>Backup and recovery checks · Finance Tracker</title>
   <link rel="stylesheet" href="pr25-acceptance.css">
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
@@ -13,12 +13,12 @@
 <meta name="theme-color" content="#09090b">
 </head>
 <body><a class="skip-link" href="#tool-main">Skip to main content</a><main id="tool-main" tabindex="-1">
-<nav class="tool-navigation" aria-label="Development navigation"><a id="prototype-tools" href="./index.html">← Prototype tools</a><span>Synthetic data only</span></nav>
+<nav class="tool-navigation" aria-label="Development navigation"><a id="prototype-tools" href="./acceptance.html">← Acceptance tests</a><span>Synthetic data only</span></nav>
 <div id="copy-guide" hidden>
   <p class="eyebrow">Finance Tracker · PR #28 · Synthetic tests only</p>
   <h1>Backup and restore, step by step</h1>
-  <p>Reuse your completed PR28 source. <strong>You do not need to rerun the 25 live checks.</strong> Category corrections are kept and compared exactly as saved.</p>
-  <aside>Release the source on the PR28 page before starting here. Close other tabs using it. Keep this tab open and your iPad awake until each step finishes. No operation starts when this page loads.</aside>
+  <p>Reuse your completed canonical synthetic source. <strong>You do not need to rerun the 25 live checks.</strong> Category corrections are kept and compared exactly as saved.</p>
+  <aside>Release the source on the page where you used it before starting here. Close other tabs using it. Keep this tab open and your iPad awake until each step finishes. No operation starts when this page loads.</aside>
   <div class="guide-roles">
     <p><strong>SOURCE</strong> is the existing folder with your completed invented records. It is only read for these copy checks. Session markers still update.</p>
     <p><strong>BACKUP</strong> and <strong>RESTORED COPY</strong> are two different new empty synthetic folders you choose. Do not select the source, each other, or an interrupted destination.</p>
@@ -77,9 +77,9 @@
     <p id="guide-count" aria-live="off" hidden></p>
     <p id="guide-elapsed" aria-live="off"></p>
   </div>
-  <p class="guide-limits">Results apply only to this tab's run. Reloading does not preserve folder IDs, archives or records. An interrupted copy is not a passing copy, and a generic failure does not prove quarantine. Original-file expiry rules still apply. This guide accepts canonical fixtures without separately retained original files. Live device behavior and other PR28 checks remain separate.</p>
+  <p class="guide-limits">Results apply only to this tab's run. Reloading does not preserve folder IDs, archives or records. An interrupted copy is not a passing copy, and a generic failure does not prove quarantine. Original-file expiry rules still apply. This guide accepts canonical fixtures without separately retained original files. Live device behavior and the other acceptance checks remain separate.</p>
   <p id="guide-navigation-result" role="status" aria-live="polite"></p>
-  <p><a id="guide-return" href="pr28-testing.html">Return to PR28 testing</a></p>
+  <p><a id="guide-return" href="acceptance.html">Return to acceptance tests</a></p>
   <details id="guide-advanced"><summary>Advanced PR25 tools</summary><p>Snapshot, retention, deliberate failure and OAuth rehearsals are separate from these copy checks. Opening advanced tools leaves this guide.</p><a href="pr25-acceptance.html">Open legacy PR25 controls</a></details>
 </div>
 <div id="legacy-tools">

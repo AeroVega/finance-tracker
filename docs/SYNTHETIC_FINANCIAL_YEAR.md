@@ -6,7 +6,7 @@
 
 **Implemented:** [Seed a synthetic year](../prototype/synthetic-year.html), linked from the main workspace and prototype hub. The default recipe is calendar year **2025**, the last complete calendar year at implementation time. The UI intentionally offers one reproducible version rather than importing user files. It is not a production dashboard, an investment engine or a projection implementation.
 
-Production financial-data persistence remains **NO-GO** under [PR #27](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md). No real-data test, live Drive action, merge, deployment, or production activation is authorized or claimed by this implementation. No paid service, framework or new authentication scope was introduced. After the owner asked to rethink storage for speed, this feature added an opt-in grouped canonical payload layout for new synthetic copies; the catalog, transaction, recovery and session protocols are unchanged. Existing prototype pages and earlier acceptance records remain intact.
+Production financial-data persistence remains **NO-GO** under [PR #27](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md). No real-data test, live Drive action, merge, deployment, or production activation is authorized or claimed by this implementation. No paid service, framework or new authentication scope was introduced. After the owner asked to rethink storage for speed, this feature added an opt-in grouped canonical payload layout for new synthetic copies; the catalog, transaction, recovery and session protocols are unchanged. The initial feature preserved existing prototype pages. The later owner-authorized [cleanup](PROTOTYPE_CLEANUP.md) retires superseded UI while preserving earlier acceptance records.
 
 ## Recipe and financial meaning
 

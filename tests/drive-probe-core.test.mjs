@@ -5,7 +5,7 @@ import {
   DRIVE_UPLOAD_ENDPOINT,
   createSyntheticProbePayload,
   runSyntheticDriveProbe
-} from "../js/drive-probe-core.mjs";
+} from "./helpers/legacy-drive-probe-core.mjs";
 
 function fakeResponse(status, payload) {
   return {

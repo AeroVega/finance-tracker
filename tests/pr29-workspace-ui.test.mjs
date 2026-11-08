@@ -128,7 +128,7 @@ test('workspace navigation follows hash and back/forward without intercepting cl
   assert.deepEqual([...events.keys()], ['hashchange']);
 });
 
-test('shared static theme covers every tool while keeping original reference and navigation targets', () => {
+test('shared static theme covers every retained tool and guarded navigation targets', () => {
   const root = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(root, /class="brand" href="#overview"/);
   assert.match(root, /Browser warnings may not appear/);
@@ -143,12 +143,13 @@ test('shared static theme covers every tool while keeping original reference and
   }
   const hub = readFileSync(new URL('../prototype/index.html', import.meta.url), 'utf8');
   assert.match(hub, /pr25-acceptance.html\?guide=pr28/);
-  assert.match(hub, /modern-stack-exploration/);
+  assert.match(hub, /acceptance.html/);
+  assert.match(hub, /<details/);
   const acceptance = readFileSync(new URL('../prototype/pr25-acceptance.html', import.meta.url), 'utf8');
   const acceptanceNavigation = acceptance.match(/<nav class="tool-navigation"[\s\S]*?<\/nav>/)[0];
   assert.match(acceptanceNavigation, /id="prototype-tools"/, 'keep the copy guide navigation guard hook');
   assert.doesNotMatch(acceptanceNavigation, /href="\.\.\/index.html"/, 'do not add an unguarded exit beside the copy guide');
-  assert.equal(existsSync(new URL('../prototype/modern-stack-exploration/index.html', import.meta.url)), true);
+  assert.equal(existsSync(new URL('../docs/archive/MODERN_UI_EXPLORATION.md', import.meta.url)), true);
   assert.match(readFileSync(new URL('../design-system.css', import.meta.url), 'utf8'), /\[hidden\]\s*\{\s*display:\s*none\s*!important/);
   assert.doesNotMatch(root, /tailwind|fonts\.googleapis|analytics/);
 });

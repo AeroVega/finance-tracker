@@ -12,3 +12,5 @@ h2 { margin-top: 36px; margin-bottom: 8px; }
 .back { display: inline-flex; align-items: center; min-height: 44px; margin-top: 24px; }
 footer { font-size: .72rem; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 18px; }
 @media(max-width:600px) { .item { padding: 18px; flex-wrap: wrap; gap: 12px; }.meta { width: 100%; justify-content: space-between; }.item>.arrow { margin-left: auto; }h1 { font-size: 2.25rem; } }
+#engineering-tools { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); }
+#engineering-tools > summary { font-weight: 600; color: var(--text); }
