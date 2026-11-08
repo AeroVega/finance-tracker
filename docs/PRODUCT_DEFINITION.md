@@ -399,7 +399,7 @@ The actual workbook inspection, conversion script, reconciliation, and import wi
 
 PR #25's synthetic-only storage-readiness implementation is merged. Its scope included backup/restore portability, immutable snapshot verification, source-retention primitives, and synthetic acceptance workflows. The product vision in this document does **not** add reporting, investments, debt, budgeting, goals, projections, insights, or other product features to PR #25.
 
-Owner-reported synthetic acceptance evidence is recorded in the [PR #25 acceptance record](https://github.com/AeroVega/finance-tracker/blob/main/docs/PR25_ACCEPTANCE.md) and [implementation handoff](https://github.com/AeroVega/finance-tracker/blob/main/docs/PR25_IMPLEMENTATION_HANDOFF.md). That evidence is distinct from automated CI and does not remove the documented limitations. Remaining owner review includes:
+Owner-reported synthetic acceptance evidence is recorded in the [synthetic storage acceptance record](SYNTHETIC_STORAGE_ACCEPTANCE.md) and subject-based [backup/restore](DRIVE_BACKUP_AND_RESTORE.md), [retention](ORIGINAL_SOURCE_RETENTION.md), and [Google Drive configuration](GOOGLE_DRIVE_CONFIGURATION.md) guides. That evidence is distinct from automated CI and does not remove the documented limitations. Remaining owner review includes:
 - Review the residual deletion-receipt recovery limitation and its conservative retry behavior.
 - Inspect the actual Cloud OAuth audience/scopes, API-key restrictions, assigned quotas, usage, and billing.
 - Complete final privacy/security inspection of the deployed artifact and browser storage/network behavior.
@@ -417,6 +417,6 @@ This document captures product-level intent. Detailed technical decisions remain
 - [Database identity and lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md)
 - [Data model and reconciliation principles](DATA_MODEL.md)
 - [Security and privacy requirements](SECURITY.md)
-- [PR #25 acceptance evidence](https://github.com/AeroVega/finance-tracker/blob/main/docs/PR25_ACCEPTANCE.md)
+- [Synthetic storage acceptance evidence](SYNTHETIC_STORAGE_ACCEPTANCE.md)
 
 When a future implementation proposal appears to conflict with an established decision, identify the conflict and bring it forward for resolution. Do not silently reinterpret this document or an existing technical contract.
