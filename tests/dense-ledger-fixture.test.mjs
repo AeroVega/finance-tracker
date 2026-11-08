@@ -24,3 +24,11 @@ test('dense invented year uses supported imports and audited commands across fou
   validateLedger(ledger);
 });
 test('dense fixture rejects accidental unbounded size requests',()=>assert.throws(()=>denseLedgerFixture(100),/unsupported-fixture-years/));
+
+test('dense CPU capacity does not imply grouped storage can hold whole-period imports',async()=>{
+  const {serializePackedCanonicalLedger,CANONICAL_CHUNK_BYTES}=await import('../js/canonical-ledger-storage.mjs');
+  const {canonicalizeJcs}=await import('../js/transaction-protocol.mjs');
+  const {ledger}=denseLedgerFixture(5);
+  assert.ok(ledger.imports.some(run=>Buffer.byteLength(canonicalizeJcs(run))>CANONICAL_CHUNK_BYTES));
+  assert.throws(()=>serializePackedCanonicalLedger(ledger),{code:'canonical-chunk-too-large'});
+});

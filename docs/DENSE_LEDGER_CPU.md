@@ -42,3 +42,11 @@ Setup took 0.86, 3.83, and 10.29 seconds, excluded from the operation measuremen
 Used heap includes the Node runtime and retained objects. RSS also includes reserved heap pages and native allocations; forced GC does not make Node return every page to the OS. The ten-year projection added about 21.26 MiB of retained heap. Its checkpoint before GC used 125.53 MiB heap, but that checkpoint is not a peak measurement. Whole-process RSS high-water includes fixture setup and was already reached before projection in these runs. A true projection-only peak is unavailable because the synchronous operation prevents in-process sampling.
 
 These separate runs had setup times of 0.59, 2.69, and 5.75 seconds and one-call projection times of 69, 314, and 715 milliseconds. Differences from the shared comparison run illustrate timing and GC variability. These numbers do not establish memory savings against the baseline. Browser memory behavior, mobile responsiveness, and safe device limits remain unverified.
+
+## Grouped storage is a separate limit
+
+**Verified locally against the unchanged version-2 grouped adapter:** The one-year fixture serializes to 114 objects. Its four import records occupy a 95,111-byte imports chunk. The five-year and ten-year fixtures fail `serializePackedCanonicalLedger` with `canonical-chunk-too-large` before any write. Their imports chunks are 460,171 and 916,475 bytes respectively.
+
+The fixture intentionally uses four whole-period imports. Each import retains every linked observation ID, so a large single import can exceed the 128 KiB cap even on its own. Byte-aware grouping alone would not solve that oversized-record case. A reviewed record-splitting format or another explicitly versioned representation would be needed. Ordinary smaller imports have different boundaries, but fixed 64-record groups can also reach the byte cap as import inventories grow.
+
+These CPU benchmarks therefore do not establish end-to-end multi-year storage capacity. The existing refusal is safe and unchanged; the optimization does not increase the cap, silently migrate copies or weaken canonical/history checks. A regression test records this boundary. Production remains NO-GO.
