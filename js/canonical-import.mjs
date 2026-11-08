@@ -170,12 +170,14 @@ function canonicalRow(record, account) {
   catch { if(candidate.valid!==false) candidate.errorCode=candidate.currency===null?'missing-currency':'invalid-money'; candidate.valid=false; }
   return candidate;
 }
+// Operation-local indexes preserve Array.find's first match before final validation.
+function firstBy(records, key) {
+  const index=new Map();
+  for(const record of records) if(!index.has(record[key])) index.set(record[key],record);
+  return index;
+}
 function refreshRun(ledger, run) {
-  const observationById=new Map();
-  for(const observation of ledger.observations) {
-    // Keep find's first-match behavior until the mutated ledger's final ID check.
-    if(!observationById.has(observation.observationId)) observationById.set(observation.observationId,observation);
-  }
+  const observationById=firstBy(ledger.observations,'observationId');
   const observations=run.observationIds.map(value=>observationById.get(value));
   const counts=zeroCounts(); counts.rowsSeen=run.rowsSeen; counts.rowsRecognized=observations.length;
   for(const o of observations) counts[o.disposition]++;
@@ -183,7 +185,13 @@ function refreshRun(ledger, run) {
   run.status=observations.some(o=>(o.disposition==='review'||o.disposition==='rejected')&&!o.resolved) ? 'needs-review':'processed';
   run.errorCode=run.status==='needs-review'?'unresolved-observations':null;
   const replay=projectActivities(ledger);
-  run.latestActivityDate=activeActivities(ledger).filter(a=>a.accountId===run.accountId).map(a=>replay.get(a.activityId).effectiveDate).sort().at(-1)??null;
+  let latest=null;
+  for(const activity of activeActivities(ledger)) {
+    if(activity.accountId!==run.accountId) continue;
+    const date=replay.get(activity.activityId).effectiveDate;
+    if(latest===null || date>latest) latest=date;
+  }
+  run.latestActivityDate=latest;
 }
 
 export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageByAccount,syntheticOnly}, options = {}) {
@@ -206,16 +214,23 @@ export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageB
     if(prior?.status==='processed') { runIds.push(prior.importRunId); summary.noOp++; continue; }
     if(prior) {
       // Resume unresolved occurrences, preserving the identity and effects of accepted rows.
-      const unresolved=prior.observationIds.map(value=>next.observations.find(o=>o.observationId===value)).filter(o=>!o.resolved&&['review','rejected'].includes(o.disposition));
-      const retryRows=unresolved.map(o=>canonicalRow(records.find(r=>r.rowOrdinal===o.rowOrdinal)??fail('retry-row-missing'),account));
+      const observationById=firstBy(next.observations,'observationId');
+      const recordByOrdinal=firstBy(records,'rowOrdinal');
+      const unresolved=prior.observationIds.map(value=>observationById.get(value)).filter(o=>!o.resolved&&['review','rejected'].includes(o.disposition));
+      const retryRows=unresolved.map(o=>canonicalRow(recordByOrdinal.get(o.rowOrdinal)??fail('retry-row-missing'),account));
       if(retryRows.some((candidate,i)=>canonicalizeJcs(candidate)!==canonicalizeJcs(unresolved[i].candidate))) fail('retry-normalization-changed');
       const retry=reconcileImport({institutionId:account.institutionId,accountId:account.accountId,sourceFormat:parsed.sourceFormat,fileFingerprint:parsed.fileFingerprint,rows:retryRows,...reconciliationEvidence(next),idFactory:()=>id(options)});
       const time=stamp(options),priorStatus=prior.status,priorCounts=clone(prior.counts);
       for(const a of retry.activities) next.activities.push({...a,createdAt:time,updatedAt:time});
       retry.observations.forEach((result,i)=>Object.assign(unresolved[i],result));
+      const unresolvedByOrdinal=firstBy(unresolved,'rowOrdinal');
+      const commandIds=new Set(next.events.map(event=>event.commandId));
       for(const e of retry.events) {
-        const observation=unresolved.find(o=>o.rowOrdinal===e.observationRowOrdinal),commandId=`import:${observation.observationId}:${e.eventType}`;
-        if(!next.events.some(event=>event.commandId===commandId)) next.events.push({...e,eventId:id(options),commandId,sourceObservationId:observation.observationId,recordedAt:time});
+        const observation=unresolvedByOrdinal.get(e.observationRowOrdinal),commandId=`import:${observation.observationId}:${e.eventType}`;
+        if(!commandIds.has(commandId)) {
+          next.events.push({...e,eventId:id(options),commandId,sourceObservationId:observation.observationId,recordedAt:time});
+          commandIds.add(commandId);
+        }
       }
       refreshRun(next,prior);prior.retryAttempts.push({attemptId:id(options),startedAt:time,completedAt:time,priorStatus,priorCounts,status:prior.status,counts:clone(prior.counts)});runIds.push(prior.importRunId);
       for(const k of Object.keys(zeroCounts())) summary[k]+=prior.counts[k];
@@ -227,8 +242,9 @@ export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageB
     for(const activity of result.activities) next.activities.push({...activity,createdAt:time,updatedAt:time});
     const observations=result.observations.map((o,i)=>({...o,observationId:id(options),importRunId:runId,observedAt:time,physicalLine:records[i].physicalLine ?? null,candidate:rows[i],resolved:false}));
     next.observations.push(...observations);
+    const observationByOrdinal=firstBy(observations,'rowOrdinal');
     for(const event of result.events) {
-      const observation=observations.find(o=>o.rowOrdinal===event.observationRowOrdinal);
+      const observation=observationByOrdinal.get(event.observationRowOrdinal);
       next.events.push({...event,eventId:id(options),commandId:`import:${observation.observationId}:${event.eventType}`,sourceObservationId:observation.observationId,recordedAt:time});
     }
     const dates=rows.map(r=>r.effectiveDate).filter(isCalendarDate).sort();
