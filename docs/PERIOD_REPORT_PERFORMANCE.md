@@ -8,7 +8,7 @@ Only the invented-year generator adopts the batch API: its annual report and twe
 
 ## Local evidence
 
-**Verified November 8, 2026, Node 24.22.1, Linux x64:** three alternating measurements per operation against commit `480c9f1`, using the dense invented fixture. Thirteen scopes comprise its full range and twelve first-year months. Complete outputs, including exclusions and reason order, match separate baseline reports.
+**Verified November 8, 2026, Node 24.22.1, Linux x64:** three alternating measurements per operation against the canonical implementation published at `86e8e38f492e44a27258407168ce2156ddabe1ac`, using the dense invented fixture. Thirteen scopes comprise its full range and twelve first-year months. Complete outputs, including exclusions and reason order, match separate baseline reports.
 
 | Invented years | Activities | Events | Separate median ms | Batch median ms | Speedup |
 | --- | ---: | ---: | ---: | ---: | ---: |

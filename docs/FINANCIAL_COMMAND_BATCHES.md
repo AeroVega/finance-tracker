@@ -14,7 +14,7 @@ This is a computational API, not a storage transaction. It does not authorize a 
 
 Independent review compared 10,000 seeded batch/sequential sequences. The 1,684 successful outputs matched exactly, and the remaining error messages matched. Malformed commands/categories, signature reuse, UUID collisions, empty lists and output isolation were also checked. The review found an error-order issue for an omitted legacy category field; event-local JSON/history validation fixed it before acceptance.
 
-The full synthetic generator result matched the pre-batch implementation for 2000, 2025 and 2099. A permanent test pins the default canonical ledger's SHA-256 to the pre-batch recipe at ebf1ef1, covering all stored records, order, IDs and command signatures rather than totals alone.
+The full synthetic generator result matched the pre-batch implementation for 2000, 2025 and 2099. A permanent test pins the default canonical ledger's SHA-256 to the pre-batch recipe at 0899eaa8ebd425bb515a4870a8b0821d0c53afe6, covering all stored records, order, IDs and command signatures rather than totals alone.
 
 Additional tests cover late-bound refund categories, exact large-decimal corrections, multiple refunds, classification changes, every invalid intermediate state followed by an attempted repair, idempotency, duplicate identities and the single-ledger-clone bound.
 

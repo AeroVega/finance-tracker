@@ -10,7 +10,7 @@ Run `node --test tests/dense-ledger-fixture.test.mjs` and `node tests/benchmark-
 
 ## Local measurement, November 8, 2026
 
-**Verified:** Node 24.22.1, candidate commit `52603c1`, unchanged canonical baseline with scoped category memberships and without chronological replay. Each number is a three-call median, rounded to milliseconds. Every measured call passed complete-output comparison. Other workers were active on the host.
+**Verified:** Node 24.22.1, canonical implementation published at `6da6c8b506d02b819251441e2ead55b0d5d8e5e0`, unchanged canonical baseline with scoped category memberships and without chronological replay. Each number is a three-call median, rounded to milliseconds. Every measured call passed complete-output comparison. Other workers were active on the host.
 
 | Years | Activities | Operation | Baseline ms | Candidate ms |
 | --- | ---: | --- | ---: | ---: |
@@ -31,7 +31,7 @@ Setup took 0.86, 3.83, and 10.29 seconds, excluded from the operation measuremen
 
 ## Candidate-only memory
 
-**Verified locally:** Each size ran in a fresh Node 24.22.1 process with `--expose-gc`, using only candidate `52603c1`. Run `node --expose-gc tests/benchmark-dense-ledger-memory.mjs 10`, replacing 10 with 1 or 5 as needed. The runner forces GC before setup, after setup, and after projection, keeping the ledger and final projection live. Pre-fixture used heap was about 6.87 MiB in every process.
+**Verified locally:** Each size ran in a fresh Node 24.22.1 process with `--expose-gc`, using the canonical implementation published at `6da6c8b506d02b819251441e2ead55b0d5d8e5e0`. Run `node --expose-gc tests/benchmark-dense-ledger-memory.mjs 10`, replacing 10 with 1 or 5 as needed. The runner forces GC before setup, after setup, and after projection, keeping the ledger and final projection live. Pre-fixture used heap was about 6.87 MiB in every process.
 
 | Years | Retained ledger heap MiB | Ledger plus projection heap MiB | RSS after setup GC MiB | RSS after projection GC MiB | Whole-process high-water RSS MiB |
 | --- | ---: | ---: | ---: | ---: | ---: |

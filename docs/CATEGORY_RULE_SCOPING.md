@@ -34,7 +34,7 @@ Focused regression coverage includes:
 
 An immutable activity-creation sequence and one applicability boundary per rule could remove that remaining growth. That needs an explicit versioned contract across imports, retained inactive activities, backup/restore and existing events. Transaction dates, wall-clock timestamps and freely mutable array positions are not equivalent boundaries. No such migration is part of this change.
 
-The wider event engine still replays earlier event prefixes during validation and scans events per activity. Import reconciliation and retained storage history have separate scaling costs. This change does not claim to solve them.
+At the time of this scoped-rule change, the event engine replayed earlier prefixes during validation and scanned events per activity. The later [chronological replay](LEDGER_REPLAY_CPU.md), [import indexes](IMPORT_RECONCILIATION_CPU.md) and [owned sessions](LEDGER_SESSION.md) address those separate CPU costs. [Retained history verification](DRIVE_HISTORY_VERIFICATION.md) still has explicit growth and memory limits.
 
 All work remains synthetic-only. Production persistence is NO-GO. Live Google/device acceptance, merging and deployment are separate actions.
 

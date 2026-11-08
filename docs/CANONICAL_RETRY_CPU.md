@@ -9,7 +9,7 @@ No index is persisted or retained across operations. First-match behavior matter
 Use only the invented fixtures in `tests/helpers/canonical-retry-fixture.mjs`.
 
 ```
-git show 52603c1:js/canonical-import.mjs > js/.canonical-import-retry-baseline.mjs
+git show 6da6c8b506d02b819251441e2ead55b0d5d8e5e0:js/canonical-import.mjs > js/.canonical-import-retry-baseline.mjs
 node tests/benchmark-canonical-retry.mjs js/.canonical-import-retry-baseline.mjs
 rm js/.canonical-import-retry-baseline.mjs
 node --test tests/canonical-import-retry-indexes.test.mjs
