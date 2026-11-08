@@ -1,10 +1,10 @@
 # Finance Tracker — next steps and handoff
 
-## Current project handoff — 2026-11-04
+## Current project handoff, 2026-11-08
 
 PRs #20–#25 are merged. The synthetic Drive storage foundation includes the application lifecycle, durable transactions/recovery, version-2 per-copy locator catalogs, backup/restore, portable archives, and 540-day original-source retention primitives. Owner-reported synthetic acceptance and exact-head CI evidence are recorded in [Synthetic Storage Acceptance](SYNTHETIC_STORAGE_ACCEPTANCE.md). Operational details live in [Drive Backup and Restore](DRIVE_BACKUP_AND_RESTORE.md), [Original Source File Retention](ORIGINAL_SOURCE_RETENTION.md), [Drive Transaction Engine Testing](DRIVE_TRANSACTION_ENGINE_TESTING.md), and [Google Drive Configuration](GOOGLE_DRIVE_CONFIGURATION.md).
 
-Production financial-data persistence remains disabled and unauthorized. PR #27 is the separate design, implementation, and explicit authorization workstream. Synthetic data remains first-class for all future development, automated tests, migrations, regression, and acceptance. [PR #26](https://github.com/AeroVega/finance-tracker/pull/26) merged the product-definition baseline on 2026-11-06. The PR27 branch already contains the subject-based documentation consolidation described above; branch reconciliation and the remaining PR27 design and acceptance work are still pending.
+Production financial-data persistence remains disabled and unauthorized. PR #27 is the documentation-only production persistence planning review. Its merge would approve the plan only; implementation and production activation need separate authorization. Synthetic data remains first-class for all future development, automated tests, migrations, regression, and acceptance. [PR #26](https://github.com/AeroVega/finance-tracker/pull/26) merged the product-definition baseline on 2026-11-06. [PR #28](https://github.com/AeroVega/finance-tracker/pull/28) merged its synthetic-only canonical import work on 2026-11-08. The PR27 branch reconciles the subject-based documentation consolidation with `main` at `c5b1fa916b431debf923d9502d5e8b2447e9b914`. The plan is back with the owner for review; future production implementation and acceptance remain pending.
 
 **Last updated:** 2026-11-08
 
@@ -21,7 +21,7 @@ See the [PR27 decision record](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#decision-
 - **Hypothesis, recommended direction:** Evaluate grouped storage without choosing partition boundaries yet. Compatibility, integrity, ownership, recovery, backup, and restore testing remain required.
 - **Open:** Verify what supported browsers retain and document what abrupt closure or device loss can leave behind. Do not promise a perfect wipe.
 
-These decisions update the plan only. PR27 remains a documentation-only draft; production persistence is still disabled and unauthorized.
+These decisions update the plan only. PR27 remains a documentation-only draft; production persistence is still disabled and unauthorized. Its [planning-review and merge rule](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#planning-review-draft-exit-and-merge-rule) separates review of the plan from later implementation and production acceptance. The merged PR28 workbench preserves the in-tab draft on release; the future production clearing requirement remains an [explicit implementation gap](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#current-pr28-release-behavior-and-production-gap).
 
 ## PR #24 status — merged 2026-11-02
 
@@ -131,7 +131,7 @@ Closing or disconnecting an account must not create gaps: preserve its historica
 
 - Obtain explicit owner acceptance of evidence and remaining limitations.
 
-**Exit:** PR #25 merged on 2026-11-04 after owner-reported synthetic acceptance. Production financial-data persistence remains disabled until PR #27 is implemented, reviewed, and explicitly authorized.
+**Exit:** PR #25 merged on 2026-11-04 after owner-reported synthetic acceptance. Production financial-data persistence remains disabled. PR #27 records the plan only; separately authorized implementation, production acceptance, and explicit owner approval are still required.
 
 ## Temporary prototype navigation and MVP1 cleanup
 

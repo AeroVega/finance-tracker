@@ -9,6 +9,7 @@ const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 const MIME_JSON = "application/json";
 const TAG = "financeTracker";
+const FILE_ID_BATCH_SIZE = 16;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class DriveTransactionError extends Error {
@@ -68,6 +69,9 @@ export class GoogleDriveTransactionAdapter {
     this.visibilityAttempts = visibilityAttempts;
     this.visibilityDelayMs = visibilityDelayMs;
     this.visibilityMaxDelayMs = visibilityMaxDelayMs;
+    this.generatedFileIds = [];
+    this.seenGeneratedFileIds = new Set();
+    this.fileIdRefill = null;
   }
 
   async request(url, options = {}, { allowStatuses = [] } = {}) {
@@ -87,12 +91,25 @@ export class GoogleDriveTransactionAdapter {
   }
 
   async allocateFileId() {
-    const response = await this.request(`${API}/files/generateIds?count=1&space=drive`);
-    const result = await response.json();
-    if (!Array.isArray(result.ids) || result.ids.length !== 1 || typeof result.ids[0] !== "string") {
-      fail("invalid-generated-id", "Google Drive did not return exactly one pre-generated file ID.");
+    // Allocate lazily in small batches. These are unused IDs, not cached file
+    // evidence. Concurrent callers share the refill and consume distinct IDs.
+    while (this.generatedFileIds.length === 0) {
+      if (!this.fileIdRefill) {
+        this.fileIdRefill = (async () => {
+          const response = await this.request(`${API}/files/generateIds?count=${FILE_ID_BATCH_SIZE}&space=drive`);
+          const result = await response.json();
+          if (!Array.isArray(result?.ids) || result.ids.length !== FILE_ID_BATCH_SIZE ||
+              result.ids.some((id) => typeof id !== "string" || !id.trim() || this.seenGeneratedFileIds.has(id)) ||
+              new Set(result.ids).size !== FILE_ID_BATCH_SIZE) {
+            fail("invalid-generated-id", "Google Drive did not return a complete batch of distinct new file IDs.");
+          }
+          for (const id of result.ids) this.seenGeneratedFileIds.add(id);
+          this.generatedFileIds.push(...result.ids);
+        })().finally(() => { this.fileIdRefill = null; });
+      }
+      await this.fileIdRefill;
     }
-    return result.ids[0];
+    return this.generatedFileIds.shift();
   }
 
   async listChildren() {
@@ -103,12 +120,13 @@ export class GoogleDriveTransactionAdapter {
       const query = new URLSearchParams({
         q: `'${this.folderId}' in parents and trashed = false`,
         pageSize: "1000",
-        fields: "nextPageToken,incompleteSearch,files(id,name,mimeType,parents,appProperties,version)"
+        fields: "nextPageToken,incompleteSearch,files(id,name,mimeType,parents,appProperties,version,trashed)"
       });
       if (pageToken) query.set("pageToken", pageToken);
       const response = await this.request(`${API}/files?${query}`);
       const page = await response.json();
-      if (page.incompleteSearch !== false || !Array.isArray(page.files)) {
+      if (page?.incompleteSearch !== false || !Array.isArray(page.files) ||
+          (page.nextPageToken != null && typeof page.nextPageToken !== "string")) {
         fail("incomplete-folder-enumeration", "Drive did not confirm complete folder enumeration.");
       }
       all.push(...page.files);
@@ -117,6 +135,38 @@ export class GoogleDriveTransactionAdapter {
       if (pageToken) seen.add(pageToken);
     } while (pageToken);
     return all;
+  }
+
+  /** Fresh metadata for this verification only; enumeration is not atomic. */
+  async readMetadataBatch(fileIds) {
+    if (!Array.isArray(fileIds) || fileIds.some((id) => typeof id !== "string" || !id.trim()) ||
+        new Set(fileIds).size !== fileIds.length) {
+      fail("invalid-metadata-batch", "Batch metadata reads require distinct nonempty file IDs.");
+    }
+    const requested = new Set(fileIds);
+    const metadata = new Map();
+    const seen = new Set();
+    if (!fileIds.length) return metadata;
+    // Complete every page before admitting any media reads. Missing, moved or
+    // trashed retained files must fail closed, never trigger a guessed locator.
+    for (const file of await this.listChildren()) {
+      if (typeof file?.id !== "string" || !file.id.trim() || seen.has(file.id)) {
+        fail("invalid-metadata-batch", "The complete folder listing has malformed or duplicate file identities.");
+      }
+      seen.add(file.id);
+      if (!requested.has(file.id)) continue;
+      if (file.trashed !== false || !Array.isArray(file.parents) || !file.parents.includes(this.folderId)) {
+        fail("object-location-mismatch", "A retained file is trashed or outside the selected database folder.", { fileId: file.id });
+      }
+      if (typeof file.version !== "string" || !/^[0-9]+$/.test(file.version)) {
+        fail("invalid-metadata-batch", "A retained file has no valid Drive version.", { fileId: file.id });
+      }
+      metadata.set(file.id, structuredClone(file));
+    }
+    if (metadata.size !== requested.size) {
+      fail("incomplete-metadata-batch", "The complete folder listing did not contain every retained file.");
+    }
+    return metadata;
   }
 
   async readMetadata(fileId) {
@@ -255,8 +305,12 @@ export class GoogleDriveTransactionAdapter {
     if (storedHash !== actualHash || stored.length !== bytes.length) {
       fail("immutable-readback-mismatch", "The immutable Drive object failed exact byte verification.", { fileId });
     }
+    // Optional receipt for callers that also verify immutable writes. These are
+    // detached copies of the exact-ID GET results, not the uploaded bytes or
+    // create response. Callers must validate the binding and hash themselves.
+    const readback = { metadata: structuredClone(metadataAfter), bytes: stored.slice() };
     await this.afterMutation?.({ kind, operation: "create" });
-    return { fileId, sha256: actualHash, size: bytes.length };
+    return { fileId, sha256: actualHash, size: bytes.length, readback };
   }
 
   async appendJournal(event, fileId) {

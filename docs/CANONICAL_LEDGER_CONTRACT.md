@@ -2,7 +2,9 @@
 
 **Status:** M1 contract decisions recorded; pure synthetic reference reconciliation is test-scoped only. No provider parser, production persistence, or production financial-data use is authorized by this document alone.  
 **Version:** `finance-tracker-ledger-v1`  
-**Last updated:** 2026-10-28
+**Last updated:** 2026-11-06
+
+**PR28 implementation note:** The bounded synthetic application layer and its compatible coverage/event additions are documented in [PR28 canonical import contract](PR28_CANONICAL_IMPORT.md). The original pure reconciler remains a proposal calculator; application record creation, review, serialization, and verified persistence use that layer. Production authorization remains separate.
 
 This is the source-independent contract that every file adapter must target. Provider parsers translate source-specific fields into this model; they do not define separate ledgers. All public fixtures use invented data.
 
@@ -49,7 +51,7 @@ The entity is called **activity**, not just transaction, because Fidelity files 
 | `effectiveDate` | `YYYY-MM-DD` | yes | Source date selected by documented adapter policy; never a timestamp inferred from import time |
 | `postedDate` | date or null | yes | Distinct posting/settlement date when supplied; otherwise null |
 | `amountMinor` | integer or null | yes | Signed value in currency minor units; null when non-monetary or using decimal fallback |
-| `amountDecimal` | decimal string or null | yes | Exact signed decimal fallback when the currency exponent is unsupported; otherwise null. Never populate both amount fields for the same value |
+| `amountDecimal` | decimal string or null | yes | Exact signed decimal fallback when the currency exponent is unsupported or the minor-unit result exceeds the safe-integer range; otherwise null. Never populate both amount fields for the same value |
 | `currency` | ISO 4217 code or null | yes | Currency of either amount field; null only when both amount fields are null or not monetary |
 | `sourceDescription` | string | yes | Source description preserved verbatim, including empty string only when source is genuinely blank |
 | `normalizedDescription` | string or null | yes | Optional derived searchable description; never replaces source text |
@@ -227,3 +229,11 @@ Before PR #11 is merge-ready, run node --test tests/*.test.mjs on the final PR h
 8. In the future private-storage integration suite (synthetic data only): file-retention state is independent of import status; age-based deletion eligibility follows the approved policy; confirmed deletion clears the active locator and records a deletion timestamp; failed deletion remains visible and retryable; backup/restore behavior respects the retention/deletion policy. These are future storage gates, not claims covered by the current pure reconciliation tests.
 
 Any unimplemented behavior must be described as a limitation, not implied by a passing test. In particular, this pure module does not prove persistence atomicity, interrupted-write recovery, durable deduplication, private file retention/deletion, or financial-reporting correctness. Those remain future integration/release gates. PR #11 must remain unmerged until the owner explicitly approves merging.
+
+## PR28 coverage and application integration amendment
+
+The application stores `declaredCoverage: {start, end, provenance}` separately from `observedStart`, `observedEnd`, `startedAt`, and `coverageReconciled`. Declared periods require explicit confirmation; observed dates and file balances never supply that confirmation. A valid empty import has null observed dates and may still have a confirmed declared interval. The pure reference result's legacy `coverageStart`/`coverageEnd` names describe observed dates only; they must not be used as declared or verified coverage.
+
+The synthetic layer keeps a stable import-run identity for one file/account context. A retry of a needs-review run reevaluates unresolved occurrences and appends an identified `retryAttempts` audit entry with timestamps and prior/result counts and status. It preserves the initial completion timestamp and accepted occurrence identities. A processed identical run is a no-op. This amendment makes logical-run identity and retry-attempt evidence explicit rather than overwriting or suppressing failed work.
+
+Application events add explicit classification, category correction with prospective rule metadata, bank correction, and refund linkage. Effective results apply events in their preserved order. Original records remain immutable; storage rejects record/order removal or rewriting. Human decisions can be reversed by a new linked decision only when later evidence does not depend on them. The exact synthetic schema, validators, and limitations are documented in the implementation contract.

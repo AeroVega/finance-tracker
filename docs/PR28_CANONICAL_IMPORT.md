@@ -1,0 +1,196 @@
+# PR28 canonical import contract and verification
+
+**Status: bounded live acceptance recorded; final local regression and independent correctness review passed; published-head remote CI pending.** This is the bounded synthetic implementation approved by the owner on November 6, 2026. Read [the included scope and acceptance criteria](PR28_IMPLEMENTATION_SCOPE.md) alongside the accepted canonical, database-lifecycle, and PR26 product decisions. The acceptance record below distinguishes the earlier full recipe from the later guide retests and their remaining limits.
+
+## Application pipeline
+
+`provider-csv.mjs` reads source bytes and emits preserved source records. `canonical-import.mjs` maps explicit accounts and coverage, allocates UUID v4 identities, reconciles observations, and applies auditable decisions. `canonical-ledger-storage.mjs` serializes that application state for the existing `ApplicationStorageLifecycle` and `CatalogTransactionEngine`. The storage adapter adds no journal, session, manifest-publication, or recovery protocol.
+
+The workbench at `prototype/pr28-import.html` fetches only fixed, invented CSV fixtures, including a later coffee purchase for prospective-category acceptance. It requires the existing dedicated synthetic folder and does not accept arbitrary financial uploads. Locally staged work is distinct from a saved commit; a failed or uncertain save requires recovery and reopening before recomputing another proposal.
+
+### Manual save and leaving the page
+
+Imports, review decisions, and corrections stay in memory until an explicit save. A prominent save-status callout remains visible on the guided page even when its optional workbench is collapsed. It distinguishes unsaved local changes, a save in progress, an unverified or deliberately paused save, and verified saved state. There is no background financial autosave or browser-storage copy of the ledger.
+
+A save clears the unsaved state only after successful verification. A failed or unverified save keeps the local changes and warning. The write may already have reached Drive, so an error is not proof that nothing was saved; follow the existing recovery/reopen flow before another attempt. Connect, reopen, and recovery actions retain their explicit discard confirmations. Releasing the session does not save or erase the in-tab draft.
+
+The existing `beforeunload` guard requests a generic browser warning while changes are unsaved or an operation is in progress. Browsers control that prompt and may require prior interaction. iPhone app switching, process termination, crashes, or some tab-closing paths can bypass it. The app cannot promise a warning or save changes after termination. Save before leaving; cancelling a supported warning leaves the draft in the current tab.
+
+Ownership heartbeats, offline refusal, exact-base checks, crash recovery, and page-hide session release are unchanged. The callout does not authorize a background write, bypass recovery, or replace a confirmed save.
+
+**Verified locally for these callouts:** the complete Node 24.22.1 and Node 26.13.0 suites each passed 541/541 tests with no failures or skips. Fourteen behavioral UI cases cover unsaved/busy leave guards, cancelled discard and recovery actions, pending/repeated/failed saves, verified save/reopen, dirty release, offline state, keyboard focus, and the intentional interruption rehearsal. Independent review found no blocker. Real browser layout and native warning behavior, especially on Safari/iPhone, remain **Open**.
+
+## Records and evidence
+
+The synthetic envelope is `finance-tracker-canonical-ledger`, version 1, with a UUID `ledgerId`, `createdAt`, `syntheticOnly: true`, and these collections:
+
+- `accounts`: persistent UUID `accountId`, institution, `displayName`, explicit currency and standard type.
+- `imports`: stable file/account context, SHA-256 of the original file bytes, source format, timestamps, observed and declared dates, counts, source-retention status, observation IDs, and appended retry-attempt evidence.
+- `observations`: original source fields, canonicalized source-row SHA-256, CSV record ordinal and starting physical line, import/account links, proposed normalization, disposition, and review state. Identical-looking rows may share a fingerprint but never acquire identity from that fact alone.
+- `activities`: immutable accepted financial evidence with exact minor units or decimal fallback, original source description/action and investment fields, separate dates, account, lifecycle, and application IDs.
+- `events`: ordered append-only classification, category correction, bank correction, refund-link, and supported pending-to-posted evidence. Explicit commands have an idempotency identity. Prior values and references are validated before replay.
+- `reviewDecisions`: explicit, scoped decisions with rationale, affected observation/activity IDs and, where needed, confirmed missing currency. Reversal appends a new decision; it does not erase the first decision or its created records.
+
+A review-created activity whose sole supporting decision is reversed remains as retained inactive history. It cannot contribute to totals or accept new matches/events. Reversal refuses later dependent work or a lifecycle-changing match that needs a more specific resolution.
+
+Each record has its own stable logical path under `synthetic/canonical-v1/`; the index preserves collection order and metadata. Unchanged records reuse their hashes. Save rejects removal/reordering of prior records, mutation of immutable activities/events/decisions, replacement of original observation/import evidence, and alteration of prior retry-attempt entries. Loading validates identities, references, exact monetary representations, counts, event order, and the selected snapshot. A changed base requires reopening and recomputing, not stale replay.
+
+Original source-file retention remains separate from processing. This slice records `not-retained` and null retention locators/timestamps; it does not claim a private full-file retention receipt. The invented source bytes remain in bundled fixtures. The accepted 540-day policy and the existing retention machinery remain unchanged for their authorized use.
+
+## Coverage
+
+`declaredCoverage` has inclusive `start`/`end` dates and confirmation provenance. The workbench uses two independently navigable calendars and an explicit confirmation. `observedStart`/`observedEnd` describe source dates, including nulls for empty files. Import timestamps are not transaction dates. Usable source dates outside the declaration block finalization.
+
+A declared period is not proof of complete history. `coverageReconciled` starts false. The current readout always identifies its results as known subtotals with `complete: false` and `coverage-not-reconciled`, plus specific exclusions. It cannot manufacture a complete total from supplied dates alone.
+
+## Matching, corrections, and calculations
+
+Identical completed file bytes in the same account/format context are a no-op even if renamed. Needs-review retries reevaluate unresolved occurrences against current evidence, retain accepted IDs, and append retry audit. Stable provider IDs remain scoped to institution/account. Composite similarity alone routes to review, including a single apparent candidate; repeated occurrences within a file retain their multiplicity.
+
+Explicit review can confirm the same activity, preserve a separate activity, or reject a row with retained evidence. A missing Fidelity currency can be explicitly supplied with rationale only when that is the sole validation issue. Reversing that decision returns the unchanged original evidence to missing-currency review so it can be resolved again. Original source fields remain unchanged. This cannot bypass an invalid date, amount, row width, or other malformed evidence.
+
+Category correction changes the selected activity's effective category and records an inspectable prospective rule. Its exact key includes account, institution, currency, normalized description, and source action. Already-imported peers are explicitly excluded. Empty descriptions disable prospective matching rather than creating a broad rule. Later explicit overrides win.
+
+Bank corrections preserve the original activity and apply an evidenced exact amount to its effective reporting period. Refund links require distinct records, a same-currency spending target and supporting evidence. Their effective category follows the linked purchase, including an auditable correction to that purchase, unless a later explicit refund-category correction overrides it. Original records remain unchanged; partial refunds reduce spending in their posting period. An optional `confirmedPostedDate` on the refund-link event records explicit posting-date evidence without changing the original activity, and cannot conflict with an existing known posting date. A refund without an evidenced `postedDate` is excluded with `missing-refund-posted-date`; its source activity date is not substituted for a posting date. Unmatched refunds need explicit classification/category treatment and remain qualified. Unsupported reversals, unknown lifecycle and unclassified investment activity are not silently assigned reporting meaning.
+
+Readouts use exact decimal arithmetic. Pending activity is excluded from finalized subtotals; unknown lifecycle, currency, amounts and classification have explicit exclusions. Cash subtotals cover explicitly classified external movement in checking/savings accounts, separate from credit-card liabilities. These are scoped known subtotals, not complete financial statements.
+
+## Tested provider variants
+
+The fixtures and adapter tests cover UTF-8 with optional BOM, comma-delimited fields, quoting and escaped quotes, multiline fields, line endings, exact ordered headers, optional Wells Fargo check-number and SoFi current-balance columns, and Fidelity's observed 18-column shape. Numeric grammar is a signed decimal string; unsupported grouping/symbols/precision are retained as errors rather than rounded or guessed.
+
+Wells Fargo's documented US date form and the existing invented ISO fixture variant are recognized. SoFi uses the documented ISO form. Fidelity preserves run and settlement dates separately. Only the exact invented Fidelity explanatory footer is ignored; unknown nonblank footer-like text remains rejected evidence. Missing currency or lifecycle is not inferred from provider name. These are synthetic-tested variants, not validation of every original provider export.
+
+## Verification
+
+### Assisted live acceptance
+
+Open [PR28 assisted acceptance](../prototype/pr28-testing.html). Confirm the deployed SHA and browser, connect a fresh empty synthetic Drive folder, then press **Run live checks**. That button authorizes the fixed invented recipe and its synthetic saves. It supplies account mappings, declared coverage, classifications and evidence, checks actual canonical save/reopen, verifies portable history in memory, revalidates the existing session, and verifies release. No console, manual calculations or repeated entry of invented fields is required. No recipe runs on page load.
+
+The runner uses the same workbench, canonical functions, `CanonicalLedgerStore`, and PR25 catalog lifecycle. It is not another financial or persistence engine. A module-only exclusive lease disables manual operations while it runs. The gate checks a clean writable session and the actual verified writable base: synthetic, revision zero, empty full snapshot and no pending catalog finalization. An empty canonical collection alone is insufficient. Dashboard-only, populated, partial and unsupported copies are not reset or overwritten.
+
+There are 25 fixed live assertions. The first 24 include:
+
+- Explicit account and coverage gates; source evidence and both identical-looking coffee purchases.
+- Exact classifications, repeated imports and repeated commands without duplicate effects.
+- Unresolved retry evidence, keep-separate, append-only reversal with retained inactive history, match and malformed-row rejection.
+- A missing refund posting-date probe discarded by independent reopen, an evidenced February refund, amount correction, prospective coffee category rule, refund category inheritance and explicit override.
+- Separate Wells Fargo and SoFi imports and both Fidelity accounts. Missing Fidelity currency is explicitly resolved, reversed and resolved again; blank original source currency and unknown lifecycle are preserved.
+- Three real saved checkpoints and independent reopen comparisons of the complete graph; immutable-account rewrite refusal without a transaction; retained-history export and verification in memory; existing-session revalidation and verified release.
+
+The last assertion needs the human to reconnect through Google and choose the same folder. **Verify saved run after reconnect** then compares its copy identity and full saved graph against memory from this tab's completed run. It does not accept another copy, guess identity from record counts, or start another import. This comparison is intentionally unavailable after reload. An exported archive stays in memory and is not downloaded or included in the report; this check does not claim a real backup or restore to another folder.
+
+The final graph contains 5 accounts, 7 imports, 15 observations, 15 activities, 15 events and 8 review decisions. Two activities are retained inactive history. The original checking account has January spending `106.00`, February spending `-40.00`, combined spending `66.00` and income `1000.00`. Across all accounts, January through March known spending is `101.75` and income is `2250.37`. All results remain incomplete; pending and unknown lifecycle activity stays excluded. These counts differ from the earlier manual recipe because the runner also saves reversal and provider scenarios.
+
+**Stop after current operation** waits for the admitted operation to finish or fail, then starts no further step. Failed or stopped runs retain completed statuses and never retry a write automatically, erase records, reclaim a stale session or infer that a save succeeded. Inspect via the existing reconnect/recovery/reopen controls. Use a new empty synthetic folder for a new complete run. A double-click cannot acquire another workbench lease. A reset clears only recorded evidence and the in-memory comparison, never the ledger or session.
+
+The main human checklist has four items: device and Google connection confirmation, touch/keyboard/layout and OAuth cancellation, one whole-tab interruption rehearsal, and actual new-folder backup/restore. The old deterministic import recipe no longer needs duplicate manual sign-off. Each selected step shows its actions, connection controls, folder role and adjacent outcome. The workbench and generic interruption control remain available under Advanced.
+
+For interruption, connect a separate fresh empty synthetic folder. **Prepare baseline and one change** saves and independently reopens four invented rows, then stages one classification. **Save and pause this prepared test** checks the in-memory receipt against the exact graph and physical copy before pausing after its first durable mutation. Close the whole tab, reconnect to that folder, and use recovery controls only when offered. **Verify recovery and finish one retry** reconstructs this version's deterministic invented recipe and compares every recovered record. It saves the single missing classification only if the complete baseline is present; an already complete classification is verified without another save. The final full graph has exactly one audit event and incomplete January spending of `100.00`. Older, modified or unrelated fixtures are refused without a new financial write. Preparation, pause and verification show their own phases and timings; pause time stops at PAUSED, not when the owner later returns. These machine assertions do not prove whole-tab closure or mark the human observation passed. This is one live boundary, not every crash boundary or proof of iOS process termination.
+
+The workbench shows staging success or failure beside the action, the selected activity, and audit events not yet saved compared with the verified saved baseline. An unchanged repeated click cannot append an event accidentally. An explicitly confirmed intentional repeat remains possible; the financial event API and append-only history are unchanged. Successful verified load replaces an earlier stale error message.
+
+For backup/restore, release the current session and open [the guided copy page](../prototype/pr25-acceptance.html?guide=pr28). Choose the existing completed synthetic source, not the interruption folder. The page verifies it without initializing an empty source. It creates a backup in a fresh destination, releases that session, independently reopens through a new session, compares the exact manifest and retained logical objects with the selected source, then releases again. Export verifies the archive and releases the source before requesting the download. The owner must save and select the actual local file; an in-memory export or a download request cannot pass that file roundtrip. Restore uses another fresh destination and repeats the independent reopen/comparison/release checks. Intentional source corrections are included; the guide does not require a fixed 15-event count. It supports canonical synthetic fixtures without separately retained original files, refusing those unsupported sources before copying. The legacy original-file tools remain separate.
+
+Copy, independent reopen, export, selected local file, restore and release have separate visible outcomes. Phase/count/time feedback appears beside the active step, with completed operation durations retained for screenshots. Copy and independent reopen share one explicitly labeled duration. No action starts on load; folder/file pickers, Google consent, whole-tab closure and stale-session confirmation remain human actions. Interrupted or uncertain destinations are preserved. A generic copy failure is not proof of a durable quarantine marker. Failed session release blocks completion, and a retry uses a fresh destination after resolving ownership. The guide keeps comparison data only in memory and does not persist IDs, archives or ledger contents.
+
+**Verified locally for the streamlined guides at `626ec025c5c02d73cbc6003c35932f47b128a65e`, November 8, 2026:** the complete Node 24.22.1 and Node 26.13.0 suites each passed 679/679 tests, with no failures or skips. Module syntax, unique HTML IDs and diff checks passed. The UX and storage reviews at that stage found no remaining blocker. Actual-handler tests use the real session/catalog APIs and HTTP adapter simulation, including the completed source with a 16th intentional category correction, cancelled selections, changed source or copy manifests, failed/uncertain releases, server-rejected authorization, and page interruption during a pending source claim or stale recovery. The interruption helper tests exact baseline/committed recovery and single retry, refusal of modified or older fixtures, and no extra write on repeated verification. These automated results do not establish browser or live Drive acceptance. The later owner retests are recorded below. The 679-test result predates the final correctness follow-up and does not validate its changes.
+
+The 13 bundled fixture checks remain available without Google. Their in-memory results, live programmatic assertions and tester selections are separate. The report allows only fixed check IDs/statuses, date, browser label, an explicitly confirmed full source SHA, and sanitized aggregate request metrics. It excludes ledger contents, account/folder/file IDs, provider error bodies, credentials, URLs and free text. Same-source, same-tab reload restores sanitized evidence as **historical**; it never resumes a run or claims a newly connected folder was tested. Unknown or changed source stamps cannot restore evidence. Copying does not send a report.
+
+The [storage performance follow-up](PR28_STORAGE_PERFORMANCE.md) records the measured synthetic request baseline, optimizations, request-counter privacy boundaries, and regression requirements. Request counts and elapsed time explain the work performed; they do not replace any acceptance assertion or prove live browser performance.
+
+Live result rows show a compact status and duration, such as `Passed in 12 seconds`, for screenshots. The active run total excludes connection/setup and idle time between reconnect attempts. Each live phase measures its complete operation, including any save and reopen within that check. Repeated same-copy reconnect attempts show cumulative check time rather than claiming a separate duration for the last successful attempt. Detailed request counts remain available below the compact results and in the sanitized report.
+
+The 13 local fixture assertions share one recipe and common setup. Their timing is measured once around that run, including fixture loading, and is explicitly labeled shared rather than 13 independent durations. Missing or historical timings are unmeasured, never invented as zero. Timings stay in memory; reloading restores only the existing sanitized historical statuses.
+
+**Verified locally for timing and bounded review, November 7, 2026:** the complete Node 24.22.1 and Node 26.13.0 suites each passed 599/599 tests, with no failures or skips. Syntax, diff checks and independent reviews passed. Activity/validation lookups use call-local indexes; review items and match choices are paginated without changing financial decisions or audit history. See the performance record for measured CPU and DOM results. Real browser rendering, Safari touch behavior and live Drive elapsed time were **Open** at this checkpoint. Local Chromium could not start in this workspace, so this local record claims no browser screenshots or device passes. Later owner observations are recorded separately below.
+
+The public Pages URL can serve a different branch after another deployment. Confirm its source stamp against the intended commit. A missing stamp remains unverified. CI, deployment, programmatic acceptance and human acceptance are distinct.
+
+**User-confirmed, November 6, 2026:** the owner reported 13/13 local fixture checks passing in Safari on iPhone, and successful connection to and release of a fresh synthetic folder on the earlier guided deployment. This report did not include canonical live saves, the former manual recipe, interruption, backup/restore or other browser checks. This evidence is not a pass for this new runner.
+
+**Verified locally for the assisted runner, November 6, 2026:** the complete Node 24.22.1 and Node 26.13.0 suites each passed 427 tests with no failures or skips. Syntax and diff checks passed. An actual-handler DOM simulation used the real application lifecycle, catalog transaction engine and invented in-memory Drive adapter. It passed 24 assertions, then the 25th after reconnect, and checked safe release, nonempty-folder refusal, reset, and separate local/manual results. A second simulation verified that a repeated start cannot overlap, Stop lets one admitted checkpoint finish, and later steps remain unrun. These are not live Google Drive, OAuth or device results.
+
+**Verified locally for the earlier guided page, November 6, 2026:** the complete Node 24.22.1 and Node 26.13.0 suites each passed 410 tests. A DOM simulation exercised the prior guide/workbench recipe with a qualified combined subtotal of `66.00`, source-scoped restore, clipboard fallback, reset without financial changes, and one interrupted in-memory catalog mutation. These are historical engineering checks, not new-run live Drive or Safari acceptance.
+
+### Owner testing lessons, November 8, 2026
+
+**User-confirmed on deployed source `70728162c4c20918c152a08a90856f2e0328dbfa`:** the completed testing session exposed workflow problems alongside the remaining Drive cost. The results below distinguish successful observations from deviations and unverified conditions.
+
+- The interruption preparation control was difficult to find. The guide's jump link led to save controls rather than the separate preparation button.
+- Staging confirmation appeared below another section instead of beside the action. Uncertainty led to two explicit classification clicks and two retained audit events. Identical classifications of one activity do not double its spending amount, but the two-event result differs from the rehearsal's single-event criterion.
+- Long backup operations offered no visible phase or elapsed-time feedback. The owner could not tell what remained while waiting.
+- The transition from the completed live-run source to the separate interruption folder, backup destination and restored copy was confusing. The interface did not make clear that backup testing reuses the completed source without rerunning the full live recipe.
+- As controls multiply, the owner wants understandable menus and clear, fluid action sequences rather than more disconnected test controls.
+
+**Follow-up criteria from the testing session:**
+
+- Put the required next action and its prerequisites beside each guided step. Show the current folder's role and whether its state is suitable for that action.
+- Show staging confirmation and the resulting pending-change count beside the staging control. Make accidental repeat actions apparent while preserving intentional corrections and append-only history.
+- Guide backup and restore through source selection, separate fresh destinations, verified release and independent reopen. Keep the distinction between the completed source and the disposable interruption folder visible throughout.
+- Keep long-operation progress and final outcomes visible. Object-count completion must remain distinct from verified, usable copy completion.
+- Continue measuring and reducing Drive work. The local bounded-copy change overlaps requests but does not reduce their number. Save granularity, journal volume and repeated retained-history reads still need careful performance work with integrity, recovery and ownership checks preserved.
+
+**Implemented and verified locally before publication:** the backup follow-up added phase, checked-object count and elapsed-time feedback to the PR25 page, plus bounded independent copy operations. Its complete Node suites passed 627/627 on both supported versions. See [the measured cost, safeguards and remaining limits](PR28_STORAGE_PERFORMANCE.md#backup-and-portable-restore). The owner finished the prior testing session and authorized publication. Live device/Drive retesting was still open at that checkpoint. The later bounded guide results appear below; they do not establish a full device matrix or broader product-navigation acceptance.
+
+### Owner acceptance observations, November 8, 2026
+
+**User-confirmed source:** `70728162c4c20918c152a08a90856f2e0328dbfa`. These observations concern invented fixtures only and predate the bounded-copy/progress changes.
+
+- **Verified from the supplied result screenshots and live report:** all 25 live assertions, including same-copy reconnect, passed. All 13 local fixture assertions passed in one shared run. The live report recorded 5,294 completed requests, no requests left in flight, no rejected requests, and 938.5 seconds of active run time. These results do not cover the separate manual checks.
+- **User-confirmed manual check 2:** touch, keyboard, orientation, pinch zoom, folder-selection cancellation and reconnect worked on the owner's devices. This is not a browser/device compatibility matrix or a rendered check of the later progress panel.
+- **User-confirmed manual check 3, with a recipe deviation:** after closing the paused tab and recovering the stopped session, independent reopen showed the prior checkpoint: one account, one import, four observations, four activities and zero audit events. The owner then explicitly staged the same classification twice, saved and reopened two events. Known spending remained `100.00`, labeled incomplete. This supports rollback and subsequent save/reopen, but does not meet the recipe's strict single-event result. The two explicit actions are retained history, not an automatically duplicated transaction.
+- **User-confirmed manual check 4, with an intentional fixture change:** both the Drive backup and the separately restored copy reopened with five accounts, seven imports, 15 observations, 15 activities, 16 audit events and eight review decisions. Known income was `2250.37`, spending `101.75` and cash flow `2148.62`, labeled incomplete with three exclusions. The 16th event was a later intentional category correction to Food, after the 15 automated events. Backup does not add a financial audit event. These observations support the tested copies and explain the deviation from the untouched recipe's 15-event expectation; matching counts and subtotals alone are not proof of byte-for-byte graph equality.
+- **User-confirmed interruption during the first restore:** the iPad slept and the application reported the copy quarantined. A durable quarantine marker was not independently confirmed. The owner retried into a new empty synthetic folder and successfully reopened that restored copy. The first destination's state remains unverified; neither the error message nor the successful new copy establishes that destination's usability or durable quarantine state.
+
+The targeted follow-up reused the preserved completed synthetic source, not the separate interruption folder. The changed copy guide and interruption feedback did not require rerunning the complete 25-check source recipe solely to prepare these retests. The original 25 live and 13 fixture results remain evidence for `70728162`, not a full rerun on `626ec025`.
+
+### Owner guide retests on `626ec025`, November 8, 2026
+
+**Verified deployment evidence:** the manual Pages workflow run [42446429754](https://github.com/aerovega/finance-tracker/actions/runs/42446429754) succeeded for `626ec025c5c02d73cbc6003c35932f47b128a65e`. The public `js/build-info.js` contained that full source SHA. This establishes the deployment checked for the session; the supplied result screenshots do not themselves show the build footer.
+
+**User-confirmed guided backup and portable restore:** the owner reported that the full test passed. The final screenshot omits source/backup steps 1 and 2 and the footer counts, so those portions are supported by the owner's report rather than visible results in that image. The visible completed outcomes establish the narrower checks below:
+
+- **Verified from the supplied screenshot:** portable export completed its integrity and source verification before requesting a download, with a displayed duration of 21 seconds. The owner then selected the actual saved file. Its comparison passed against the export and source in less than one second. This is saved-file roundtrip evidence, not just an in-memory export or download request.
+- **Verified from the supplied screenshot:** restore created a distinct copy, verified it and released its session. A new session then independently reopened the copy, matched the exact archive and source history, and released again. The shared restore/reopen duration was 3 minutes 21 seconds, including folder-picker wait. The source was released. An earlier screenshot showing 102 of 226 objects in progress is superseded by this completed result, not an additional completed run.
+
+**User-confirmed whole-tab canonical-save interruption:** the owner reported completing the rehearsal and selected **Passed by me**. **Verified from the supplied screenshot:** recovery found the exact baseline, saved the missing classification once, independently reopened it, and verified the full graph with exactly one audit event and January known spending of `100.00`, still labeled incomplete. The combined verification, retry and reopen took 1 minute 28 seconds. The owner subsequently confirmed releasing the session. This meets the one-event criterion for this rehearsal, unlike the earlier two-click result. It covers one deliberately paused save boundary, not every crash boundary or iOS process-termination path.
+
+**Unverified follow-up coverage:** the planned bounded manual checks and changed-path completion retests are complete. Broader cross-device layout, touch/keyboard, orientation, native leave-warning and cancellation coverage is not established for the changed controls; these are follow-up limits, not new mandatory acceptance gates. The earlier manual device results remain tied to `70728162`. Automated failure tests cover interrupted copy/restore, but the older live sleep incident does not prove a durable quarantine marker. Another live disposable-destination rehearsal is optional unless the owner or final review requires it. Preserve any failed destination and retry only into a fresh one after resolving ownership.
+
+### Corrected overlap reconciliation
+
+Overlap review considers original and accepted source evidence for active activities, plus their actual correction and lifecycle history. Candidates are deduplicated by activity ID. Composite similarity opens review and never establishes an automatic match. Rejected, unresolved and inactive evidence cannot supply candidates.
+
+An explicit Match to retained historical evidence preserves the current corrected values and existing events. Mathematically equivalent exact decimal spellings compare equally without rewriting source text. Source-ID matching and lifecycle behavior, storage format and recovery protocols are unchanged.
+
+**Verified locally in final independent review, November 8, 2026:** the corrected bundled-market overlap, retries, historical Match, correction history and reversal passed. The review also checked mathematically equivalent decimal spellings and true differences for CHF, AUD and large USD amounts. No remaining code blocker was found.
+
+**Verified locally after the final correction, November 8, 2026:** the complete suites passed 694/694 tests on both Node 24.22.1 and Node 26.13.0, with no failures, cancellations or skips. Syntax checks for all source and test modules and `git diff --check` passed.
+
+**Open:** remote CI must still pass for the exact published head. The owner's merge decision remains separate. The bounded live evidence remains tied to `70728162` and `626ec025`; no new live test of this correction is claimed. Local validation and independent review do not establish production readiness.
+
+### Efficient verified canonical reopen
+
+Canonical reopen now uses the lifecycle's pinned verified-snapshot reader when available. It verifies retained catalog history once for the operation, copies the selected object bytes, then rechecks the exact manifest and session ownership. It does not retain a cross-operation cache or change the transaction engine, recovery protocol or checksums. Older test drivers keep the original reader fallback. This avoids re-reading all retained history separately for every canonical record during live acceptance. `canonical-snapshot-read.test.mjs` covers changed manifests, changed ownership and detached returned bytes. Existing canonical storage tests cover the fallback reader.
+
+### Automated and live verification
+
+Run `node --test tests/*.test.mjs` and syntax checks for the new application/browser modules. The existing CI uses Node 26. The development workspace provides Node 24.22.1; Node 26.13.0 is also available for CI-equivalent local checks. Local results and remote CI evidence must be reported separately.
+
+The canonical integration tests run the actual catalog transaction engine through every durable mutation exercised by the multi-record payload, then recover and compare complete record graphs. They also export and restore through the existing portable backup APIs, preserving logical identity/history with new physical locators. The shared `validateSyntheticApplicationSnapshot` composes the canonical and existing dashboard validators, rejects unknown paths, and is wired into the PR25 browser backup, export, and restore handlers. Tests cover retained dashboard/canonical coexistence and complete decision, reversal, rule, correction, and refund history. Existing storage/session tests continue to run unchanged.
+
+A local DOM simulation may exercise the actual workbench handlers, financial modules and catalog engine against invented in-memory Drive data. Such a simulation is not a browser-layout, Safari/device, OAuth or live Drive acceptance test. Record those results separately.
+
+Use the assisted runner above for deterministic live acceptance. Its programmatic pipeline does not replace workbench-control regression tests, browser layout checks, actual offline/online transitions, OAuth cancellation, whole-tab interruption or new-folder restore. Review those separately on the target devices. Deployment and production activation still require their separate authorization.
+
+### Implementation verification recorded November 6, 2026
+
+This is the historical implementation checkpoint. Its open live checks were subsequently tested only to the extent described in the later owner records above.
+
+- **Verified locally:** Node 24.22.1 and Node 26.13.0 each ran the complete suite, 397 tests passed, no failures or skips. Syntax checks passed for the application, parser, reconciliation, storage, shared backup validator, and affected browser modules. `git diff --check` passed.
+- **Verified with the existing catalog engine:** 38 interrupted-write boundaries recover a whole import or its prior state. Save/reopen and portable restore preserve a graph containing retry history, keep/match/reject/reversal decisions, a prospective category rule, an amount correction, and a refund with explicit posting evidence. Dashboard/canonical coexistence passes export and restore.
+- **Verified in a DOM simulation:** actual workbench handlers complete map, review, classify, save, reopen, and partial-refund linking using invented in-memory Drive data. The known spending subtotal is exactly `70.00`, labeled incomplete. Changing the fixture, failing a preview, and receiving an obsolete asynchronous preview cannot stage old source data.
+- **Open:** real browser layout, keyboard/touch and Safari/device acceptance, interactive OAuth, and live synthetic Drive operation. Browser execution was unavailable in the implementation workspace; the DOM simulation does not replace these checks. Original provider exports and production data were not used.
+- **Open:** remote CI and owner review must be checked against the published implementation head. Local test results do not establish merge or production readiness.

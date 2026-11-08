@@ -67,11 +67,75 @@ test("needs-review prior run does not suppress retry of the identical file", () 
   assert.equal(result.activities.length, 1);
 });
 
-test("overlapping import with one unique composite candidate attaches provenance instead of duplicating", () => {
+test("overlapping import with one unique composite candidate requires corroboration", () => {
   const result = reconcileImport({ ...base, rows: [row()], existingActivities: [activity()] });
-  assert.equal(result.counts.matched, 1);
+  assert.equal(result.counts.review, 1);
   assert.equal(result.activities.length, 0);
-  assert.equal(result.observations[0].activityId, "activity-1");
+  assert.equal(result.observations[0].activityId, null);
+});
+
+test("historical composite evidence deduplicates canonical IDs without matching automatically", () => {
+  const current = activity({ amountMinor: -2000 });
+  const evidence = [activity(), activity(), current];
+  const one = reconcileImport({ ...base, rows: [row(), row({ rowOrdinal: 2 })],
+    existingActivities: [current], existingCompositeEvidence: evidence });
+  assert.equal(one.counts.review, 2);
+  assert.equal(one.counts.created, 0);
+  assert.equal(one.counts.matched, 0);
+  assert.ok(one.observations.every(o => o.reasonCode === "insufficient-composite-evidence" && o.activityId === null));
+  const two = reconcileImport({ ...base, rows: [row()],
+    existingActivities: [current, activity({ activityId: "activity-2", amountMinor: -1900 })],
+    existingCompositeEvidence: [...evidence, activity({ activityId: "activity-2" })] });
+  assert.equal(two.observations[0].reasonCode, "ambiguous-composite-match");
+});
+
+test("historical evidence cannot revive inactive IDs or cross institution, account or currency", () => {
+  for (const existingActivities of [[], [activity({ activityId: "another-id" })],
+    [activity({ institutionId: "wells-fargo" })], [activity({ accountId: "other-account" })],
+    [activity({ currency: "EUR" })]]) {
+    // A current matching record is excluded so only the supplied historical
+    // evidence could influence this incoming row.
+    const result = reconcileImport({ ...base, rows: [row()],
+      existingActivities: existingActivities.map(a => ({ ...a, amountMinor: -2000 })),
+      existingCompositeEvidence: [activity()] });
+    assert.equal(result.counts.created, 1);
+    assert.equal(result.counts.review, 0);
+  }
+});
+
+test("historical composites do not override current source-ID conflicts or reversal amounts", () => {
+  const context = { ...base, existingActivities: [activity({ amountMinor: -2000 })],
+    existingCompositeEvidence: [activity()], existingObservations: [{
+      accountId: "acct-1", sourceRecordId: "known-id", activityId: "activity-1", disposition: "created",
+    }] };
+  const conflict = reconcileImport({ ...context, rows: [row({ sourceRecordId: "known-id" })] });
+  assert.equal(conflict.observations[0].reasonCode, "source-id-conflict");
+  const matched = reconcileImport({ ...context, rows: [row({ sourceRecordId: "known-id", amountMinor: -2000 })] });
+  assert.equal(matched.counts.matched, 1);
+  const distinctId = reconcileImport({ ...context, rows: [row({ sourceRecordId: "different-id" })] });
+  assert.equal(distinctId.counts.created, 1);
+  const reversal = reconcileImport({ ...context, rows: [row({ reversalOfActivityId: "activity-1", amountMinor: 2341 })] });
+  assert.equal(reversal.observations[0].reasonCode, "invalid-reversal-amount");
+  assert.deepEqual(reversal.events, []);
+});
+
+test("composites compare exact signed decimal values across source and correction scales", () => {
+  for (const [currency, amountDecimal, incoming] of [
+    ["CHF", "-90.00", "-90"], ["AUD", "-90.000", "-90.0"],
+    ["USD", "-90071992547409.9300", "-90071992547409.93"],
+  ]) {
+    const existing = activity({ currency, amountMinor: null, amountDecimal });
+    const candidate = row({ currency, amountMinor: null, amountDecimal: incoming });
+    const result = reconcileImport({ ...base, rows: [candidate], existingActivities: [existing] });
+    assert.equal(result.counts.review, 1);
+    assert.equal(result.observations[0].reasonCode, "insufficient-composite-evidence");
+    assert.equal(existing.amountDecimal, amountDecimal);
+    const opposite = reconcileImport({ ...base, rows: [{ ...candidate, amountDecimal: incoming.slice(1) }], existingActivities: [existing] });
+    assert.equal(opposite.counts.created, 1);
+  }
+  const nonmonetary = reconcileImport({ ...base, rows: [row({ amountMinor: null, amountDecimal: null })],
+    existingActivities: [activity({ amountMinor: null, amountDecimal: null })] });
+  assert.equal(nonmonetary.counts.review, 1);
 });
 
 test("same-day same-amount same-description collision with multiple candidates requires review", () => {
@@ -175,8 +239,8 @@ test("valid empty file succeeds with every data-row count zero and unknown cover
 });
 
 test("re-execution of the pure reconciliation function is deterministic and has no external side effects", () => {
-  const first = reconcileImport({ ...base, rows: [row()] });
-  const retry = reconcileImport({ ...base, rows: [row()] });
+  const first = reconcileImport({ ...base, rows: [row()], idFactory: () => "test-id" });
+  const retry = reconcileImport({ ...base, rows: [row()], idFactory: () => "test-id" });
   assert.deepEqual(retry, first);
   assert.equal(retry.activities.length, 1);
 });

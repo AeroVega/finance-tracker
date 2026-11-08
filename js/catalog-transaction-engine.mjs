@@ -1,7 +1,7 @@
 import { DriveTransactionEngine, DriveTransactionError } from "./drive-transaction-engine.mjs";
 import { canonicalizeJcs, createJournalEvent, verifyJournal } from "./transaction-protocol.mjs";
 import { createLocatorCatalog, resolveLocator } from "./drive-locator-catalog.mjs";
-import { encode, hashRaw, writeVerified, readVerified, writeCatalog, verifyCatalogHistory, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
+import { encode, hashRaw, writeVerified, readVerified, mapImmutableReads, writeCatalog, verifyCatalogHistory, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
 
 const equal = (a, b) => canonicalizeJcs(a) === canonicalizeJcs(b);
 
@@ -40,11 +40,13 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
       await this.guard();
       // Folder enumeration catches even a start event created by a prior page
       // which died before publishing any new catalog pointer.
-      await this.recoverInternal({ manifestFileId });
+      const recovered = await this.recoverInternal({ manifestFileId });
       const current = await this.adapter.readJson(manifestFileId);
-      if (!equal(current, expectedBase)) throw storageError("base-conflict", "The transaction requires the exact verified base manifest.");
+      if (!equal(current, expectedBase) || !equal(current, recovered.manifest)) throw storageError("base-conflict", "The transaction requires the exact verified base manifest.");
       if (current.role !== "primary") throw storageError("read-only-copy", "Backup copies cannot accept transactions.");
-      const { catalog } = await verifyCatalogHistory(this.adapter, current, this.crypto);
+      // Recovery just verified this complete history after all repair writes.
+      // Reuse it only inside this operation and after the exact manifest check.
+      const { catalog } = recovered.verified;
       if (!Array.isArray(objects) || !objects.length) throw storageError("invalid-transaction", "Changed objects are required.");
       const paths = new Set();
       const planned = [];
@@ -133,11 +135,26 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
     const files = await this.adapter.listChildren();
     const groups = new Map();
     const additions = [];
-    for (const file of files.filter((item) => item.appProperties?.financeTrackerKind === "journal-event")) {
-      const bytes = await readVerified(this.adapter, { fileId: file.id, sha256: file.appProperties.financeTrackerHash,
-        kind: "journal-event", transactionId: file.appProperties.financeTrackerTransaction }, this.crypto);
+    const indexedJournals = new Map(Object.entries(verified.catalog.entries)
+      .filter(([, entry]) => entry.kind === "journal-event").map(([key, entry]) => [entry.fileId, { key, entry }]));
+    const journals = await mapImmutableReads(files.filter((item) => item.appProperties?.financeTrackerKind === "journal-event"), async (file) => {
+      const indexed = indexedJournals.get(file.id);
+      // Enumeration remains mandatory to find unindexed crash evidence. Only
+      // the identical binding can reuse bytes from this recovery's full scan.
+      const reusable = indexed && indexed.entry.sha256 === file.appProperties.financeTrackerHash &&
+        indexed.entry.transactionId === file.appProperties.financeTrackerTransaction &&
+        file.trashed !== true && file.parents?.includes(this.adapter.folderId);
+      const bytes = reusable ? verified.objects.get(indexed.key) : await readVerified(this.adapter,
+        { fileId: file.id, sha256: file.appProperties.financeTrackerHash, kind: "journal-event",
+          transactionId: file.appProperties.financeTrackerTransaction }, this.crypto);
       const event = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      if (event.transactionId !== file.appProperties.financeTrackerTransaction) throw storageError("journal-identity-mismatch", "Journal identity does not match Drive metadata.");
+      if (event.transactionId !== file.appProperties.financeTrackerTransaction ||
+          (reusable && (event.eventId !== indexed.entry.identity || event.sequence !== indexed.entry.sequence))) {
+        throw storageError("journal-identity-mismatch", "Journal identity does not match Drive metadata or its retained locator.");
+      }
+      return { file, event };
+    });
+    for (const { file, event } of journals) {
       if (!groups.has(event.transactionId)) groups.set(event.transactionId, []);
       groups.get(event.transactionId).push({ event, location: { kind: "journal-event", identity: event.eventId,
         transactionId: event.transactionId, sequence: event.sequence, fileId: file.id, sha256: file.appProperties.financeTrackerHash } });
@@ -247,8 +264,11 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
     // Existing identities must also agree in file ID, hash and journal binding;
     // createLocatorCatalog rejects a duplicate/rebound enumeration result.
     manifest = await this.finalize(manifestFileId, manifest, verified.catalog, additions);
-    await verifyCatalogHistory(this.adapter, manifest, this.crypto);
+    verified = await verifyCatalogHistory(this.adapter, manifest, this.crypto);
+    if (!equal(await this.adapter.readJson(manifestFileId), manifest)) {
+      throw storageError("base-conflict", "The manifest changed while recovery verified retained history.");
+    }
     this.recoveryRequired = false;
-    return { manifest, transactions: outcomes };
+    return { manifest, transactions: outcomes, verified };
   }
 }
