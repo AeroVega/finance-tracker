@@ -140,14 +140,6 @@ export function reconcileImport({
   const events = [];
   const counts = { rowsSeen: rows.length, rowsRecognized: 0, created: 0, matched: 0, review: 0, rejected: 0, ignored: 0 };
   let coverageStart = null, coverageEnd = null;
-  // The caller supplies retained accepted evidence for review only. Never let
-  // historical records revive an inactive ID or cross its account/currency.
-  const activeById = new Map(existingActivities.map(activity => [activity.activityId, activity]));
-  const compositeEvidence = [...existingActivities, ...existingCompositeEvidence.filter(evidence => {
-    const active = activeById.get(evidence.activityId);
-    return active && active.institutionId === evidence.institutionId &&
-      active.accountId === evidence.accountId && active.currency === evidence.currency;
-  })];
   // Repeated provider IDs with contradictory monetary identity in one input file
   // are not resolved by row order. Keep every conflicting occurrence for review.
   const sourceIdRows = new Map();
@@ -172,21 +164,24 @@ export function reconcileImport({
     }
   }
 
-  // Array.find uses the first duplicate ID, unlike the last-wins active
-  // evidence map above. Keep both semantics explicitly.
+  // Array.find uses the first duplicate ID. Keep existing and new records
+  // separate so reversal lookup never includes a row created in this import.
+  const requestedSourceIds = new Set(rows.filter(row => row && row.sourceRecordId && !row.reversalOfActivityId).map(row => row.sourceRecordId));
   const firstActivityById = new Map();
-  for (const activity of existingActivities) {
-    if (!firstActivityById.has(activity.activityId)) firstActivityById.set(activity.activityId, activity);
+  if (requestedSourceIds.size || rows.some(row => row?.reversalOfActivityId)) {
+    for (const activity of existingActivities) {
+      if (!firstActivityById.has(activity.activityId)) firstActivityById.set(activity.activityId, activity);
+    }
   }
-  const existingFirstActivityById = new Map(firstActivityById);
+  const createdActivityById = new Map();
   const sourceActivities = new Map();
   const indexObservation = (observation) => {
-    if (observation.accountId !== accountId || !observation.activityId) return;
+    if (observation.accountId !== accountId || !observation.activityId || !requestedSourceIds.has(observation.sourceRecordId)) return;
     let candidates = sourceActivities.get(observation.sourceRecordId);
     if (!candidates) sourceActivities.set(observation.sourceRecordId, candidates = new Set());
     candidates.add(observation.activityId);
   };
-  for (const observation of existingObservations) indexObservation(observation);
+  if (requestedSourceIds.size) for (const observation of existingObservations) indexObservation(observation);
   const transitions = new Map();
   const workingActivity = (activity) => transitions.has(activity.activityId)
     ? { ...activity, ...transitions.get(activity.activityId) } : activity;
@@ -250,6 +245,14 @@ export function reconcileImport({
   const getCompositeIndex = () => {
     if (compositeIndex) return;
     compositeIndex = new Map();
+    // Historical accepted evidence remains review-only. Last-wins active IDs
+    // preserve the original evidence validity rule, distinct from Array.find.
+    const activeById = new Map(existingActivities.map(activity => [activity.activityId, activity]));
+    const compositeEvidence = [...existingActivities, ...existingCompositeEvidence.filter(evidence => {
+      const active = activeById.get(evidence.activityId);
+      return active && active.institutionId === evidence.institutionId &&
+        active.accountId === evidence.accountId && active.currency === evidence.currency;
+    })];
     for (const evidence of compositeEvidence) {
       if (evidence.institutionId !== institutionId || evidence.accountId !== accountId) continue;
       const bucket = compositeBucket(evidence, true);
@@ -298,7 +301,7 @@ export function reconcileImport({
     let reasonCode = null;
 
     if (row.reversalOfActivityId) {
-      match = existingFirstActivityById.get(row.reversalOfActivityId) ?? null;
+      match = firstActivityById.get(row.reversalOfActivityId) ?? null;
       if (!match) {
         disposition = "review"; reasonCode = "reversal-target-not-found";
       } else if (match.institutionId !== institutionId || match.accountId !== accountId) {
@@ -319,7 +322,7 @@ export function reconcileImport({
     } else if (row.sourceRecordId) {
       const unique = [];
       for (const id of sourceActivities.get(row.sourceRecordId) ?? []) {
-        const activity = firstActivityById.get(id);
+        const activity = firstActivityById.get(id) ?? createdActivityById.get(id);
         if (activity && activity.institutionId === institutionId && activity.accountId === accountId) {
           unique.push(workingActivity(activity));
           // Only uniqueness matters; two candidates already require review.
@@ -377,7 +380,7 @@ export function reconcileImport({
     if (disposition === "created") {
       activityId = idFactory();
       activities.push({ ...incoming, activityId, processingStatus: "processed" });
-      if (!firstActivityById.has(activityId)) firstActivityById.set(activityId, activities.at(-1));
+      if (!createdActivityById.has(activityId)) createdActivityById.set(activityId, activities.at(-1));
       counts.created++;
     } else if (disposition === "matched") {
       counts.matched++;

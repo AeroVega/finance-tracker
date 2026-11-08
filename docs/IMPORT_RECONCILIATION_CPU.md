@@ -4,8 +4,8 @@
 
 ## Design and correctness
 
-- Source observations are grouped by provider ID within the requested account. Activity IDs stay in first-observation order. IDs resolve when each row runs, including dangling observations that acquire a newly created target during the file.
-- Activity lookup preserves the original first duplicate ID. Historical evidence validity still uses the last duplicate ID, matching the previous implementation. Reversals only see activities that existed before this import.
+- Source observations are grouped by provider ID within the requested account, only for IDs requested by incoming non-reversal rows. Activity IDs stay in first-observation order. IDs resolve when each row runs, including dangling observations that acquire a newly created target during the file.
+- Activity lookup preserves the original first duplicate ID. Existing and created activity maps are separate; composite-only files skip this lookup entirely. Historical evidence validity still uses the last duplicate ID, matching the previous implementation, and is built only for composite queries. Reversals only see activities that existed before this import.
 - A small transition map records the latest pending-to-posted state without replaying every prior event for each row.
 - Composite indexes are built only when a row without a source ID needs them. Nested Map keys include institution, account, currency, date, description and action. They preserve object identity without serializing open-ended fields. Separate raw-money and exact-decimal keys retain money equivalence without floating-point conversion. Each exact bucket deduplicates activity IDs before matching.
 - Every composite candidate still passes the original equality check. Bucket collisions do not establish identity. Historical evidence remains review-only, and new same-file activities do not enter the composite index.
@@ -58,5 +58,15 @@ The benchmark keeps merchant and date identical while varying amounts. The compo
 | ---: | ---: | ---: | ---: |
 | 1,000 | 2524.6 | 15.8 | 159.8x |
 | 10,000 | 32185.4 | 33.5 | 960.8x |
+| 50,000 | 128116.5 | 72.6 | 1764.7x |
 
 A deterministic 50,000-representation operation-count test also passes. These represent a deliberately pathological repeated-history case, not typical imports. The standalone benchmark includes a 50,000-representation scan and can take several minutes.
+
+
+## Match-path-specific setup
+
+**Verified:** A follow-up avoids building unused indexes. Source-only files skip historical composite validation/index construction, and composite-only files skip observation and first-activity lookup construction. Existing and newly created activities have separate maps, so no full existing-map copy is needed for reversal boundaries.
+
+For 50,000 existing activities and 1,000 overlapping source-ID rows, five GC-controlled Node 24.22.1 runs measured median CPU time of 63.1 ms before this setup change and 21.1 ms after. Median heap growth during the call was 36.1 MiB before and 9.4 MiB after. Heap growth is not peak memory, and garbage collection timing affects it.
+
+Composite median CPU time improved from 193.0 to 149.7 ms in the same five-run comparison. Its observed heap growth varied with collection timing and does not support a memory-reduction claim. Complete output equality passed before timing. The focused suite also checks that source matching never reads retained composite evidence and composite matching never reads source observations.

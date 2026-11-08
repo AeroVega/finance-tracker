@@ -139,3 +139,22 @@ test("unrelated retained currency objects are never coerced while indexing", () 
   const currency = { [Symbol.toPrimitive]() { throw new Error("must-not-coerce"); } };
   compare({ existingActivities: [activity({ currency })], rows: [row()] });
 });
+test("import setup touches only evidence needed by the selected match paths", () => {
+  let historicalReads = 0, observationReads = 0;
+  const existingActivities = [activity()];
+  const existingCompositeEvidence = [new Proxy(activity(), {
+    get(target, key) { historicalReads++; return target[key]; },
+  })];
+  const existingObservations = [new Proxy({ accountId: "account", activityId: "a", sourceRecordId: "source" }, {
+    get(target, key) { observationReads++; return target[key]; },
+  })];
+  const source = reconcileImport({ ...base, existingActivities, existingCompositeEvidence, existingObservations,
+    rows: [row({ sourceRecordId: "source" })] });
+  assert.equal(source.counts.matched, 1);
+  assert.equal(historicalReads, 0);
+  observationReads = 0;
+  const composite = reconcileImport({ ...base, existingActivities, existingCompositeEvidence, existingObservations,
+    rows: [row()] });
+  assert.equal(composite.counts.review, 1);
+  assert.equal(observationReads, 0);
+});
