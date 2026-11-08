@@ -146,6 +146,56 @@ test("saved source evidence, activities, and audit events cannot be removed or r
   assert.throws(() => serializeCanonicalLedger(production));
 });
 
+test("corrected source overlaps remain reviewable and preserve totals through save and independent reopen", async () => {
+  const setup = await setupCatalog(), lifecycle = lifecycleFor(setup);
+  let store = new CanonicalLedgerStore({ lifecycle });
+  await store.load();
+  let ledger = registerAccount(createLedger({ now }), { institutionId: "wells-fargo", displayName: "Invented corrected checking", currency: "USD", accountType: "checking" }, { now });
+  const accountId = ledger.accounts[0].accountId;
+  const input = parsed => ({ parsed, syntheticOnly: true, accountMappings: { default: accountId }, coverageByAccount: {
+    [accountId]: { start: "2026-01-01", end: "2026-01-31", provenance: "user-confirmed" } } });
+  const fixture = async name => parseProviderCsv({ bytes: await readFile(new URL("../fixtures/pr28/" + name, import.meta.url)), sourceFormat: "wells-fargo-csv-v1" });
+  ledger = prepareCanonicalImport(ledger, input(await fixture("wells-fargo-foundation.csv")), { now }).ledger;
+  const marketId = ledger.activities[0].activityId;
+  ledger = applyFinancialEvent(ledger, { type: "classification", commandId: "classify-corrected-market", activityId: marketId, activityKind: "spending" }, { now });
+  for (const amountText of ["-95.00", "-90.00"]) ledger = applyFinancialEvent(ledger, { type: "bank-correction", commandId: "correct-market-" + amountText,
+    activityId: marketId, amountText, evidence: { reason: "Invented sequential correction" } }, { now });
+  const original = structuredClone(ledger.activities[0]), events = structuredClone(ledger.events);
+  ledger = await store.save(ledger);
+  store = new CanonicalLedgerStore({ lifecycle });
+  assert.deepEqual(await store.load(), ledger);
+  const reviewInput = input(await fixture("wells-fargo-review.csv"));
+  ledger = prepareCanonicalImport(await store.load(), reviewInput, { now }).ledger;
+  assert.equal(ledger.imports.at(-1).counts.created, 2);
+  assert.equal(ledger.imports.at(-1).counts.review, 1);
+  const overlapId = ledger.observations.find(o => o.disposition === "review").observationId;
+  ledger = await store.save(ledger);
+  store = new CanonicalLedgerStore({ lifecycle });
+  ledger = prepareCanonicalImport(await store.load(), reviewInput, { now }).ledger;
+  assert.equal(ledger.activities.length, 6);
+  assert.equal(ledger.observations.find(o => o.observationId === overlapId).disposition, "review");
+  ledger = applyReviewDecision(ledger, { observationId: overlapId, action: "match", activityId: marketId, rationale: "Invented original receipt before correction" }, { now });
+  const decisionId = ledger.reviewDecisions.at(-1).reviewDecisionId;
+  ledger = await store.save(ledger);
+  store = new CanonicalLedgerStore({ lifecycle });
+  const reopened = await store.load();
+  assert.deepEqual(reopened, ledger);
+  assert.deepEqual(reopened.activities[0], original);
+  assert.deepEqual(reopened.events, events);
+  assert.equal(reopened.observations.find(o => o.observationId === overlapId).activityId, marketId);
+  assert.equal(summarizeLedger(reopened, { start: "2026-01-01", end: "2026-01-31", currency: "USD" }).spending, "90.00");
+  const intermediate = await parseProviderCsv({ sourceFormat: "wells-fargo-csv-v1", bytes: new TextEncoder().encode(
+    "DATE,DESCRIPTION,AMOUNT,CHECK #,STATUS\n01/05/2026,INVENTED MARKET PURCHASE,-95.00,,Posted\n") });
+  ledger = prepareCanonicalImport(reopened, input(intermediate), { now }).ledger;
+  assert.equal(ledger.observations.at(-1).reasonCode, "insufficient-composite-evidence");
+  ledger = reverseReviewDecision(ledger, { reviewDecisionId: decisionId, rationale: "Invented reversal for another review" }, { now });
+  ledger = await store.save(ledger);
+  assert.deepEqual(await new CanonicalLedgerStore({ lifecycle }).load(), ledger);
+  assert.deepEqual(ledger.events, events);
+  assert.equal(ledger.activities.length, 6);
+  assert.equal(summarizeLedger(ledger, { start: "2026-01-01", end: "2026-01-31", currency: "USD" }).spending, "90.00");
+});
+
 test("full review, reversal, prospective rule, correction, and refund history survives save, export, and restore", async () => {
   const setup = await setupCatalog();
   const store = new CanonicalLedgerStore({ lifecycle: lifecycleFor(setup) });

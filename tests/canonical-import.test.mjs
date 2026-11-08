@@ -1,6 +1,8 @@
 import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {parseProviderCsv} from '../js/provider-csv.mjs';
 import {createLedger,registerAccount,prepareCanonicalImport,applyReviewDecision,applyFinancialEvent,summarizeLedger,validateLedger,getEffectiveActivities,reverseReviewDecision} from '../js/canonical-import.mjs';
 const options=()=>{let n=0;return {now:()=> '2026-11-06T00:00:00.000Z',idFactory:()=>`00000000-0000-4000-8000-${String(++n).padStart(12,'0')}`};};
 function setup(){const opt=options();let ledger=createLedger(opt);ledger=registerAccount(ledger,{institutionId:'sofi',name:'Invented account',currency:'USD',accountType:'checking'},opt);return {ledger,opt,accountId:ledger.accounts[0].accountId};}
@@ -8,6 +10,7 @@ const row=(overrides={})=>({sourceAccountKey:'default',sourceFields:{Description
 function input(accountId,records=[row()],fingerprint='invented-hash'){return {syntheticOnly:true,parsed:{sourceFormat:'sofi-csv-v1',institutionId:'sofi',fileFingerprint:fingerprint,rowsSeen:records.length+1,ignoredCount:0,records,sourceAccountKeys:['default'],sourceCoverage:null},accountMappings:{default:accountId},coverageByAccount:{[accountId]:{start:'2026-01-01',end:'2026-02-28',provenance:'user-confirmed'}}};}
 const report=ledger=>summarizeLedger(ledger,{start:'2026-01-01',end:'2026-01-31',currency:'USD'});
 const classify=(ledger,opt,activityId,activityKind,commandId=activityId)=>applyFinancialEvent(ledger,{type:'classification',activityId,activityKind,categoryId:'example-category',commandId},opt);
+const correct=(ledger,opt,activityId,amountText,commandId)=>applyFinancialEvent(ledger,{type:'bank-correction',activityId,amountText,commandId,evidence:{reason:'Invented bank correction'}},opt);
 
 test('immutable import has stable identities, original evidence, declared and observed dates',()=>{
  const {ledger,opt,accountId}=setup(); const result=prepareCanonicalImport(ledger,input(accountId),opt);
@@ -64,6 +67,155 @@ test('bank and category corrections preserve originals and adjust original-perio
  assert.equal(next.activities[0].amountMinor,-1234);assert.equal(report(next).spending,'10.00');
  next=applyFinancialEvent(next,{type:'category-correction',activityId,categoryId:'new-category',commandId:'category-1'},opt);assert.equal(next.events.at(-1).priorCategoryId,'example-category');
  assert.throws(()=>applyFinancialEvent(next,{...command,amountText:'-1.00'},opt),/command-conflict/);
+});
+test('bundled market overlap after a bank correction stays in review and cannot duplicate spending',async()=>{
+ const opt=options();let next=registerAccount(createLedger(opt),{institutionId:'wells-fargo',name:'Invented checking',currency:'USD',accountType:'checking'},opt);
+ const accountId=next.accounts[0].accountId;
+ const fixture=async name=>({...input(accountId),parsed:await parseProviderCsv({bytes:await readFile(new URL('../fixtures/pr28/'+name,import.meta.url)),sourceFormat:'wells-fargo-csv-v1'})});
+ next=prepareCanonicalImport(next,await fixture('wells-fargo-foundation.csv'),opt).ledger;
+ const marketId=next.activities[0].activityId,originals=structuredClone(next.activities),source=structuredClone(next.observations);
+ next=classify(next,opt,marketId,'spending');next=correct(next,opt,marketId,'-90.00','correct-bundled-market');
+ const args=await fixture('wells-fargo-review.csv'),result=prepareCanonicalImport(next,args,opt);next=result.ledger;
+ assert.equal(result.summary.created,2);assert.equal(result.summary.review,1);assert.equal(result.summary.rejected,1);
+ assert.equal(next.activities.length,6);assert.equal(next.observations[4].reasonCode,'insufficient-composite-evidence');
+ assert.equal(next.observations[4].activityId,null);assert.equal(report(next).spending,'90.00');
+ assert.deepEqual(next.activities.slice(0,4),originals);assert.deepEqual(next.observations.slice(0,4),source);
+ const retry=prepareCanonicalImport(next,args,opt).ledger;
+ assert.deepEqual(retry.activities,next.activities);assert.deepEqual(retry.observations,next.observations);assert.deepEqual(retry.events,next.events);
+ assert.equal(retry.imports.at(-1).retryAttempts.length,1);assert.equal(report(retry).spending,'90.00');
+ assert.equal(validateLedger(retry),true);
+});
+test('original, intermediate and current corrected amounts each identify one review candidate on imports and retries',()=>{
+ const {ledger,opt,accountId}=setup();let next=prepareCanonicalImport(ledger,input(accountId),opt).ledger;
+ const activityId=next.activities[0].activityId;next=classify(next,opt,activityId,'spending');
+ next=correct(next,opt,activityId,'-10.00','first-correction');next=correct(next,opt,activityId,'-8.00','second-correction');
+ const args=input(accountId,['-12.34','-10.00','-8.00'].map((amountText,i)=>row({rowOrdinal:i+1,amountText})),'all-corrected-amounts');
+ next=prepareCanonicalImport(next,args,opt).ledger;
+ assert.equal(next.activities.length,1);assert.equal(next.imports.at(-1).counts.review,3);
+ assert.ok(next.observations.slice(1).every(o=>o.reasonCode==='insufficient-composite-evidence'&&o.activityId===null));
+ next=correct(next,opt,activityId,'-6.00','third-correction');const evidence=structuredClone(next.observations),events=structuredClone(next.events);
+ const retry=prepareCanonicalImport(next,args,opt).ledger;
+ assert.equal(retry.activities.length,1);assert.deepEqual(retry.observations,evidence);assert.deepEqual(retry.events,events);
+ assert.equal(retry.imports.at(-1).counts.review,3);assert.equal(report(retry).spending,'6.00');
+});
+test('accepted source observations retain composite evidence after correction without becoming automatic identity',()=>{
+ const {ledger,opt,accountId}=setup();let next=prepareCanonicalImport(ledger,input(accountId,[row({sourceRecordId:'invented-source'})]),opt).ledger;
+ const alternate=row({sourceRecordId:'invented-source',sourceDescription:'ALTERNATE INVENTED SHOP',normalizedDescription:'alternate invented shop'});
+ next=prepareCanonicalImport(next,input(accountId,[alternate],'accepted-description'),opt).ledger;
+ assert.equal(next.observations.at(-1).disposition,'matched');
+ next=correct(next,opt,next.activities[0].activityId,'-10.00','correct-accepted-source');
+ next=prepareCanonicalImport(next,input(accountId,[{...alternate,sourceRecordId:null}],'idless-description'),opt).ledger;
+ assert.equal(next.activities.length,1);assert.equal(next.observations.at(-1).reasonCode,'insufficient-composite-evidence');assert.equal(next.observations.at(-1).activityId,null);
+});
+test('historical composites preserve actual lifecycle states without inventing amount and date combinations',()=>{
+ const {ledger,opt,accountId}=setup();let next=prepareCanonicalImport(ledger,input(accountId,[row({sourceRecordId:'invented-pending',lifecycleStatus:'pending'})]),opt).ledger;
+ const activityId=next.activities[0].activityId;next=correct(next,opt,activityId,'-10.00','before-posting');
+ const posted=row({sourceRecordId:'invented-pending',amountText:'-10.00',effectiveDate:'2026-02-01',postedDate:'2026-02-01'});
+ next=prepareCanonicalImport(next,input(accountId,[posted],'posted-correction'),opt).ledger;
+ next=correct(next,opt,activityId,'-8.00','after-posting');
+ const observed=[row(),row({amountText:'-10.00'}),{...posted,sourceRecordId:null},{...posted,sourceRecordId:null,amountText:'-8.00'}];
+ const overlap=prepareCanonicalImport(next,input(accountId,observed.map((r,i)=>({...r,rowOrdinal:i+1})),'historical-states'),opt).ledger;
+ assert.equal(overlap.activities.length,1);assert.equal(overlap.imports.at(-1).counts.review,4);
+ const invented=prepareCanonicalImport(next,input(accountId,[row({amountText:'-8.00'}),{...posted,sourceRecordId:null,amountText:'-12.34',rowOrdinal:2}],'unobserved-combinations'),opt).ledger;
+ assert.equal(invented.imports.at(-1).counts.created,2);
+ const stale=prepareCanonicalImport(next,input(accountId,[posted],'stale-provider-value'),opt).ledger;
+ assert.equal(stale.observations.at(-1).reasonCode,'source-id-conflict');
+ const current=prepareCanonicalImport(stale,input(accountId,[{...posted,amountText:'-8.00'}],'current-provider-value'),opt).ledger;
+ assert.equal(current.observations.at(-1).disposition,'matched');assert.equal(current.activities.length,1);
+ assert.equal(current.events.filter(e=>e.eventType==='lifecycle-transition').length,1);
+});
+test('reversing a matched observation removes its unique evidence while keeping the original active',()=>{
+ const {ledger,opt,accountId}=setup();let next=prepareCanonicalImport(ledger,input(accountId,[row({sourceRecordId:'invented-source'})]),opt).ledger;
+ const alternate=row({sourceRecordId:'invented-source',sourceDescription:'INVENTED ALIAS',normalizedDescription:'invented alias',effectiveDate:'2026-01-16'});
+ next=prepareCanonicalImport(next,input(accountId,[alternate],'review-alias'),opt).ledger;
+ const observationId=next.observations.at(-1).observationId,activityId=next.activities[0].activityId;
+ next=applyReviewDecision(next,{observationId,action:'match',activityId},opt);
+ const probe=input(accountId,[{...alternate,sourceRecordId:null}],'probe-alias');
+ assert.equal(prepareCanonicalImport(next,probe,opt).ledger.observations.at(-1).disposition,'review');
+ next=reverseReviewDecision(next,{reviewDecisionId:next.reviewDecisions.at(-1).reviewDecisionId},opt);
+ const after=prepareCanonicalImport(next,probe,opt).ledger;
+ assert.equal(after.observations.at(-1).disposition,'created');assert.equal(after.activities.length,2);
+});
+test('inactive retained activities and unresolved or rejected rows cannot supply overlap evidence',()=>{
+ const {ledger,opt,accountId}=setup();const initial=prepareCanonicalImport(ledger,input(accountId,[row({sourceRecordId:'invented-source'})]),opt).ledger;
+ const conflicting=row({sourceRecordId:'invented-source',amountText:'-10.00',sourceDescription:'INVENTED DIFFERENT SHOP',normalizedDescription:'invented different shop'});
+ const unresolved=prepareCanonicalImport(initial,input(accountId,[conflicting],'conflicting-row'),opt).ledger;
+ const observationId=unresolved.observations.at(-1).observationId,probe=input(accountId,[{...conflicting,sourceRecordId:null}],'idless-probe');
+ const rejected=applyReviewDecision(unresolved,{observationId,action:'reject'},opt);
+ let reversed=applyReviewDecision(unresolved,{observationId,action:'keep-separate'},opt);
+ const inactiveId=reversed.activities.at(-1).activityId;
+ reversed=reverseReviewDecision(reversed,{reviewDecisionId:reversed.reviewDecisions.at(-1).reviewDecisionId},opt);
+ assert.equal(getEffectiveActivities(reversed).find(a=>a.activityId===inactiveId).active,false);
+ for(const before of [unresolved,rejected,reversed]) {
+  const after=prepareCanonicalImport(before,probe,opt).ledger;
+  assert.equal(after.observations.at(-1).disposition,'created');assert.notEqual(after.observations.at(-1).activityId,inactiveId);
+ }
+});
+test('corrected overlap evidence respects account and currency boundaries and keeps genuine multiplicity',()=>{
+ const {ledger,opt,accountId}=setup();let next=prepareCanonicalImport(ledger,input(accountId,[row(),row({rowOrdinal:2})]),opt).ledger;
+ next=correct(next,opt,next.activities[0].activityId,'-10.00','correct-first-twin');next=correct(next,opt,next.activities[1].activityId,'-8.00','correct-second-twin');
+ const overlap=prepareCanonicalImport(next,input(accountId,[row(),row({rowOrdinal:2})],'two-overlaps'),opt).ledger;
+ assert.equal(overlap.activities.length,2);assert.equal(overlap.imports.at(-1).counts.review,2);
+ assert.ok(overlap.observations.slice(2).every(o=>o.reasonCode==='ambiguous-composite-match'));
+ const separate=applyReviewDecision(overlap,{observationId:overlap.observations.at(-1).observationId,action:'keep-separate'},opt);
+ assert.equal(separate.activities.length,3);assert.equal(separate.activities.at(-1).amountMinor,-1234);
+ next=registerAccount(next,{institutionId:'sofi',name:'Other invented checking',currency:'USD',accountType:'checking'},opt);
+ const other=prepareCanonicalImport(next,input(next.accounts[1].accountId,[row()],'other-account'),opt).ledger;
+ assert.equal(other.observations.at(-1).disposition,'created');
+ const currency=prepareCanonicalImport(next,input(accountId,[row({currency:'EUR'})],'other-currency'),opt).ledger;
+ assert.equal(currency.observations.at(-1).disposition,'created');
+});
+test('explicit historical match preserves corrections through later source-ID imports and decision reversal',()=>{
+ const {ledger,opt,accountId}=setup();let next=prepareCanonicalImport(ledger,input(accountId,[row({sourceRecordId:'invented-source'})]),opt).ledger;
+ const activityId=next.activities[0].activityId;next=classify(next,opt,activityId,'spending');next=correct(next,opt,activityId,'-10.00','correct-before-match');
+ next=prepareCanonicalImport(next,input(accountId,[row({sourceRecordId:'invented-source'})],'old-source-overlap'),opt).ledger;
+ const observationId=next.observations.at(-1).observationId,events=structuredClone(next.events),activities=structuredClone(next.activities);
+ assert.equal(next.observations.at(-1).reasonCode,'source-id-conflict');
+ next=applyReviewDecision(next,{observationId,action:'match',activityId,rationale:'Same invented source before correction'},opt);
+ assert.equal(next.observations.at(-1).disposition,'matched');assert.equal(report(next).spending,'10.00');
+ assert.deepEqual(next.events,events);assert.deepEqual(next.activities,activities);assert.equal(next.reviewDecisions.at(-1).action,'match');
+ const decisionId=next.reviewDecisions.at(-1).reviewDecisionId;
+ next=prepareCanonicalImport(next,input(accountId,[row({sourceRecordId:'invented-source',amountText:'-10.00'})],'new-source-value'),opt).ledger;
+ assert.equal(next.observations.at(-1).disposition,'matched');
+ next=prepareCanonicalImport(next,input(accountId,[row({sourceRecordId:'invented-source'})],'old-source-again'),opt).ledger;
+ assert.equal(next.observations.at(-1).reasonCode,'source-id-conflict');assert.equal(next.activities.length,1);
+ next=reverseReviewDecision(next,{reviewDecisionId:decisionId},opt);
+ assert.equal(next.observations.find(o=>o.observationId===observationId).disposition,'review');
+ assert.deepEqual(next.events,events);assert.deepEqual(next.activities,activities);assert.equal(report(next).spending,'10.00');
+});
+test('explicit historical amount match needs the full retained composite and never infers posting',()=>{
+ const {ledger,opt,accountId}=setup();let next=prepareCanonicalImport(ledger,input(accountId,[row({sourceRecordId:'invented-source',lifecycleStatus:'pending'})]),opt).ledger;
+ const activityId=next.activities[0].activityId;next=correct(next,opt,activityId,'-10.00','pending-correction');
+ const overlap=prepareCanonicalImport(next,input(accountId,[row({sourceRecordId:'invented-source'})],'old-posted-evidence'),opt).ledger;
+ const linked=applyReviewDecision(overlap,{observationId:overlap.observations.at(-1).observationId,action:'match',activityId},opt);
+ assert.deepEqual(linked.events,next.events);assert.equal(getEffectiveActivities(linked)[0].lifecycleStatus,'pending');assert.equal(getEffectiveActivities(linked)[0].amountMinor,-1000);
+ for(const overrides of [{amountText:'-11.00'},{normalizedDescription:'unrelated invented shop'},{effectiveDate:'2026-01-16'},{sourceAction:'Other action'},{currency:'EUR'}]) {
+  const conflict=prepareCanonicalImport(next,input(accountId,[row({sourceRecordId:'invented-source',...overrides})],'unrelated-conflict'),opt).ledger;
+  assert.equal(conflict.observations.at(-1).disposition,'review');
+  assert.throws(()=>applyReviewDecision(conflict,{observationId:conflict.observations.at(-1).observationId,action:'match',activityId},opt),/conflicting-match-requires-correction/);
+ }
+});
+test('parsed decimal fallback overlaps survive correction scale differences without duplicate effects',async()=>{
+ for(const [currency,originalAmount,intermediateAmount,currentAmount,expectedSpending] of [
+  ['CHF','-100.00','-90.00','-80.000','80.000'],
+  ['USD','-90071992547409.92','-90071992547409.9300','-90071992547409.940','90071992547409.940'],
+ ]) {
+  const opt=options();let next=registerAccount(createLedger(opt),{institutionId:'wells-fargo',name:'Invented decimal account',currency,accountType:'checking'},opt);
+  const accountId=next.accounts[0].accountId;
+  const csv=async amounts=>({...input(accountId),parsed:await parseProviderCsv({sourceFormat:'wells-fargo-csv-v1',bytes:new TextEncoder().encode('DATE,DESCRIPTION,AMOUNT,CHECK #,STATUS\n'+amounts.map(amount=>'01/15/2026,INVENTED DECIMAL PURCHASE,'+amount+',,Posted\n').join(''))})});
+  next=prepareCanonicalImport(next,await csv([originalAmount]),opt).ledger;
+  const activityId=next.activities[0].activityId;next=classify(next,opt,activityId,'spending');
+  next=correct(next,opt,activityId,intermediateAmount,'intermediate-decimal');next=correct(next,opt,activityId,currentAmount,'current-decimal');
+  const events=structuredClone(next.events),args=await csv([originalAmount,intermediateAmount,currentAmount]);
+  next=prepareCanonicalImport(next,args,opt).ledger;
+  assert.equal(next.imports.at(-1).counts.review,3);assert.equal(next.activities.length,1);
+  const old=next.observations.at(-2);assert.notEqual(old.candidate.amountDecimal,intermediateAmount);
+  next=applyReviewDecision(next,{observationId:old.observationId,action:'match',activityId},opt);
+  assert.deepEqual(next.events,events);assert.equal(next.activities.length,1);
+  next=prepareCanonicalImport(next,args,opt).ledger;
+  assert.equal(next.imports.at(-1).counts.review,2);assert.equal(next.imports.at(-1).counts.matched,1);assert.equal(next.activities.length,1);
+  assert.equal(summarizeLedger(next,{start:'2026-01-01',end:'2026-01-31',currency}).spending,expectedSpending);
+ }
 });
 test('linked partial refunds reduce posting month spending, never income or original month',()=>{
  const {ledger,opt,accountId}=setup();let next=prepareCanonicalImport(ledger,input(accountId,[row(),row({rowOrdinal:2,sourceDescription:'EXAMPLE REFUND',amountText:'5.00',effectiveDate:'2026-01-30',postedDate:'2026-02-02'})]),opt).ledger;

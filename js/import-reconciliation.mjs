@@ -34,15 +34,14 @@ export function isCalendarDate(value) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-function sameComposite(a, b) {
+export function sameComposite(a, b) {
   return a.institutionId === b.institutionId &&
     a.accountId === b.accountId &&
     a.currency === b.currency &&
-    a.amountMinor === b.amountMinor &&
-    (a.amountDecimal ?? null) === (b.amountDecimal ?? null) &&
     a.effectiveDate === b.effectiveDate &&
     (a.normalizedDescription ?? a.sourceDescription ?? "") === (b.normalizedDescription ?? b.sourceDescription ?? "") &&
-    (a.sourceAction ?? "") === (b.sourceAction ?? "");
+    (a.sourceAction ?? "") === (b.sourceAction ?? "") &&
+    sameMoney(a, b);
 }
 
 
@@ -60,6 +59,17 @@ export function exactSignedDecimal(activity) {
     return activity.amountDecimal;
   }
   return null;
+}
+
+function sameMoney(a, b) {
+  if (a.amountMinor === b.amountMinor && (a.amountDecimal ?? null) === (b.amountDecimal ?? null)) return true;
+  if (Number.isSafeInteger(a.amountMinor) && Number.isSafeInteger(b.amountMinor)) return false;
+  const left = exactSignedDecimal(a), right = exactSignedDecimal(b);
+  if (left === null || right === null) return false;
+  // Corrections retain entered decimal text while adapters can normalize its
+  // scale. Compare exact values without rewriting either source representation.
+  return decimalParts(left).negative === decimalParts(right).negative &&
+    compareAbsoluteDecimals(left, right) === 0;
 }
 
 function decimalParts(value) {
@@ -106,7 +116,7 @@ function isPendingPostedTransition(oldRow, newRow) {
 
 export function reconcileImport({
   institutionId, accountId, sourceFormat, fileFingerprint, rows,
-  existingActivities = [], existingObservations = [], completedRuns = [],
+  existingActivities = [], existingObservations = [], existingCompositeEvidence = [], completedRuns = [],
   idFactory = () => globalThis.crypto.randomUUID(),
 }) {
   if (!accountId) throw new TypeError("explicit-account-mapping-required");
@@ -130,6 +140,14 @@ export function reconcileImport({
   const events = [];
   const counts = { rowsSeen: rows.length, rowsRecognized: 0, created: 0, matched: 0, review: 0, rejected: 0, ignored: 0 };
   const validDates = [];
+  // The caller supplies retained accepted evidence for review only. Never let
+  // historical records revive an inactive ID or cross its account/currency.
+  const activeById = new Map(existingActivities.map(activity => [activity.activityId, activity]));
+  const compositeEvidence = [...existingActivities, ...existingCompositeEvidence.filter(evidence => {
+    const active = activeById.get(evidence.activityId);
+    return active && active.institutionId === evidence.institutionId &&
+      active.accountId === evidence.accountId && active.currency === evidence.currency;
+  })];
   // Repeated provider IDs with contradictory monetary identity in one input file
   // are not resolved by row order. Keep every conflicting occurrence for review.
   const sourceIdRows = new Map();
@@ -250,10 +268,10 @@ export function reconcileImport({
         }
       }
     } else {
-      const candidates = existingActivities.filter((a) => sameComposite(a, incoming));
-      if (candidates.length === 1) {
+      const candidates = new Set(compositeEvidence.filter((a) => sameComposite(a, incoming)).map(a => a.activityId));
+      if (candidates.size === 1) {
         disposition = "review"; reasonCode = "insufficient-composite-evidence";
-      } else if (candidates.length > 1) {
+      } else if (candidates.size > 1) {
         disposition = "review"; reasonCode = "ambiguous-composite-match";
       }
     }

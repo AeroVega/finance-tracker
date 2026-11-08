@@ -1,6 +1,6 @@
 # PR28: canonical import foundation
 
-**Status: implemented for synthetic review; live acceptance remains outstanding.** The owner approved this five-part scope on November 6, 2026. PR26 supplies product decisions for this and subsequent work. PR20–25 supply the existing persistence, recovery, session, backup, and portability machinery.
+**Status: bounded live acceptance recorded; final local regression and independent correctness review passed; published-head remote CI pending.** The owner approved this five-part synthetic scope on November 6, 2026. PR26 supplies product decisions for this and subsequent work. PR20–25 supply the existing persistence, recovery, session, backup, and portability machinery.
 
 ## Included implementation
 
@@ -29,6 +29,10 @@
 - Safe setup and verification may run together after an explicit action. Folder/file choices and consent remain visible, cancellations and release failures cannot be marked passed, and no guided operation starts on page load. Progress, immediate staging feedback and remaining human actions stay beside the relevant controls. Programmatic assertions do not automatically mark human observations passed.
 
 ## Safety and review gates
+
+**Verified and user-confirmed acceptance evidence:** the [acceptance record](PR28_CANONICAL_IMPORT.md#owner-acceptance-observations-november-8-2026) ties the full 25 live assertions, 13 fixture assertions and earlier manual device checks to `70728162`. The later [guide retests on `626ec025`](PR28_CANONICAL_IMPORT.md#owner-guide-retests-on-626ec025-november-8-2026) record a passed single-event save-interruption rehearsal and owner-reported full copy test, with visible saved-file verification and independently reopened restore results. The planned bounded manual checks and changed-path completion retests are complete. Broader device, native warning and cancellation coverage remains unverified follow-up work, not a new mandatory gate. Automated interrupted-copy tests pass; another live rehearsal is optional unless the owner or final review requires it, and the earlier sleep incident still does not establish durable quarantine.
+
+**Verified locally after the correction-overlap fix:** [final independent review](PR28_CANONICAL_IMPORT.md#corrected-overlap-reconciliation) found no remaining code blocker. The complete suites passed 694/694 tests on both Node 24.22.1 and Node 26.13.0, with no failures, cancellations or skips. Source/test module syntax and diff checks passed. **Open:** remote CI for the exact published head and the owner's separate merge decision. No new live acceptance is claimed for this correction, and production activation remains gated.
 
 The workbench accepts only bundled invented fixtures and a dedicated synthetic folder. Production data remains disabled under the PR27 gate. The accepted single-active-device model, offline-write prohibition, $0 recurring-cost constraint, privacy rules, and separate 540-day original-source policy remain in force. Original-file retention is reported honestly and is not inferred from a successful canonical commit.
 

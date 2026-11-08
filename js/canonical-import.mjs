@@ -1,5 +1,5 @@
 import { canonicalizeJcs } from './transaction-protocol.mjs';
-import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal } from './import-reconciliation.mjs';
+import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal, sameComposite } from './import-reconciliation.mjs';
 
 const collections = { accounts:'accountId', imports:'importRunId', observations:'observationId', activities:'activityId', events:'eventId', reviewDecisions:'reviewDecisionId' };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -190,7 +190,7 @@ export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageB
       const unresolved=prior.observationIds.map(value=>next.observations.find(o=>o.observationId===value)).filter(o=>!o.resolved&&['review','rejected'].includes(o.disposition));
       const retryRows=unresolved.map(o=>canonicalRow(records.find(r=>r.rowOrdinal===o.rowOrdinal)??fail('retry-row-missing'),account));
       if(retryRows.some((candidate,i)=>canonicalizeJcs(candidate)!==canonicalizeJcs(unresolved[i].candidate))) fail('retry-normalization-changed');
-      const retry=reconcileImport({institutionId:account.institutionId,accountId:account.accountId,sourceFormat:parsed.sourceFormat,fileFingerprint:parsed.fileFingerprint,rows:retryRows,existingActivities:activeActivities(next).map(a=>effective(next,a)),existingObservations:next.observations,idFactory:()=>id(options)});
+      const retry=reconcileImport({institutionId:account.institutionId,accountId:account.accountId,sourceFormat:parsed.sourceFormat,fileFingerprint:parsed.fileFingerprint,rows:retryRows,...reconciliationEvidence(next),idFactory:()=>id(options)});
       const time=stamp(options),priorStatus=prior.status,priorCounts=clone(prior.counts);
       for(const a of retry.activities) next.activities.push({...a,createdAt:time,updatedAt:time});
       retry.observations.forEach((result,i)=>Object.assign(unresolved[i],result));
@@ -204,7 +204,7 @@ export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageB
     }
     const runId=id(options), time=stamp(options), rows=records.map(r=>canonicalRow(r,account));
     if(new Set(rows.map(r=>r.rowOrdinal)).size!==rows.length) fail('duplicate-row-ordinal');
-    const result=reconcileImport({institutionId:account.institutionId,accountId:account.accountId,sourceFormat:parsed.sourceFormat,fileFingerprint:parsed.fileFingerprint,rows,existingActivities:activeActivities(next).map(a=>effective(next,a)),existingObservations:next.observations,idFactory:()=>id(options)});
+    const result=reconcileImport({institutionId:account.institutionId,accountId:account.accountId,sourceFormat:parsed.sourceFormat,fileFingerprint:parsed.fileFingerprint,rows,...reconciliationEvidence(next),idFactory:()=>id(options)});
     for(const activity of result.activities) next.activities.push({...activity,createdAt:time,updatedAt:time});
     const observations=result.observations.map((o,i)=>({...o,observationId:id(options),importRunId:runId,observedAt:time,physicalLine:records[i].physicalLine ?? null,candidate:rows[i],resolved:false}));
     next.observations.push(...observations);
@@ -235,12 +235,17 @@ export function applyReviewDecision(ledger, {observationId,action,activityId=nul
     if(accepted.valid===false || !isCalendarDate(accepted.effectiveDate)) fail('invalid-row-cannot-be-accepted');
     activityId=id(options); next.activities.push({...accepted,activityId,processingStatus:'processed',createdAt:time,updatedAt:time}); o.disposition='created';
   } else if(action==='match') {
-    const a=effective(next,activityFor(next,activityId));
+    const original=activityFor(next,activityId),a=effective(next,original);
     if(!activeActivities(next).some(active=>active.activityId===activityId)) fail('inactive-match-target');
     if(o.candidate.valid===false || !isCalendarDate(o.candidate.effectiveDate)) fail('invalid-row-cannot-be-accepted');
-    if(a.accountId!==o.accountId || a.currency!==o.candidate.currency || exactSignedDecimal(a)===null || exactSignedDecimal(o.candidate)===null || compare(exactSignedDecimal(a),exactSignedDecimal(o.candidate))!==0) fail('conflicting-match-requires-correction');
+    if(a.accountId!==o.accountId || a.currency!==o.candidate.currency || exactSignedDecimal(a)===null || exactSignedDecimal(o.candidate)===null) fail('conflicting-match-requires-correction');
+    const amountConflict=compare(exactSignedDecimal(a),exactSignedDecimal(o.candidate))!==0;
+    const historicalMatch=amountConflict && retainedCompositeEvidence(next,[original]).some(evidence=>sameComposite(evidence,o.candidate));
+    if(amountConflict && !historicalMatch) fail('conflicting-match-requires-correction');
     o.disposition='matched';
-    if(a.lifecycleStatus==='pending'&&o.candidate.lifecycleStatus==='posted') {
+    // Explicitly linking old evidence must not undo a correction or infer a
+    // lifecycle transition from a row that conflicts with the current amount.
+    if(!historicalMatch&&a.lifecycleStatus==='pending'&&o.candidate.lifecycleStatus==='posted') {
       next.events.push({eventId:id(options),commandId:`review:${o.observationId}:lifecycle-transition`,eventType:'lifecycle-transition',activityId,sourceObservationId:o.observationId,recordedAt:time,from:'pending',to:'posted',effectiveDate:o.candidate.effectiveDate,postedDate:o.candidate.postedDate,settlementDate:o.candidate.settlementDate,appendOnly:true});
     }
   } else { o.disposition='rejected'; activityId=null; }
@@ -261,6 +266,35 @@ function activeActivityIds(ledger) {
 function activeActivities(ledger) {
   const ids=activeActivityIds(ledger);
   return ledger.activities.filter(activity=>ids.has(activity.activityId));
+}
+
+function reconciliationEvidence(ledger) {
+  const active=activeActivities(ledger);
+  return {existingActivities:active.map(activity=>effective(ledger,activity)),existingObservations:ledger.observations,existingCompositeEvidence:retainedCompositeEvidence(ledger,active)};
+}
+
+function retainedCompositeEvidence(ledger,active) {
+  const history=new Map(active.map(activity=>[activity.activityId,{...activity}]));
+  const existingCompositeEvidence=[...active];
+  // Keep actual historical states, not every combination of old amounts and
+  // dates. These records can open review only; identity and lifecycle matching
+  // still use the current effective activities below.
+  for(const event of ledger.events) {
+    const prior=history.get(event.activityId);
+    if(!prior) continue;
+    let current;
+    if(event.eventType==='bank-correction') current={...prior,...event.proposedValues};
+    else if(event.eventType==='lifecycle-transition') current={...prior,lifecycleStatus:event.to,effectiveDate:event.effectiveDate,postedDate:event.postedDate,settlementDate:event.settlementDate};
+    else continue;
+    history.set(event.activityId,current);
+    existingCompositeEvidence.push(current);
+  }
+  for(const observation of ledger.observations) {
+    if(history.has(observation.activityId) && ['created','matched'].includes(observation.disposition) && observation.candidate.valid!==false) {
+      existingCompositeEvidence.push({...observation.candidate,activityId:observation.activityId});
+    }
+  }
+  return existingCompositeEvidence;
 }
 
 export function reverseReviewDecision(ledger,{reviewDecisionId,rationale=null},options={}) {
