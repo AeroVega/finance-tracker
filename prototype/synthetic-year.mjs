@@ -1,6 +1,6 @@
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
-import { serializeCanonicalLedger, serializePackedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
+import { serializeCanonicalLedger, serializePackedCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
 
 const $ = id => document.getElementById(id);
 let busy = false, configured = false, writes = 0, started = 0, phase = '', timer = null;
@@ -30,6 +30,7 @@ function refresh() {
   const online = navigator.onLine !== false;
   const ready = lifecycle?.state === 'ready' && lifecycle.acceptingWrites && online;
   $('preview').disabled = busy;
+  $('storage-layout').disabled = busy || Boolean(lifecycle);
   $('empty-confirmed').disabled = busy;
   $('upload').disabled = busy || !configured || !online || !$('empty-confirmed').checked || Boolean(lifecycle);
   $('reconnect').disabled = busy || !configured || !online;
@@ -56,7 +57,9 @@ const seeder = new SyntheticYearSeeder({ onProgress: state => {
 } });
 function previewResult(recipe) {
   const ledger = recipe.ledger;
-  $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. ${serializeCanonicalLedger(ledger).size} logical canonical objects grouped into ${serializePackedCanonicalLedger(ledger).size} storage objects before journals. January–December 2025. No Drive write is needed for this preview.`;
+  const layout = recipe.storageLayout || $('storage-layout').value;
+  const physical = layout === 'fragments-v3' ? serializeFragmentedCanonicalLedger(ledger) : layout === 'chunks-v2' ? serializePackedCanonicalLedger(ledger) : serializeCanonicalLedger(ledger);
+  $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. ${serializeCanonicalLedger(ledger).size} logical canonical objects grouped into ${physical.size} storage objects before journals. January–December 2025. No Drive write is needed for this preview.`;
 }
 async function verify() {
   const recipe = await seeder.verifyOrSeed(storage.lifecycle);
@@ -82,6 +85,7 @@ $('preview').addEventListener('click', () => run(async () => {
 $('upload').addEventListener('click', () => {
   if (!$('empty-confirmed').checked || storage.lifecycle || !configured || navigator.onLine === false) return;
   void run(async () => {
+    seeder.layout = $('storage-layout').value;
     result('Choose your newly created empty synthetic folder.');
     // Keep the Google authorization invocation in the user activation path.
     await storage.connect({ requireEmpty: true });

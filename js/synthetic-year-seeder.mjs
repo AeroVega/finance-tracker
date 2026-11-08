@@ -13,7 +13,9 @@ const pristine = manifest => manifest.syntheticOnly === true && manifest.role ==
  * be verified; a failed/empty copy requires a new empty destination.
  */
 export class SyntheticYearSeeder {
-  constructor({ createRecipe = createSyntheticFinancialYear, onProgress = () => {} } = {}) {
+  constructor({ createRecipe = createSyntheticFinancialYear, onProgress = () => {}, layout = "chunks-v2" } = {}) {
+    if (!["chunks-v2", "fragments-v3"].includes(layout)) fail("unsupported-canonical-layout");
+    this.layout = layout;
     this.createRecipe = createRecipe;
     this.onProgress = onProgress;
     this.recipe = null;
@@ -44,13 +46,13 @@ export class SyntheticYearSeeder {
       this.onProgress('preparing');
       const recipe = await this.preview();
       this.onProgress('checking');
-      const store = new CanonicalLedgerStore({ lifecycle, layout: "chunks-v2" });
+      const store = new CanonicalLedgerStore({ lifecycle, layout: this.layout });
       const saved = await store.load();
       if (Object.keys(store.base.snapshot || {}).some(path => !path.startsWith(CANONICAL_PREFIX))) fail('unrecognized-seed-copy');
       if (saved) {
         if (!equal(saved, recipe.ledger)) fail('unrecognized-seed-copy');
         this.onProgress('verified');
-        return { ...recipe, alreadySaved: true };
+        return { ...recipe, alreadySaved: true, storageLayout: store.layout };
       }
       if (!this.freshIdentity || !equal(identity(lifecycle, store.base), this.freshIdentity) || !pristine(store.base)) {
         fail('new-empty-folder-required');
@@ -62,7 +64,7 @@ export class SyntheticYearSeeder {
       const reopened = await new CanonicalLedgerStore({ lifecycle }).load();
       if (!equal(reopened, recipe.ledger)) fail('seed-readback-mismatch');
       this.onProgress('verified');
-      return { ...recipe, alreadySaved: false };
+      return { ...recipe, alreadySaved: false, storageLayout: store.layout };
     } finally { this.busy = false; }
   }
 }

@@ -5,3 +5,5 @@
 #result[data-state=error]{border-color:var(--danger);color:var(--danger)}
 #result[data-state=success]{border-color:var(--success)}
 @media(max-width:540px){.actions button{width:100%}}
+
+#storage-layout{display:block;width:100%;max-width:100%;margin:8px 0}

@@ -47,6 +47,11 @@ These separate runs had setup times of 0.59, 2.69, and 5.75 seconds and one-call
 
 **Verified locally against the unchanged version-2 grouped adapter:** The one-year fixture serializes to 114 objects. Its four import records occupy a 95,111-byte imports chunk. The five-year and ten-year fixtures fail `serializePackedCanonicalLedger` with `canonical-chunk-too-large` before any write. Their imports chunks are 460,171 and 916,475 bytes respectively.
 
-The fixture intentionally uses four whole-period imports. Each import retains every linked observation ID, so a large single import can exceed the 128 KiB cap even on its own. Byte-aware grouping alone would not solve that oversized-record case. A reviewed record-splitting format or another explicitly versioned representation would be needed. Ordinary smaller imports have different boundaries, but fixed 64-record groups can also reach the byte cap as import inventories grow.
+The fixture intentionally uses four whole-period imports. Each import retains every linked observation ID, so a large single import can exceed the 128 KiB cap even on its own. Byte-aware grouping alone would not solve that oversized-record case. The explicit version-3 record-splitting option described below addresses this separate physical-storage limit. Ordinary smaller imports have different boundaries, but fixed 64-record groups can also reach the byte cap as import inventories grow.
 
 These CPU benchmarks therefore do not establish end-to-end multi-year storage capacity. The existing refusal is safe and unchanged; the optimization does not increase the cap, silently migrate copies or weaken canonical/history checks. A regression test records this boundary. Production remains NO-GO.
+
+
+## Explicit fragmented storage option
+
+**Implemented, synthetic-only:** fresh copies may now opt into [version-3 fragmented canonical storage](FRAGMENTED_CANONICAL_STORAGE.md). It preserves exact logical records while splitting oversized inventories and the logical index into bounded physical objects. The version-2 limits described above remain unchanged for existing copies. No implicit migration occurs. See the linked format, limits and verification record before choosing it.

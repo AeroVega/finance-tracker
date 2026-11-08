@@ -37,3 +37,8 @@ An immutable activity-creation sequence and one applicability boundary per rule 
 The wider event engine still replays earlier event prefixes during validation and scans events per activity. Import reconciliation and retained storage history have separate scaling costs. This change does not claim to solve them.
 
 All work remains synthetic-only. Production persistence is NO-GO. Live Google/device acceptance, merging and deployment are separate actions.
+
+
+## Explicit fragmented storage option
+
+**Implemented, synthetic-only:** fresh copies may now opt into [version-3 fragmented canonical storage](FRAGMENTED_CANONICAL_STORAGE.md). It preserves exact logical records while splitting oversized inventories and the logical index into bounded physical objects. The version-2 limits described above remain unchanged for existing copies. No implicit migration occurs. See the linked format, limits and verification record before choosing it.

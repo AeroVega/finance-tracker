@@ -134,6 +134,10 @@ test('year UI is opt-in, has recovery and release, and cannot ingest user CSVs',
   assert.match(html, /Production financial-data persistence remains NO-GO/);
   assert.match(html, /drive.file access cannot prove/);
   assert.doesNotMatch(html, /type="file"/);
+  assert.match(html, /id="storage-layout"/);
+  assert.ok(html.indexOf('value="chunks-v2"') < html.indexOf('value="fragments-v3"'));
+  assert.match(js, /seeder.layout = \$\('storage-layout'\).value/);
+  assert.match(js, /\$\('storage-layout'\).disabled = busy \|\| Boolean\(lifecycle\)/);
   for (const id of ['upload','reconnect','verify','recover','stale','release']) assert.match(html, new RegExp('id="' + id + '"[^>]*disabled'));
   assert.match(js, /if \(busy\) return/);
   assert.match(js, /connect\(\{ requireEmpty: true \}\)/);
@@ -156,4 +160,18 @@ test('year reconnect opts out of original-file retention and deletion even for a
   const ui = readFileSync(new URL('../prototype/synthetic-year.mjs',import.meta.url),'utf8');
   assert.match(ui, /maintainOriginals: false/);
   assert.equal(new DashboardSyntheticStorage().maintainOriginals, true, 'other tools keep established retention behavior');
+});
+
+
+test('explicit fragmented seeder option creates v3 and default reconnect preserves it', async () => {
+  const lifecycle = fakeLifecycle(), generated = recipe();
+  const seeder = new SyntheticYearSeeder({ createRecipe: () => generated, layout: 'fragments-v3' });
+  await seeder.admitFreshConnection(lifecycle); await seeder.verifyOrSeed(lifecycle);
+  const index = JSON.parse(new TextDecoder().decode(await lifecycle.readObject('synthetic/canonical-v1/index.json')));
+  assert.equal(index.version, 3);
+  const writes = lifecycle.mutations;
+  const reopened = new SyntheticYearSeeder({ createRecipe: () => generated });
+  assert.equal((await reopened.verifyOrSeed(lifecycle)).alreadySaved, true);
+  assert.equal(lifecycle.mutations, writes);
+  assert.throws(() => new SyntheticYearSeeder({ layout: 'unknown' }), { code: 'unsupported-canonical-layout' });
 });
