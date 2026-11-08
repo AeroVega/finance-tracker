@@ -364,7 +364,7 @@ function categoryRuleMatches(key, activity) {
 }
 
 function prospectiveCategoryRule(ledger, activity) {
-  const key=categoryRuleKey(activity), enabled=Boolean(key.normalizedDescription.trim());
+  const key=clone(categoryRuleKey(activity)), enabled=Boolean(key.normalizedDescription.trim());
   // The immutable account, currency and source fields keep unrelated activities
   // outside this rule forever. Retain only earlier exact-key peers, including
   // inactive history, so later imports can inherit without recategorizing peers.

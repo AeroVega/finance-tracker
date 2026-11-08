@@ -93,3 +93,15 @@ test('structured legacy category prior values retain sequential clone identity c
     assert.throws(()=>validateLedger(ledger),{name:'TypeError',message:'classification-history-mismatch'});
   }
 });
+
+test('new category rules do not retain caller-owned structured match fields',()=>{
+  for(const sourceAction of [{kind:{label:'invented'}},['invented',{label:'action'}]]) {
+    const {ledger}=replayFixture();ledger.activities[0].sourceAction=sourceAction;
+    const command={type:'category-correction',activityId:ledger.activities[0].activityId,categoryId:'new',commandId:'invented-source-alias'};
+    const next=applyFinancialEvents(ledger,[command],options()),before=structuredClone(next);
+    if(Array.isArray(sourceAction))sourceAction[1].label='changed input';else sourceAction.kind.label='changed input';
+    assert.deepEqual(next,before);assert.equal(validateLedger(next),true);
+    next.events[0].prospectiveRule.key.sourceAction.extra='changed output';
+    assert.equal(Object.hasOwn(sourceAction,'extra'),false);
+  }
+});
