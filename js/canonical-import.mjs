@@ -85,36 +85,15 @@ function validateAndProject(ledger) {
     if(o.candidate.accountId!==o.accountId||o.candidate.institutionId!==account.institutionId||(['created','matched'].includes(o.disposition)&&o.activityId===null)||(['review','rejected'].includes(o.disposition)&&o.activityId!==null)) fail('invalid-observation-state');
     if (o.activityId !== null && findActivity(o.activityId).accountId !== o.accountId) fail('observation-account-conflict');
   }
-  const validMoney = value => {
-    if(!value || Object.keys(value).some(k=>!['amountMinor','amountDecimal','currency'].includes(k)) || !/^[A-Z]{3}$/.test(value.currency) || (value.amountMinor===null)===(value.amountDecimal===null) || exactSignedDecimal(value)===null) fail('invalid-event-money');
-    parseMoney(exactSignedDecimal(value),value.currency);
-  };
   const replay=createActivityReplay(ledger.activities);
-  const commands=new Set();
+  const commands=new Map();
   for (const e of ledger.events) {
     findActivity(e.activityId);
     if (typeof e.commandId !== 'string' || !e.commandId || commands.has(e.commandId)) fail('invalid-event-command');
-    commands.add(e.commandId);
+    commands.set(e.commandId,e);
     if (!Number.isFinite(Date.parse(e.recordedAt)) || e.appendOnly!==true) fail('invalid-event-metadata');
     const a=replay.get(e.activityId);
-    if(e.eventType==='bank-correction') {
-      validMoney(e.priorValues); validMoney(e.proposedValues);
-      if(e.priorValues.amountMinor!==a.amountMinor||e.priorValues.amountDecimal!==a.amountDecimal) fail('correction-history-mismatch');
-      if(e.proposedValues.currency!==a.currency || e.priorValues.currency!==a.currency || !e.evidence) fail('invalid-bank-correction');
-    } else if(e.eventType==='category-correction') {
-      if(typeof e.categoryId!=='string'||!e.categoryId||e.priorCategoryId!==a.categoryId) fail('invalid-category-correction');
-      const rule=e.prospectiveRule;
-      if(!rule || rule.version!==1 || rule.enabled!==Boolean(categoryRuleKey(a).normalizedDescription.trim()) || canonicalizeJcs(rule.key)!==canonicalizeJcs(categoryRuleKey(a)) || !Array.isArray(rule.existingActivityIds) || new Set(rule.existingActivityIds).size!==rule.existingActivityIds.length || !rule.existingActivityIds.includes(a.activityId) || rule.existingActivityIds.some(value=>!byId.activities.has(value))) fail('invalid-prospective-category-rule');
-    } else if(e.eventType==='classification') {
-      if(e.priorActivityKind!==a.activityKind||e.priorCategoryId!==a.categoryId) fail('classification-history-mismatch');
-      if(!['income','spending','transfer','refund','unclassified'].includes(e.activityKind) || (e.categoryId!==null&&typeof e.categoryId!=='string')) fail('invalid-classification');
-    } else if(e.eventType==='refund-link') {
-      const target=findActivity(e.originalActivityId);
-      if(target.currency!==a.currency || a.activityId===target.activityId || !e.evidence) fail('invalid-refund-link');
-      if(e.confirmedPostedDate!==null && e.confirmedPostedDate!==undefined && (!isCalendarDate(e.confirmedPostedDate)||(a.postedDate!==null&&a.postedDate!==e.confirmedPostedDate))) fail('invalid-refund-posted-date');
-    } else if(e.eventType==='lifecycle-transition') {
-      if(a.lifecycleStatus!=='pending'||e.from!=='pending'||e.to!=='posted'||!isCalendarDate(e.effectiveDate)||(e.postedDate!==null&&!isCalendarDate(e.postedDate))||(e.settlementDate!==null&&!isCalendarDate(e.settlementDate))||byId.observations.get(e.sourceObservationId)?.activityId!==e.activityId) fail('invalid-lifecycle-event');
-    } else fail('unsupported-persisted-event');
+    validateHistoryEvent(e,a,byId);
     replay.append(e);
   }
   const refundTotals=new Map(), refundActivities=new Set();
@@ -139,10 +118,42 @@ function validateAndProject(ledger) {
     }
     priorDecisions.set(d.reviewDecisionId,d);
   }
-  // Storage records must be JSON, not Date/BigInt/undefined or non-finite values.
-  const inspect = value => { if (value===undefined || typeof value==='bigint' || typeof value==='function' || typeof value==='symbol' || (typeof value==='number'&&!Number.isFinite(value))) fail('non-json-ledger'); if(value && typeof value==='object') { if(!Array.isArray(value) && Object.getPrototypeOf(value)!==Object.prototype) fail('non-json-ledger'); Object.values(value).forEach(inspect); } };
-  inspect(ledger);
-  return replay;
+  inspectJson(ledger);
+  return {replay,ids,commands,byId};
+}
+
+function validEventMoney(value) {
+  if(!value || Object.keys(value).some(k=>!['amountMinor','amountDecimal','currency'].includes(k)) || !/^[A-Z]{3}$/.test(value.currency) || (value.amountMinor===null)===(value.amountDecimal===null) || exactSignedDecimal(value)===null) fail('invalid-event-money');
+  parseMoney(exactSignedDecimal(value),value.currency);
+}
+function validateHistoryEvent(e,a,byId) {
+  const findActivity=activityId=>byId.activities.get(activityId)??fail('unknown-activity');
+  if(e.eventType==='bank-correction') {
+    validEventMoney(e.priorValues); validEventMoney(e.proposedValues);
+    if(e.priorValues.amountMinor!==a.amountMinor||e.priorValues.amountDecimal!==a.amountDecimal) fail('correction-history-mismatch');
+    if(e.proposedValues.currency!==a.currency || e.priorValues.currency!==a.currency || !e.evidence) fail('invalid-bank-correction');
+  } else if(e.eventType==='category-correction') {
+    if(typeof e.categoryId!=='string'||!e.categoryId||e.priorCategoryId!==a.categoryId) fail('invalid-category-correction');
+    const rule=e.prospectiveRule;
+    if(!rule || rule.version!==1 || rule.enabled!==Boolean(categoryRuleKey(a).normalizedDescription.trim()) || canonicalizeJcs(rule.key)!==canonicalizeJcs(categoryRuleKey(a)) || !Array.isArray(rule.existingActivityIds) || new Set(rule.existingActivityIds).size!==rule.existingActivityIds.length || !rule.existingActivityIds.includes(a.activityId) || rule.existingActivityIds.some(value=>!byId.activities.has(value))) fail('invalid-prospective-category-rule');
+  } else if(e.eventType==='classification') {
+    if(e.priorActivityKind!==a.activityKind||e.priorCategoryId!==a.categoryId) fail('classification-history-mismatch');
+    if(!['income','spending','transfer','refund','unclassified'].includes(e.activityKind) || (e.categoryId!==null&&typeof e.categoryId!=='string')) fail('invalid-classification');
+  } else if(e.eventType==='refund-link') {
+    const target=findActivity(e.originalActivityId);
+    if(target.currency!==a.currency || a.activityId===target.activityId || !e.evidence) fail('invalid-refund-link');
+    if(e.confirmedPostedDate!==null && e.confirmedPostedDate!==undefined && (!isCalendarDate(e.confirmedPostedDate)||(a.postedDate!==null&&a.postedDate!==e.confirmedPostedDate))) fail('invalid-refund-posted-date');
+  } else if(e.eventType==='lifecycle-transition') {
+    if(a.lifecycleStatus!=='pending'||e.from!=='pending'||e.to!=='posted'||!isCalendarDate(e.effectiveDate)||(e.postedDate!==null&&!isCalendarDate(e.postedDate))||(e.settlementDate!==null&&!isCalendarDate(e.settlementDate))||byId.observations.get(e.sourceObservationId)?.activityId!==e.activityId) fail('invalid-lifecycle-event');
+  } else fail('unsupported-persisted-event');
+}
+// Storage records must be JSON, not Date/BigInt/undefined or non-finite values.
+function inspectJson(value) {
+  if(value===undefined || typeof value==='bigint' || typeof value==='function' || typeof value==='symbol' || (typeof value==='number'&&!Number.isFinite(value))) fail('non-json-ledger');
+  if(value && typeof value==='object') {
+    if(!Array.isArray(value) && Object.getPrototypeOf(value)!==Object.prototype) fail('non-json-ledger');
+    Object.values(value).forEach(inspectJson);
+  }
 }
 
 export function registerAccount(ledger, account, options = {}) {
@@ -435,7 +446,7 @@ function effective(ledger,activity) {
   return clone(projectActivities(ledger).get(activity.activityId));
 }
 export function getEffectiveActivities(ledger) {
-  const replay=validateAndProject(ledger),activeIds=activeActivityIds(ledger);
+  const {replay}=validateAndProject(ledger),activeIds=activeActivityIds(ledger);
   return ledger.activities.map(activity=>({...clone(replay.get(activity.activityId)),active:activeIds.has(activity.activityId)}));
 }
 
@@ -447,14 +458,76 @@ const negate = value => { const d=decimal(value);return format(-d.n,d.s); };
 const compare = (a,b) => {const d=decimal(add(a,negate(b)));return d.n<0n?-1:d.n>0n?1:0;};
 
 export function applyFinancialEvent(ledger, command, options={}) {
-  const replay=validateAndProject(ledger);
+  return applyFinancialEvents(ledger,[command],options);
+}
+
+// An explicit command list is one immutable proposal, not a persistence commit.
+// Preserve the same order, IDs, prior values and intermediate financial checks
+// as separate commands, but validate and clone the unchanged graph only once.
+export function applyFinancialEvents(ledger, commands, options={}) {
+  const context=validateAndProject(ledger);
+  if(!Array.isArray(commands)) fail('invalid-financial-commands');
+  const next=clone(ledger);
+  context.activeIds=activeActivityIds(ledger);
+  context.refunds=createRefundChecks(ledger,context.replay);
+  for(const command of commands) {
+    const event=buildFinancialEvent(next,command,options,context);
+    if(!event) continue;
+    if(context.ids.has(event.eventId)) fail('invalid-or-duplicate-record-id');
+    context.ids.add(event.eventId);
+    validateHistoryEvent(event,context.replay.get(event.activityId),context.byId);
+    next.events.push(event);context.commands.set(event.commandId,event);
+    context.replay.append(event);
+    context.refunds.check(event);
+    inspectJson(event);
+  }
+  validateLedger(next);
+  return next;
+}
+
+function createRefundChecks(ledger,replay) {
+  const byRefund=new Map(),byTarget=new Map();
+  const groupFor=targetId=>{
+    if(!byTarget.has(targetId))byTarget.set(targetId,{total:'0'});
+    return byTarget.get(targetId);
+  };
+  const remember=event=>{
+    const amount=exactSignedDecimal(replay.get(event.activityId)),group=groupFor(event.originalActivityId);
+    byRefund.set(event.activityId,{targetId:event.originalActivityId,amount});
+    group.total=add(group.total,amount);
+  };
+  for(const event of ledger.events)if(event.eventType==='refund-link')remember(event);
+  return {
+    totalFor:targetId=>byTarget.get(targetId)?.total??'0',
+    check(event) {
+      if(!['classification','bank-correction','refund-link'].includes(event.eventType))return;
+      if(event.eventType==='refund-link')remember(event);
+      const refund=byRefund.get(event.activityId),targets=new Set();
+      if(refund) {
+        const activity=replay.get(event.activityId),amount=exactSignedDecimal(activity);
+        if(activity.activityKind!=='refund'||amount===null||compare(amount,'0')<=0)fail('invalid-effective-refund');
+        const group=groupFor(refund.targetId);
+        group.total=add(group.total,add(amount,negate(refund.amount)));refund.amount=amount;
+        targets.add(refund.targetId);
+      }
+      if(byTarget.has(event.activityId))targets.add(event.activityId);
+      for(const targetId of targets) {
+        const target=replay.get(targetId),amount=exactSignedDecimal(target);
+        if(target.activityKind!=='spending'||amount===null||compare(amount,'0')>=0)fail('invalid-effective-refund');
+        if(compare(groupFor(targetId).total,negate(amount))>0)fail('refund-exceeds-original');
+      }
+    },
+  };
+}
+
+function buildFinancialEvent(next,command,options,{replay,commands,activeIds,refunds}) {
   const {type,activityId,commandId}=command;
   if(typeof commandId!=='string'||!commandId) fail('event-command-id-required');
   const signature=canonicalizeJcs(command);
-  const prior=ledger.events.find(e=>e.commandId===commandId);
-  if(prior) {if(prior.commandSignature!==signature) fail('event-command-conflict');return clone(ledger);}
-  const next=clone(ledger), a=replay.get(activityId);
-  if(!activeActivities(next).some(active=>active.activityId===activityId)) fail('inactive-financial-target');
+  const prior=commands.get(commandId);
+  if(prior) {if(prior.commandSignature!==signature) fail('event-command-conflict');return null;}
+  const a=replay.get(activityId);
+  if(!activeIds.has(activityId)) fail('inactive-financial-target');
   const event={eventId:id(options),commandId,commandSignature:signature,eventType:type,activityId,recordedAt:stamp(options),evidence:clone(command.evidence??null),appendOnly:true};
   if(type==='category-correction') {if(typeof command.categoryId!=='string'||!command.categoryId) fail('category-required');event.categoryId=command.categoryId;event.priorCategoryId=a.categoryId;event.prospectiveRule=prospectiveCategoryRule(next,a);}
   else if(type==='bank-correction') {if(!command.evidence) fail('correction-evidence-required');event.priorValues={amountMinor:a.amountMinor,amountDecimal:a.amountDecimal,currency:a.currency};event.proposedValues=parseMoney(command.amountText,a.currency);}
@@ -467,18 +540,17 @@ export function applyFinancialEvent(ledger, command, options={}) {
     if(!command.evidence || activityId===command.originalActivityId) fail('refund-evidence-required');
     const target=replay.get(command.originalActivityId);
     if(target.currency!==a.currency || target.activityKind!=='spending' || compare(exactSignedDecimal(a),'0')<=0 || compare(exactSignedDecimal(target),'0')>=0 || a.originalActivityId) fail('invalid-refund-link');
-    let refunded=exactSignedDecimal(a);
-    for(const priorEvent of next.events.filter(e=>e.eventType==='refund-link'&&e.originalActivityId===target.activityId)) refunded=add(refunded,exactSignedDecimal(replay.get(priorEvent.activityId)));
+    const refunded=add(exactSignedDecimal(a),refunds.totalFor(target.activityId));
     if(compare(refunded,negate(exactSignedDecimal(target)))>0) fail('refund-exceeds-original');
     event.originalActivityId=target.activityId;
     event.confirmedPostedDate=command.confirmedPostedDate??null;
     if(event.confirmedPostedDate!==null && (!isCalendarDate(event.confirmedPostedDate)||(a.postedDate!==null&&a.postedDate!==event.confirmedPostedDate))) fail('invalid-refund-posted-date');
   } else fail('unsupported-financial-event');
-  next.events.push(event); validateLedger(next);return next;
+  return event;
 }
 
 export function summarizeLedger(ledger,{start,end,currency,accountIds=ledger.accounts.map(a=>a.accountId)}) {
-  const replay=validateAndProject(ledger);
+  const {replay}=validateAndProject(ledger);
   if(!isCalendarDate(start)||!isCalendarDate(end)||start>end||!/^[A-Z]{3}$/.test(currency)) fail('invalid-report-scope');
   accountIds.forEach(value=>accountFor(ledger,value));
   const reasons=new Set(['coverage-not-reconciled']);

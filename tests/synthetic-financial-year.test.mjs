@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import {createSyntheticFinancialYear, DEFAULT_SYNTHETIC_YEAR} from '../js/synthetic-financial-year.mjs';
 import {parseProviderCsv} from '../js/provider-csv.mjs';
 import {getEffectiveActivities, prepareCanonicalImport, validateLedger} from '../js/canonical-import.mjs';
@@ -127,4 +129,11 @@ test('bounded year option supports leap years without accepting extra data', asy
   assert.equal(leap.monthly[1].end, '2024-02-29');
   assert.notEqual(leap.ledger.ledgerId, fixture.ledger.ledgerId);
   assert.equal(leap.summary.spending, fixture.summary.spending);
+});
+
+// Pinned from the pre-batch recipe at ebf1ef1. This guards the complete ordered
+// evidence graph, including stable IDs and command signatures, not only totals.
+test('batch generation preserves the pre-batch canonical year byte for byte',()=>{
+  const digest=createHash('sha256').update(canonicalizeJcs(fixture.ledger)).digest('hex');
+  assert.equal(digest,'bc1da7ad6dc32cd3230285b71bedc5ae05357da9e2957dd1ae2d567ca261d5a3');
 });

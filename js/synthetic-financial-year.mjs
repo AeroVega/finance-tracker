@@ -1,5 +1,5 @@
 import {parseProviderCsv} from './provider-csv.mjs';
-import {createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent, summarizeLedger, validateLedger} from './canonical-import.mjs';
+import {createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvents, summarizeLedger, validateLedger} from './canonical-import.mjs';
 
 export const DEFAULT_SYNTHETIC_YEAR = 2025;
 export const SYNTHETIC_YEAR_DESCRIPTOR = Object.freeze({
@@ -86,22 +86,24 @@ export async function createSyntheticFinancialYear({year = DEFAULT_SYNTHETIC_YEA
       coverageByAccount: {[accountId]: {start, end, provenance: 'source-confirmed'}}}, options).ledger;
     sources.push({syntheticOnly: true, accountId, sourceFormat, fileFingerprint: parsed.fileFingerprint, bytes});
     const activities = ledger.activities.filter(activity => activity.accountId === accountId);
+    const commands=[];
     for (const [i, row] of rows[key].entries()) {
       if (!row.kind) continue; // Fidelity does not provide a supported posted lifecycle.
       const activityId = activities[i].activityId;
-      ledger = applyFinancialEvent(ledger, {type: 'classification', activityId, activityKind: row.kind,
+      commands.push({type: 'classification', activityId, activityKind: row.kind,
         categoryId: row.category, commandId: `synthetic-year:${activityId}:classify`,
-        evidence: {reason: 'Explicit classification from the invented version-1 scenario; not inferred from a real merchant.'}}, options);
-      if (row.correctedCents !== null && row.correctedCents !== undefined) ledger = applyFinancialEvent(ledger, {
+        evidence: {reason: 'Explicit classification from the invented version-1 scenario; not inferred from a real merchant.'}});
+      if (row.correctedCents !== null && row.correctedCents !== undefined) commands.push({
         type: 'bank-correction', activityId, amountText: money(row.correctedCents), commandId: `synthetic-year:${activityId}:correct`,
-        evidence: {reason: 'Invented utility provider corrected a five-dollar overcharge.'}}, options);
+        evidence: {reason: 'Invented utility provider corrected a five-dollar overcharge.'}});
       if (row.refund) {
         const original = activities.find(activity => activity.effectiveDate === `${year}-06-22` && activity.sourceDescription === 'INVENTED SEASONAL PURCHASE');
-        ledger = applyFinancialEvent(ledger, {type: 'refund-link', activityId, originalActivityId: original.activityId,
+        commands.push({type: 'refund-link', activityId, originalActivityId: original.activityId,
           confirmedPostedDate: row.date, commandId: `synthetic-year:${activityId}:refund`,
-          evidence: {reason: 'Invented partial refund of the June travel purchase, posted July 4.'}}, options);
+          evidence: {reason: 'Invented partial refund of the June travel purchase, posted July 4.'}});
       }
     }
+    ledger=applyFinancialEvents(ledger,commands,options);
   }
   validateLedger(ledger);
   const monthly = expectedMonthly.map(({month}) => summarizeLedger(ledger, {start: `${month}-01`,
