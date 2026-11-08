@@ -15,6 +15,7 @@ const HEADERS = {
   'sofi-csv-v1': ['Date', 'Description', 'Type', 'Amount', 'Current balance', 'Status'],
   'fidelity-accounts-history-csv-v1': ['Run Date', 'Account', 'Account Number', 'Action', 'Symbol', 'Description', 'Type', 'Exchange Quantity', 'Exchange Currency', 'Currency', 'Price', 'Quantity', 'Exchange Rate', 'Commission', 'Fees', 'Accrued Interest', 'Amount', 'Settlement Date'],
 };
+const HASH_BATCH_SIZE = 16;
 const INSTITUTIONS = { 'wells-fargo-csv-v1': 'wells-fargo', 'sofi-csv-v1': 'sofi', 'fidelity-accounts-history-csv-v1': 'fidelity' };
 function fail(code) { const error = new TypeError(code); error.code = code; throw error; }
 
@@ -86,7 +87,23 @@ export async function parseProviderCsv({ bytes, sourceFormat } = {}) {
   const wf = sourceFormat === 'wells-fargo-csv-v1';
   let ignoredCount = headerIndex + 1;
   const records = [];
-  for (const row of parsed.slice(headerIndex + 1)) {
+  // Bound native crypto jobs and observe every rejection immediately. Settle a
+  // batch before reporting its earliest source-row failure, regardless of the
+  // completion order. CSV syntax was already validated for the entire file.
+  let pending = [];
+  const flush = async () => {
+    const results = await Promise.all(pending.map(p => p.result));
+    for (let i = 0; i < results.length; i++) {
+      if (!results[i].ok) throw results[i].error;
+      pending[i].record.sourceRowFingerprint = results[i].value;
+    }
+    pending = [];
+  };
+  for (let rowIndex = headerIndex + 1; rowIndex < parsed.length; rowIndex++) {
+    const row = parsed[rowIndex];
+    // Source fields retain their exact strings; the intermediate cell array no
+    // longer needs to survive until the last digest completes.
+    parsed[rowIndex] = null;
     if (blank(row) || (fidelity && row.cells.length === 2 && row.cells[0] === 'This is invented explanatory footer text' && row.cells[1] === ' not a transaction row.')) { ignoredCount++; continue; }
     const sourceFields = Object.fromEntries(headers.map((h, i) => [h, row.cells[i] ?? null]));
     // Retain surplus cells rather than losing evidence on malformed rows.
@@ -101,7 +118,7 @@ export async function parseProviderCsv({ bytes, sourceFormat } = {}) {
     const settlement = get('Settlement Date');
     const currency = get('Currency');
     const record = {
-      sourceRowFingerprint: await sha256Hex(canonicalizeJcs(sourceFields)),
+      sourceRowFingerprint: null,
       sourceAccountKey: fidelity ? get('Account Number') : 'default', sourceFields,
       rowOrdinal: row.rowOrdinal, physicalLine: row.physicalLine, sourceDescription,
       normalizedDescription: sourceDescription.trim().replace(/\s+/g, ' ').toLowerCase(),
@@ -127,7 +144,12 @@ export async function parseProviderCsv({ bytes, sourceFormat } = {}) {
     }
     record.errorCode = errors[0] ?? null; record.valid = errors.length === 0;
     records.push(record);
+    pending.push({ record, result: sha256Hex(canonicalizeJcs(sourceFields)).then(
+      value => ({ ok: true, value }), error => ({ ok: false, error }),
+    ) });
+    if (pending.length === HASH_BATCH_SIZE) await flush();
   }
+  await flush();
   const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
   const fileFingerprint = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
   return { sourceFormat, institutionId: INSTITUTIONS[sourceFormat], fileFingerprint, rowsSeen: parsed.length, ignoredCount,
