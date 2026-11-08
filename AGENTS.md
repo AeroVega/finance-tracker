@@ -2,6 +2,10 @@
 
 Read `README.md`, this file, and relevant `docs/` files before changing the project.
 
+## Agent skills
+
+Read [the skills index](skills/README.md) when choosing a testing, debugging, review, PR-writing, research, design, prose-editing, or requested interview workflow. Canonical files live in `skills/`; `.agents/skills/` links them for Codex discovery. `grill-me`, `grill-with-docs`, their helpers, and `unslop` are opt-in, not prerequisites for ordinary implementation. Skills supplement these instructions and never grant permission to merge, deploy, or use real financial data.
+
 ## Git workflow
 - Work on a focused branch and submit a pull request into `main`.
 - Never push directly to `main`, force-push, rewrite shared history, or merge without explicit authorization.
