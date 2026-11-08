@@ -420,7 +420,12 @@ function createActivityReplay(activities) {
   return {
     get(activityId) {
       const state=stateFor(activityId);checkDependencies(state);
-      return state.categoryTarget===null?{...state.value}:{...state.value,categoryId:categoryFor(state)};
+      const result=state.categoryTarget===null?{...state.value}:{...state.value,categoryId:categoryFor(state)};
+      // Legacy base records can contain structured categories. The former replay
+      // cloned them, so an event's strict prior-value check must never gain
+      // equality merely because caller-owned objects share the same reference.
+      if(result.categoryId!==null && typeof result.categoryId==='object') result.categoryId=clone(result.categoryId);
+      return result;
     },
     append(event) {
       const state=stateFor(event.activityId),result=state.value;

@@ -79,3 +79,17 @@ test('malformed generated event fails before later commands run',()=>{
   assert.equal(validateLedger(ledger),true);
   assert.throws(()=>applyFinancialEvents(ledger,commands,options()),{name:'TypeError',message:'non-json-ledger'});
 });
+
+test('structured legacy category prior values retain sequential clone identity checks',()=>{
+  for(const categoryId of [{legacy:'category'},['legacy-category']]) {
+    const {ledger}=replayFixture();ledger.activities[0].categoryId=categoryId;
+    assert.equal(validateLedger(ledger),true);
+    const commands=[{type:'category-correction',activityId:ledger.activities[0].activityId,categoryId:'new',commandId:'invented-structured-prior'},
+      {type:'classification',activityId:'missing',activityKind:'spending',commandId:'invented-later-error'}];
+    assert.throws(()=>applyFinancialEvents(ledger,commands,options()),{name:'TypeError',message:'invalid-category-correction'});
+    ledger.events.push({eventId:options().idFactory(),commandId:'invented-shared-prior',eventType:'classification',
+      activityId:ledger.activities[0].activityId,recordedAt:'2026-11-08T00:00:00Z',appendOnly:true,
+      activityKind:'spending',categoryId:'new',priorActivityKind:'unclassified',priorCategoryId:categoryId});
+    assert.throws(()=>validateLedger(ledger),{name:'TypeError',message:'classification-history-mismatch'});
+  }
+});
