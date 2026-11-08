@@ -22,3 +22,19 @@ for (const size of [1000, 10000, 50000]) {
     console.log(JSON.stringify({ size, rows: rows.length, mode, milliseconds: times, speedup: Math.round(times.scan / times.indexed * 10) / 10 }));
   }
 }
+for (const size of [1000, 10000, 50000]) {
+  const current = { ...base, ...row(100), activityId: "single-activity" };
+  const input = { ...base, existingActivities: [current],
+    existingCompositeEvidence: Array.from({ length: size }, () => ({ ...current, amountMinor: null, amountDecimal: "01.000" })),
+    rows: Array.from({ length: 1000 }, () => row(100)) };
+  const times = {};
+  let expected;
+  for (const [name, fn] of [["scan", scan], ["indexed", reconcileImport]]) {
+    const start = performance.now();
+    const result = fn(input);
+    times[name] = Math.round((performance.now() - start) * 10) / 10;
+    if (expected) assert.deepEqual(result, expected); else expected = result;
+  }
+  console.log(JSON.stringify({ historicalEvidence: size, rows: 1000, mode: "repeated-single-candidate",
+    milliseconds: times, speedup: Math.round(times.scan / times.indexed * 10) / 10 }));
+}

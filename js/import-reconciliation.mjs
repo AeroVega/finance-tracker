@@ -191,40 +191,73 @@ export function reconcileImport({
   const workingActivity = (activity) => transitions.has(activity.activityId)
     ? { ...activity, ...transitions.get(activity.activityId) } : activity;
 
-  // The serialized key is only a candidate bucket, never evidence of equality.
-  // Recheck sameComposite so null/missing or unusual retained values cannot
-  // accidentally acquire equivalence from serialization.
-  const compositeKey = activity => JSON.stringify([
+  // Native Map keys preserve strict field identity, including object references,
+  // without serializing user-supplied descriptions or actions. NaN never equals
+  // itself under sameComposite's strict comparisons, so it gets no bucket.
+  const compositeFields = activity => [
     activity.institutionId, activity.accountId, activity.currency,
     activity.effectiveDate, activity.normalizedDescription ?? activity.sourceDescription ?? "",
     activity.sourceAction ?? "",
-  ]);
-  const moneyKeys = activity => {
-    const keys = ["raw:" + JSON.stringify([activity.amountMinor, activity.amountDecimal ?? null])];
+  ];
+  const decimalKey = activity => {
+    // Incoming monetary rows require string currencies. Do not coerce an
+    // unrelated retained object's currency while building this lookup.
+    if (Number.isSafeInteger(activity.amountMinor) && typeof activity.currency !== "string") return null;
     const decimal = exactSignedDecimal(activity);
-    if (decimal !== null) {
-      const negative = decimal.startsWith("-");
-      const [whole, fraction = ""] = (negative ? decimal.slice(1) : decimal).split(".");
-      const normalized = (whole.replace(/^0+/, "") || "0") + "." + fraction.replace(/0+$/, "");
-      keys.push("value:" + (negative && normalized !== "0." ? "-" : "") + normalized);
-    }
-    return keys;
+    if (decimal === null) return null;
+    const negative = decimal.startsWith("-");
+    const [whole, fraction = ""] = (negative ? decimal.slice(1) : decimal).split(".");
+    const normalized = (whole.replace(/^0+/, "") || "0") + "." + fraction.replace(/0+$/, "");
+    return (negative && normalized !== "0." ? "-" : "") + normalized;
   };
   let compositeIndex = null;
+  const compositeBucket = (activity, create) => {
+    let node = compositeIndex;
+    for (const field of compositeFields(activity)) {
+      if (typeof field === "number" && Number.isNaN(field)) return null;
+      if (!node.has(field)) {
+        if (!create) return null;
+        node.set(field, new Map());
+      }
+      node = node.get(field);
+    }
+    return node;
+  };
+  const rawMoney = Symbol("raw-money"), decimalMoney = Symbol("decimal-money");
+  const amountBucket = (bucket, kind, key, create) => {
+    if (!bucket.has(kind)) {
+      if (!create) return null;
+      bucket.set(kind, new Map());
+    }
+    const amounts = bucket.get(kind);
+    if (!amounts.has(key)) {
+      if (!create) return null;
+      amounts.set(key, new Map());
+    }
+    return amounts.get(key);
+  };
+  const rawBucket = (bucket, activity, create) => {
+    const minor = activity.amountMinor, decimal = activity.amountDecimal ?? null;
+    if (Number.isNaN(minor) || Number.isNaN(decimal)) return null;
+    const minors = amountBucket(bucket, rawMoney, minor, create);
+    if (!minors) return null;
+    if (!minors.has(decimal)) {
+      if (!create) return null;
+      minors.set(decimal, new Map());
+    }
+    return minors.get(decimal);
+  };
   const getCompositeIndex = () => {
-    if (compositeIndex) return compositeIndex;
+    if (compositeIndex) return;
     compositeIndex = new Map();
     for (const evidence of compositeEvidence) {
       if (evidence.institutionId !== institutionId || evidence.accountId !== accountId) continue;
-      const key = compositeKey(evidence);
-      let amounts = compositeIndex.get(key);
-      if (!amounts) compositeIndex.set(key, amounts = new Map());
-      for (const amount of moneyKeys(evidence)) {
-        if (!amounts.has(amount)) amounts.set(amount, []);
-        amounts.get(amount).push(evidence);
-      }
+      const bucket = compositeBucket(evidence, true);
+      if (!bucket) continue;
+      rawBucket(bucket, evidence, true)?.set(evidence.activityId, evidence);
+      const decimal = decimalKey(evidence);
+      if (decimal !== null) amountBucket(bucket, decimalMoney, decimal, true).set(evidence.activityId, evidence);
     }
-    return compositeIndex;
   };
 
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -318,11 +351,19 @@ export function reconcileImport({
       }
     } else {
       const candidates = new Set();
-      const amounts = getCompositeIndex().get(compositeKey(incoming));
-      candidateAmounts: for (const amount of moneyKeys(incoming)) {
-        for (const evidence of amounts?.get(amount) ?? []) {
-          if (sameComposite(evidence, incoming)) candidates.add(evidence.activityId);
-          if (candidates.size === 2) break candidateAmounts;
+      getCompositeIndex();
+      const bucket = compositeBucket(incoming, false);
+      if (bucket) {
+        const decimal = decimalKey(incoming);
+        const matches = [
+          rawBucket(bucket, incoming, false),
+          decimal === null ? null : amountBucket(bucket, decimalMoney, decimal, false),
+        ];
+        candidateAmounts: for (const amounts of matches) {
+          for (const evidence of amounts?.values() ?? []) {
+            if (sameComposite(evidence, incoming)) candidates.add(evidence.activityId);
+            if (candidates.size === 2) break candidateAmounts;
+          }
         }
       }
       if (candidates.size === 1) {

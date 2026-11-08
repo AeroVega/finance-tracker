@@ -92,3 +92,50 @@ test("large ambiguous source and composite buckets stop once ambiguity is establ
     assert.ok(reads < 50000, `${reads} ID reads`);
   }
 });
+test("composite indexes preserve strict identities without serializing open-ended fields", () => {
+  const cyclic = {}; cyclic.self = cyclic;
+  const reordered = { b: 2, a: 1 };
+  const fn = () => 1;
+  const values = [undefined, null, "", 0, -0, NaN, 1n, Symbol("action"), fn, cyclic, { a: 1, b: 2 }, reordered];
+  for (const field of ["sourceAction", "normalizedDescription"]) {
+    for (const left of values) for (const right of values) {
+      compare({ existingActivities: [activity({ [field]: left })], rows: [row({ [field]: right })] });
+    }
+  }
+  for (const value of values) {
+    compare({ existingActivities: [activity({ currency: value, amountMinor: undefined })],
+      rows: [row({ currency: value, amountMinor: undefined })] });
+  }
+});
+test("returned activities and observations retain original shallow reference semantics", () => {
+  for (const fn of [scan, reconcileImport]) {
+    const sourceFields = { invented: { value: 1 } };
+    const sourceAction = { kind: "example" };
+    const input = row({ sourceFields, sourceAction });
+    const result = fn({ ...base, rows: [input], idFactory: () => "created" });
+    assert.notEqual(result.activities[0], input);
+    assert.equal(result.activities[0].sourceFields, sourceFields);
+    assert.equal(result.observations[0].sourceFields, sourceFields);
+    assert.equal(result.activities[0].sourceAction, sourceAction);
+    input.sourceFields.invented.value = 2;
+    assert.equal(result.observations[0].sourceFields.invented.value, 2);
+  }
+});
+test("repeated retained evidence for one activity is deduplicated before matching", () => {
+  let reads = 0;
+  const evidence = new Proxy(activity({ amountMinor: null, amountDecimal: "01.000" }), {
+    get(target, key) { if (key === "activityId") reads++; return target[key]; },
+  });
+  const result = reconcileImport({ ...base, existingActivities: [activity()],
+    existingCompositeEvidence: Array(50000).fill(evidence),
+    rows: Array.from({ length: 1000 }, () => row()) });
+  assert.equal(result.counts.review, 1000);
+  assert.ok(reads < 200000, `${reads} ID reads`);
+  compare({ existingActivities: [activity()],
+    existingCompositeEvidence: Array(100).fill(evidence),
+    rows: [row(), row({ amountMinor: null, amountDecimal: "1.0" })] });
+});
+test("unrelated retained currency objects are never coerced while indexing", () => {
+  const currency = { [Symbol.toPrimitive]() { throw new Error("must-not-coerce"); } };
+  compare({ existingActivities: [activity({ currency })], rows: [row()] });
+});
