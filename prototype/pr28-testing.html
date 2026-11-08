@@ -74,6 +74,30 @@
     <p id="manual-progress" role="status" aria-live="polite"></p>
     <label for="step-choice">Choose a step</label><select id="step-choice"></select>
     <h2 id="step-title" tabindex="-1"></h2>
+    <p id="step-folder-role" class="notice"></p>
+    <div class="step-controls" aria-label="Current step controls">
+      <p id="step-connection-state" role="status" aria-live="polite">Choose a synthetic folder to begin.</p>
+      <button id="step-connect" disabled>Choose synthetic folder</button>
+      <button id="step-stale" disabled>Confirm and recover stopped session</button>
+      <button id="step-recover" disabled>Recover interrupted save</button>
+      <button id="step-release" disabled>Release current session</button>
+      <div id="step-live-controls"><button id="step-run-live" disabled>Run live checks</button><button id="step-verify-live" disabled>Verify saved run after reconnect</button><p id="step-live-result" role="status" aria-live="polite">Not run. These checks supply all invented inputs for you.</p><a href="#live-checks">See all live results and timings</a></div>
+      <div id="step-interruption" hidden>
+        <h3>Interruption test actions</h3>
+        <p>Use a separate, fresh empty synthetic folder. One saved checkpoint can take several minutes. Keep this tab open until it explicitly says PAUSED.</p>
+        <button id="prepare-interruption" disabled>1. Prepare baseline and one change</button>
+        <button id="pause-prepared-interruption" disabled>2. Save and pause this prepared test</button>
+        <p id="interruption-result" role="status" aria-live="polite">Not prepared. Choose a separate fresh empty interruption folder, then prepare it here.</p>
+        <p id="interruption-preparation-time" class="metric-note">Preparation time: unmeasured.</p><p id="interruption-pause-time" class="metric-note">Pause operation time: unmeasured.</p>
+        <button id="verify-interruption" disabled>3. Verify recovery and finish one retry</button>
+        <p id="interruption-verification" role="status" aria-live="polite">After closing the PAUSED tab, reopen this page, choose this step and reconnect to that same interruption folder. Recover only when offered, then press this button.</p>
+        <p id="interruption-verification-time" class="metric-note">Recovery verification time: unmeasured.</p>
+        <p class="metric-note">Each time covers its whole operation, including its saved checkpoint and independent reopen. The assertions within that operation share this time. Timings disappear on reload.</p>
+        <p>The verifier recognizes only this version's exact invented interruption recipe. An older or modified test folder is unsupported, not necessarily corrupt. It will not be rewritten. No dates, categories or manual counting are needed.</p>
+      </div>
+      <p id="step-device-controls" hidden>Open the workbench below to inspect the calendars and touch controls. Preview only; leave the completed source unchanged.</p>
+      <div id="step-copy-controls" hidden><p>Reuse the completed source, including intentional corrections. The interruption folder is a different test. Release here before opening the copy guide. You do not need to repeat the 25 live checks.</p><a id="step-copy-guide" class="jump-button" href="./pr25-acceptance.html?guide=pr28">Open guided backup and restore</a></div>
+    </div>
     <ol id="step-actions"></ol>
     <div class="expected"><h3>Expected result</h3><p id="step-expected"></p></div>
     <a id="step-workbench" class="jump-button" href="#workbench">Go to these controls</a>
@@ -81,17 +105,15 @@
     <div class="step-navigation"><button id="previous-step">Previous step</button><button id="next-step">Next step</button></div>
     <details><summary>All manual results</summary><ul id="manual-results"></ul></details>
     <p>These are the remaining human observations. The former manual import recipe is automated above. No test status sends anything to anyone.</p>
-    <button id="prepare-interruption" disabled>Prepare interruption test in fresh folder</button>
-    <p id="interruption-result" role="status">Optional. Saves a four-row baseline and stages one change. The separate pause button still needs your explicit choice.</p>
   </section>
-  <details id="workbench-details"><summary>Optional workbench and interruption controls</summary>
+  <details id="workbench-details"><summary>Advanced workbench and manual interruption controls</summary>
   <div id="workbench" aria-label="Shared invented import workbench">
     <p id="workbench-loading" role="status">Loading the existing import workbench…</p>
   </div></details>
   <section aria-labelledby="extended-tools-title">
     <h2 id="extended-tools-title">Existing storage tools</h2>
     <p>Save and verify release before navigating away or opening another tool on the same folder. The PR25 page uses the same version-2 storage machinery. Its backup/export/restore actions validate canonical records; its pause fixture is a separate dashboard test.</p>
-    <a href="./pr25-acceptance.html">PR25 Storage acceptance for backup, export and restore</a>
+    <a id="extended-copy-guide" href="./pr25-acceptance.html?guide=pr28">PR25 Storage acceptance for backup, export and restore</a>
   </section>
   <section id="results-report" aria-labelledby="report-title">
     <h2 id="report-title">Copy a safe results report</h2>

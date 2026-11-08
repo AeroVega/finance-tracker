@@ -1,93 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { webcrypto } from 'node:crypto';
-import { ApplicationStorageLifecycle } from '../js/application-storage-lifecycle.mjs';
-import { GoogleDriveTransactionAdapter } from '../js/drive-transaction-engine.mjs';
-import { CatalogTransactionEngine } from '../js/catalog-transaction-engine.mjs';
-import { initializeCatalogCopy } from '../js/catalog-storage.mjs';
-import { CanonicalLedgerStore, CANONICAL_INDEX } from '../js/canonical-ledger-storage.mjs';
+import { CANONICAL_INDEX } from '../js/canonical-ledger-storage.mjs';
 import { createLedger, registerAccount, summarizeLedger } from '../js/canonical-import.mjs';
-import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
-import { validateSyntheticApplicationSnapshot } from '../js/synthetic-application-structure.mjs';
 import { createLiveRunner, LIVE_IDS } from '../prototype/pr28-live-checks.mjs';
-import { HttpCatalogDrive, HTTP_CATEGORIES } from './helpers/http-catalog-drive.mjs';
-
-const loadBytes = path => readFile(new URL('../prototype/' + path, import.meta.url));
+import { HTTP_CATEGORIES } from './helpers/http-catalog-drive.mjs';
+import { setupHttpCanonicalWorkbench as setup, loadCanonicalFixtureBytes as loadBytes } from './helpers/pr28-http-workbench.mjs';
 
 // Measured at b9229cd, using the same actual lifecycle, adapters and recipe.
 // Bootstrap/connect, reconnect verification, OAuth, fixture downloads, periodic
 // heartbeat, retry/backoff, pagination and browser CORS requests are excluded.
 const BEFORE_REQUESTS = 9590;
 const BEFORE_SMALL_COMMITS = [293, 521, 749, 977, 1205, 1433, 1661, 1889, 2117, 2345];
-
-async function setup() {
-  const http = new HttpCatalogDrive();
-  const adapter = new GoogleDriveTransactionAdapter({ folderId: http.folderId,
-    accessToken: () => 'invented-test-token', fetchImpl: http.fetch, cryptoImpl: webcrypto });
-  const { manifestFileId } = await initializeCatalogCopy({ adapter, guard: async () => {}, cryptoImpl: webcrypto });
-  const lifecycle = new ApplicationStorageLifecycle({
-    syntheticOnly: true, catalogProtocol: true, folderName: 'Invented synthetic HTTP test',
-    folderId: http.folderId, manifestFileId, accessToken: () => 'invented-test-token',
-    makeManifest: () => ({}), lifecycleTarget: new EventTarget(), fetchImpl: http.fetch,
-    setIntervalImpl: () => 1, clearIntervalImpl: () => {}, cryptoImpl: webcrypto
-  });
-  // Replacing only this fallback proves that all canonical reads exercise the
-  // production pinned-snapshot path, unlike the older in-memory runner fixture.
-  lifecycle.readObject = async () => { assert.fail('per-record fallback must not run'); };
-  http.phase = 'connect';
-  await lifecycle.start();
-  assert.ok(lifecycle.transactionAdapter instanceof GoogleDriveTransactionAdapter);
-  assert.ok(lifecycle.engine instanceof CatalogTransactionEngine);
-  let store = new CanonicalLedgerStore({ lifecycle, cryptoImpl: webcrypto });
-  let ledger = await store.load();
-  let occupied = false, dirty = false;
-  const calls = { saves: 0, opens: 0, archives: 0, releases: 0 };
-  const ready = () => { assert.equal(lifecycle.state, 'ready'); assert.equal(lifecycle.acceptingWrites, true); };
-  const driver = {
-    get requestMetrics() { return lifecycle.requestMetrics; },
-    async requireFresh() {
-      ready();
-      const manifest = await lifecycle.readManifest();
-      assert.equal(manifest.syntheticOnly, true); assert.equal(manifest.revision, 0);
-      assert.deepEqual(manifest.snapshot, {}); assert.equal(manifest.catalogFinalizationPending, null);
-      assert.equal(await store.load(), null); assert.equal(store.base.revision, 0);
-      assert.deepEqual(store.base.snapshot, {}); assert.equal(store.base.syntheticOnly, true);
-      assert.equal(store.base.catalogFinalizationPending, null);
-    },
-    async identity() {
-      ready(); const manifest = await lifecycle.readManifest();
-      return { databaseId: manifest.databaseId, copyId: manifest.copyId, folderId: lifecycle.folderId };
-    },
-    stage(next) { ready(); ledger = structuredClone(next); dirty = true; },
-    async save(next) {
-      ready(); calls.saves++; ledger = await store.save(next); dirty = false;
-      return structuredClone(ledger);
-    },
-    async reopen() {
-      ready(); calls.opens++; store = new CanonicalLedgerStore({ lifecycle, cryptoImpl: webcrypto });
-      ledger = await store.load(); dirty = false; return structuredClone(ledger);
-    },
-    async verifyPortable() {
-      ready(); calls.archives++;
-      const archive = await exportCatalogArchive({ adapter: lifecycle.transactionAdapter, manifestFileId,
-        withSourceLock: operation => lifecycle.coordinator.withWrite(operation), validateStructure: validateSyntheticApplicationSnapshot });
-      await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });
-    },
-    async revalidate() { ready(); await lifecycle.handleOnline(); ready(); },
-    async release() {
-      ready(); assert.equal(dirty, false); calls.releases++; await lifecycle.release();
-      assert.equal(lifecycle.started, false); assert.equal(lifecycle.coordinator.canWrite, false);
-      assert.equal(lifecycle.releasePending, false);
-    }
-  };
-  const withWorkbench = async operation => {
-    ready(); assert.equal(dirty, false); assert.equal(occupied, false); occupied = true;
-    try { return await operation(driver); } finally { occupied = false; }
-  };
-  return { http, lifecycle, driver, withWorkbench, calls, manifestFileId,
-    get store() { return store; }, get ledger() { return ledger; } };
-}
 
 function assertConcurrency(http) {
   assert.ok(http.peakConcurrency > 1, 'independent immutable reads should overlap');

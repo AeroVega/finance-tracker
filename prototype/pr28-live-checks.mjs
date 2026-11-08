@@ -1,6 +1,6 @@
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { createLedger, registerAccount, prepareCanonicalImport, applyReviewDecision, reverseReviewDecision, applyFinancialEvent, getEffectiveActivities, summarizeLedger } from '../js/canonical-import.mjs';
-import { canonicalizeJcs } from '../js/transaction-protocol.mjs';
+import { canonicalizeJcs, sha256Hex } from '../js/transaction-protocol.mjs';
 import { safeRequestMetrics, combineRequestMetrics } from '../js/drive-request-metrics.mjs';
 
 // Fixed synthetic recipe. No OAuth, provider credentials, DOM, or storage engine lives here.
@@ -278,19 +278,62 @@ export function createLiveRunner({ withWorkbench, loadBytes = fixtureBytes, onUp
   return Object.freeze({ getMetrics: metrics, forgetResults: () => { if (!running) { results = blankLive(); expected = null; expectedIdentity = null; captures = []; phaseCaptures = {}; } }, stop: () => { if (running) stopRequested = true; }, run: () => execute(false), verifyReconnect: () => execute(true), canVerifyReconnect: () => Boolean(expected) && !running, isRunning: () => running });
 }
 
-// Preparation uses the same import and storage APIs. It does not pause a write,
-// recover, reclaim a session, or mark interruption acceptance passed.
-export async function prepareInterruption(withWorkbench, loadBytes = fixtureBytes) {
+// This deliberately fixed invented recipe can be rebuilt after the whole tab is
+// closed. Only its random ledger identity varies. No records, Drive IDs or hashes
+// are saved in browser storage. Exact comparison rejects older/modified recipes.
+async function interruptionRecipe(ledgerId, loadBytes) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ledgerId || '')) throw new Error('interruption-recipe-unrecognized');
+  const ids = [ledgerId];
+  for (let index = 1; index < 32; index++) {
+    const hash = await sha256Hex('pr28-interruption-v2:' + ledgerId + ':' + index);
+    ids.push(`${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`);
+  }
+  const options = { now: '2026-01-31T12:00:00.000Z', idFactory: () => ids.shift() };
+  const parsed = await parseProviderCsv({ bytes: await loadBytes('../fixtures/pr28/wells-fargo-foundation.csv'), sourceFormat: 'wells-fargo-csv-v1' });
+  let baseline = registerAccount(createLedger(options), { institutionId: 'wells-fargo', displayName: 'Invented interruption checking v2', currency: 'USD', accountType: 'checking' }, options);
+  const accountId = baseline.accounts[0].accountId;
+  baseline = prepareCanonicalImport(baseline, { parsed, syntheticOnly: true, accountMappings: { default: accountId }, coverageByAccount: { [accountId]: { start: '2026-01-01', end: '2026-01-31', provenance: 'user-confirmed' } } }, options).ledger;
+  const classified = applyFinancialEvent(baseline, { type: 'classification', activityId: baseline.activities[0].activityId, activityKind: 'spending', categoryId: 'invented-default', commandId: 'pr28-interruption-v2:' + ledgerId, evidence: { reason: 'Invented interruption classification' } }, options);
+  return { baseline, classified };
+}
+
+// Preparation does not pause, recover or reclaim a session. Its returned receipt
+// stays only in module memory and binds the prominent Pause to this exact copy.
+const interruptionPhase = (observer, phase) => { try { observer(phase); } catch { /* progress cannot affect storage */ } };
+export async function prepareInterruption(withWorkbench, loadBytes = fixtureBytes, onPhase = () => {}) {
   return withWorkbench(async driver => {
+    interruptionPhase(onPhase, 'fresh-check');
     await driver.requireFresh();
-    const parsed = await parseProviderCsv({ bytes: await loadBytes('../fixtures/pr28/wells-fargo-foundation.csv'), sourceFormat: 'wells-fargo-csv-v1' });
-    let ledger = registerAccount(createLedger(), { institutionId: 'wells-fargo', displayName: 'Invented interruption checking', currency: 'USD', accountType: 'checking' });
-    const accountId = ledger.accounts[0].accountId;
-    ledger = prepareCanonicalImport(ledger, { parsed, syntheticOnly: true, accountMappings: { default: accountId }, coverageByAccount: { [accountId]: { start: '2026-01-01', end: '2026-01-31', provenance: 'user-confirmed' } } }).ledger;
-    driver.stage(ledger); assert(same(await driver.save(ledger), ledger));
-    assert(same(await driver.reopen(), ledger));
-    ledger = applyFinancialEvent(ledger, { type: 'classification', activityId: ledger.activities[0].activityId, activityKind: 'spending', categoryId: 'invented-default', commandId: crypto.randomUUID(), evidence: { reason: 'Invented interruption classification' } });
-    driver.stage(ledger);
-    assert(ledger.events.length === 1);
+    const identity = await driver.identity();
+    interruptionPhase(onPhase, 'fixture');
+    const { baseline, classified } = await interruptionRecipe(crypto.randomUUID(), loadBytes);
+    driver.stage(baseline); interruptionPhase(onPhase, 'baseline-save');
+    assert(same(await driver.save(baseline), baseline));
+    interruptionPhase(onPhase, 'baseline-reopen'); assert(same(await driver.reopen(), baseline));
+    interruptionPhase(onPhase, 'stage'); driver.stage(classified);
+    return { identity, ledger: classified };
+  });
+}
+
+// Recovery/session consent is handled by the existing connection controls first.
+// Only a complete recognized baseline or classified graph can reach the write.
+export async function verifyInterruption(withWorkbench, loadBytes = fixtureBytes, onPhase = () => {}) {
+  return withWorkbench(async driver => {
+    interruptionPhase(onPhase, 'recovered-reopen');
+    const recovered = await driver.reopen();
+    interruptionPhase(onPhase, 'recipe-compare');
+    const { baseline, classified } = await interruptionRecipe(recovered?.ledgerId, loadBytes);
+    if (!same(recovered, baseline) && !same(recovered, classified)) throw new Error('interruption-recipe-unrecognized');
+    const retried = same(recovered, baseline);
+    if (retried) {
+      driver.stage(classified); interruptionPhase(onPhase, 'retry-save');
+      assert(same(await driver.save(classified), classified));
+    }
+    interruptionPhase(onPhase, 'retry-reopen'); const reopened = await driver.reopen();
+    interruptionPhase(onPhase, 'graph-totals'); assert(same(reopened, classified));
+    const total = summarizeLedger(reopened, { start: '2026-01-01', end: '2026-01-31', currency: 'USD' });
+    assert(reopened.events.length === 1 && total.spending === '100.00' && total.income === '0' && total.complete === false && total.reasons.includes('coverage-not-reconciled'));
+    // Fixed result vocabulary only. Human pause/close observations remain separate.
+    return retried ? 'baseline-retried' : 'saved-classification-verified';
   });
 }

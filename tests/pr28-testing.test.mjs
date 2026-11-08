@@ -75,12 +75,12 @@ test('guidance distinguishes live coverage, missing refund evidence, prior check
   assert.match(plan.MANUAL_RECIPE.find(item => item.id === 'refund-date').expected, /70\.00/);
   assert.match(plan.MANUAL_RECIPE.find(item => item.id === 'future-rule').expected, /66\.00/);
   assert.match(plan.CHECKS.find(item => item.id === 'recovery').actions.join(' '), /one canonical boundary/);
-  assert.match(plan.CHECKS.find(item => item.id === 'backup-restore').actions.join(' '), /release/);
+  assert.match(plan.CHECKS.find(item => item.id === 'backup-restore').actions.join(' '), /release/i);
   assert.match(html, /Every manual check starts Not run/);
   assert.match(css, /min-height:44px/); assert.match(css, /focus-visible/); assert.match(css, /prefers-reduced-motion/);
 });
 
-function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage = false, clipboardFails = false, workbenchModule = null, runFixtures = null, now = () => performance.now() } = {}) {
+function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage = false, clipboardFails = false, workbenchModule = null, runFixtures = null, prepare = null, verify = null, answer = true, now = () => performance.now() } = {}) {
   const nodes = new Map(), stored = new Map(), copied = [], intervals = [], calls = { imports: 0, fetches: 0, checks: 0 };
   if (saved) stored.set('finance-tracker-' + plan.PLAN_VERSION, JSON.stringify(saved));
   function element(tag = '') {
@@ -108,9 +108,11 @@ function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage =
     DOMParser: class { parseFromString() { return { querySelectorAll: () => sections, getElementById: () => ({}) }; } },
     sessionStorage: { getItem(key) { if (unavailableStorage) throw new Error('unavailable'); return stored.get(key) || null; }, setItem(key, value) { if (unavailableStorage) throw new Error('unavailable'); stored.set(key, value); } },
     navigator: { clipboard: { async writeText(value) { if (clipboardFails) throw new Error('denied'); copied.push(value); } } },
-    confirm: () => true,
+    confirm: () => answer,
     fetch: async () => { calls.fetches++; return { ok: true, text: async () => controls }; },
     mountModule: async () => { calls.imports++; return workbenchModule || { withAcceptanceWorkbench: async () => { throw new Error('not-connected'); }, subscribeAcceptanceStatus: listener => listener({ ready: false, busy: false }) }; },
+    prepareInterruption: prepare || ((withWorkbench, bytes, onPhase) => liveChecks.prepareInterruption(withWorkbench, loadBytes, onPhase)),
+    verifyInterruption: verify || ((withWorkbench, bytes, onPhase) => liveChecks.verifyInterruption(withWorkbench, loadBytes, onPhase)),
     createLiveRunner: options => liveChecks.createLiveRunner({ ...options, loadBytes }),
     runFixtureChecks: async () => { calls.checks++; return runFixtures ? runFixtures() : Object.fromEntries(plan.AUTOMATED_IDS.map(id => [id, 'passed'])); }
   };
@@ -410,4 +412,119 @@ test('stopping during an accepted fresh preflight clears historical provenance w
   assert.equal(report.liveEvidence, 'stopped');
   assert.equal(Object.values(report.live).every(status => status === 'not-run'), true);
   assert.doesNotMatch(h.get('live-results').textContent, /Passed|earlier|Checking/);
+});
+
+
+test('selected interruption step exposes contextual preparation, pause and verification before manual result', async () => {
+  const h = controller(); await tick();
+  h.get('step-choice').value = '2'; h.get('step-choice').change();
+  assert.equal(h.get('step-interruption').hidden, false); assert.equal(h.get('step-workbench').hidden, true);
+  assert.match(h.get('step-folder-role').textContent, /separate disposable interruption folder/);
+  assert.ok(html.indexOf('id="prepare-interruption"') < html.indexOf('id="step-status"'));
+  h.get('step-choice').value = '3'; h.get('step-choice').change();
+  assert.equal(h.get('step-interruption').hidden, true); assert.equal(h.get('step-copy-controls').hidden, false);
+  assert.match(h.get('step-folder-role').textContent, /intended saved corrections/);
+  assert.match(html, /pr25-acceptance.html\?guide=pr28/);
+});
+
+test('actual interruption handlers require explicit starts, serialize repeated clicks and never change human results', async () => {
+  const gate = deferred(), entered = deferred(); let listener, preparations = 0, pauses = 0, verifications = 0;
+  const receipt = { ledger: { private: 'never-copy-ledger' }, identity: { private: 'never-copy-identity' } };
+  const workbenchModule = { withAcceptanceWorkbench() {}, subscribeAcceptanceStatus(value) { listener = value; value({ ready: true, connected: true, busy: false, sessionActive: true }); }, async pausePreparedInterruption(value) { assert.equal(value, receipt); pauses++; throw new Error('changed'); } };
+  const h = controller({ workbenchModule, prepare: async () => { preparations++; entered.resolve(); await gate.promise; listener({ ready: false, connected: true, dirty: true }); return receipt; }, verify: async () => { verifications++; return 'baseline-retried'; } }); await tick();
+  assert.equal(preparations, 0); assert.equal(pauses, 0); assert.equal(verifications, 0);
+  const first = h.get('prepare-interruption').click(); await entered.promise;
+  await h.get('prepare-interruption').click(); await h.get('verify-interruption').click();
+  assert.equal(preparations, 1); assert.equal(verifications, 0); assert.match(h.get('interruption-result').textContent, /several minutes/);
+  gate.resolve(); await first;
+  assert.equal(h.get('pause-prepared-interruption').disabled, false);
+  assert.match(h.get('interruption-result').textContent, /Next: press 2/);
+  await h.get('pause-prepared-interruption').click(); assert.equal(pauses, 1);
+  assert.equal(h.get('interruption-result').dataset.result, 'failed');
+  assert.equal(h.get('pause-prepared-interruption').disabled, true);
+  listener({ ready: true, connected: true, dirty: false });
+  await h.get('verify-interruption').click();
+  assert.equal(verifications, 1); assert.equal(h.get('interruption-verification').dataset.result, 'passed');
+  assert.match(h.get('interruption-verification').textContent, /saved once.*Complete graph verified/);
+  const report = JSON.parse(h.get('safe-report').value);
+  assert.equal(report.interruption.verification, 'passed'); assert.equal(report.manual.recovery, 'not-run');
+  assert.doesNotMatch([...h.stored.values()].join('') + h.get('safe-report').value, /never-copy/);
+});
+
+test('interruption cancelled choices do no work and unsupported recipe clears a prior green result', async () => {
+  let checks = 0, prepareCalls = 0, listener;
+  const module = { withAcceptanceWorkbench() {}, subscribeAcceptanceStatus(value) { listener = value; value({ ready: true, busy: false }); } };
+  const cancelled = controller({ workbenchModule: module, answer: false, prepare: async () => { prepareCalls++; }, verify: async () => { checks++; } }); await tick();
+  await cancelled.get('prepare-interruption').click(); await cancelled.get('verify-interruption').click();
+  assert.equal(prepareCalls, 0); assert.equal(checks, 0);
+  const h = controller({ workbenchModule: module, verify: async () => { if (++checks > 1) throw new Error('interruption-recipe-unrecognized'); return 'saved-classification-verified'; } }); await tick();
+  await h.get('verify-interruption').click(); assert.equal(h.get('interruption-verification').dataset.result, 'passed');
+  await h.get('verify-interruption').click(); assert.equal(h.get('interruption-verification').dataset.result, 'failed');
+  assert.match(h.get('interruption-verification').textContent, /No classification was staged or saved.*not necessarily corrupt/);
+  assert.doesNotMatch(h.get('interruption-verification').textContent, /Complete graph verified/);
+  listener({ ready: false, busy: false, lifecycleState: 'stale-session' });
+  assert.equal(h.get('verify-interruption').disabled, true); assert.match(h.get('step-connection-state').textContent, /confirm all earlier tabs/);
+});
+
+test('copy guide blocks navigation while a session or dirty changes remain, and interruption report fields are allowlisted', async () => {
+  let listener;
+  const h = controller({ workbenchModule: { withAcceptanceWorkbench() {}, subscribeAcceptanceStatus(value) { listener = value; value({ ready: true, busy: false, sessionActive: true }); } } }); await tick();
+  let prevented = 0; h.get('step-copy-guide').click({ preventDefault() { prevented++; } }); assert.equal(prevented, 1);
+  listener({ ready: false, busy: false, sessionActive: false, dirty: false });
+  h.get('step-copy-guide').click({ preventDefault() { prevented++; } }); assert.equal(prevented, 1);
+  const report = JSON.parse(plan.createSafeReport({ interruption: { preparation: ['passed'], verification: { private: 'secret' }, extra: 'secret' } }));
+  assert.deepEqual(report.interruption, { preparation: 'not-run', verification: 'not-run' }); assert.doesNotMatch(JSON.stringify(report), /secret/);
+});
+
+test('guided interruption phases and elapsed/final times remain adjacent, share one operation time and are never persisted', async () => {
+  let time = 0, phases;
+  const gate = deferred();
+  const module = { withAcceptanceWorkbench() {}, subscribeAcceptanceStatus(listener) { listener({ ready: true, busy: false }); } };
+  const h = controller({ now: () => time, workbenchModule: module,
+    prepare: async (driver, bytes, onPhase) => { phases = onPhase; onPhase('baseline-save'); await gate.promise; return {}; },
+    verify: async (driver, bytes, onPhase) => { onPhase('retry-save'); time += 2100; return 'baseline-retried'; }
+  }); await tick();
+  const pending = h.get('prepare-interruption').click(); await tick();
+  assert.match(h.get('interruption-result').textContent, /Saving and verifying the baseline checkpoint/);
+  time = 90200; for (const interval of h.intervals) interval();
+  assert.match(h.get('interruption-preparation-time').textContent, /elapsed: 1 minute 30 seconds/);
+  phases('private-error'); assert.doesNotMatch(h.get('interruption-result').textContent, /private-error/);
+  gate.resolve(); await pending;
+  assert.match(h.get('interruption-preparation-time').textContent, /time: 1 minute 30 seconds/);
+  time += 600000; await h.get('verify-interruption').click();
+  assert.match(h.get('interruption-verification-time').textContent, /time: 2 seconds/);
+  const report = JSON.parse(h.get('safe-report').value);
+  assert.equal(report.interruptionTimings.preparation, 90200); assert.equal(report.interruptionTimings.verification, 2100);
+  assert.doesNotMatch([...h.stored.values()].join(''), /interruptionTimings|90200|2100/);
+  const poison = JSON.parse(plan.createSafeReport({ interruptionTimings: { preparation: ['1'], pause: Infinity, verification: { private: 'secret' } } }));
+  assert.deepEqual(poison.interruptionTimings, { preparation: null, pause: null, verification: null });
+});
+
+test('pause timer stops at the durable boundary and does not measure waiting for the user to close the tab', async () => {
+  let time = 0, listener;
+  const module = { withAcceptanceWorkbench() {}, subscribeAcceptanceStatus(callback) { listener = callback; listener({ ready: true, connected: true, busy: false }); },
+    async pausePreparedInterruption() { time = 3500; listener({ ready: false, connected: true, dirty: true, busy: true, saveState: 'paused' }); await new Promise(() => {}); }
+  };
+  const h = controller({ now: () => time, workbenchModule: module, prepare: async () => { listener({ ready: false, connected: true, dirty: true }); return {}; } }); await tick();
+  await h.get('prepare-interruption').click(); void h.get('pause-prepared-interruption').click(); await tick();
+  assert.match(h.get('interruption-result').textContent, /PAUSED after the first durable write/);
+  assert.match(h.get('interruption-pause-time').textContent, /time: 4 seconds/);
+  time += 600000; for (const interval of h.intervals) interval();
+  await h.get('copy-report').click();
+  assert.equal(JSON.parse(h.copied[0]).interruptionTimings.pause, 3500);
+  assert.equal(JSON.parse(h.copied[0]).manual.recovery, 'not-run');
+});
+
+
+test('reset clears displayed interruption outcomes together with report statuses and durations', async () => {
+  const module = { withAcceptanceWorkbench() {}, subscribeAcceptanceStatus(listener) { listener({ ready: true, busy: false }); } };
+  const h = controller({ workbenchModule: module, verify: async () => 'saved-classification-verified' }); await tick();
+  await h.get('verify-interruption').click(); assert.equal(h.get('interruption-verification').dataset.result, 'passed');
+  h.get('reset-checklist').click();
+  assert.equal(h.get('interruption-verification').dataset.result, 'not-run'); assert.equal(h.get('interruption-result').dataset.result, 'not-run');
+  assert.match(h.get('interruption-verification').textContent, /Not checked after reset/);
+  assert.doesNotMatch(h.get('interruption-verification').textContent, /Complete graph verified/);
+  const report = JSON.parse(h.get('safe-report').value);
+  assert.deepEqual(report.interruption, { preparation: 'not-run', verification: 'not-run' });
+  assert.equal(report.interruptionTimings.verification, null);
 });

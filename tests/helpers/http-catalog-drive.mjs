@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { setImmediate } from 'node:timers/promises';
+import { setImmediate, setTimeout } from 'node:timers/promises';
 
 export const HTTP_CATEGORIES = Object.freeze(['list', 'generate-id', 'metadata', 'media', 'create', 'update']);
 
@@ -14,8 +14,11 @@ const fileKind = metadata => metadata?.appProperties?.financeTrackerKind ||
 // Only the exact Drive operations used by the production adapters are modeled.
 // No fallback to global fetch, real credentials, fixture exports or network I/O.
 export class HttpCatalogDrive {
-  constructor() {
-    this.folderId = 'invented-synthetic-http-folder';
+  constructor({ folderId = 'invented-synthetic-http-folder', idPrefix = 'invented-http-file-', latencyMs = 0 } = {}) {
+    assert.ok(Number.isFinite(latencyMs) && latencyMs >= 0);
+    this.folderId = folderId;
+    this.idPrefix = idPrefix;
+    this.latencyMs = latencyMs;
     this.files = new Map();
     this.requests = [];
     this.phase = 'bootstrap';
@@ -54,6 +57,8 @@ export class HttpCatalogDrive {
     const rows = this.requests.filter(row => !phase || row.phase === phase);
     return {
       requests: rows.length,
+      peakConcurrency: Math.max(0, ...rows.map(row => row.concurrency)),
+      peakMutations: Math.max(0, ...rows.map(row => row.concurrentMutations)),
       categories: Object.fromEntries(HTTP_CATEGORIES.map(category => [category, rows.filter(row => row.category === category).length])),
       byKind: rows.reduce((counts, row) => { counts[row.kind] = (counts[row.kind] || 0) + 1; return counts; }, {}),
       mutations: rows.filter(row => row.method === 'POST' || row.method === 'PATCH').length
@@ -92,10 +97,12 @@ export class HttpCatalogDrive {
     this.requests.push(row);
     this.peakConcurrency = Math.max(this.peakConcurrency, ++this.active);
     if (mutation) this.peakMutations = Math.max(this.peakMutations, ++this.activeMutations);
+    row.concurrency = this.active;
+    row.concurrentMutations = this.activeMutations;
     try {
       // Give concurrent requests a deterministic opportunity to overlap. This is
       // not a Drive latency model and no elapsed-time assertion depends on it.
-      await setImmediate();
+      await (this.latencyMs ? setTimeout(this.latencyMs) : setImmediate());
       this.check();
       await this.beforeResponse?.({ category, method, fileId: id, row });
       const result = await this.respond(target, options, category, id, row);
@@ -112,7 +119,7 @@ export class HttpCatalogDrive {
       const count = Number(target.searchParams.get('count'));
       assert.ok(Number.isSafeInteger(count) && count >= 1 && count <= 1000);
       assert.equal(target.searchParams.get('space'), 'drive');
-      return response({ ids: Array.from({ length: count }, () => 'invented-http-file-' + ++this.nextId) });
+      return response({ ids: Array.from({ length: count }, () => this.idPrefix + ++this.nextId) });
     }
     if (category === 'list') {
       assert.equal(target.searchParams.get('q'), `'${this.folderId}' in parents and trashed = false`);
@@ -140,7 +147,7 @@ export class HttpCatalogDrive {
       assert.equal(target.searchParams.get('uploadType'), 'multipart');
       const { metadata, bytes } = await this.multipart(options);
       row.kind = fileKind(metadata);
-      assert.ok(metadata.id?.startsWith('invented-http-file-'));
+      assert.ok(metadata.id?.startsWith(this.idPrefix));
       assert.deepEqual(metadata.parents, [this.folderId]);
       if (this.files.has(metadata.id)) return response({}, 409);
       const stored = { ...metadata, trashed: false, version: '1', size: String(bytes.length) };
@@ -152,7 +159,7 @@ export class HttpCatalogDrive {
     if (!file) return response({}, 404);
     if (target.searchParams.get('uploadType') === 'multipart') {
       const { metadata, bytes } = await this.multipart(options);
-      assert.equal(fileKind(file.metadata), 'dashboard-synthetic-manifest', 'only the manifest may be replaced');
+      assert.ok(['dashboard-synthetic-manifest', 'copy-preparation'].includes(fileKind(file.metadata)), 'only the manifest or copy preparation may be replaced');
       Object.assign(file.metadata, metadata);
       file.bytes = bytes;
     } else {

@@ -32,7 +32,7 @@ Ten successive small save-and-reopen operations, each adding one invented accoun
 
 The performance work preserves the existing storage format, immutable history, exact manifest comparisons, session ownership checks, and recovery protocol. It does not introduce a persistent or cross-operation verification cache. Every application read and save still verifies retained history, including objects no longer selected by the current snapshot.
 
-Independent immutable history reads use a bounded pool. Financial publication, catalog finalization, session updates, and other mutations remain ordered. A failed read stops admission of more reads and waits for already-started reads to settle before reporting failure.
+Independent immutable history reads use a bounded pool. Canonical transaction writes, financial publication, catalog finalization and session updates remain ordered. The backup follow-up below separately permits up to four independent immutable destination copies. A failed read stops admission of more reads and waits for already-started reads to settle before reporting failure.
 
 For Google Drive, fresh complete folder enumerations provide metadata for the retained objects before and after their body reads. This replaces individual metadata requests. Every requested file must appear exactly once with a valid location, kind, transaction binding, and hash. Incomplete pages, duplicate IDs, missing files, or changed bindings fail closed. Every body is still fetched and hashed. Adapters without bulk metadata support retain their individual metadata reads; a failed bulk request never silently falls back or returns a partial result.
 
@@ -45,6 +45,38 @@ Recovery can reuse a journal's already-verified bytes within that same recovery 
 A changed canonical save checks fresh ownership and the exact expected manifest before handing off to the engine. The engine then verifies all retained history before any mutation. This avoids a duplicate preflight history scan. An unchanged save still performs its full storage verification. Stale proposals and corrupted unselected history remain failures.
 
 File IDs are allocated lazily in batches of 16. Batch validation rejects incomplete, duplicate, or reused IDs. An assigned ID remains unchanged through an ambiguous create and recovery; batching does not retry or replace a write.
+
+## Backup and portable restore
+
+**Verified in the same invented HTTP simulation:** the completed canonical recipe selects 66 current objects but retains 226 objects: 68 data objects, four commit records and 154 journal events. Backup and restore must copy all 226. Their 229 immutable creates also include a preparation marker, a locator catalog and the final manifest. One ordered update marks the preparation ready. This fixture has no retained original CSV files; the separate original-file retention workflow is unchanged.
+
+The serial baseline is `catalog-backup.mjs` at `70728162c4c20918c152a08a90856f2e0328dbfa`. Both versions use the same current HTTP transaction/session adapters and complete live-recipe source. The comparison first passes all 25 recipe assertions, then checks the exact portable archive, every retained byte and logical binding, distinct physical IDs, and complete reopened canonical graphs and collection order. The source manifest stays unchanged.
+
+| Operation | Before requests | After requests |
+| --- | ---: | ---: |
+| Portable export | 235 | 235 |
+| Verify portable archive in memory | 0 | 0 |
+| Backup into a fresh destination | 1,874 | 1,874 |
+| Reopen canonical graph from backup | 238 | 238 |
+| Restore archive into a fresh destination | 1,635 | 1,635 |
+| Reopen canonical graph from restore | 238 | 238 |
+
+The counts include source verification and final source-manifest recheck for backup, per-mutation ownership checks, exact-ID create read-back, and full destination history verification before and after manifest publication. Connection, folder initialization, session release, periodic heartbeats, OAuth, fixture downloads, retries, pagination and browser CORS requests are excluded. Independent test-only history comparisons occur outside the measured operation. The original 24-step recipe still uses 4,633 requests before human reconnect.
+
+The improvement comes from overlapping up to four independent retained-object copies. It does not remove requests or integrity checks. Each admitted copy keeps its assigned physical ID and completes its ownership check, create and exact-ID verification. Catalog entries retain their input order even when uploads finish out of order. After a failure, the pool stops admitting objects and drains every started operation before quarantine or releasing either session gate. Preparation, original-import restoration, catalog creation and final manifest publication stay ordered. The full source recheck and both destination verifications remain mandatory.
+
+**Verified local delay experiment on Node 24.22.1, Linux x64:** with an invented 2 ms wait before every simulated HTTP response, three runs gave the medians below. These times include local hashing, validation and timer scheduling. They demonstrate overlapping waits in this experiment and are not Google latency estimates, live backup times or Safari measurements. No regression test imposes an elapsed-time threshold.
+
+| Operation | Serial median, ms | Bounded-copy median, ms |
+| --- | ---: | ---: |
+| Backup | 3,213.65 | 1,321.88 |
+| Restore | 3,040.38 | 1,118.96 |
+
+The delayed experiment observed one concurrent immutable create before and four after. Periodic heartbeats are disabled only in this simulation. Production source and destination heartbeats continue unchanged and may overlap these requests, so four is a retained-copy worker limit, not a global HTTP-concurrency limit. The original canonical save recipe still has serial durable writes.
+
+Run `node tests/benchmark-backup.mjs --baseline-ref=7072816 --latency-ms=2 --runs=3` to repeat the comparison. The benchmark loads that committed backup module into a temporary local file and uses current shared adapters and fixture assertions for both versions. It does not check out another branch or contact Drive. Omitting `--baseline-ref` measures only the current implementation; omitting `--latency-ms` adds no timer delay. Request budgets run with `node --test tests/pr28-backup-budget.test.mjs tests/pr28-request-budget.test.mjs`. The original recipe tests keep their existing assertions through a shared fixture helper.
+
+The PR25 page now reports fixed copy phases, verified-object counts, elapsed time and final duration. A count measures objects that completed their individual verification; it is not an estimate of time remaining or proof that the copy is usable. The page reports success only after final verification and destination-session release. Its timer includes time spent choosing a destination, so it is not a network-only measurement. Missing clocks remain unmeasured. Progress callbacks receive no file identifiers or object bytes, and callback failures cannot change storage outcomes. Archive-file loading uses the same busy guard as copying to prevent overlapping actions from replacing its result.
 
 ## Request counters
 
@@ -78,6 +110,8 @@ Collapsed collection and rule JSON is generated only when opened. The evidence r
 These measurements do not explain the tiny bundled fixture's live Drive delay and are not device responsiveness measurements. Event-heavy replay, full-ledger cloning and retained storage history still grow with the ledger. This change does not redesign their audit records or recovery boundaries.
 
 ## Acceptance
+
+**Verified locally after the backup-copy follow-up:** the complete suite passed 627/627 tests on Node 24.22.1 and Node 26.13.0, with no failures or skips. All browser-module syntax and diff checks passed. Independent storage review found no blocker. New coverage includes failed-copy drainage through actual session release, continuing heartbeats, ambiguous creates, changed ownership, corruption before and after publication, safe progress observers, exact HTTP copy budgets, and actual-handler progress/cancellation/archive-loading behavior. Rendered browser/Safari layout and live Google performance of these changes remain **Open**. The implementation was held locally while the owner tested the existing deployment.
 
 **Verified locally after the timing and local-performance follow-up:** the complete suite passed 599/599 tests on Node 24.22.1 and Node 26.13.0, with no failures or skips. Module syntax and diff checks passed. Independent safety review found no blocker in the metadata brackets, bounded reads, create receipts, exact-base handoff, recovery, ID batching, or metric privacy. The later canonical/UI review compared 22 workflow snapshots and 6,641 malformed-ledger cases against the prior implementation with identical financial results and validation errors. These results do not replace live Google/Safari acceptance of the published commit.
 

@@ -1,7 +1,7 @@
 import { blankLive, safeLiveMetrics } from './pr28-live-checks.mjs';
 import { safeElapsedMs } from './pr28-testing-timing.mjs';
 // Public, invented acceptance instructions only. No ledger or provider data belongs here.
-export const PLAN_VERSION = 'pr28-assisted-v2';
+export const PLAN_VERSION = 'pr28-assisted-v3';
 export const STATUS_LABELS = Object.freeze({ 'not-run': 'Not run', passed: 'Passed by me', failed: 'Failed', blocked: 'Blocked', skipped: 'Skipped' });
 export const BROWSER_LABELS = Object.freeze(['Not recorded', 'Safari on iPhone', 'Safari on iPad', 'Safari on Mac', 'Chrome on desktop', 'Firefox on desktop', 'Edge on desktop', 'Other browser']);
 export const MANUAL_RECIPE = Object.freeze([
@@ -173,17 +173,18 @@ export const CHECKS = Object.freeze([
     actions: ['Use portrait, landscape and text zoom. Open optional workbench controls and preview a fixture to try both independent coverage calendars. Do not stage or save manual changes to the completed automated run.', 'Check touch targets, labels, focus and panel scrolling. When no save is running, try cancelling Google consent or folder selection, then reconnect. The page must show an honest cancelled/error state.'],
     expected: 'Controls remain usable on this device. The whole page does not require sideways scrolling. Google cancellation does not save an invented ledger or count as a successful connection.' },
   { ...MANUAL_RECIPE.find(check => check.id === 'recovery'), actions: [
-    'Copy the completed live report first. Release any connected session, connect a separate fresh empty synthetic folder, then choose Prepare interruption test. The page saves the four-row baseline and stages one classification for you. It does not pause or claim recovery passed.',
-    'Open the optional workbench Save and reopen section. Choose Save and pause after first durable write, confirm, and wait for PAUSED. Copy the safe report before closing. Fully close this tab and reopen this page. This is one canonical boundary rehearsal, not every crash boundary or an iOS process-kill test.',
-    'Reconnect to that same disposable folder. Recover interrupted save if offered. If a stopped session remains, wait for conclusively stale status and confirm all old tabs/devices stopped before Recover stopped session. Never take over a live session.',
-    'Reopen verified saved ledger. Expect 1 account, 1 import, 4 observations, 4 activities, 0 decisions and either 0 events or one complete market classification. Only if the event is absent, stage that one classification, save and reopen. Exactly 1 event and January spending 100.00 must remain. Mark this human check only after observing the pause and recovered state.'
-  ] },
+    'Copy the completed live report first and release the completed source. Choose a separate fresh empty synthetic interruption folder with the controls in this step. Press 1. Prepare baseline and one change. Wait for the verified preparation result.',
+    'Press 2. Save and pause this prepared test, confirm, and wait for PAUSED. Copy the safe report before closing. Fully close this tab and reopen this page. This is one canonical boundary rehearsal, not every crash boundary or an iOS process-kill test.',
+    'Choose this step again and reconnect to the same interruption folder. Recover interrupted save only when offered. For a stopped session, wait for conclusively stale status and explicitly confirm that all old tabs/devices stopped. Never take over a live session.',
+    'Press 3. Verify recovery and finish one retry. It independently reopens and compares the entire recognized fixture. If the single classification is absent, it stages, saves and reopens it once. It checks the complete graph and January spending 100.00 automatically. Mark your human observation only after seeing the pause, closing the tab and returning.'
+  ], expected: 'The verifier recognizes the exact baseline or the exact single-classification graph, then verifies one saved event and qualified spending 100.00. A modified or older fixture is refused without writes. Programmatic graph checks do not prove that you closed the tab; record that observation yourself.' },
   { ...MANUAL_RECIPE.find(check => check.id === 'backup-restore'), actions: [
-    'The live runner already verifies all retained history and a portable archive in memory. This additional check creates real copies. Copy your live report and release the current session. Open PR25 Storage acceptance and connect to the completed source.',
-    'Create a verified Drive backup in a fresh empty synthetic folder. Export the portable archive, move it outside Drive, reopen and verify it, then restore to a second fresh empty synthetic folder. Keep the archive private. Do not use dashboard snapshot, retention or interruption buttons.',
-    'Release PR25 before opening each copied folder in this page. Reopen each copy with the optional workbench. Expect 5 accounts, 7 imports, 15 observations, 15 activities, 15 events and 8 review decisions. The two retained inactive activities remain history. Full January–March known spending is 101.75 and income is 2250.37, qualified as incomplete. The automated core checking account alone has combined January–February spending 66.00.',
-    'The same-copy verification button intentionally rejects backup/restored copies because their physical copy identities differ. Use this human copy check for them, then release.'
-  ], expected: 'Both copies independently reopen with the complete logical graph and history, using new physical copy locators. In-memory archive validation alone does not prove a live new-folder backup or restore.' }
+    'Reuse the completed live-check source, including any intentional saved corrections. The separate interruption folder is not the source for this test. You do not need to repeat the live recipe.',
+    'Release the current session, then open Guided backup and restore from this step. Choose the existing completed source there. The guide verifies it, creates a backup in a fresh empty synthetic folder and checks the copied graph.',
+    'Export the portable archive, keep it outside Drive, then choose the saved file in the guide. Restore into a different fresh empty synthetic folder. The guide verifies the full expected graph and retained history and independently reopens each copy. Keep archives private.',
+    'Keep the device awake. Observe phase, checked-object count, elapsed time and the final verified result. An object count alone is not a usable-copy result. A failed destination must remain untouched; use a new empty folder for another attempt.'
+  ], expected: 'Both copies match the actual source graph and retained history with new physical copy locators. Intentional source corrections are included. No fixed original event count substitutes for exact verification. Folder/file choices and device observations remain yours.' }
+
 ]);
 
 export const AUTOMATED_IDS = Object.freeze(['fixture-foundation', 'canonical-foundation', 'classifications', 'category-rule', 'repeat-import', 'review-import', 'review-retry', 'review-decisions', 'missing-refund-date', 'refund-period', 'amount-correction', 'future-category', 'provider-shapes']);
@@ -198,7 +199,7 @@ export function safeAutomated(input) {
 export function verifiedSource(text, confirmed) {
   return confirmed === true && typeof text === 'string' && /^[0-9a-f]{40}$/.test(text) ? text : 'unverified';
 }
-export function createSafeReport({ manual, automated, browser, source, sourceConfirmed, date, live, liveState, metrics, fixtureElapsedMs }) {
+export function createSafeReport({ manual, automated, browser, source, sourceConfirmed, date, live, liveState, metrics, fixtureElapsedMs, interruption, interruptionTimings }) {
   // Deliberate allowlist. Never serialize DOM, URLs, errors, storage objects or free text.
   const isoDate = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date ? date : 'not-recorded';
   return JSON.stringify({ plan: PLAN_VERSION, date: isoDate,
@@ -208,6 +209,10 @@ export function createSafeReport({ manual, automated, browser, source, sourceCon
     automatedProvenance: 'Bundled-fixture checks only; no browser-layout, OAuth or Drive verification', automated: safeAutomated(automated),
     fixtureTimingProvenance: 'One shared fixture-run duration, including fixture loading and common setup. Not independent or additive check times. Unmeasured after reload.',
     fixtureElapsedMs: safeElapsedMs(fixtureElapsedMs),
+    interruptionProvenance: 'Current-page programmatic preparation and exact recovered-recipe verification only. Whole-tab close, stale-session consent and device observations are recorded separately by the tester. Not restored after reload.',
+    interruption: Object.fromEntries(['preparation', 'verification'].map(id => [id, ['passed', 'failed', 'running', 'not-run'].includes(interruption?.[id]) ? interruption[id] : 'not-run'])),
+    interruptionTimingProvenance: 'One duration per complete preparation, pause-to-boundary or recovery-verification operation, shared by all assertions within it. Unmeasured after reload.',
+    interruptionTimings: Object.fromEntries(['preparation', 'pause', 'verification'].map(id => [id, safeElapsedMs(interruptionTimings?.[id])])),
     liveProvenance: 'Programmatic assertions in the connected synthetic session; save/reopen, export validation and release have separate results. No layout, OAuth cancellation, whole-tab interruption or new-folder restore claim.',
     liveEvidence: ['not-run', 'running', 'complete', 'failed', 'stopped', 'historical', 'blocked'].includes(liveState) ? liveState : 'not-run', live: blankLive(live),
     requestMetricsProvenance: 'In-memory API fetch attempts started in the live-run and reconnect-verification windows, including session traffic. Excludes connection/setup, idle gaps, fixture downloads and browser CORS traffic. HTTP status is not an acceptance result. Request time ends at response headers, excludes body reading and hashing; elapsed time covers the operation. In-flight attempts remain in their starting phase. Repeated reconnect attempts are cumulative. Metrics are unavailable after reload.',

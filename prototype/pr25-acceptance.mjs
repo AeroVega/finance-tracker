@@ -7,7 +7,19 @@ import { verifyCatalogHistory, storageError } from "../js/catalog-storage.mjs";
 import { backupCatalogCopy, exportCatalogArchive, verifyCatalogArchive, restoreCatalogArchive } from "../js/catalog-backup.mjs";
 import { chooseSyntheticFolder } from "../js/synthetic-folder-picker.mjs";
 import { ORIGINAL_RETENTION_MS } from "../js/original-retention-policy.mjs";
+import { startCopyProgress } from "./pr25-copy-progress.mjs";
 
+import { createCopyGuideDriver } from "./pr25-copy-guide-driver.mjs";
+import { mountCopyGuide } from "./pr25-copy-guide.mjs";
+
+if (globalThis.location?.search?.split(/[?&]/).includes("guide=pr28")) {
+  document.getElementById("legacy-tools").hidden = true;
+  document.getElementById("copy-guide").hidden = false;
+  document.title = "PR28 guided backup and restore · Finance Tracker";
+  const guideStorage = new DashboardSyntheticStorage();
+  const guide = mountCopyGuide({ document, window, driver: createCopyGuideDriver({ storage: guideStorage }) });
+  guideStorage.prepare().then(() => guide.ready()).catch(() => guide.unavailable());
+} else {
 const $ = (id) => document.getElementById(id);
 let busy = false;
 let configured = false;
@@ -52,8 +64,9 @@ function sourceOptions() {
 }
 function pick(title) { return chooseSyntheticFolder({ config: storage.config, token: () => storage.token(), title }); }
 
-async function folderSession(folder, operation) {
+async function folderSession(folder, operation, progress) {
   if (folder.id === storage.folderId) throw storageError("same-copy-folder", "Choose a folder distinct from the connected primary.");
+  progress?.setPhase("opening-destination");
   const coordinator = new SessionCoordinator({ adapter: createDriveSessionAdapter({ folderId: folder.id, accessToken: () => storage.token() }) });
   let stop;
   try {
@@ -64,23 +77,28 @@ async function folderSession(folder, operation) {
     return await operation({ targetAdapter: adapter, withTargetLock: (work) => coordinator.withWrite(work),
       assertTargetWritable: () => coordinator.assertCanWrite({ online: navigator.onLine !== false }) });
   } finally {
-    if (coordinator.canWrite) await coordinator.release();
+    if (coordinator.canWrite) { progress?.setPhase("releasing-destination"); await coordinator.release(); }
     stop?.();
     ownedDestinations.delete(coordinator);
   }
 }
 
+async function runAction(status, operation) {
+  if (busy) return;
+  busy = true; refresh();
+  const progress = status === "copy-result" ? startCopyProgress({ region: $("copy-progress"),
+    phase: $("copy-phase"), count: $("copy-count"), elapsed: $("copy-elapsed") }) : undefined;
+  if (progress) result(status, "Working. Completion has not been verified.", "pending");
+  let succeeded = false;
+  try { succeeded = (await operation(progress)) !== false; }
+  catch (error) {
+    // Stable codes only; provider bodies and private folder/file IDs stay out
+    // of page diagnostics, downloads and public acceptance evidence.
+    result(status, "Action did not complete: " + (error.code || "unexpected-error") + ". Reconnect or inspect the preserved synthetic evidence before retrying.", "error");
+  } finally { progress?.finish(succeeded); busy = false; refresh(); }
+}
 function action(id, status, operation) {
-  $(id).addEventListener("click", async () => {
-    if (busy) return;
-    busy = true; refresh();
-    try { await operation(); }
-    catch (error) {
-      // Stable codes only; provider bodies and private folder/file IDs stay out
-      // of page diagnostics, downloads and public acceptance evidence.
-      result(status, "Action did not complete: " + (error.code || "unexpected-error") + ". Reconnect or inspect the preserved synthetic evidence before retrying.", "error");
-    } finally { busy = false; refresh(); }
-  });
+  $(id).addEventListener("click", () => runAction(status, operation));
 }
 
 action("connect", "connection", () => storage.connect());
@@ -94,49 +112,65 @@ action("verify-source", "source-result", async () => {
   const verified = await options.withSourceLock(async () => verifyCatalogHistory(options.sourceAdapter, await options.sourceAdapter.readJson(options.sourceManifestFileId)));
   result("source-result", "PASS: all retained bytes and commit ancestry verified. Revision " + verified.record.revision + ".");
 });
-action("backup", "copy-result", async () => {
+action("backup", "copy-result", async (progress) => {
+  progress.setPhase("choosing-destination");
   const folder = await pick("Choose a fresh synthetic backup destination");
-  const copied = await folderSession(folder, (target) => backupCatalogCopy({ ...sourceOptions(), ...target }));
+  const copied = await folderSession(folder, (target) => backupCatalogCopy({ ...sourceOptions(), ...target, onProgress: progress.onProgress }), progress);
   result("copy-result", "PASS: separate Drive backup created, reopened, and verified. " + copied.objectCount + " immutable objects; logical commit history preserved.");
 });
-action("quarantine", "copy-result", async () => {
+action("quarantine", "copy-result", async (progress) => {
+  progress.setPhase("choosing-destination");
   const folder = await pick("Choose a fresh disposable synthetic quarantine destination");
   const source = sourceOptions();
   const archive = await exportCatalogArchive({ adapter: source.sourceAdapter, manifestFileId: source.sourceManifestFileId,
-    withSourceLock: source.withSourceLock, validateStructure });
+    withSourceLock: source.withSourceLock, validateStructure, onProgress: progress.onProgress });
   let observed = false;
   await folderSession(folder, async (target) => {
-    try { await restoreCatalogArchive({ archive, ...target, validateStructure,
+    try { await restoreCatalogArchive({ archive, ...target, validateStructure, onProgress: progress.onProgress,
       beforePublish: async () => { throw storageError("intentional-synthetic-failure", "Intentional quarantine rehearsal"); } }); }
     catch (error) {
       if (error.code !== "copy-quarantined" || !error.quarantineConfirmed) throw error;
       const candidates = (await target.targetAdapter.listChildren()).filter((file) => file.appProperties?.financeTrackerKind === "copy-preparation");
       observed = candidates.length === 1 && (await target.targetAdapter.readJson(candidates[0].id)).state === "quarantined";
     }
-  });
+  }, progress);
   if (!observed) throw storageError("quarantine-unverified", "Quarantine was not verified.");
   result("copy-result", "PASS: intentional copy failure left a durable quarantine marker and no usable destination manifest. Retry requires a fresh destination.");
 });
-action("export", "copy-result", async () => {
+action("export", "copy-result", async (progress) => {
   const source = sourceOptions();
   loadedArchive = await exportCatalogArchive({ adapter: source.sourceAdapter, manifestFileId: source.sourceManifestFileId,
-    withSourceLock: source.withSourceLock, validateStructure });
-  await verifyCatalogArchive(loadedArchive, { validateStructure });
+    withSourceLock: source.withSourceLock, validateStructure, onProgress: progress.onProgress });
+  await verifyCatalogArchive(loadedArchive, { validateStructure, onProgress: progress.onProgress });
   const url = URL.createObjectURL(new Blob([JSON.stringify(loadedArchive)], { type: "application/json" }));
   const link = document.createElement("a"); link.href = url; link.download = "finance-tracker-synthetic-backup.json"; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   result("copy-result", "PASS: portable archive verified and downloaded. Move it outside Drive and reopen it here for independent verification. Keep it private; it includes synthetic recovery locators.");
 });
 $("archive").addEventListener("change", async () => {
-  loadedArchive = null; refresh();
-  try { const file = $("archive").files[0]; if (file) { const archive = JSON.parse(await file.text()); await verifyCatalogArchive(archive, { validateStructure }); loadedArchive = archive; result("copy-result", "PASS: local archive independently verified."); } }
-  catch { result("copy-result", "Archive rejected. Use a verified version-2 synthetic application archive.", "error"); }
-  refresh();
+  if (busy) return;
+  loadedArchive = null;
+  const file = $("archive").files[0];
+  if (!file) { result("copy-result", "No archive selected.", "pending"); $("copy-progress").hidden = true; refresh(); return; }
+  await runAction("copy-result", async (progress) => {
+    progress.setPhase("loading-archive");
+    try {
+      const archive = JSON.parse(await file.text());
+      await verifyCatalogArchive(archive, { validateStructure, onProgress: progress.onProgress });
+      loadedArchive = archive;
+      result("copy-result", "PASS: local archive independently verified.");
+    } catch {
+      // Retain the existing fixed rejection text, without JSON/parser details.
+      result("copy-result", "Archive rejected. Use a verified version-2 synthetic application archive.", "error");
+      return false;
+    }
+  });
 });
-action("verify-archive", "copy-result", async () => { await verifyCatalogArchive(loadedArchive, { validateStructure }); result("copy-result", "PASS: loaded archive integrity, history, and application structure verified."); });
-action("restore", "copy-result", async () => {
+action("verify-archive", "copy-result", async (progress) => { await verifyCatalogArchive(loadedArchive, { validateStructure, onProgress: progress.onProgress }); result("copy-result", "PASS: loaded archive integrity, history, and application structure verified."); });
+action("restore", "copy-result", async (progress) => {
+  progress.setPhase("choosing-destination");
   const folder = await pick("Choose a fresh synthetic restore destination");
-  const restored = await folderSession(folder, (target) => restoreCatalogArchive({ archive: loadedArchive, ...target, validateStructure }));
+  const restored = await folderSession(folder, (target) => restoreCatalogArchive({ archive: loadedArchive, ...target, validateStructure, onProgress: progress.onProgress }), progress);
   result("copy-result", "PASS: restored into a separate Drive folder with a new physical copy identity. Revision " + restored.manifest.revision + "; exact logical history verified.");
 });
 action("retain", "retention-result", async () => { const item = await storage.originals.retainFixture(); retainedAt = item.sourceFileRetainedAt; result("retention-result", "PASS: invented original uploaded, hash-verified, and linked to a completed synthetic import with its 540-day clock."); });
@@ -168,3 +202,5 @@ window.addEventListener("pagehide", () => { for (const coordinator of ownedDesti
 storage.prepare().then(() => { configured = true; result("connection", "Google services ready. Connect to a dedicated synthetic primary."); refresh(); })
   .catch(() => { result("connection", "Google services or deployment configuration are unavailable. Use the documented branch deployment after CI and review; no Drive operations were attempted.", "error"); refresh(); });
 refresh();
+
+}

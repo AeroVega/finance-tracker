@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createLiveRunner, LIVE_IDS, blankLive, prepareInterruption } from '../prototype/pr28-live-checks.mjs';
+import { createLiveRunner, LIVE_IDS, blankLive, prepareInterruption, verifyInterruption } from '../prototype/pr28-live-checks.mjs';
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
 import { summarizeLedger } from '../js/canonical-import.mjs';
 import { setupCatalog } from './helpers/catalog-drive.mjs';
@@ -135,4 +135,74 @@ test('request metrics and throwing progress observers cannot alter operations or
   assert.doesNotMatch(JSON.stringify(metrics), /private-/);
   runner.forgetResults(); assert.equal(runner.getMetrics().available, false);
   assert.equal(requestMetrics.snapshot().requests, 2, 'reset only forgets reporting windows, not storage state');
+});
+
+
+test('interruption verifier recovers the prior exact graph using the actual engine and saves one retry only', async () => {
+  const h = await harness();
+  const prepared = await prepareInterruption(h.withWorkbench, loadBytes);
+  h.setup.adapter.stopAfter = h.setup.adapter.mutations + 1;
+  await assert.rejects(h.driver.save(prepared.ledger));
+  h.setup.adapter.reboot();
+  await h.setup.engine.recover({ manifestFileId: h.setup.manifestFileId });
+  await h.driver.reopen();
+  assert.equal(h.ledger.events.length, 0);
+  const saves = h.calls.saves;
+  assert.equal(await verifyInterruption(h.withWorkbench, loadBytes), 'baseline-retried');
+  assert.equal(h.calls.saves, saves + 1);
+  assert.deepEqual(h.ledger, prepared.ledger);
+  assert.equal(await verifyInterruption(h.withWorkbench, loadBytes), 'saved-classification-verified');
+  assert.equal(h.calls.saves, saves + 1, 'a repeated verification does not repeat the classification save');
+});
+
+test('interruption verifier accepts the entire committed recipe without adding another event', async () => {
+  const h = await harness(), prepared = await prepareInterruption(h.withWorkbench, loadBytes);
+  await h.driver.save(prepared.ledger);
+  const saves = h.calls.saves, mutations = h.setup.adapter.mutations;
+  assert.equal(await verifyInterruption(h.withWorkbench, loadBytes), 'saved-classification-verified');
+  assert.equal(h.calls.saves, saves); assert.equal(h.setup.adapter.mutations, mutations);
+  assert.deepEqual(h.ledger, prepared.ledger);
+});
+
+for (const modification of ['account', 'amount', 'coverage', 'extra-event', 'old-recipe', 'extra-field']) test(`interruption verifier refuses ${modification} before staging or saving`, async () => {
+  const h = await harness(), prepared = await prepareInterruption(h.withWorkbench, loadBytes);
+  await h.driver.reopen();
+  const recovered = structuredClone(h.ledger);
+  if (modification === 'account') recovered.accounts[0].displayName = 'Invented modified account';
+  if (modification === 'amount') recovered.activities[0].amountMinor = -9000;
+  if (modification === 'coverage') recovered.imports[0].declaredCoverage.end = '2026-02-01';
+  if (modification === 'extra-event') recovered.events = [...prepared.ledger.events, { ...prepared.ledger.events[0], eventId: crypto.randomUUID() }];
+  if (modification === 'old-recipe') recovered.accounts[0].displayName = 'Invented interruption checking';
+  if (modification === 'extra-field') recovered.imports[0].unexpected = true;
+  const saves = h.calls.saves, mutations = h.setup.adapter.mutations;
+  h.driver.reopen = async () => structuredClone(recovered);
+  h.driver.stage = () => assert.fail('must not stage a modified or old recipe');
+  await assert.rejects(verifyInterruption(h.withWorkbench, loadBytes), /interruption-recipe-unrecognized/);
+  assert.equal(h.calls.saves, saves); assert.equal(h.setup.adapter.mutations, mutations);
+});
+
+test('interruption verification never retries a failed save and refuses dirty or overlapping leases', async () => {
+  const h = await harness(); await prepareInterruption(h.withWorkbench, loadBytes);
+  await assert.rejects(verifyInterruption(h.withWorkbench, loadBytes));
+  await h.driver.reopen();
+  const saves = h.calls.saves;
+  h.setup.adapter.stopAfter = h.setup.adapter.mutations + 1;
+  await assert.rejects(verifyInterruption(h.withWorkbench, loadBytes));
+  assert.equal(h.calls.saves, saves + 1);
+  await assert.rejects(verifyInterruption(h.withWorkbench, loadBytes));
+  assert.equal(h.calls.saves, saves + 1);
+});
+
+test('interruption phase observers cannot change save results or expose graph values', async () => {
+  let saved, staged, saves = 0;
+  const phases = [];
+  const driver = { async requireFresh() {}, async identity() { return { copyId: 'private-copy' }; }, stage(value) { staged = value; }, async save(value) { saves++; return saved = structuredClone(value); }, async reopen() { return structuredClone(saved); } };
+  const withWorkbench = operation => operation(driver);
+  const onPhase = phase => { phases.push(phase); throw new Error('private-observer-error'); };
+  const receipt = await prepareInterruption(withWorkbench, loadBytes, onPhase);
+  assert.equal(saves, 1); assert.equal(staged.events.length, 1);
+  assert.equal(await verifyInterruption(withWorkbench, loadBytes, onPhase), 'baseline-retried');
+  assert.equal(saves, 2); assert.deepEqual(saved, receipt.ledger);
+  assert.deepEqual(phases, ['fresh-check', 'fixture', 'baseline-save', 'baseline-reopen', 'stage', 'recovered-reopen', 'recipe-compare', 'retry-save', 'retry-reopen', 'graph-totals']);
+  assert.doesNotMatch(JSON.stringify(phases), /private|[0-9a-f]{8}-[0-9a-f]{4}/);
 });

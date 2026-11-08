@@ -1,3 +1,4 @@
+import { canonicalizeJcs } from '../js/transaction-protocol.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
 import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
@@ -17,6 +18,7 @@ const fixtures = Object.freeze({
 let pauseAfterFirstWrite = false;
 let busy = false, configured = false, ledger = null, store = null, parsed = null, dirty = false;
 let saveState = 'idle';
+let savedAuditEvents = 0, lastStagedAction = null;
 let mappingForms = [];
 let previewGeneration = 0, parsedFixture = null;
 let acceptanceListener = null;
@@ -50,7 +52,7 @@ function refreshSaveStatus(ready) {
   if (saveState === 'paused') {
     state = 'paused'; text = 'Interruption test paused. This is not a verified save. For this rehearsal only, close the tab as instructed in Save and reopen.';
   } else if (saveState === 'saving') {
-    state = 'saving'; text = 'Saving and verifying changes. Keep this tab open until verification finishes.';
+    state = 'saving'; text = 'Saving and verifying changes. One checkpoint can take several minutes. Keep this tab open until verification finishes.';
   } else if (saveState === 'unverified') {
     state = 'unverified'; text = 'Save did not finish and verify. ' + (dirty ? 'Your staged changes are still in this tab. ' : '') + 'Use recovery if offered, then reopen verified saved records before retrying.';
   } else if (dirty) {
@@ -78,9 +80,15 @@ function refresh() {
   $('stage').disabled = busy || !ready || !store || !parsed || parsedFixture !== $('fixture').value || !ledger;
   $('save').disabled = busy || !ready || !store || !ledger || !dirty;
   if ($('pause-canonical')) $('pause-canonical').disabled = $('save').disabled;
-  $('event').disabled = busy || !ready || !store || !$('activity').value;
+  const repeated = repeatsLastAction();
+  $('event').disabled = busy || !ready || !store || !$('activity').value || repeated;
+  $('event').textContent = repeated ? 'This action is already ' + lastActionState() : 'Stage auditable change';
+  $('repeat-event').hidden = !repeated;
+  $('repeat-event').disabled = busy || !ready || !store || !repeated;
+  const eventCount = ledger ? `${ledger.events.length} audit events in this ledger. ${Math.max(0, ledger.events.length - savedAuditEvents)} audit events not yet saved.` + (dirty ? ' Unsaved local changes remain. Save before leaving.' : ' No unsaved changes.') : 'No ledger loaded.';
+  if ($('event-count').textContent !== eventCount) $('event-count').textContent = eventCount;
   $('summarize').disabled = busy || !ledger;
-  acceptanceListener?.({ ready: Boolean(ready && store && ledger && !dirty), busy });
+  acceptanceListener?.({ ready: Boolean(ready && store && ledger && !dirty), connected: Boolean(ready && store && ledger), busy, dirty, saveState, lifecycleState: lifecycle?.state || 'disconnected', sessionActive: Boolean(lifecycle?.started || lifecycle?.coordinator?.canWrite || lifecycle?.releasePending) });
   refreshSaveStatus(ready);
 }
 const storage = new DashboardSyntheticStorage({
@@ -94,18 +102,21 @@ const storage = new DashboardSyntheticStorage({
     await new Promise(() => {});
   }
 });
-async function run(operation) {
+async function run(operation, feedbackId = null) {
   if (busy) return;
   busy = true; refresh();
+  if (feedbackId) { $(feedbackId).dataset.error = 'false'; $(feedbackId).textContent = 'Checking and staging locally…'; }
   try { await operation(); }
   catch (error) {
     const candidate = error.code || (error instanceof TypeError ? error.message : '');
     const code = typeof candidate === 'string' && /^[a-z][a-z0-9-]{0,95}$/.test(candidate) ? candidate : 'invalid-input-or-unavailable';
-    message((inputMessages[code] || 'Action did not complete: ' + code + '. Check inputs or reconnect and reopen before retrying.') + (dirty ? ' Staged changes remain in this tab.' : ''), true);
+    const failure = (inputMessages[code] || 'Action did not complete: ' + code + '. Check inputs or reconnect and reopen before retrying.') + (dirty ? ' Staged changes remain in this tab.' : '');
+    message(failure, true);
+    if (feedbackId) { $(feedbackId).textContent = failure; $(feedbackId).dataset.error = 'true'; }
   }
   finally { busy = false; refresh(); }
 }
-function action(id, operation) { $(id).addEventListener('click', () => run(operation)); }
+function action(id, operation, feedbackId = null) { $(id).addEventListener('click', () => run(operation, feedbackId)); }
 function changed(next) { if (ledger?.ledgerId !== next.ledgerId) resetReviewState(); ledger = next; dirty = true; return renderLedger(); }
 function option(select, value, label) { const node = element('option', label); node.value = value; select.append(node); }
 function labelled(parent, text, node) { const label = element('label', text); label.append(node); parent.append(label); return node; }
@@ -187,12 +198,26 @@ function renderMappings() {
     $('mappings').append(fieldset); mappingForms.push({key,select,name,currency,type,start,end,confirm});
   }
 }
-async function loadLedger() { const nextStore = new CanonicalLedgerStore({ lifecycle: storage.lifecycle }); const nextLedger = await nextStore.load() || createLedger(); store = nextStore; ledger = nextLedger; resetReviewState(); dirty = false; saveState = 'idle'; clearPreview(); renderLedger(); }
+async function loadLedger() {
+  const nextStore = new CanonicalLedgerStore({ lifecycle: storage.lifecycle });
+  const savedLedger = await nextStore.load(), nextLedger = savedLedger || createLedger();
+  store = nextStore; ledger = nextLedger; savedAuditEvents = ledger.events.length;
+  lastStagedAction = null; resetReviewState(); dirty = false; saveState = 'idle';
+  $('event-result').textContent = savedLedger ? 'Verified saved ledger loaded. Choose an activity to stage an auditable change.' : 'No saved canonical ledger yet. Stage an invented import to begin.';
+  $('event-result').dataset.error = 'false';
+  $('stage-result').textContent = 'No unsaved import from this session. Preview a fixture to continue.';
+  $('stage-result').dataset.error = 'false';
+  clearPreview(); renderLedger();
+  message(savedLedger ? 'Saved canonical records independently reopened and verified. ' + recordCounts() : 'Connected to an empty synthetic ledger. No canonical records are saved yet.');
+  return Boolean(savedLedger);
+}
 async function saveLedger(next = ledger) {
   saveState = 'saving'; refresh();
   try {
     const saved = await store.save(next);
-    ledger = saved; dirty = false; saveState = 'idle'; renderLedger();
+    ledger = saved; savedAuditEvents = saved.events.length; dirty = false; saveState = 'idle'; renderLedger();
+    $('event-result').textContent = `${saved.events.length} audit events saved and verified. No unsaved changes.`; $('event-result').dataset.error = 'false';
+    $('stage-result').textContent = 'Imports saved and verified. Preview a fixture to stage another import.'; $('stage-result').dataset.error = 'false';
     return saved;
   } catch (error) {
     // A rejected or interrupted save is not evidence that nothing reached Drive.
@@ -229,8 +254,10 @@ action('stage', async () => {
     accountMappings[form.key]=id; coverageByAccount[id]={start:form.start.value,end:form.end.value,provenance:'user-confirmed'};
   }
   const result = await prepareCanonicalImport(next,{parsed,accountMappings,coverageByAccount,syntheticOnly:true});
-  changed(result.ledger); clearPreview(); message('Import staged locally. Review before saving. '+JSON.stringify(result.summary));
-});
+  changed(result.ledger); clearPreview();
+  const feedback = 'Import staged locally. ' + result.summary.created + ' activities created; ' + result.summary.review + ' need review; ' + result.summary.rejected + ' rejected. Save before leaving.';
+  $('stage-result').textContent = feedback; message(feedback);
+}, 'stage-result');
 action('save', async () => { await saveLedger(); message('Canonical ledger saved and verified. ' + recordCounts() + ' Reopen to independently reload saved records.'); });
 if ($('pause-canonical')) action('pause-canonical', async () => {
   if (!confirm('Pause a canonical save after its first durable write in this disposable synthetic folder? You must fully close this tab to continue, then reconnect and verify recovery.')) return;
@@ -238,15 +265,43 @@ if ($('pause-canonical')) action('pause-canonical', async () => {
   try { await saveLedger(); message('No durable write was paused. The ledger was unchanged or the save completed. Do not record interruption as passed.'); }
   finally { pauseAfterFirstWrite = false; }
 });
-action('reopen', async () => { if (dirty && !confirm('Discard unsaved local changes and reopen the saved ledger?')) return; await loadLedger(); message('Saved canonical records reopened and verified. ' + recordCounts()); });
-action('event', async () => {
-  if (!$('evidence').value.trim()) inputError('evidence-required');
-  const event={type:$('event-type').value,activityId:$('activity').value,commandId:crypto.randomUUID(),evidence:{reason:$('evidence').value.trim()}};
+action('reopen', async () => { if (dirty && !confirm('Discard unsaved local changes and reopen the saved ledger?')) return; const saved = await loadLedger(); if (saved) message('Saved canonical records reopened and verified. ' + recordCounts()); });
+function eventInput() {
+  const event = { type: $('event-type').value, activityId: $('activity').value, evidence: { reason: $('evidence').value.trim() } };
   if (event.type==='refund-link') { event.originalActivityId=$('original').value; if ($('refund-posted-date').value) event.confirmedPostedDate=$('refund-posted-date').value; }
   else if (event.type==='bank-correction') event.amountText=$('amount').value.trim();
   else { event.categoryId=$('category').value.trim() || null; if (event.type==='classification') event.activityKind=$('classification').value; }
-  changed(applyFinancialEvent(ledger,event)); message('Auditable change staged locally. Save to persist it.');
-});
+  return event;
+}
+function lastActionState() { return ledger.events.length <= savedAuditEvents ? 'saved' : 'staged'; }
+function repeatsLastAction() {
+  return Boolean(lastStagedAction && ledger?.ledgerId === lastStagedAction.ledgerId && ledger.events.at(-1)?.eventId === lastStagedAction.eventId && JSON.stringify(eventInput()) === lastStagedAction.input);
+}
+async function stageEvent(allowRepeat = false) {
+  if (!store || !storage.lifecycle?.acceptingWrites) inputError('reconnect-required');
+  if (repeatsLastAction() && !allowRepeat) {
+    $('event-result').textContent = 'This exact action is already ' + lastActionState() + '. No second audit event was added. Change the inputs for a correction, or explicitly choose to stage the identical action again.'; return;
+  }
+  if (!$('evidence').value.trim()) inputError('evidence-required');
+  const input = eventInput(), event = { ...input, commandId: crypto.randomUUID() };
+  const activity = ledger.activities.find(item => item.activityId === event.activityId);
+  changed(applyFinancialEvent(ledger,event));
+  lastStagedAction = { ledgerId: ledger.ledgerId, eventId: ledger.events.at(-1).eventId, input: JSON.stringify(input) };
+  // Keep the selected target visible so the adjacent receipt identifies exactly
+  // what was staged. Equal commands are protected only in this UI, not the engine.
+  $('activity').value = event.activityId;
+  $('original').value = input.originalActivityId || '';
+  const feedback = `${event.type} staged for ${activity.sourceDescription} · ${activity.activityId}. ${ledger.events.length} audit events now. Save before leaving.`;
+  $('event-result').textContent = feedback; $('event-result').dataset.error = 'false'; message(feedback);
+}
+action('event', () => stageEvent(), 'event-result');
+action('repeat-event', async () => {
+  if (!repeatsLastAction()) return;
+  if (!confirm('This exact action was already ' + lastActionState() + '. Append another identical audit event intentionally?')) {
+    $('event-result').textContent = 'Identical action cancelled. No second audit event was added.'; return;
+  }
+  await stageEvent(true);
+}, 'event-result');
 action('summarize', async () => { const result = summarizeLedger(ledger,{start:$('report-start').value,end:$('report-end').value,currency:'USD',accountIds:ledger.accounts.map(a=>a.accountId)}); $('summary').textContent=JSON.stringify(result,null,2)+'\nDeclared coverage is not independent proof of complete history.'; });
 function renderLedger() {
   const effectiveActivities = getEffectiveActivities(ledger);
@@ -371,7 +426,9 @@ function renderReviews(activeActivities) {
   return { pendingStatus, decisionStatus };
 }
 $('fixture').addEventListener('change',clearPreview);
-$('activity').addEventListener('change',refresh);
+for (const id of ['activity', 'original', 'event-type', 'classification', 'category', 'amount', 'evidence', 'refund-posted-date']) {
+  $(id).addEventListener('input', refresh); $(id).addEventListener('change', refresh);
+}
 $('event-type').addEventListener('change',()=>{ $('refund-posting-fields').hidden=$('event-type').value!=='refund-link'; });
 $('show-save').addEventListener('click', () => { if ($('workbench-details')) $('workbench-details').open = true; $('save-title').focus(); });
 window.addEventListener('beforeunload',event=>{ if(dirty||busy){event.preventDefault();event.returnValue='';} });
@@ -423,3 +480,20 @@ export async function withAcceptanceWorkbench(operation) {
 }
 
 export function subscribeAcceptanceStatus(listener) { acceptanceListener = listener; refresh(); return () => { if (acceptanceListener === listener) acceptanceListener = null; }; }
+
+// Only the assisted page calls this with its in-memory preparation receipt. The
+// advanced manual pause remains separate and never supplies a guided receipt.
+export async function pausePreparedInterruption(prepared) {
+  if (busy) inputError('operation-in-progress');
+  const lifecycle = storage.lifecycle;
+  if (!prepared || !store || !ledger || !dirty || saveState !== 'idle' || lifecycle?.state !== 'ready' || !lifecycle.acceptingWrites || navigator.onLine === false) inputError('prepared-interruption-required');
+  busy = true; refresh();
+  try {
+    const manifest = await lifecycle.readManifest();
+    const identity = { databaseId: manifest.databaseId, copyId: manifest.copyId, folderId: lifecycle.folderId };
+    if (storage.lifecycle !== lifecycle || canonicalizeJcs(identity) !== canonicalizeJcs(prepared.identity) || canonicalizeJcs(ledger) !== canonicalizeJcs(prepared.ledger)) inputError('prepared-interruption-changed');
+    pauseAfterFirstWrite = true;
+    await saveLedger();
+    inputError('interruption-not-paused');
+  } finally { pauseAfterFirstWrite = false; busy = false; refresh(); }
+}

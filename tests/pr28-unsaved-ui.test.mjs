@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import * as canonical from '../js/canonical-import.mjs';
+import { canonicalizeJcs } from '../js/transaction-protocol.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 
 const moduleUrl = new URL('../prototype/pr28-import.mjs', import.meta.url);
@@ -66,15 +67,15 @@ async function controller({ guided = false } = {}) {
       state.saved = structuredClone(next); return structuredClone(state.saved);
     }
   }
-  const context = { ...canonical, parseProviderCsv, DashboardSyntheticStorage: Storage, CanonicalLedgerStore: Store,
+  const context = { ...canonical, applyFinancialEvent: (ledger, command) => canonical.applyFinancialEvent(ledger, JSON.parse(JSON.stringify(command))), parseProviderCsv, DashboardSyntheticStorage: Storage, CanonicalLedgerStore: Store,
     document: { getElementById: get, createElement: element, querySelectorAll: controls },
     window: { addEventListener(type, callback) { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(callback); } },
-    navigator: { onLine: true }, crypto, structuredClone, URL, Uint8Array,
+    navigator: { onLine: true }, crypto, canonicalizeJcs: value => canonicalizeJcs(JSON.parse(JSON.stringify(value))), structuredClone, URL, Uint8Array,
     confirm: question => { prompts.push(question); return typeof state.answer === 'function' ? state.answer(question) : state.answer; },
     fetch: async url => { const bytes = await readFile(url); return { ok: true, arrayBuffer: async () => bytes }; }
   };
   const executable = source.replace(/^import .*;$/gm, '').replace(/^export /gm, '').replaceAll('import.meta.url', JSON.stringify(moduleUrl.href));
-  vm.runInNewContext(executable + '\nglobalThis.page = { withAcceptanceWorkbench, subscribeAcceptanceStatus, inspect: () => ({ ledger, dirty, busy, store, saveState }) };', context);
+  vm.runInNewContext(executable + '\nglobalThis.page = { withAcceptanceWorkbench, subscribeAcceptanceStatus, pausePreparedInterruption, inspect: () => ({ ledger, dirty, busy, store, saveState }) };', context);
   await tick();
   const click = id => get(id).emit('click');
   return { state, calls, get, click, prompts, listeners, context, page: context.page, storage: () => storage, focused: () => focused,
@@ -273,4 +274,93 @@ test('interruption pause is explicit, remains dirty and busy, and never announce
   assert.match(h.get('result').textContent, /PAUSED after the first durable write/);
   assert.equal(h.leave().prevented, true); assert.equal(h.get('save').disabled, true);
   await h.click('save'); assert.equal(h.calls.saves, 1);
+});
+
+
+test('actual event handler shows adjacent receipt and unsaved audit count; an exact repeat cannot append accidentally', async () => {
+  const h = await controller(); await h.click('connect'); await h.stage(); await h.click('save');
+  const activityId = h.page.inspect().ledger.activities[0].activityId;
+  h.get('activity').value = activityId; h.get('category').value = 'invented-default'; h.get('evidence').value = 'Invented receipt';
+  await h.click('event');
+  assert.equal(h.page.inspect().ledger.events.length, 1);
+  assert.match(h.get('event-result').textContent, /classification staged for INVENTED MARKET PURCHASE/);
+  assert.match(h.get('event-result').textContent, new RegExp(activityId));
+  assert.match(h.get('event-count').textContent, /1 audit events not yet saved/);
+  assert.equal(h.get('event').disabled, true); assert.equal(h.get('repeat-event').hidden, false);
+  await h.click('event');
+  assert.equal(h.page.inspect().ledger.events.length, 1);
+  assert.match(h.get('event-result').textContent, /No second audit event/);
+  h.state.answer = false; await h.click('repeat-event');
+  assert.equal(h.page.inspect().ledger.events.length, 1);
+  h.state.answer = true; await h.click('repeat-event');
+  assert.equal(h.page.inspect().ledger.events.length, 2, 'intentional repeated audit command remains possible');
+  assert.match(h.prompts.at(-1), /Append another identical audit event intentionally/);
+  await h.click('save'); assert.match(h.get('event-count').textContent, /0 audit events not yet saved.*No unsaved changes/);
+  h.get('activity').value = activityId; await h.get('activity').emit('change');
+  assert.equal(h.get('event').disabled, true); assert.equal(h.get('event').textContent, 'This action is already saved');
+  await h.click('event'); assert.match(h.get('event-result').textContent, /already saved/);
+  assert.equal(h.page.inspect().ledger.events.length, 2);
+  h.get('event-type').value = 'category-correction';
+  h.get('category').value = 'invented-different'; await h.get('category').emit('input');
+  assert.equal(h.get('event').disabled, false); await h.click('event');
+  assert.equal(h.page.inspect().ledger.events.length, 3, 'a real correction is not suppressed');
+  assert.match(h.get('event-count').textContent, /1 audit events not yet saved/);
+});
+
+test('inline staging failure replaces stale success and a later valid action clears red error state', async () => {
+  const h = await controller(); await h.click('connect'); await h.stage();
+  assert.match(h.get('stage-result').textContent, /Import staged locally/);
+  await h.click('stage'); assert.equal(h.get('stage-result').dataset.error, 'true');
+  h.get('activity').value = h.page.inspect().ledger.activities[0].activityId;
+  await h.click('event'); assert.equal(h.get('event-result').dataset.error, 'true');
+  assert.match(h.get('event-result').textContent, /Enter evidence/);
+  h.get('evidence').value = 'Invented evidence'; await h.click('event');
+  assert.equal(h.get('event-result').dataset.error, 'false');
+  assert.equal(h.page.inspect().ledger.events.length, 1);
+  await h.click('save'); await h.click('reopen');
+  assert.match(h.get('event-count').textContent, /0 audit events not yet saved/);
+  assert.match(h.get('event-result').textContent, /Verified saved ledger loaded/);
+});
+
+for (const changed of ['identity', 'graph', 'offline', 'ownership', 'clean', 'unverified']) test(`prepared pause refuses ${changed} without writing`, async () => {
+  const h = await controller({ guided: true }); await h.click('connect'); await h.stage();
+  const lifecycle = h.storage().lifecycle;
+  lifecycle.folderId = 'invented-folder'; lifecycle.readManifest = async () => ({ databaseId: 'invented-database', copyId: 'invented-copy' });
+  const prepared = { identity: { databaseId: 'invented-database', copyId: 'invented-copy', folderId: 'invented-folder' }, ledger: structuredClone(h.page.inspect().ledger) };
+  if (changed === 'identity') prepared.identity.copyId = 'other-copy';
+  if (changed === 'graph') prepared.ledger.accounts[0].displayName = 'Other invented name';
+  if (changed === 'offline') h.context.navigator.onLine = false;
+  if (changed === 'ownership') lifecycle.acceptingWrites = false;
+  if (changed === 'clean') await h.click('save');
+  if (changed === 'unverified') { h.state.onSave = () => { throw new Error('failed'); }; await h.click('save'); }
+  const saves = h.calls.saves;
+  await assert.rejects(h.page.pausePreparedInterruption(prepared), error => ['prepared-interruption-required', 'prepared-interruption-changed'].includes(error.code));
+  assert.equal(h.calls.saves, saves); assert.equal(h.page.inspect().busy, false);
+});
+
+test('prepared pause matches canonical object keys, holds one lease and reports PAUSED only after durable mutation', async () => {
+  const h = await controller({ guided: true }); await h.click('connect'); await h.stage();
+  const lifecycle = h.storage().lifecycle;
+  lifecycle.folderId = 'invented-folder'; lifecycle.readManifest = async () => ({ databaseId: 'invented-database', copyId: 'invented-copy' });
+  const prepared = { identity: { folderId: 'invented-folder', copyId: 'invented-copy', databaseId: 'invented-database' }, ledger: JSON.parse(canonicalizeJcs(h.page.inspect().ledger)) };
+  void h.page.pausePreparedInterruption(prepared); await tick();
+  assert.equal(h.calls.saves, 1); assert.equal(h.page.inspect().saveState, 'paused');
+  await assert.rejects(h.page.pausePreparedInterruption(prepared), error => error.code === 'operation-in-progress');
+  assert.equal(h.calls.saves, 1); assert.match(status(h), /not a verified save/);
+});
+
+
+for (const retry of ['connect', 'reopen', 'recover', 'stale']) test(`a verified ${retry} clears a prior generic red result without claiming discarded drafts were saved`, async () => {
+  const h = await controller(); await h.click('connect'); await h.stage();
+  h.state.onSave = () => { throw Object.assign(new Error('failed'), { code: 'verification-failed' }); };
+  await h.click('save'); assert.equal(h.get('result').dataset.error, 'true');
+  assert.match(h.get('result').textContent, /verification-failed/);
+  h.state.onSave = null;
+  if (retry === 'recover') h.storage().lifecycle.state = 'recovery-required';
+  if (retry === 'stale') h.storage().lifecycle.state = 'stale-session';
+  await h.click(retry);
+  assert.equal(h.get('result').dataset.error, 'false');
+  assert.doesNotMatch(h.get('result').textContent, /verification-failed|Staged changes remain/);
+  assert.equal(h.page.inspect().dirty, false); assert.equal(h.page.inspect().ledger.events.length, 0);
+  assert.equal(h.calls.saves, 1, 'reopen/reconnect did not save the discarded draft');
 });
