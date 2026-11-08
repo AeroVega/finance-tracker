@@ -16,24 +16,64 @@ export async function writeVerified(adapter, { content, kind, transactionId, nam
   fileId ||= await adapter.allocateFileId();
   await guard();
   let createError;
-  try { await adapter.createImmutable({ fileId, content: bytes, kind, transactionId, name, expectedSha256: sha256 }); }
+  let created;
+  try { created = await adapter.createImmutable({ fileId, content: bytes, kind, transactionId, name, expectedSha256: sha256 }); }
   catch (error) { createError = error; }
+  // The optional receipt contains exact-ID metadata and media read back by the
+  // adapter, never the upload payload or POST response. Recheck every binding
+  // and the raw bytes here. A hash-only success result is not a receipt.
+  if (!createError && created?.readback?.metadata && created.readback.bytes instanceof Uint8Array) {
+    await verifyReadback(adapter, { fileId, sha256, kind, transactionId }, created.readback, cryptoImpl);
+    return { fileId, sha256 };
+  }
   try { await readVerified(adapter, { fileId, sha256, kind, transactionId }, cryptoImpl); }
   catch (error) { throw createError || error; }
   return { fileId, sha256 };
 }
 
-export async function readVerified(adapter, { fileId, sha256, kind, transactionId }, cryptoImpl = globalThis.crypto) {
-  const metadata = await adapter.readMetadata(fileId);
-  if (metadata.id !== fileId || metadata.trashed === true || !metadata.parents?.includes(adapter.folderId) ||
+function verifyMetadata(adapter, { fileId, sha256, kind, transactionId }, metadata) {
+  if (metadata?.id !== fileId || metadata.trashed === true || !Array.isArray(metadata.parents) || !metadata.parents.includes(adapter.folderId) ||
       metadata.appProperties?.financeTrackerHash !== sha256 ||
       (kind && metadata.appProperties?.financeTrackerKind !== physicalKind(kind)) ||
       (transactionId && metadata.appProperties?.financeTrackerTransaction !== transactionId)) {
     throw storageError("immutable-metadata-mismatch", "An immutable object has an unexpected folder, kind, identity, or hash binding.");
   }
-  const bytes = await adapter.readBytes(fileId);
-  if (await hashRaw(bytes, cryptoImpl) !== sha256) throw storageError("immutable-hash-mismatch", "An immutable object failed exact-byte verification.");
+}
+
+async function verifyReadback(adapter, reference, { metadata, bytes }, cryptoImpl) {
+  verifyMetadata(adapter, reference, metadata);
+  if (await hashRaw(bytes, cryptoImpl) !== reference.sha256) throw storageError("immutable-hash-mismatch", "An immutable object failed exact-byte verification.");
   return bytes;
+}
+
+export async function readVerified(adapter, reference, cryptoImpl = globalThis.crypto) {
+  const { fileId } = reference;
+  const metadata = await adapter.readMetadata(fileId);
+  verifyMetadata(adapter, reference, metadata);
+  const bytes = await adapter.readBytes(fileId);
+  return verifyReadback(adapter, reference, { metadata, bytes }, cryptoImpl);
+}
+
+/** Bound independent reads, preserve input order, and drain reads before failing. */
+export async function mapImmutableReads(items, read) {
+  const results = new Array(items.length);
+  let next = 0;
+  let failure;
+  let failureIndex = Infinity;
+  let failed = false;
+  const worker = async () => {
+    while (!failed && next < items.length) {
+      const index = next++;
+      try { results[index] = await read(items[index], index); }
+      catch (error) {
+        if (index < failureIndex) { failure = error; failureIndex = index; }
+        failed = true;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, items.length) }, worker));
+  if (failed) throw failure;
+  return results;
 }
 
 export function requireCatalogManifest(manifest, adapter) {
@@ -97,8 +137,41 @@ export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globa
   const catalog = await readCatalog(adapter, manifest, cryptoImpl);
   const objects = new Map();
   const journals = new Map();
-  for (const [key, entry] of Object.entries(catalog.entries)) {
-    objects.set(key, await readVerified(adapter, { ...entry, kind: entry.kind }, cryptoImpl));
+  const entries = Object.entries(catalog.entries);
+  const readMetadataBatch = async () => {
+    const result = await adapter.readMetadataBatch(entries.map(([, entry]) => entry.fileId));
+    if (!(result instanceof Map) || result.size !== entries.length) {
+      throw storageError("invalid-metadata-batch", "Batch metadata must cover exactly the retained file IDs.");
+    }
+    // A fresh complete listing may replace per-file metadata GETs, but never
+    // byte verification. Validate all bindings before admitting any body reads.
+    for (const [, entry] of entries) {
+      const file = result.get(entry.fileId);
+      verifyMetadata(adapter, entry, file);
+      if (typeof file.version !== "string" || !/^[0-9]+$/.test(file.version)) {
+        throw storageError("invalid-metadata-batch", "Batch metadata must provide a valid version for every retained file.");
+      }
+    }
+    return result;
+  };
+  const metadata = typeof adapter.readMetadataBatch === "function" ? await readMetadataBatch() : null;
+  const verifiedBytes = await mapImmutableReads(entries, async ([, entry]) => {
+    if (!metadata) return readVerified(adapter, entry, cryptoImpl);
+    const bytes = await adapter.readBytes(entry.fileId);
+    return verifyReadback(adapter, entry, { metadata: metadata.get(entry.fileId), bytes }, cryptoImpl);
+  });
+  if (metadata) {
+    // Bracket media reads with a second fresh complete enumeration. Membership,
+    // tags and Drive versions must still agree. This is not an atomic snapshot.
+    const after = await readMetadataBatch();
+    for (const [, entry] of entries) {
+      if (metadata.get(entry.fileId).version !== after.get(entry.fileId).version) {
+        throw storageError("immutable-version-mismatch", "A retained file changed while its bytes were being verified.");
+      }
+    }
+  }
+  for (const [index, [key, entry]] of entries.entries()) {
+    objects.set(key, verifiedBytes[index]);
     if (entry.kind === "journal-event") {
       const event = JSON.parse(new TextDecoder().decode(objects.get(key)));
       if (event.eventId !== entry.identity || event.transactionId !== entry.transactionId || event.sequence !== entry.sequence) {

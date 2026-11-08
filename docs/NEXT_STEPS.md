@@ -1,11 +1,27 @@
 # Finance Tracker — next steps and handoff
 
-## PR25 current handoff — 2026-11-03
+## Current project handoff, 2026-11-08
 
-Synthetic catalog-backed transactions/recovery, full-history backup/restore, retention integration and live-rehearsal controls are implemented for review. PR25 uses fresh version-2 synthetic folders only; no PR24 directory conversion is supported. See [the action ownership matrix and remaining gates](PR25_IMPLEMENTATION_HANDOFF.md) and [current acceptance evidence](PR25_ACCEPTANCE.md). This supersedes earlier implementation-pending notes below. Concrete protocol/retention review, current-head Node 26 CI and all live account/device/Cloud/owner acceptance gates remain open. No deployment or production persistence was authorized by this coding pass.
+PRs #20–#25 are merged. The synthetic Drive storage foundation includes the application lifecycle, durable transactions/recovery, version-2 per-copy locator catalogs, backup/restore, portable archives, and 540-day original-source retention primitives. Owner-reported synthetic acceptance and exact-head CI evidence are recorded in [Synthetic Storage Acceptance](SYNTHETIC_STORAGE_ACCEPTANCE.md). Operational details live in [Drive Backup and Restore](DRIVE_BACKUP_AND_RESTORE.md), [Original Source File Retention](ORIGINAL_SOURCE_RETENTION.md), [Drive Transaction Engine Testing](DRIVE_TRANSACTION_ENGINE_TESTING.md), and [Google Drive Configuration](GOOGLE_DRIVE_CONFIGURATION.md).
 
-**Last updated:** 2026-11-02
-**Current phase:** PRs #22–#24 are merged. PR #25 is active on `feat/production-readiness-acceptance`, adding synthetic-only backup/restore portability and 540-day retention primitives plus an explicit acceptance record. Production financial-data persistence remains **not approved**.
+Production financial-data persistence remains disabled and unauthorized. PR #27 is the documentation-only production persistence planning review. Its merge would approve the plan only; implementation and production activation need separate authorization. Synthetic data remains first-class for all future development, automated tests, migrations, regression, and acceptance. [PR #26](https://github.com/AeroVega/finance-tracker/pull/26) merged the product-definition baseline on 2026-11-06. [PR #28](https://github.com/AeroVega/finance-tracker/pull/28) merged its synthetic-only canonical import work on 2026-11-08. The PR27 branch reconciles the subject-based documentation consolidation with `main` at `c5b1fa916b431debf923d9502d5e8b2447e9b914`. The plan is back with the owner for review; future production implementation and acceptance remain pending.
+
+**Last updated:** 2026-11-08
+
+## PR27 planning decisions recorded, 2026-11-08
+
+See the [PR27 decision record](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#decision-record-2026-11-08) for the confirmed requirements and remaining verification work.
+
+- **User-confirmed:** Add data classes only when their features are ready. Enumerate the first-release records against the capabilities actually approved for that release.
+- **User-confirmed:** Use one designated Google account. A workflow for switching between multiple authorized accounts is out of scope; wrong-account rejection and safe reauthorization still apply.
+- **User-confirmed:** Keep working financial data and the access token in memory, clear them on sign-out or normal orderly release, and retain only the agreed non-authoritative local inventory and recovery diagnostics.
+- **User-confirmed:** Define routine backup cadence, tolerable data loss, and rotation after production OAuth is verified. Existing retention and required verified pre-migration backups remain in force. OAuth verification is still an acceptance gate, not a recorded pass.
+- **User-confirmed OAuth clarification:** No blocking configuration change is identified, so continue the design discussion without assuming formal Google app review is mandatory. Actual settings, exception applicability, and authorization behavior remain unverified. The earlier backup deferral is unchanged. See the [qualified OAuth guidance and remaining checks](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#oauth-clarification-no-blocking-configuration-change-identified).
+- **User-confirmed:** A separate real-financial-data smoke test is not required before production acceptance. Fully passing synthetic tests provide the test evidence; production OAuth, live synthetic acceptance, security/privacy, cost, residual-risk, final owner review, and explicit production authorization gates remain required. Real-data use is not authorized now.
+- **Hypothesis, recommended direction:** Evaluate grouped storage without choosing partition boundaries yet. Compatibility, integrity, ownership, recovery, backup, and restore testing remain required.
+- **Open:** Verify what supported browsers retain and document what abrupt closure or device loss can leave behind. Do not promise a perfect wipe.
+
+These decisions update the plan only. PR27 remains a documentation-only draft; production persistence is still disabled and unauthorized. Its [planning-review and merge rule](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#planning-review-draft-exit-and-merge-rule) separates review of the plan from later implementation and production acceptance. The merged PR28 workbench preserves the in-tab draft on release; the future production clearing requirement remains an [explicit implementation gap](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#current-pr28-release-behavior-and-production-gap).
 
 ## PR #24 status — merged 2026-11-02
 
@@ -81,9 +97,9 @@ Branch: `feat/production-readiness-acceptance`
 - `js/portable-backup.mjs`: portable archive envelope, SHA-256 verification, exact snapshot-object set, structural-validation hook, provider-independent export without Drive file locators, and inert restore planning.
 - `js/original-retention-policy.mjs`: exact 540-day clock, deletion eligibility versus confirmed deletion, retryable failures, and backup/restore rules that do not restart or resurrect expired originals.
 - Synthetic tests in `tests/portable-backup.test.mjs` and `tests/original-retention-policy.test.mjs`.
-- `docs/PR25_ACCEPTANCE.md`: current Google OAuth/quota/cost review, evidence labels, and owner-run acceptance protocol.
+- `docs/SYNTHETIC_STORAGE_ACCEPTANCE.md` and `docs/GOOGLE_DRIVE_CONFIGURATION.md`: acceptance evidence and Google OAuth/quota/cost review.
 
-**Still required before PR #25 can close:**
+**Historical PR25 readiness gates (now completed or retained as limitations):**
 - **Verified on current PR #25 head** `ba0aabfbbc935a869785ff4662424d596e02b1ea`: Finance Tracker contract tests run #267 and Node contract tests run #381 both passed on Node.js 26, with 223/223 tests and dashboard/browser syntax checks green. This closes the current automated CI rerun only; live Drive acceptance and end-to-end wiring remain open.
 - Wire retention state into original-import metadata and actual Drive deletion/read-back; the current state machine is not an end-to-end deletion worker.
 - Wire the backup helper to the actual Drive adapters and complete live synthetic backup, quarantine, portability, and restore rehearsals. Restore planning alone is not a completed restore.
@@ -115,7 +131,7 @@ Closing or disconnecting an account must not create gaps: preserve its historica
 
 - Obtain explicit owner acceptance of evidence and remaining limitations.
 
-**Exit:** all evidence reviewed and explicit owner acceptance recorded. Production financial-data persistence remains disabled until the owner separately authorizes it.
+**Exit:** PR #25 merged on 2026-11-04 after owner-reported synthetic acceptance. Production financial-data persistence remains disabled. PR #27 records the plan only; separately authorized implementation, production acceptance, and explicit owner approval are still required.
 
 ## Temporary prototype navigation and MVP1 cleanup
 
@@ -139,7 +155,7 @@ The accepted operating model is single-user/single-active-device. Simultaneous u
 
 PR #22 merged on 2026-11-01. Its protocol specification is `docs/TRANSACTION_STAGING_AND_RECOVERY.md`; the pure implementation is `js/transaction-protocol.mjs`; tests are in `tests/transaction-protocol.test.mjs`. PR #23 adds `js/drive-transaction-engine.mjs`, `tests/drive-transaction-engine.test.mjs`, and `docs/DRIVE_TRANSACTION_ENGINE_TESTING.md`; the Drive feasibility page includes a live synthetic transaction smoke test.
 
-PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation; its automated suites and owner-run live synthetic smoke test/cleanup have passed. PR #24 owns application integration and automatic session lifecycle; its synthetic-only lifecycle controller and dashboard are implemented, with corrective review changes and remaining live acceptance tracked in `PR24_REVIEW_HANDOFF.md`. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
+PR #23 owns the durable Drive adapter, staged transaction engine, and synthetic recovery validation; its automated suites and owner-run live synthetic smoke test/cleanup have passed. PR #24 owns application integration and automatic session lifecycle; its synthetic-only lifecycle controller and dashboard are implemented, with corrective review changes and remaining live acceptance tracked in `APPLICATION_STORAGE_LIFECYCLE.md` and `DRIVE_TRANSACTION_ENGINE_TESTING.md`. Do not enable real ledger reads/writes or production financial-data persistence in either workstream.
 
 Do not enable real ledger reads/writes or production financial-data persistence during these workstreams. Use invented fixtures and the dedicated synthetic Drive folder only.
 

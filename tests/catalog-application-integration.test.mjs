@@ -10,7 +10,8 @@ class DriveHttp {
     if (this.denied) return Response.json({ error: "invented-authorization-failure" }, { status: this.denied });
     const parsed = new URL(url);
     const method = options.method || "GET";
-    if (parsed.pathname.endsWith("/generateIds")) return Response.json({ ids: ["invented-file-" + ++this.nextId] });
+    if (parsed.pathname.endsWith("/generateIds")) return Response.json({ ids:
+      Array.from({ length: Number(parsed.searchParams.get("count")) }, () => "invented-file-" + ++this.nextId) });
     const fileId = parsed.pathname.split("/files/")[1];
     if (!fileId && method === "GET") return Response.json({ incompleteSearch: false, files: [...this.files.values()].map((file) => file.metadata) });
     if (method === "POST" || method === "PATCH") {
