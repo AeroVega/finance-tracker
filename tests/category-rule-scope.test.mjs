@@ -152,8 +152,8 @@ test('unrelated legacy membership arrays are not searched during effective proje
   let searches=0;const includes=ids.includes;
   Object.defineProperty(ids,'includes',{value(...args){searches++;return includes.apply(this,args);}});
   getEffectiveActivities(ledger);
-  // One validation check for the event target, one application check for its only matching activity.
-  assert.equal(searches,2);
+  // One validation check for the event target. Replay uses a per-event membership Set.
+  assert.equal(searches,1);
 });
 
 test('bank corrections and pending-to-posted transitions preserve scoped rule identity',()=>{

@@ -16,6 +16,11 @@ export function createLedger(options = {}) {
 }
 
 export function validateLedger(ledger) {
+  validateAndProject(ledger);
+  return true;
+}
+
+function validateAndProject(ledger) {
   if (!ledger || ledger.format !== 'finance-tracker-canonical-ledger' || ledger.version !== 1 || ledger.syntheticOnly !== true || !uuid.test(ledger.ledgerId) || !Number.isFinite(Date.parse(ledger.createdAt))) fail('invalid-canonical-ledger');
   const ids = new Set([ledger.ledgerId]);
   // These indexes belong to this validation only. Every record and reference is
@@ -84,13 +89,14 @@ export function validateLedger(ledger) {
     if(!value || Object.keys(value).some(k=>!['amountMinor','amountDecimal','currency'].includes(k)) || !/^[A-Z]{3}$/.test(value.currency) || (value.amountMinor===null)===(value.amountDecimal===null) || exactSignedDecimal(value)===null) fail('invalid-event-money');
     parseMoney(exactSignedDecimal(value),value.currency);
   };
+  const replay=createActivityReplay(ledger.activities);
   const commands=new Set();
   for (const e of ledger.events) {
     findActivity(e.activityId);
     if (typeof e.commandId !== 'string' || !e.commandId || commands.has(e.commandId)) fail('invalid-event-command');
     commands.add(e.commandId);
     if (!Number.isFinite(Date.parse(e.recordedAt)) || e.appendOnly!==true) fail('invalid-event-metadata');
-    const a=effective({...ledger,events:ledger.events.slice(0,ledger.events.indexOf(e))},findActivity(e.activityId));
+    const a=replay.get(e.activityId);
     if(e.eventType==='bank-correction') {
       validMoney(e.priorValues); validMoney(e.proposedValues);
       if(e.priorValues.amountMinor!==a.amountMinor||e.priorValues.amountDecimal!==a.amountDecimal) fail('correction-history-mismatch');
@@ -109,11 +115,12 @@ export function validateLedger(ledger) {
     } else if(e.eventType==='lifecycle-transition') {
       if(a.lifecycleStatus!=='pending'||e.from!=='pending'||e.to!=='posted'||!isCalendarDate(e.effectiveDate)||(e.postedDate!==null&&!isCalendarDate(e.postedDate))||(e.settlementDate!==null&&!isCalendarDate(e.settlementDate))||byId.observations.get(e.sourceObservationId)?.activityId!==e.activityId) fail('invalid-lifecycle-event');
     } else fail('unsupported-persisted-event');
+    replay.append(e);
   }
   const refundTotals=new Map(), refundActivities=new Set();
   for(const event of ledger.events.filter(e=>e.eventType==='refund-link')) {
-    const refund=effective(ledger,findActivity(event.activityId));
-    const target=effective(ledger,findActivity(event.originalActivityId));
+    const refund=replay.get(event.activityId);
+    const target=replay.get(event.originalActivityId);
     const amount=exactSignedDecimal(refund), originalAmount=exactSignedDecimal(target);
     if(refundActivities.has(refund.activityId)||refund.activityKind!=='refund'||target.activityKind!=='spending'||amount===null||originalAmount===null||compare(amount,'0')<=0||compare(originalAmount,'0')>=0) fail('invalid-effective-refund');
     refundActivities.add(refund.activityId);
@@ -135,7 +142,7 @@ export function validateLedger(ledger) {
   // Storage records must be JSON, not Date/BigInt/undefined or non-finite values.
   const inspect = value => { if (value===undefined || typeof value==='bigint' || typeof value==='function' || typeof value==='symbol' || (typeof value==='number'&&!Number.isFinite(value))) fail('non-json-ledger'); if(value && typeof value==='object') { if(!Array.isArray(value) && Object.getPrototypeOf(value)!==Object.prototype) fail('non-json-ledger'); Object.values(value).forEach(inspect); } };
   inspect(ledger);
-  return true;
+  return replay;
 }
 
 export function registerAccount(ledger, account, options = {}) {
@@ -164,7 +171,8 @@ function refreshRun(ledger, run) {
   run.counts=counts;
   run.status=observations.some(o=>(o.disposition==='review'||o.disposition==='rejected')&&!o.resolved) ? 'needs-review':'processed';
   run.errorCode=run.status==='needs-review'?'unresolved-observations':null;
-  run.latestActivityDate=activeActivities(ledger).filter(a=>a.accountId===run.accountId).map(a=>effective(ledger,a).effectiveDate).sort().at(-1)??null;
+  const replay=projectActivities(ledger);
+  run.latestActivityDate=activeActivities(ledger).filter(a=>a.accountId===run.accountId).map(a=>replay.get(a.activityId).effectiveDate).sort().at(-1)??null;
 }
 
 export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageByAccount,syntheticOnly}, options = {}) {
@@ -269,8 +277,8 @@ function activeActivities(ledger) {
 }
 
 function reconciliationEvidence(ledger) {
-  const active=activeActivities(ledger);
-  return {existingActivities:active.map(activity=>effective(ledger,activity)),existingObservations:ledger.observations,existingCompositeEvidence:retainedCompositeEvidence(ledger,active)};
+  const active=activeActivities(ledger),replay=projectActivities(ledger);
+  return {existingActivities:active.map(activity=>replay.get(activity.activityId)),existingObservations:ledger.observations,existingCompositeEvidence:retainedCompositeEvidence(ledger,active)};
 }
 
 function retainedCompositeEvidence(ledger,active) {
@@ -340,31 +348,95 @@ function prospectiveCategoryRule(ledger, activity) {
   return {version:1,enabled,key,existingActivityIds};
 }
 
-function effective(ledger, activity, visited = new Set()) {
-  if(visited.has(activity.activityId)) fail('cyclic-refund-link');
-  const ancestry=new Set(visited);ancestry.add(activity.activityId);
-  const result=clone(activity);
-  for(const e of ledger.events) {
-    // The recorded membership boundary makes rules prospective without relying on
-    // clocks or mutable array ordering. Existing peers keep their historical category.
-    if(e.eventType==='category-correction' && e.prospectiveRule?.enabled && categoryRuleMatches(e.prospectiveRule.key,activity) && !e.prospectiveRule.existingActivityIds.includes(activity.activityId)) result.categoryId=e.categoryId;
-    if(e.activityId!==activity.activityId) continue;
-    if(e.eventType==='bank-correction') Object.assign(result,e.proposedValues);
-    if(e.eventType==='category-correction') result.categoryId=e.categoryId;
-    if(e.eventType==='classification') { result.activityKind=e.activityKind; if(e.categoryId!==null) result.categoryId=e.categoryId; }
-    if(e.eventType==='refund-link') {
-      result.activityKind='refund';result.originalActivityId=e.originalActivityId;
-      result.categoryId=effective(ledger,activityFor(ledger,e.originalActivityId),ancestry).categoryId;
-      if(e.confirmedPostedDate) result.postedDate=e.confirmedPostedDate;
+// State is local to one operation and is never stored on the ledger. A refund
+// category is a reference until a later explicit/rule category overrides it.
+// This preserves the original replay's late-bound purchase category semantics.
+function createActivityReplay(activities) {
+  const states=new Map(activities.map(activity=>[activity.activityId,{
+    value:{...activity},categoryTarget:null,dependencies:new Set(),dependents:new Set(),checked:true,
+  }]));
+  let byRuleKey=null;
+  const stateFor=activityId=>states.get(activityId)??fail('unknown-activity');
+  const keyFor=key=>JSON.stringify(['accountId','institutionId','currency','normalizedDescription','sourceAction'].map(field=>key[field]).map(value=>value===undefined?'undefined':canonicalizeJcs(value)));
+  const matchingStates=key=>{
+    if(!byRuleKey) {
+      byRuleKey=new Map();
+      for(const activity of activities) {
+        const key=keyFor(categoryRuleKey(activity));
+        if(!byRuleKey.has(key)) byRuleKey.set(key,[]);
+        byRuleKey.get(key).push(stateFor(activity.activityId));
+      }
     }
-    if(e.eventType==='lifecycle-transition') { result.lifecycleStatus=e.to; result.effectiveDate=e.effectiveDate; result.postedDate=e.postedDate; result.settlementDate=e.settlementDate; }
-  }
-  return result;
+    return byRuleKey.get(keyFor(key))??[];
+  };
+  const checkDependencies=(state,visiting=new Set())=>{
+    if(visiting.has(state)) fail('cyclic-refund-link');
+    if(state.checked) return;
+    visiting.add(state);
+    for(const targetId of state.dependencies) checkDependencies(stateFor(targetId),visiting);
+    visiting.delete(state);state.checked=true;
+  };
+  const invalidateDependencies=state=>{
+    const pending=[state],seen=new Set();
+    while(pending.length) {
+      const current=pending.pop();
+      if(seen.has(current)) continue;
+      seen.add(current);current.checked=false;
+      for(const dependentId of current.dependents) pending.push(stateFor(dependentId));
+    }
+  };
+  const categoryFor=state=>{
+    while(state.categoryTarget!==null) state=stateFor(state.categoryTarget);
+    return state.value.categoryId;
+  };
+  const category=(state,value)=>{state.value.categoryId=value;state.categoryTarget=null;};
+  return {
+    get(activityId) {
+      const state=stateFor(activityId);checkDependencies(state);
+      return state.categoryTarget===null?{...state.value}:{...state.value,categoryId:categoryFor(state)};
+    },
+    append(event) {
+      const state=stateFor(event.activityId),result=state.value;
+      if(event.eventType==='category-correction' && event.prospectiveRule?.enabled) {
+        const excluded=new Set(event.prospectiveRule.existingActivityIds);
+        for(const peer of matchingStates(event.prospectiveRule.key)) {
+          if(!excluded.has(peer.value.activityId)) category(peer,event.categoryId);
+        }
+      }
+      if(event.eventType==='bank-correction') Object.assign(result,event.proposedValues);
+      if(event.eventType==='category-correction') category(state,event.categoryId);
+      if(event.eventType==='classification') {
+        result.activityKind=event.activityKind;
+        if(event.categoryId!==null) category(state,event.categoryId);
+      }
+      if(event.eventType==='refund-link') {
+        const target=stateFor(event.originalActivityId);
+        result.activityKind='refund';result.originalActivityId=event.originalActivityId;
+        state.categoryTarget=event.originalActivityId;
+        // Retain every link for cycle checks, even if a later category overrides
+        // it. The prior replay traversed those links before applying overrides.
+        state.dependencies.add(event.originalActivityId);target.dependents.add(event.activityId);
+        invalidateDependencies(state);
+        if(event.confirmedPostedDate) result.postedDate=event.confirmedPostedDate;
+      }
+      if(event.eventType==='lifecycle-transition') {
+        result.lifecycleStatus=event.to;result.effectiveDate=event.effectiveDate;
+        result.postedDate=event.postedDate;result.settlementDate=event.settlementDate;
+      }
+    },
+  };
+}
+function projectActivities(ledger) {
+  const replay=createActivityReplay(ledger.activities);
+  for(const event of ledger.events) replay.append(event);
+  return replay;
+}
+function effective(ledger,activity) {
+  return clone(projectActivities(ledger).get(activity.activityId));
 }
 export function getEffectiveActivities(ledger) {
-  validateLedger(ledger);
-  const activeIds=activeActivityIds(ledger);
-  return ledger.activities.map(activity=>({...effective(ledger,activity),active:activeIds.has(activity.activityId)}));
+  const replay=validateAndProject(ledger),activeIds=activeActivityIds(ledger);
+  return ledger.activities.map(activity=>({...clone(replay.get(activity.activityId)),active:activeIds.has(activity.activityId)}));
 }
 
 // Exact decimal arithmetic throughout; BigInts never enter persisted records.
@@ -375,13 +447,13 @@ const negate = value => { const d=decimal(value);return format(-d.n,d.s); };
 const compare = (a,b) => {const d=decimal(add(a,negate(b)));return d.n<0n?-1:d.n>0n?1:0;};
 
 export function applyFinancialEvent(ledger, command, options={}) {
-  validateLedger(ledger);
+  const replay=validateAndProject(ledger);
   const {type,activityId,commandId}=command;
   if(typeof commandId!=='string'||!commandId) fail('event-command-id-required');
   const signature=canonicalizeJcs(command);
   const prior=ledger.events.find(e=>e.commandId===commandId);
   if(prior) {if(prior.commandSignature!==signature) fail('event-command-conflict');return clone(ledger);}
-  const next=clone(ledger), original=activityFor(next,activityId), a=effective(next,original);
+  const next=clone(ledger), a=replay.get(activityId);
   if(!activeActivities(next).some(active=>active.activityId===activityId)) fail('inactive-financial-target');
   const event={eventId:id(options),commandId,commandSignature:signature,eventType:type,activityId,recordedAt:stamp(options),evidence:clone(command.evidence??null),appendOnly:true};
   if(type==='category-correction') {if(typeof command.categoryId!=='string'||!command.categoryId) fail('category-required');event.categoryId=command.categoryId;event.priorCategoryId=a.categoryId;event.prospectiveRule=prospectiveCategoryRule(next,a);}
@@ -393,10 +465,10 @@ export function applyFinancialEvent(ledger, command, options={}) {
     event.activityKind=command.activityKind;event.categoryId=command.categoryId??null;event.priorActivityKind=a.activityKind;event.priorCategoryId=a.categoryId;
   } else if(type==='refund-link') {
     if(!command.evidence || activityId===command.originalActivityId) fail('refund-evidence-required');
-    const target=effective(next,activityFor(next,command.originalActivityId));
+    const target=replay.get(command.originalActivityId);
     if(target.currency!==a.currency || target.activityKind!=='spending' || compare(exactSignedDecimal(a),'0')<=0 || compare(exactSignedDecimal(target),'0')>=0 || a.originalActivityId) fail('invalid-refund-link');
     let refunded=exactSignedDecimal(a);
-    for(const priorEvent of next.events.filter(e=>e.eventType==='refund-link'&&e.originalActivityId===target.activityId)) refunded=add(refunded,exactSignedDecimal(effective(next,activityFor(next,priorEvent.activityId))));
+    for(const priorEvent of next.events.filter(e=>e.eventType==='refund-link'&&e.originalActivityId===target.activityId)) refunded=add(refunded,exactSignedDecimal(replay.get(priorEvent.activityId)));
     if(compare(refunded,negate(exactSignedDecimal(target)))>0) fail('refund-exceeds-original');
     event.originalActivityId=target.activityId;
     event.confirmedPostedDate=command.confirmedPostedDate??null;
@@ -406,7 +478,7 @@ export function applyFinancialEvent(ledger, command, options={}) {
 }
 
 export function summarizeLedger(ledger,{start,end,currency,accountIds=ledger.accounts.map(a=>a.accountId)}) {
-  validateLedger(ledger);
+  const replay=validateAndProject(ledger);
   if(!isCalendarDate(start)||!isCalendarDate(end)||start>end||!/^[A-Z]{3}$/.test(currency)) fail('invalid-report-scope');
   accountIds.forEach(value=>accountFor(ledger,value));
   const reasons=new Set(['coverage-not-reconciled']);
@@ -416,7 +488,7 @@ export function summarizeLedger(ledger,{start,end,currency,accountIds=ledger.acc
     if(!isCalendarDate(o.candidate.effectiveDate)||(o.candidate.effectiveDate>=start&&o.candidate.effectiveDate<=end)) reasons.add('unresolved-observations');
   }
   for(const original of activeActivities(ledger).filter(a=>accountIds.includes(a.accountId))) {
-    const a=effective(ledger,original), date=a.activityKind==='refund'?a.postedDate:a.effectiveDate;
+    const a=replay.get(original.activityId), date=a.activityKind==='refund'?a.postedDate:a.effectiveDate;
     // A source activity date is not proof of a refund's posting period.
     // Its unknown posting date can affect any requested period for this account.
     if(a.activityKind==='refund'&&a.lifecycleStatus==='posted'&&a.postedDate===null) {
