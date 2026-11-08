@@ -53,6 +53,20 @@ Preserve the existing orderly-release sequence: close admission, drain admitted 
 
 Preserve existing retention policies and required verified pre-migration backups. Deferring routine backup choices does not waive those safeguards or change the 540-day original-source retention policy.
 
+### OAuth clarification: no blocking configuration change identified
+
+**User-confirmed:** Use "no blocking configuration change identified" as the current planning position. Continue the design discussion rather than assume a settings change or formal Google app review is required. Interactive reauthorization is acceptable; its actual behavior still needs confirmation.
+
+**Verified, official guidance checked 2026-11-08:**
+
+- Google lists personal-use apps with fewer than 100 users as an exception to mandatory OAuth verification. The exception does not waive Google's API Services User Data Policy. It is policy guidance, not confirmation that this project's current configuration qualifies. See [when verification is not needed](https://support.google.com/cloud/answer/13464323?hl=en).
+- Google classifies `drive.file` as a recommended non-sensitive scope with per-file access. That classification alone does not establish a blanket exemption from every verification requirement. See [Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
+- If the project is configured as Testing and requests Drive access, Google's documented rule is that test-user authorizations expire seven days after consent. The basic-identity-only exception does not cover `drive.file`. This is distinct from the access token's short lifetime; Google's browser token model obtains a new token through a user-driven flow when one expires. See [app audience and publishing status](https://support.google.com/cloud/answer/15549945?hl=en) and [the browser token model](https://developers.google.com/identity/oauth2/web/guides/use-token-model).
+
+**Open:** Confirm the actual audience, publishing status, requested/granted scopes, applicable verification exceptions, and expiry, reauthorization, revocation, and recovery behavior. This clarification does not record a Cloud Console inspection, a seven-day expiry observation, Google verification, or a production-readiness pass. It changes no settings, scopes, tokens, or permissions.
+
+The earlier backup deferral remains in force. Routine cadence, tolerable data loss, and rotation are still undecided; this clarification does not claim its OAuth condition has been met. Distinguish verification of the app's actual OAuth configuration and behavior from Google's formal app-review process. Do not assume the latter is mandatory, or use its absence alone to halt the design discussion. Production acceptance and explicit owner authorization remain required.
+
 ### No separate real-data smoke-test prerequisite
 
 **User-confirmed:** Fully passing synthetic tests may provide the test evidence for starting production use. A separate smoke test with real financial data is not required as an acceptance prerequisite.
@@ -217,5 +231,6 @@ Where this proposal conflicts with an accepted contract, identify the conflict a
 
 ## Change log
 
+- **2026-11-08, OAuth clarification:** Recorded the owner's non-blocking planning position against current official Google guidance. Actual project configuration, exception applicability, and token/authorization behavior remain unverified. Preserved the earlier backup deferral and all production gates.
 - **2026-11-08:** Recorded the owner-confirmed ready-feature data scope, one designated Google account, in-memory working-data/token policy with sign-out/normal-release clearing, decision to define routine backup promises after OAuth verification, and acceptance without a separate real-data smoke-test prerequisite. Kept grouped storage as a recommended direction pending compatibility and recovery evidence. Browser retention verification and wiping/device-loss limits remain acceptance work. Documentation only; no production authorization or implementation.
 - **Initial draft:** reserves the production persistence and authorization workstream for PR #27. No implementation or production authorization is included in this initial commit.
