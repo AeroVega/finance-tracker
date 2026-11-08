@@ -51,6 +51,8 @@ The manual steps now have adjacent controls, progress and timing. The interrupti
 
 ## Temporary prototype navigation
 
+PR29 extends the original visual reference across the main workspace, guided acceptance pages and development tools. The [visual overhaul record](docs/PR29_VISUAL_OVERHAUL.md) explains the changes, the PR28 lessons they address, and the validation limits. The main workspace remains a local CSV preview with optional invented-data storage; it is not the canonical production dashboard. All existing prototype pages remain available. Prototype removal is deferred, not part of PR29.
+
 During development, the app footer links to a temporary [Prototype Tools hub](prototype/), which indexes the browser-based Drive and session experiments. The hub and all browser prototype pages are development-only. **They are not v1.0.0 product features.** Before the v1.0.0 release, remove the app entry point and ensure the `prototype/` pages are excluded from the user-facing GitHub Pages deployment. Retain only the automated tests and engineering documentation needed to support the shipped product.
 
 ## Deploying a branch for experiments

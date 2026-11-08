@@ -12,6 +12,8 @@
     const node = $("import-status");
     node.textContent = message;
     node.dataset.kind = kind;
+    const ledgerStatus = $("ledger-status");
+    if (ledgerStatus) { ledgerStatus.textContent = message; ledgerStatus.dataset.kind = kind; }
   }
 
   function parseCsv(text) {
@@ -172,7 +174,7 @@
       render();
       const rejectedText = parsed.rejected.length ? ` ${parsed.rejected.length} row(s) need review and were not imported.` : "";
       const investmentText = parsed.isInvestmentActivity ? " Fidelity investment activity is listed separately and excluded from these simple cash-flow totals." : "";
-      setStatus(`${parsed.provider}: imported ${accepted.length} row(s).${rejectedText}${investmentText} CSV rows remain local and are never uploaded to Drive in PR #24. Exact-file retry protection lasts only until this page is closed.`, "success");
+      setStatus(`${parsed.provider}: imported ${accepted.length} row(s).${rejectedText}${investmentText} CSV rows remain local and are never uploaded to Drive on this page. Exact-file retry protection lasts only until this page is closed.`, "success");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The file couldn't be parsed.", "error");
     } finally {
@@ -185,9 +187,18 @@
     const cashRows = visible.filter((t) => t.eligibleForCashFlow);
     const income = cashRows.reduce((sum, t) => sum + (t.amount > 0 ? t.amount : 0), 0);
     const expenses = cashRows.reduce((sum, t) => sum + (t.amount < 0 ? Math.abs(t.amount) : 0), 0);
-    $("income-total").textContent = money.format(income);
-    $("expense-total").textContent = money.format(expenses);
-    $("net-total").textContent = money.format(income - expenses);
+    $("income-total").textContent = cashRows.length ? money.format(income) : "Unavailable";
+    $("expense-total").textContent = cashRows.length ? money.format(expenses) : "Unavailable";
+    $("net-total").textContent = cashRows.length ? money.format(income - expenses) : "Unavailable";
+    const localCount = state.transactions.length, sampleCount = state.syntheticTransactions.length;
+    if ($("data-mode")) $("data-mode").textContent = localCount && sampleCount ? "Local CSV + invented sample" : localCount ? "Local CSV preview" : sampleCount ? "Invented sample data" : "No data loaded";
+    if ($("data-summary")) $("data-summary").textContent = visible.length
+      ? `${localCount} local CSV row(s) · ${sampleCount} invented sample row(s). Totals use all eligible loaded rows, not the search.`
+      : "No records loaded. Totals are unavailable.";
+    const query = String($("transaction-search")?.value || "").trim().toLocaleLowerCase();
+    const matches = visible.filter((row) => !query || [row.description, row.date, dateFormatter.format(new Date(row.date + "T00:00:00Z")), row.provider].some((value) => String(value || "").toLocaleLowerCase().includes(query)));
+    if ($("filter-count")) $("filter-count").textContent = visible.length ? `Showing ${matches.length} of ${visible.length} transaction(s)` : "No transactions to search.";
+    if ($("search-empty")) $("search-empty").hidden = visible.length === 0 || matches.length > 0;
     $("transaction-count").textContent = String(visible.length);
     const storageSessionUnready = Boolean(syntheticStorage?.lifecycle && syntheticStorage.lifecycle.state !== "ready");
     $("clear-data").disabled = syntheticMutationPending || visible.length === 0 || storageSessionUnready;
@@ -195,22 +206,20 @@
     $("load-sample").disabled = syntheticMutationPending;
     $("release-synthetic-storage").disabled = syntheticMutationPending || syntheticStorage?.lifecycle?.state !== "ready";
     $("empty-state").hidden = visible.length > 0;
-    $("transaction-table-wrap").hidden = visible.length === 0;
+    $("transaction-table-wrap").hidden = matches.length === 0;
     const body = $("transaction-rows");
     body.replaceChildren();
-    visible.forEach((transaction) => {
+    matches.forEach((transaction) => {
       const tr = document.createElement("tr");
       const date = document.createElement("td");
       date.textContent = dateFormatter.format(new Date(transaction.date + "T00:00:00Z"));
       const description = document.createElement("td");
       description.className = "description";
       description.textContent = transaction.description;
-      if (transaction.isInvestmentActivity) {
-        const note = document.createElement("small");
-        note.textContent = "Investment activity";
-        note.style.cssText = "display:block;color:#6e6e73;font-size:.72rem;margin-top:4px";
-        description.appendChild(note);
-      }
+      const note = document.createElement("small");
+      note.className = "transaction-detail";
+      note.textContent = [transaction.syntheticOnly ? "Invented sample" : "Local CSV", transaction.provider, transaction.isInvestmentActivity ? "Investment activity · excluded from cash totals" : ""].filter(Boolean).join(" · ");
+      description.appendChild(note);
       const amount = document.createElement("td");
       amount.className = "amount " + (transaction.amount > 0 ? "inflow" : "outflow");
       amount.textContent = (transaction.amount > 0 ? "+" : "") + money.format(transaction.amount);
@@ -251,6 +260,14 @@
     }
   }
 
+  // Warn before leaving an ephemeral CSV preview or interrupting an operation.
+  // The browser controls whether this prompt appears; it is not a save mechanism.
+  globalThis.addEventListener?.("beforeunload", (event) => {
+    if (!state.transactions.length && !syntheticMutationPending) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+  $("transaction-search")?.addEventListener("input", render);
   $("csv-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
   const connectStorageButton = $("connect-synthetic-storage");
   connectStorageButton.disabled = true;
