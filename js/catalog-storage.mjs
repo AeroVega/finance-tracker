@@ -134,6 +134,39 @@ export function validateLogicalCommit(record, databaseId) {
 
 /** Verify every retained object and the entire selected commit ancestry. */
 export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globalThis.crypto) {
+  return verifyHistory(adapter, manifest, cryptoImpl);
+}
+
+/**
+ * Session-local evidence, populated only by successful complete verification.
+ * A fresh Drive version and all bindings bracket every reuse. No upload payload,
+ * caller-provided bytes, persisted evidence, or prior manifest is trusted.
+ */
+export function createCatalogHistoryVerifier({ maxBytes = 16 * 1024 * 1024, maxEntries = 20000 } = {}) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || !Number.isSafeInteger(maxEntries) || maxEntries < 0) {
+    throw storageError("invalid-history-cache-limit", "History evidence limits must be nonnegative safe integers.");
+  }
+  let evidence = null;
+  let generation = 0;
+  const clear = () => { generation++; evidence = null; };
+  return Object.freeze({ clear, async verify(adapter, manifest, cryptoImpl = globalThis.crypto) {
+    try {
+      requireCatalogManifest(manifest, adapter);
+      const scope = canonicalizeJcs([adapter.folderId, manifest.databaseId, manifest.copyId]);
+      if (evidence && (evidence.adapter !== adapter || evidence.crypto !== cryptoImpl || evidence.scope !== scope ||
+          manifest.revision < evidence.revision)) clear();
+      const epoch = generation;
+      const cache = { previous: evidence?.entries, next: new Map(), bytes: 0, maxBytes, maxEntries };
+      const verified = await verifyHistory(adapter, manifest, cryptoImpl, cache);
+      // An offline/release/error transition during a read must not repopulate it.
+      if (generation === epoch) evidence = { adapter, crypto: cryptoImpl, scope,
+        revision: manifest.revision, entries: cache.next };
+      return verified;
+    } catch (error) { clear(); throw error; }
+  } });
+}
+
+async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
   const catalog = await readCatalog(adapter, manifest, cryptoImpl);
   const objects = new Map();
   const journals = new Map();
@@ -143,8 +176,8 @@ export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globa
     if (!(result instanceof Map) || result.size !== entries.length) {
       throw storageError("invalid-metadata-batch", "Batch metadata must cover exactly the retained file IDs.");
     }
-    // A fresh complete listing may replace per-file metadata GETs, but never
-    // byte verification. Validate all bindings before admitting any body reads.
+    // A fresh complete listing may replace per-file metadata GETs. Validate
+    // every binding before admitting downloads or previously verified bytes.
     for (const [, entry] of entries) {
       const file = result.get(entry.fileId);
       verifyMetadata(adapter, entry, file);
@@ -152,12 +185,16 @@ export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globa
         throw storageError("invalid-metadata-batch", "Batch metadata must provide a valid version for every retained file.");
       }
     }
-    return result;
+    return structuredClone(result);
   };
   const metadata = typeof adapter.readMetadataBatch === "function" ? await readMetadataBatch() : null;
-  const verifiedBytes = await mapImmutableReads(entries, async ([, entry]) => {
+  const verifiedBytes = await mapImmutableReads(entries, async ([key, entry]) => {
     if (!metadata) return readVerified(adapter, entry, cryptoImpl);
-    const bytes = await adapter.readBytes(entry.fileId);
+    const prior = cache?.previous?.get(key);
+    const reusable = prior && prior.binding === canonicalizeJcs(entry) &&
+      prior.version === metadata.get(entry.fileId).version;
+    // Detach returned bytes from private evidence, and hash them on every use.
+    const bytes = reusable ? prior.bytes.slice() : (await adapter.readBytes(entry.fileId)).slice();
     return verifyReadback(adapter, entry, { metadata: metadata.get(entry.fileId), bytes }, cryptoImpl);
   });
   if (metadata) {
@@ -226,7 +263,18 @@ export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globa
   for (const entry of Object.values(catalog.entries).filter((entry) => entry.kind === "commit-record")) {
     if (!seen.has(entry.identity)) throw storageError("disconnected-history", "A catalog commit is not part of the selected retained ancestry.");
   }
-  return { catalog, record: currentRecord, objects };
+  if (cache && metadata) {
+    // Keep only this fully verified catalog, bounded in both bytes and entries.
+    // Uncached objects are always downloaded again; hitting a limit is safe.
+    for (const [key, entry] of entries) {
+      const bytes = objects.get(key);
+      if (cache.next.size >= cache.maxEntries || cache.bytes + bytes.byteLength > cache.maxBytes) continue;
+      cache.next.set(key, { binding: canonicalizeJcs(entry), version: metadata.get(entry.fileId).version, bytes: bytes.slice() });
+      cache.bytes += bytes.byteLength;
+    }
+  }
+  return { catalog, record: currentRecord, objects,
+    versions: metadata ? new Map(entries.map(([, entry]) => [entry.fileId, metadata.get(entry.fileId).version])) : null };
 }
 
 /** Fresh-folder bootstrap only; callers hold the verified session gate. */

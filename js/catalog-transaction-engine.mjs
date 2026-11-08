@@ -1,12 +1,24 @@
 import { DriveTransactionEngine, DriveTransactionError } from "./drive-transaction-engine.mjs";
 import { canonicalizeJcs, createJournalEvent, verifyJournal } from "./transaction-protocol.mjs";
 import { createLocatorCatalog, resolveLocator } from "./drive-locator-catalog.mjs";
-import { encode, hashRaw, writeVerified, readVerified, mapImmutableReads, writeCatalog, verifyCatalogHistory, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
+import { encode, hashRaw, writeVerified, readVerified, mapImmutableReads, writeCatalog, createCatalogHistoryVerifier, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
 
 const equal = (a, b) => canonicalizeJcs(a) === canonicalizeJcs(b);
 
 /** Version-2 synthetic engine. Legacy history is never rewritten implicitly. */
 export class CatalogTransactionEngine extends DriveTransactionEngine {
+  #historyVerifier = createCatalogHistoryVerifier();
+
+  invalidateHistory() { this.#historyVerifier.clear(); }
+  async verifyHistory(manifest) {
+    return this.#historyVerifier.verify(this.adapter, manifest, this.crypto);
+  }
+  enqueue(operation) {
+    return super.enqueue(async () => {
+      try { return await operation(); }
+      catch (error) { this.invalidateHistory(); throw error; }
+    });
+  }
   async recoveryGuard() {
     if (!this.isOnline()) throw storageError("offline", "Storage maintenance requires an online session.");
     await this.assertWritable();
@@ -94,7 +106,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
           commitRecordHash: commit.sha256, snapshot, catalogFinalizationPending: transactionId };
         const staged = await writeCatalog(this.adapter, { manifest: next, previousCatalog: catalog, additions }, () => this.guard(), this.crypto);
         next.locatorCatalog = staged.pointer;
-        await verifyCatalogHistory(this.adapter, next, this.crypto);
+        await this.verifyHistory(next);
         // This event cannot index itself. It and the terminal events are added
         // by the second, catalog-only publication after the financial commit.
         await add("manifest-publication-planned", { baseRevision: current.revision, baseCommitId: current.commitId,
@@ -120,18 +132,24 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
     if (!missing.length && manifest.catalogFinalizationPending === null) return manifest;
     const staged = await writeCatalog(this.adapter, { manifest, previousCatalog: catalog, additions }, () => this.recoveryGuard(), this.crypto);
     const next = { ...manifest, locatorCatalog: staged.pointer, catalogFinalizationPending: null };
-    await verifyCatalogHistory(this.adapter, next, this.crypto);
+    await this.verifyHistory(next);
     await this.publishExact(manifestFileId, manifest, next);
     return next;
   }
 
-  async recover(options) { return this.enqueue(() => this.recoverInternal(options)); }
+  async recover(options) {
+    return this.enqueue(() => {
+      // Explicit reconnect/recovery starts from remotely fetched bytes.
+      this.invalidateHistory();
+      return this.recoverInternal(options);
+    });
+  }
 
   async recoverInternal({ manifestFileId }) {
     this.recoveryRequired = true;
     if (!this.isOnline()) throw storageError("offline", "Recovery requires an online connection.");
     let manifest = await this.adapter.readJson(manifestFileId);
-    let verified = await verifyCatalogHistory(this.adapter, manifest, this.crypto);
+    let verified = await this.verifyHistory(manifest);
     const files = await this.adapter.listChildren();
     const groups = new Map();
     const additions = [];
@@ -143,6 +161,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
       // the identical binding can reuse bytes from this recovery's full scan.
       const reusable = indexed && indexed.entry.sha256 === file.appProperties.financeTrackerHash &&
         indexed.entry.transactionId === file.appProperties.financeTrackerTransaction &&
+        (!verified.versions || verified.versions.get(file.id) === file.version) &&
         file.trashed !== true && file.parents?.includes(this.adapter.folderId);
       const bytes = reusable ? verified.objects.get(indexed.key) : await readVerified(this.adapter,
         { fileId: file.id, sha256: file.appProperties.financeTrackerHash, kind: "journal-event",
@@ -235,7 +254,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
           commitRecordHash: location.sha256, snapshot: record.snapshot, catalogFinalizationPending: transactionId };
         const staged = await writeCatalog(this.adapter, { manifest: intended, previousCatalog: verified.catalog, additions }, () => this.recoveryGuard(), this.crypto);
         intended.locatorCatalog = staged.pointer;
-        await verifyCatalogHistory(this.adapter, intended, this.crypto);
+        await this.verifyHistory(intended);
         await this.journal("manifest-publication-planned", { baseRevision: manifest.revision, baseCommitId: manifest.commitId,
           intendedRevision: intended.revision, intendedCommitId: intended.commitId, nextManifest: intended }, events, additions, transactionId);
         state = await verifyJournal(events, { cryptoImpl: this.crypto });
@@ -245,7 +264,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
           intended.catalogFinalizationPending !== transactionId || intended.role !== "primary") {
         throw storageError("invalid-publication-intent", "Publication intent does not match transaction identity and lineage.");
       }
-      const target = await verifyCatalogHistory(this.adapter, intended, this.crypto);
+      const target = await this.verifyHistory(intended);
       if (target.record.transactionId !== transactionId || intended.commitRecordHash !== state.commit?.recordHash) {
         throw storageError("journal-commit-mismatch", "Publication intent does not match its staged commit.");
       }
@@ -264,7 +283,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
     // Existing identities must also agree in file ID, hash and journal binding;
     // createLocatorCatalog rejects a duplicate/rebound enumeration result.
     manifest = await this.finalize(manifestFileId, manifest, verified.catalog, additions);
-    verified = await verifyCatalogHistory(this.adapter, manifest, this.crypto);
+    verified = await this.verifyHistory(manifest);
     if (!equal(await this.adapter.readJson(manifestFileId), manifest)) {
       throw storageError("base-conflict", "The manifest changed while recovery verified retained history.");
     }

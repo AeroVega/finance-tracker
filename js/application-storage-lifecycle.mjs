@@ -96,6 +96,7 @@ export class ApplicationStorageLifecycle {
   }
 
   publish(state, message, code = null) {
+    if (state !== "ready") this.engine?.invalidateHistory?.();
     this.state = state;
     this.onStatus({ state, message, code });
   }
@@ -272,13 +273,20 @@ export class ApplicationStorageLifecycle {
     }
   }
 
+  async verifyHistory(manifest) {
+    // The catalog engine owns private session evidence; legacy/custom engines
+    // without it retain the complete remote verification path.
+    return this.engine?.verifyHistory ? this.engine.verifyHistory(manifest)
+      : verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto);
+  }
+
   async readManifest() {
     try {
       await this.requireReady();
       const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
       if (this.catalogProtocol) {
         if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Catalog finalization must complete before reading application state.");
-        await verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto);
+        await this.verifyHistory(manifest);
       }
       return manifest;
     } catch (error) { this.pauseAfterReadFailure(error); throw error; }
@@ -304,14 +312,14 @@ export class ApplicationStorageLifecycle {
     catch (error) { this.pauseAfterReadFailure(error); throw error; }
   }
 
-  /** One verified, pinned catalog snapshot per call. No cross-operation cache. */
+  /** One verified, pinned snapshot; fresh metadata gates any private byte reuse. */
   async readVerifiedSnapshot() {
     try {
       await this.requireReady();
       if (!this.catalogProtocol) fail("catalog-required", "A verified snapshot requires the version-2 catalog protocol.");
       const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
       if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Complete catalog finalization before reading a snapshot.");
-      const verified = await verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto);
+      const verified = await this.verifyHistory(manifest);
       // This validates every selected logical path and its catalog binding.
       const references = resolveSnapshotLocators(manifest.snapshot, verified.catalog);
       const objects = Object.create(null);
@@ -340,7 +348,7 @@ export class ApplicationStorageLifecycle {
     const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
     if (this.catalogProtocol && manifest.catalogFinalizationPending !== null) fail("recovery-required", "Finish catalog recovery before reading objects.");
     const reference = this.catalogProtocol
-      ? resolveSnapshotLocators(manifest.snapshot, (await verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto)).catalog)[logicalPath]
+      ? resolveSnapshotLocators(manifest.snapshot, (await this.verifyHistory(manifest)).catalog)[logicalPath]
       : manifest.snapshot?.[logicalPath];
     if (!reference?.fileId || !/^[0-9a-f]{64}$/.test(String(reference.sha256 || ""))) {
       fail("object-not-found", "The requested object is not present in the verified manifest.");
@@ -357,10 +365,15 @@ export class ApplicationStorageLifecycle {
   }
 
   async requireReady() {
-    if (!this.started || !this.acceptingWrites || this.state !== "ready") {
-      fail("storage-not-ready", "Private storage is not in a verified ready state.");
+    try {
+      if (!this.started || !this.acceptingWrites || this.state !== "ready") {
+        fail("storage-not-ready", "Private storage is not in a verified ready state.");
+      }
+      await this.coordinator.assertCanWrite({ online: this.isOnline() });
+    } catch (error) {
+      this.engine?.invalidateHistory?.();
+      throw error;
     }
-    await this.coordinator.assertCanWrite({ online: this.isOnline() });
   }
 
   async transact(transaction) {

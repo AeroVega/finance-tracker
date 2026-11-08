@@ -397,6 +397,7 @@ test("retained corruption after staging or before catalog finalization still blo
         const terminal = input.kind === "journal-event" && JSON.parse(new TextDecoder().decode(input.content)).eventType === "transaction-committed";
         if (input.kind === boundary || (boundary === "transaction-committed" && terminal)) {
           adapter.files.get(historical.fileId).bytes = encode("invented retained corruption");
+          if (batch) adapter.files.get(historical.fileId).metadata.version = "2";
         }
         return result;
       };

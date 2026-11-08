@@ -6,11 +6,11 @@ import { createLiveRunner, LIVE_IDS } from '../prototype/pr28-live-checks.mjs';
 import { HTTP_CATEGORIES } from './helpers/http-catalog-drive.mjs';
 import { setupHttpCanonicalWorkbench as setup, loadCanonicalFixtureBytes as loadBytes } from './helpers/pr28-http-workbench.mjs';
 
-// Measured at b9229cd, using the same actual lifecycle, adapters and recipe.
+// Measured at e55faec, using the same actual lifecycle, adapters and recipe.
 // Bootstrap/connect, reconnect verification, OAuth, fixture downloads, periodic
 // heartbeat, retry/backoff, pagination and browser CORS requests are excluded.
-const BEFORE_REQUESTS = 9590;
-const BEFORE_SMALL_COMMITS = [293, 521, 749, 977, 1205, 1433, 1661, 1889, 2117, 2345];
+const BEFORE_REQUESTS = 4633;
+const BEFORE_SMALL_COMMITS = [201, 279, 357, 435, 513, 591, 669, 747, 825, 903];
 
 function assertConcurrency(http) {
   assert.ok(http.peakConcurrency > 1, 'independent immutable reads should overlap');
@@ -38,10 +38,10 @@ test('actual HTTP adapters complete the assisted recipe within its request budge
   assert.equal(last.results['reconnect-same-copy'], 'not-run');
   // Preserve meaningful headroom for extra safety checks without accepting a
   // return to the baseline. Per-phase limits identify the expensive regression.
-  assert.ok(requests <= 4800, `run used ${requests} HTTP requests; baseline was ${BEFORE_REQUESTS}`);
-  for (const [phase, budget] of [['first-save-reopen', 610], ['checkpoint-save-reopen', 900],
-    ['final-save-reopen', 1900], ['session-revalidation', 750], ['repeat-import', 70],
-    ['discard-probe', 125], ['immutable-evidence', 260], ['portable-validation', 260]]) {
+  assert.ok(requests <= 2300, `run used ${requests} HTTP requests; baseline was ${BEFORE_REQUESTS}`);
+  for (const [phase, budget] of [['first-save-reopen', 430], ['checkpoint-save-reopen', 400],
+    ['final-save-reopen', 850], ['session-revalidation', 280], ['repeat-import', 15],
+    ['discard-probe', 20], ['immutable-evidence', 20], ['portable-validation', 260]]) {
     assert.ok(h.http.summary(phase).requests <= budget, phase + ' exceeded its request budget');
   }
   for (const phase of ['mapping-coverage', 'foundation', 'classification', 'category-rule', 'review-retry',
@@ -83,7 +83,7 @@ test('actual HTTP adapters complete the assisted recipe within its request budge
   await h.lifecycle.release();
 });
 
-test('repeated small saves have a lower request-growth budget without caching later reads', async t => {
+test('repeated small saves use version-checked history within a fixed request budget', async t => {
   const h = await setup();
   let ledger = createLedger();
   const counts = [];
@@ -100,11 +100,12 @@ test('repeated small saves have a lower request-growth budget without caching la
     }
   }
   t.diagnostic(JSON.stringify({ before: BEFORE_SMALL_COMMITS, after: counts }));
-  for (let i = 0; i < counts.length; i++) assert.ok(counts[i] <= 210 + 85 * i, `save ${i + 1} used ${counts[i]} requests`);
-  for (let i = 1; i < counts.length; i++) assert.ok(counts[i] - counts[i - 1] <= 90, 'retained-history growth exceeded the per-save budget');
+  for (let i = 0; i < counts.length; i++) assert.ok(counts[i] <= 170, `save ${i + 1} used ${counts[i]} requests`);
+  for (let i = 1; i < counts.length; i++) assert.ok(counts[i] - counts[i - 1] <= 2, 'retained-history growth exceeded the per-save budget');
   assertConcurrency(h.http);
   const mutations = h.http.mutations;
   h.http.files.get(firstIndexId).bytes[0] ^= 1;
+  h.http.files.get(firstIndexId).metadata.version = "2"; // Drive versions change with every server-side mutation.
   await assert.rejects(h.store.load(), { code: 'immutable-hash-mismatch' });
   assert.equal(h.store.base, null); assert.equal(h.lifecycle.acceptingWrites, false);
   assert.equal(h.lifecycle.engine.recoveryRequired, true);
