@@ -62,6 +62,16 @@ Chunk boundaries do not move when a record changes size. An oversized chunk fail
 
 The existing engine still saves changed payloads and their journals serially. Ownership and exact-base checks, independent read-back, hash verification of all retained history, recovery and backup/export/restore validation remain in force. No persistent cache or verification shortcut was introduced. Repeated edits still retain historical chunks, so this is not a solution to unlimited retained-history growth or production scale.
 
+### Known category-correction scaling limit
+
+**Verified in a separate synthetic audit:** with 1,000 distinct posted activities and no prior events, the current `category-correction` event stores all 1,000 existing activity IDs in `prospectiveRule.existingActivityIds`. This membership list keeps a learned category rule from retroactively changing earlier peers. One event was about 39.7 KB. Applying four distinct category corrections to the same activity produced an event array of 158,821 bytes. The first three versions packed successfully; the fourth failed with `canonical-chunk-too-large` because the fixed events bucket exceeded 128 KiB.
+
+This is a hard limit on some ordinary editing workloads, not just unusually long source descriptions. The serializer refuses the save before a Drive transaction starts. Existing saved history remains unchanged, but the newly staged corrections cannot be saved in this layout until the limit is addressed. Do not assume retrying, reconnecting or choosing another folder makes that oversized ledger fit.
+
+The bounded 253-activity year recipe does not create prospective category-correction rules and still passes its upload, verification and recovery tests. Those results do **not** establish readiness for general larger-ledger editing. PR #30 remains a draft; production persistence remains NO-GO. The earlier independent review found no blocker for the bounded recipe and integrity contract, not proof that every future editing workload fits.
+
+**Open design work:** reduce duplicated prospective-rule membership without changing historical categorization semantics, or introduce a versioned, stable byte-bounded chunk inventory that handles growth safely. Either choice needs focused append/review/correction, historical-snapshot, recovery and backup/restore tests. Increasing the size cap alone would postpone this limit. This PR does not silently repartition existing chunks, migrate copies, or claim that scaling work is complete.
+
 ### Measured synthetic HTTP comparison
 
 The same seeder admission, save/independent-reopen, repeat verification and release ran through the real application lifecycle, Google adapter and catalog/session engine backed by invented in-memory HTTP responses. Default adapter pagination is included. Setup/connect requests, OAuth/Picker, retries/backoff, periodic heartbeats and browser CORS requests are excluded from the phase request counts.
