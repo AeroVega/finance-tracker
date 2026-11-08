@@ -4,9 +4,23 @@
 
 PRs #20–#25 are merged. The synthetic Drive storage foundation includes the application lifecycle, durable transactions/recovery, version-2 per-copy locator catalogs, backup/restore, portable archives, and 540-day original-source retention primitives. Owner-reported synthetic acceptance and exact-head CI evidence are recorded in [Synthetic Storage Acceptance](SYNTHETIC_STORAGE_ACCEPTANCE.md). Operational details live in [Drive Backup and Restore](DRIVE_BACKUP_AND_RESTORE.md), [Original Source File Retention](ORIGINAL_SOURCE_RETENTION.md), [Drive Transaction Engine Testing](DRIVE_TRANSACTION_ENGINE_TESTING.md), and [Google Drive Configuration](GOOGLE_DRIVE_CONFIGURATION.md).
 
-Production financial-data persistence remains disabled and unauthorized. PR #27 is the separate design, implementation, and explicit authorization workstream. Synthetic data remains first-class for all future development, automated tests, migrations, regression, and acceptance. PR #26's product-definition work proceeds independently; the PR27 documentation reorganization is intentionally deferred until PR27.
+Production financial-data persistence remains disabled and unauthorized. PR #27 is the separate design, implementation, and explicit authorization workstream. Synthetic data remains first-class for all future development, automated tests, migrations, regression, and acceptance. [PR #26](https://github.com/AeroVega/finance-tracker/pull/26) merged the product-definition baseline on 2026-11-06. The PR27 branch already contains the subject-based documentation consolidation described above; branch reconciliation and the remaining PR27 design and acceptance work are still pending.
 
-**Last updated:** 2026-11-04
+**Last updated:** 2026-11-08
+
+## PR27 planning decisions recorded, 2026-11-08
+
+See the [PR27 decision record](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#decision-record-2026-11-08) for the confirmed requirements and remaining verification work.
+
+- **User-confirmed:** Add data classes only when their features are ready. Enumerate the first-release records against the capabilities actually approved for that release.
+- **User-confirmed:** Use one designated Google account. A workflow for switching between multiple authorized accounts is out of scope; wrong-account rejection and safe reauthorization still apply.
+- **User-confirmed:** Keep working financial data and the access token in memory, clear them on sign-out or normal orderly release, and retain only the agreed non-authoritative local inventory and recovery diagnostics.
+- **User-confirmed:** Define routine backup cadence, tolerable data loss, and rotation after production OAuth is verified. Existing retention and required verified pre-migration backups remain in force. OAuth verification is still an acceptance gate, not a recorded pass.
+- **User-confirmed:** A separate real-financial-data smoke test is not required before production acceptance. Fully passing synthetic tests provide the test evidence; production OAuth, live synthetic acceptance, security/privacy, cost, residual-risk, final owner review, and explicit production authorization gates remain required. Real-data use is not authorized now.
+- **Hypothesis, recommended direction:** Evaluate grouped storage without choosing partition boundaries yet. Compatibility, integrity, ownership, recovery, backup, and restore testing remain required.
+- **Open:** Verify what supported browsers retain and document what abrupt closure or device loss can leave behind. Do not promise a perfect wipe.
+
+These decisions update the plan only. PR27 remains a documentation-only draft; production persistence is still disabled and unauthorized.
 
 ## PR #24 status — merged 2026-11-02
 
