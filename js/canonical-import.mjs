@@ -627,3 +627,110 @@ function summarizePeriod({ledger,replay,accounts,active,unresolved},{start,end,c
   }
   return {start,end,currency,income,spending,cash,complete:false,reasons:[...reasons],excluded};
 }
+
+// One owner per application ledger. This is an in-memory optimization, not a
+// storage lock: callers MUST invalidate before import/review/reload/save and
+// reopen only from a fully validated result with the current storage binding.
+// JSON-only inputs prevent caller getters, callbacks and reentrant mutation.
+export function createLedgerSessionOwner() {
+  let current=null,generation=0;
+  const invalidate=()=>{current?.close();current=null;};
+  return Object.freeze({
+    invalidate,
+    open(json,storageBinding) {
+      invalidate();
+      if(typeof json!=='string'||typeof storageBinding!=='string'||!storageBinding) fail('session-json-and-storage-binding-required');
+      if(generation===Number.MAX_SAFE_INTEGER) fail('session-generation-exhausted');
+      const openedGeneration=++generation;
+      let ledger=freezeSessionValue(JSON.parse(json)),context,closed=false,busy=false,revision=0;
+      const rebuild=()=>{
+        const rebuilt=validateAndProject(ledger);
+        rebuilt.activeIds=activeActivityIds(ledger);
+        rebuilt.refunds=createRefundChecks(ledger,rebuilt.replay);
+        context=rebuilt;
+      };
+      rebuild();
+      const close=()=>{closed=true;ledger=null;context=null;};
+      const guard=()=>{
+        if(closed||current!==session||generation!==openedGeneration) fail('ledger-session-closed');
+        if(busy) fail('ledger-session-busy');
+      };
+      const session=Object.freeze({
+        close,
+        revision() {guard();return revision;},
+        binding() {guard();return Object.freeze({generation:openedGeneration,storageBinding,revision});},
+        // Collections and every nested record are frozen, including events.
+        // No replay/index Map or mutable projection crosses this boundary.
+        snapshot() {guard();return ledger;},
+        validatedSnapshot() {guard();validateLedger(ledger);return ledger;},
+        exportJson() {guard();validateLedger(ledger);return JSON.stringify(ledger);},
+        effectiveActivity(activityId) {
+          guard();if(typeof activityId!=='string') fail('session-activity-id-required');
+          return {...clone(context.replay.get(activityId)),active:context.activeIds.has(activityId)};
+        },
+        effectiveActivities() {
+          guard();return ledger.activities.map(a=>({...clone(context.replay.get(a.activityId)),active:context.activeIds.has(a.activityId)}));
+        },
+        summarizePeriodsJson(scopesJson) {
+          guard();if(typeof scopesJson!=='string') fail('session-json-required');
+          const scopes=JSON.parse(scopesJson);
+          if(!Array.isArray(scopes)) fail('invalid-report-scopes');
+          const reportContext={ledger,replay:context.replay,accounts:context.byId.accounts,
+            active:ledger.activities.filter(a=>context.activeIds.has(a.activityId)),
+            unresolved:ledger.observations.filter(o=>!o.resolved&&['review','rejected'].includes(o.disposition))};
+          return scopes.map(scope=>summarizePeriod(reportContext,scope));
+        },
+        applyBatchJson(batchJson,expectedRevision) {
+          guard();
+          if(!Number.isSafeInteger(expectedRevision)||expectedRevision!==revision) fail('stale-ledger-session-revision');
+          if(typeof batchJson!=='string') fail('session-json-required');
+          const batch=JSON.parse(batchJson);
+          if(!Array.isArray(batch)) fail('invalid-financial-commands');
+          busy=true;
+          try {
+            // Only the private replay/check indexes mutate during preparation.
+            // The published immutable ledger is the rollback source throughout.
+            const events=[];
+            for(const entry of batch) {
+              if(!entry||typeof entry.eventId!=='string'||typeof entry.recordedAt!=='string') fail('session-primitive-event-metadata-required');
+              const event=buildFinancialEvent(ledger,entry.command,{idFactory:()=>entry.eventId,now:entry.recordedAt},context);
+              if(!event) continue;
+              if(context.ids.has(event.eventId)) fail('invalid-or-duplicate-record-id');
+              context.ids.add(event.eventId);
+              validateHistoryEvent(event,context.replay.get(event.activityId),context.byId);
+              context.commands.set(event.commandId,event);
+              context.replay.append(event);
+              context.refunds.check(event);
+              // Preserve the pure API's error order: replay/refunds before JSON.
+              inspectJson(event);
+              events.push(freezeSessionValue(event));
+            }
+            if(events.length) {
+              if(revision===Number.MAX_SAFE_INTEGER) fail('session-revision-exhausted');
+              const next=Object.freeze({...ledger,events:Object.freeze([...ledger.events,...events])});
+              ledger=next;revision++;
+            }
+            return revision;
+          } catch(error) {
+            try {rebuild();} catch {
+              // Never continue with partly mutated replay or refund indexes.
+              // Keep the original command error, but make every later use fail.
+              close();
+            }
+            throw error;
+          } finally {busy=false;}
+        },
+      });
+      current=session;
+      return session;
+    },
+  });
+}
+
+function freezeSessionValue(value) {
+  if(value&&typeof value==='object'&&!Object.isFrozen(value)) {
+    Object.values(value).forEach(freezeSessionValue);
+    Object.freeze(value);
+  }
+  return value;
+}
