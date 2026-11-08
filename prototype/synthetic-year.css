@@ -1,0 +1,7 @@
+.confirmation{display:flex;align-items:flex-start;gap:12px;color:var(--text);margin:20px 0}
+.confirmation input{flex:none;width:24px;min-height:24px;margin:2px 0}
+.actions{display:flex;flex-wrap:wrap;gap:8px}.actions button{margin:4px 0}
+#result{padding:16px;border:1px solid var(--line);border-radius:10px;overflow-wrap:anywhere}
+#result[data-state=error]{border-color:var(--danger);color:var(--danger)}
+#result[data-state=success]{border-color:var(--success)}
+@media(max-width:540px){.actions button{width:100%}}

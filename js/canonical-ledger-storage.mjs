@@ -44,8 +44,53 @@ export function serializeCanonicalLedger(ledger) {
   return objects;
 }
 
+export const CANONICAL_CHUNK_RECORDS = 64;
+export const CANONICAL_CHUNK_BYTES = 128 * 1024;
+const chunkPath = (collection, ordinal) => CANONICAL_PREFIX + "chunks/" + collection + "/" + String(ordinal).padStart(6, "0") + ".json";
+
+/** Opt-in layout for fresh synthetic copies. Fixed append-order boundaries
+ * keep unchanged chunks reusable. Oversized chunks fail before any write.
+ * The index stays at the legacy path with version 2, so old clients fail
+ * closed instead of mistaking a packed ledger for an empty one.
+ */
+export function serializePackedCanonicalLedger(ledger) {
+  const logical = serializeCanonicalLedger(ledger);
+  const index = JSON.parse(logical.get(CANONICAL_INDEX));
+  index.version = 2;
+  index.chunks = {};
+  const objects = new Map();
+  for (const name of Object.keys(CANONICAL_COLLECTIONS)) {
+    index.chunks[name] = [];
+    for (let offset = 0; offset < ledger[name].length; offset += CANONICAL_CHUNK_RECORDS) {
+      const path = chunkPath(name, offset / CANONICAL_CHUNK_RECORDS);
+      const text = canonicalizeJcs({format: "finance-tracker-canonical-chunk", version: 1,
+        collection: name, records: ledger[name].slice(offset, offset + CANONICAL_CHUNK_RECORDS)});
+      if (new TextEncoder().encode(text).byteLength > CANONICAL_CHUNK_BYTES) {
+        fail("canonical-chunk-too-large", "This synthetic chunk exceeds the 128 KiB limit. No save was attempted.");
+      }
+      index.chunks[name].push(path);
+      objects.set(path, text);
+    }
+  }
+  objects.set(CANONICAL_INDEX, canonicalizeJcs(index));
+  return objects;
+}
+
+function chunkRecords(index, name, ordinal, value) {
+  if (value?.format !== "finance-tracker-canonical-chunk" || value.version !== 1 || value.collection !== name ||
+      Object.keys(value).sort().join(",") !== "collection,format,records,version" ||
+      !Array.isArray(value.records) || new TextEncoder().encode(canonicalizeJcs(value)).byteLength > CANONICAL_CHUNK_BYTES) {
+    fail("invalid-canonical-chunk", "A canonical chunk has an invalid format, collection or size.");
+  }
+  const ids = index.collections[name].slice(ordinal * CANONICAL_CHUNK_RECORDS, (ordinal + 1) * CANONICAL_CHUNK_RECORDS);
+  if (value.records.length !== ids.length || value.records.some((record, i) => record?.[CANONICAL_COLLECTIONS[name]] !== ids[i])) {
+    fail("canonical-identity-mismatch", "Chunk records do not match the exact indexed order and identities.");
+  }
+  return value.records;
+}
+
 function validateIndex(index) {
-  if (!index || index.format !== "finance-tracker-canonical-index" || index.version !== 1 ||
+  if (!index || index.format !== "finance-tracker-canonical-index" || ![1, 2].includes(index.version) ||
       index.syntheticOnly !== true || index.metadata?.syntheticOnly !== true ||
       !index.collections || typeof index.collections !== "object") {
     fail("invalid-canonical-index", "The canonical index is not a supported synthetic record set.");
@@ -54,10 +99,19 @@ function validateIndex(index) {
   if (Object.keys(index.collections).length !== names.length || names.some((name) => !Array.isArray(index.collections[name]))) {
     fail("invalid-canonical-index", "The canonical index has an invalid collection inventory.");
   }
+  if (index.version === 2 && (Object.keys(index).sort().join(",") !== "chunks,collections,format,metadata,syntheticOnly,version" ||
+      !index.chunks || Object.keys(index.chunks).length !== names.length ||
+      names.some(name => !Array.isArray(index.chunks[name])))) {
+    fail("invalid-canonical-index", "Packed canonical collections require a complete chunk inventory.");
+  }
   for (const name of names) {
     const ids = index.collections[name];
     ids.forEach(safeId);
     if (new Set(ids).size !== ids.length) fail("duplicate-record-id", "The canonical index repeats an identity.");
+    if (index.version === 2 && (index.chunks[name].length !== Math.ceil(ids.length / CANONICAL_CHUNK_RECORDS) ||
+        index.chunks[name].some((path, ordinal) => path !== chunkPath(name, ordinal)))) {
+      fail("invalid-canonical-index", "Chunk paths must match their collection and fixed ordinal boundaries.");
+    }
   }
 }
 
@@ -68,6 +122,9 @@ export function validateCanonicalSnapshot({ objects }) {
   if (!Object.hasOwn(objects, CANONICAL_INDEX)) fail("canonical-index-missing", "Canonical history is missing its index.");
   const read = (path) => {
     if (!Object.hasOwn(objects, path)) fail("canonical-record-missing", "A retained snapshot is missing a canonical record.");
+    if (path.startsWith(CANONICAL_PREFIX + "chunks/") && objects[path].byteLength > CANONICAL_CHUNK_BYTES) {
+      fail("invalid-canonical-chunk", "A stored canonical chunk exceeds the byte limit.");
+    }
     try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(objects[path])); }
     catch { fail("invalid-canonical-object", "A retained canonical object is invalid."); }
   };
@@ -76,6 +133,13 @@ export function validateCanonicalSnapshot({ objects }) {
   const ledger = { ...index.metadata };
   const expected = new Set([CANONICAL_INDEX]);
   for (const [name, idField] of Object.entries(CANONICAL_COLLECTIONS)) {
+    if (index.version === 2) {
+      ledger[name] = index.chunks[name].flatMap((path, ordinal) => {
+        expected.add(path);
+        return chunkRecords(index, name, ordinal, read(path));
+      });
+      continue;
+    }
     ledger[name] = index.collections[name].map((id) => {
       const path = recordPath(name, id);
       expected.add(path);
@@ -90,15 +154,18 @@ export function validateCanonicalSnapshot({ objects }) {
 }
 
 export class CanonicalLedgerStore {
-  constructor({ lifecycle, cryptoImpl = globalThis.crypto }) {
+  constructor({ lifecycle, cryptoImpl = globalThis.crypto, layout = "records-v1" }) {
     if (!lifecycle || typeof lifecycle.readManifest !== "function" ||
         typeof lifecycle.readObject !== "function" || typeof lifecycle.transact !== "function") {
       fail("invalid-config", "An existing verified synthetic storage lifecycle is required.");
     }
+    if (!["records-v1", "chunks-v2"].includes(layout)) fail("unsupported-canonical-layout", "Choose a supported synthetic canonical layout.");
+    this.layout = layout;
     this.lifecycle = lifecycle;
     this.crypto = cryptoImpl;
     this.base = null;
     this.records = new Map();
+    this.storageObjects = new Map();
     this.ledger = null;
     this.busy = false;
   }
@@ -127,6 +194,7 @@ export class CanonicalLedgerStore {
       }
       this.base = manifest;
       this.records = records;
+      this.storageObjects = records;
       this.ledger = null;
       return null;
     }
@@ -135,7 +203,11 @@ export class CanonicalLedgerStore {
       let value;
       try {
         if (snapshot && !Object.hasOwn(snapshot.objects, path)) fail("canonical-record-missing", "A verified snapshot is missing a required canonical record.");
-        text = new TextDecoder("utf-8", { fatal: true }).decode(snapshot ? snapshot.objects[path] : await this.lifecycle.readObject(path));
+        const bytes = snapshot ? snapshot.objects[path] : await this.lifecycle.readObject(path);
+        if (path.startsWith(CANONICAL_PREFIX + "chunks/") && bytes.byteLength > CANONICAL_CHUNK_BYTES) {
+          fail("invalid-canonical-chunk", "A stored canonical chunk exceeds the byte limit.");
+        }
+        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
         value = JSON.parse(text);
       } catch (error) {
         if (error instanceof SyntaxError || error instanceof TypeError) fail("invalid-canonical-object", "A canonical object is not valid UTF-8 JSON.");
@@ -149,6 +221,13 @@ export class CanonicalLedgerStore {
     const ledger = { ...index.metadata };
     for (const [name, idField] of Object.entries(CANONICAL_COLLECTIONS)) {
       ledger[name] = [];
+      if (index.version === 2) {
+        for (const [ordinal, path] of index.chunks[name].entries()) {
+          if (!Object.hasOwn(manifest.snapshot, path)) fail("canonical-record-missing", "A canonical chunk is missing.");
+          ledger[name].push(...chunkRecords(index, name, ordinal, await readJson(path)));
+        }
+        continue;
+      }
       for (const id of index.collections[name]) {
         const path = recordPath(name, id);
         if (!Object.hasOwn(manifest.snapshot, path)) fail("canonical-record-missing", "The verified snapshot is missing a required canonical record.");
@@ -168,7 +247,11 @@ export class CanonicalLedgerStore {
       fail("base-conflict", "Storage changed while canonical records were loading. Reopen and review the latest state.");
     }
     this.base = current;
-    this.records = records;
+    this.layout = index.version === 2 ? "chunks-v2" : "records-v1";
+    this.storageObjects = records;
+    // Existing immutable-history checks always compare individual logical
+    // records, irrespective of the physical layout selected by this copy.
+    this.records = index.version === 2 ? serializeCanonicalLedger(ledger) : records;
     this.ledger = ledger;
     return structuredClone(ledger);
   }
@@ -219,7 +302,11 @@ export class CanonicalLedgerStore {
           }
         }
       }
-      const changed = [...objects].filter(([path, content]) => this.records.get(path) !== content)
+      const storageObjects = this.layout === "chunks-v2" ? serializePackedCanonicalLedger(ledger) : objects;
+      for (const path of this.storageObjects.keys()) {
+        if (!storageObjects.has(path)) fail("history-removal-refused", "A save cannot drop an existing canonical chunk or record.");
+      }
+      const changed = [...storageObjects].filter(([path, content]) => this.storageObjects.get(path) !== content)
         .map(([logicalPath, content]) => ({ logicalPath, content }));
       if (changed.length && typeof this.lifecycle.assertCurrentManifest === "function") {
         // The real transaction engine verifies all retained history before its

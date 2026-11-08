@@ -39,6 +39,10 @@ The [Second Generation Product Definition](docs/PRODUCT_DEFINITION.md) records t
 - [Data model and reconciliation principles](docs/DATA_MODEL.md)
 - [Contributor and agent instructions](AGENTS.md)
 
+## Synthetic financial year
+
+[Seed an invented year](prototype/synthetic-year.html) uploads a reproducible 2025 canonical ledger to a newly created empty synthetic Drive folder you choose. It preserves source observations and audit events for future visualization, insight and projection tests. Fresh-folder checks, exact read-back and conservative retry protect existing records. The current workspace does not yet render this canonical year. Read [the recipe, operating steps and validation limits](docs/SYNTHETIC_FINANCIAL_YEAR.md). Production persistence remains **NO-GO**; live acceptance and deployment are separate.
+
 ## PR28 canonical import foundation
 
 The [approved PR28 scope](docs/PR28_IMPLEMENTATION_SCOPE.md) implements a synthetic-only CSV → account/coverage mapping → review → canonical save → reopen flow using the merged storage machinery. The [implementation contract and verification guide](docs/PR28_CANONICAL_IMPORT.md) describe the record model, tested provider variants, and acceptance evidence. The development-only [invented import workbench](prototype/pr28-import.html) accepts bundled fixtures only. Production activation remains subject to the [PR27 plan](docs/PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md) and separate implementation, acceptance, and owner authorization.
@@ -51,7 +55,7 @@ The manual steps now have adjacent controls, progress and timing. The interrupti
 
 ## Temporary prototype navigation
 
-PR29 extends the original visual reference across the main workspace, guided acceptance pages and development tools. The [visual overhaul record](docs/PR29_VISUAL_OVERHAUL.md) explains the changes, the PR28 lessons they address, and the validation limits. The main workspace remains a local CSV preview with optional invented-data storage; it is not the canonical production dashboard. All existing prototype pages remain available. Prototype removal is deferred, not part of PR29.
+PR #29 squash-merged on November 8, 2026. It extends the original visual reference across the main workspace, guided acceptance pages and development tools. The [visual overhaul record](docs/PR29_VISUAL_OVERHAUL.md) explains the changes, the PR28 lessons they address, and the validation limits. The main workspace remains a local CSV preview with optional invented-data storage; it is not the canonical production dashboard. All existing prototype pages remain available. Prototype removal is deferred, not part of PR29.
 
 During development, the app footer links to a temporary [Prototype Tools hub](prototype/), which indexes the browser-based Drive and session experiments. The hub and all browser prototype pages are development-only. **They are not v1.0.0 product features.** Before the v1.0.0 release, remove the app entry point and ensure the `prototype/` pages are excluded from the user-facing GitHub Pages deployment. Retain only the automated tests and engineering documentation needed to support the shipped product.
 
