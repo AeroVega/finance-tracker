@@ -3,44 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f5f5f7">
+  <meta name="theme-color" content="#09090b">
   <title>Finance Tracker · Session coordination test</title>
   <style>
-    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #102018; background: #f5f5f7; }
-    * { box-sizing: border-box; }
-    body { margin: 0; padding: 24px 16px 48px; }
-    main { width: min(820px, 100%); margin: 0 auto; }
-    h1 { margin: 4px 0 18px; font-size: clamp(2rem, 7vw, 3.1rem); letter-spacing: -.05em; }
-    h2 { margin: 0 0 10px; font-size: 1.12rem; }
-    p { line-height: 1.5; }
-    .eyebrow { color: #547064; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-    .panel { margin: 16px 0; padding: 20px; border: 1px solid #e3e6e5; border-radius: 18px; background: #fff; box-shadow: 0 6px 24px #17251d0a; }
-    .notice { border-color: #e6c77e; background: #fff9e9; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
-    .metric { padding: 12px; border-radius: 12px; background: #f5f7f6; min-width: 0; }
-    .metric strong { display: block; font-size: .76rem; color: #56635d; margin-bottom: 5px; }
+    .metric { padding: 12px; border-radius: 12px; background: var(--surface-raised); min-width: 0; }
+    .metric strong { display: block; font-size: .76rem; color: var(--text); margin-bottom: 5px; }
     .metric span { display: block; overflow-wrap: anywhere; font-weight: 650; }
-    button { margin: 10px 8px 0 0; padding: 11px 14px; border: 1px solid #1e5d4b; border-radius: 10px; color: #fff; background: #1e5d4b; font: inherit; font-weight: 650; cursor: pointer; }
-    button.secondary { color: #1e5d4b; background: #fff; }
-    button.danger { color: #8b2929; border-color: #c77; background: #fff; }
-    button:disabled { opacity: .48; cursor: not-allowed; }
-    .status { min-height: 1.5em; margin: 10px 0 0; color: #35453d; overflow-wrap: anywhere; white-space: pre-wrap; }
-    .status[data-kind="success"] { color: #087b55; }
-    .status[data-kind="warning"] { color: #805700; }
-    .status[data-kind="error"] { color: #a12c2c; }
-    .fine { color: #56635d; font-size: .86rem; }
+    .status { min-height: 1.5em; margin: 10px 0 0; color: var(--text); overflow-wrap: anywhere; white-space: pre-wrap; }
+
+
+
+    .fine { color: var(--text); font-size: .86rem; }
     code { overflow-wrap: anywhere; }
     ol { padding-left: 1.3rem; line-height: 1.55; }
-    footer { margin-top: 24px; text-align: center; color: #6b756f; font-size: .78rem; }
-    @media (max-width: 540px) { body { padding: 14px 10px 32px; } .panel { padding: 16px; } button { width: 100%; margin-right: 0; } .grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 540px) { .grid { grid-template-columns: 1fr 1fr; } }
   </style>
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
   <script type="module" src="session-coordination-test.mjs"></script>
   <script src="../js/build-info.js" defer></script>
+<link rel="stylesheet" href="./tools.css">
 </head>
-<body>
-  <main>
+<body><a class="skip-link" href="#tool-main">Skip to main content</a>
+  <main id="tool-main" tabindex="-1">
+<nav class="tool-navigation" aria-label="Development navigation"><a href="./index.html">← Prototype tools</a><a href="../index.html">Finance overview</a><span>Synthetic data only</span></nav>
     <p class="eyebrow">Finance Tracker · PR #21 · Synthetic only</p>
     <h1>Session coordination test</h1>
 
@@ -53,8 +40,8 @@
     <section class="panel">
       <h2>1. Connect and select the synthetic folder</h2>
       <p class="fine">Uses the existing Finance Tracker Google OAuth client, drive.file scope, Google Picker, and deployment-injected configuration. Access tokens stay in page memory.</p>
-      <button id="connect-google" type="button" disabled>Connect Google Drive</button>
-      <button id="select-folder" class="secondary" type="button" disabled>Choose synthetic test folder</button>
+      <button id="connect-google" type="button" disabled class="primary-action">Connect Google Drive</button>
+      <button id="select-folder" class="primary-action secondary" type="button" disabled>Choose synthetic test folder</button>
       <div class="grid">
         <div class="metric"><strong>Google</strong><span id="auth-state">Not connected</span></div>
         <div class="metric"><strong>Selected folder</strong><span id="folder-state">None</span></div>

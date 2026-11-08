@@ -68,3 +68,5 @@ For each significant change, report what changed and why, the checks actually ru
 
 ## Current phase
 The owner has authorized the bounded synthetic-only PR28 canonical import implementation described in `docs/PR28_IMPLEMENTATION_SCOPE.md`. Reuse the merged PR20–25 storage machinery. Production financial-data activation remains gated by PR27 and separate owner review; this authorization does not permit real-data tests, merge, or deployment. Do not modify the archived `Finances.xlsx` workbook.
+
+The owner has also authorized PR29's shared visual overhaul and usability improvements, documented in `docs/PR29_VISUAL_OVERHAUL.md`. Preserve all existing prototype pages and the original modern-stack reference. This extends the presentation and navigation scope, not production-data permissions, persistence architecture, or release authorization.

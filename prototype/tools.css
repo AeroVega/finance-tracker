@@ -1,0 +1,33 @@
+@import url('../design-system.css');
+
+/* Shared shell for development workbenches. Workflow-specific layouts stay local. */
+:root{color-scheme:dark;--ink:var(--text);--canvas:var(--page);--blue:var(--accent);--green:var(--success);--amber:var(--warning);--red:var(--danger)}
+*{box-sizing:border-box}
+body{margin:0;padding:0;background:var(--page);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{width:min(1080px,100%);max-width:1080px;margin:auto;padding:24px max(20px,env(safe-area-inset-right)) max(64px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}
+.tool-navigation{display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px;padding:0 0 20px;margin:0 0 30px;border-bottom:1px solid var(--line);font-size:.85rem}
+.tool-navigation a{display:inline-flex;align-items:center;min-height:44px;text-decoration:none}.tool-navigation span{margin-left:auto;color:var(--warning);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
+h1{font-size:clamp(2rem,5vw,3.2rem);font-weight:650;line-height:1.12;letter-spacing:-.045em;margin:12px 0 20px}h2{font-size:1.2rem;letter-spacing:-.02em;margin:0 0 14px}h3{font-size:1rem}p{line-height:1.65}.eyebrow{color:var(--violet);font-size:.75rem;text-transform:uppercase;letter-spacing:.1em}.intro,.fine,.fine-print,.metric-note,footer{color:var(--muted)}
+section,.panel,aside{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px;margin:20px 0}
+.notice,aside.notice{background:rgba(252,211,77,.06);border-color:rgba(252,211,77,.3);border-left:3px solid var(--warning);color:var(--text)}
+button,input,select,textarea{font:inherit;max-width:100%;min-height:44px;border:1px solid var(--line);border-radius:9px;padding:10px 13px;color:var(--text);background:var(--surface-raised)}
+button{font-weight:600;cursor:pointer;margin:6px 6px 6px 0}button:hover:not(:disabled){border-color:var(--accent);background:var(--accent-soft)}button:disabled{opacity:.42;cursor:not-allowed}button.secondary{background:var(--surface-raised);color:var(--text);border-color:var(--line)}button.danger{color:var(--danger);background:transparent;border-color:var(--danger)}
+a{color:var(--accent)}:is(button,input,select,textarea,a,summary):focus-visible{outline:2px solid var(--accent);outline-offset:4px}label{color:var(--muted)}input[type=checkbox]{accent-color:var(--accent)}
+pre,code{overflow-wrap:anywhere}pre{padding:16px;background:var(--page);border-radius:10px;white-space:pre-wrap;color:var(--muted)}details{border-color:var(--line)}summary{cursor:pointer;min-height:44px;padding:10px 0}table{width:100%;border-collapse:collapse}th{color:var(--muted);font-weight:600}th,td{border-color:var(--line);padding:12px;text-align:left}progress{accent-color:var(--accent);width:100%;height:10px}
+.test-jumps{background:var(--page);border-color:var(--line);border-radius:12px}.test-jumps a,.jump-button{background:var(--surface-raised);border-color:var(--line)}
+.expected,.run-timing,.request-metrics,.step-controls,.guide-next{background:var(--accent-soft);border-color:var(--line);border-left-color:var(--accent)}
+.save-status{background:var(--surface-raised)}.save-status[data-state=dirty],.save-status[data-state=paused]{background:rgba(252,211,77,.06);border-color:var(--warning)}.save-status[data-state=saving],.save-status[data-state=busy]{background:var(--accent-soft);border-color:var(--accent)}.save-status[data-state=unverified],.inline-result[data-error=true]{background:rgba(253,164,175,.06);border-color:var(--danger);color:var(--danger)}
+.days button[aria-pressed=true]{background:var(--accent);color:var(--page)}.metric,.number{background:var(--surface-raised)}#guide-progress{background:var(--surface);border-color:var(--line)}
+[hidden]{display:none!important}
+@media(max-width:540px){main{padding-top:16px}.tool-navigation{gap:8px 18px;margin-bottom:24px}.tool-navigation span{width:100%;margin:0}section,.panel,aside{padding:17px;border-radius:14px}button{width:auto}h1{overflow-wrap:anywhere}.test-jumps{position:static}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+/* Action hierarchy and keyboard entry are shared across all workbenches. */
+.skip-link{position:fixed;top:12px;left:16px;z-index:20;padding:12px 18px;background:var(--accent);color:var(--page);border-radius:8px;transform:translateY(-200%)}
+.skip-link:focus{transform:translateY(0)}
+button.primary-action{background:var(--accent);border-color:var(--accent);color:var(--page)}
+button.primary-action:hover:not(:disabled){background:var(--text);border-color:var(--text);color:var(--page)}
+input,select,textarea{font-size:16px}
+.status[data-kind=warning]{color:var(--warning)}
+.status[data-kind=success],[data-result=pass],[data-result=passed]{color:var(--success)}
+.status[data-kind=error],[data-result=error],[data-result=failed]{color:var(--danger)}

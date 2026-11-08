@@ -9,8 +9,11 @@
   <script async src="https://apis.google.com/js/api.js"></script>
   <script type="module" src="pr25-acceptance.mjs"></script>
   <script src="../js/build-info.js" defer></script>
+<link rel="stylesheet" href="./tools.css">
+<meta name="theme-color" content="#09090b">
 </head>
-<body><main>
+<body><a class="skip-link" href="#tool-main">Skip to main content</a><main id="tool-main" tabindex="-1">
+<nav class="tool-navigation" aria-label="Development navigation"><a id="prototype-tools" href="./index.html">← Prototype tools</a><span>Synthetic data only</span></nav>
 <div id="copy-guide" hidden>
   <p class="eyebrow">Finance Tracker · PR #28 · Synthetic tests only</p>
   <h1>Backup and restore, step by step</h1>
@@ -25,7 +28,7 @@
   <section>
     <h2>1. Choose the completed source</h2>
     <p>You approve Google access and choose the source folder. The page checks its synthetic canonical records and retained history. Folder names alone cannot prove which run it is.</p>
-    <button id="guide-source" disabled>Choose and verify existing source</button>
+    <button id="guide-source" disabled class="primary-action">Choose and verify existing source</button>
     <button id="guide-recover" hidden disabled>Confirm stopped sessions and recover source</button>
     <p id="guide-source-result" role="status" aria-live="polite">Not verified. Empty folders will not be initialized.</p>
     <p id="guide-source-time" class="step-time"></p>
@@ -33,7 +36,7 @@
   <section>
     <h2>2. Make the Drive backup</h2>
     <p>You choose a new empty BACKUP folder. Copying, verification, release and a separate reopen run automatically.</p>
-    <button id="guide-backup" disabled>Choose backup folder and run checks</button>
+    <button id="guide-backup" disabled class="primary-action">Choose backup folder and run checks</button>
     <p id="guide-backup-result" role="status" aria-live="polite">Backup not run.</p>
     <p id="guide-backup-time" class="step-time"></p>
     <p id="guide-backup-reopen-result" role="status" aria-live="polite">Independent backup reopen not run.</p>
@@ -41,7 +44,7 @@
   <section>
     <h2>3. Download the archive</h2>
     <p>The page verifies the archive and releases the source. Your browser handles saving the file. A download request does not prove it was saved.</p>
-    <button id="guide-export" disabled>Verify, release source and download</button>
+    <button id="guide-export" disabled class="primary-action">Verify, release source and download</button>
     <p id="guide-export-result" role="status" aria-live="polite">Export not run.</p>
     <p id="guide-export-time" class="step-time"></p>
   </section>
@@ -56,7 +59,7 @@
   <section>
     <h2>5. Restore and independently reopen</h2>
     <p>You choose another new empty RESTORED COPY folder. The page restores the selected file, releases the folder, opens it through a new session, compares all retained logical bytes, then releases it again.</p>
-    <button id="guide-restore" disabled>Choose restore folder and run checks</button>
+    <button id="guide-restore" disabled class="primary-action">Choose restore folder and run checks</button>
     <p id="guide-restore-result" role="status" aria-live="polite">Restore not run.</p>
     <p id="guide-restore-time" class="step-time"></p>
     <p id="guide-restore-reopen-result" role="status" aria-live="polite">Independent restored-copy reopen not run.</p>
@@ -87,7 +90,7 @@
   <section>
     <h2>1. Connect a synthetic primary</h2>
     <p>Choose a fresh empty synthetic folder, or reopen a version-2 synthetic copy. PR24-format folders are not supported.</p>
-    <button id="connect" disabled>Connect Google Drive</button>
+    <button id="connect" disabled class="primary-action">Connect Google Drive</button>
     <button id="stale" disabled>Confirm stale-session recovery</button>
     <button id="recover" disabled>Retry transaction recovery</button>
     <button id="release" disabled>Release source session</button>
@@ -95,7 +98,7 @@
   </section>
   <section>
     <h2>2. Save and reopen invented data</h2>
-    <button id="save" disabled>Save invented snapshot</button>
+    <button id="save" disabled class="primary-action">Save invented snapshot</button>
     <button id="verify-source" disabled>Verify all retained history</button>
     <p id="source-result" role="status" aria-live="polite">Not tested.</p>
   </section>
@@ -138,6 +141,6 @@
     <p id="oauth-result" role="status" aria-live="polite">Live provider tests remain open.</p>
   </section>
 </div>
-  <a id="prototype-tools" href="./index.html">Back to prototype tools</a>
+
   <footer>Source: <span id="build-sha">development (not deployed)</span></footer>
 </main></body></html>

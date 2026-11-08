@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#09090b">
+  <meta name="description" content="An isolated Tailwind CSS UI exploration for Finance Tracker.">
+  <title>Finance Tracker — Obsidian UI Exploration</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="./js/modern-dashboard.js" defer></script>
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-100 antialiased selection:bg-cyan-300/30 selection:text-cyan-100">
+  <div class="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+    <div class="absolute -top-48 left-1/3 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl"></div>
+    <div class="absolute right-0 top-1/3 h-80 w-80 rounded-full bg-violet-500/10 blur-3xl"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.045)_1px,transparent_0)] bg-[size:28px_28px]"></div>
+  </div>
+  <div class="relative mx-auto flex min-h-screen max-w-[1440px] flex-col lg:flex-row">
+    <aside class="border-b border-white/10 bg-neutral-950/80 px-5 py-5 backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-6 lg:py-8">
+      <a href="./" class="flex items-center gap-3" aria-label="Finance Tracker exploration home">
+        <span class="grid h-10 w-10 place-items-center rounded-xl border border-cyan-300/40 bg-cyan-300/10 text-cyan-200 shadow-[0_0_22px_rgba(34,211,238,0.14)]">
+          <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" aria-hidden="true"><path d="M4 17.5 9 12l3.2 3.2L20 6.5M14.5 6.5H20v5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span><span class="block text-sm font-semibold tracking-wide">NORTHSTAR</span><span class="block text-[10px] tracking-[0.22em] text-neutral-500">FINANCE TRACKER</span></span>
+      </a>
+      <div class="mt-9 hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-600 lg:block">Workspace</div>
+      <nav class="mt-5 flex gap-2 overflow-x-auto lg:flex-col" aria-label="Primary navigation">
+        <a href="#overview" class="flex shrink-0 items-center gap-3 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.08] px-3 py-2.5 text-sm text-cyan-100 shadow-[inset_0_0_18px_rgba(34,211,238,0.04)]"><span aria-hidden="true">◫</span> Overview</a>
+        <a href="#activity" class="flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-neutral-400 transition hover:bg-white/5 hover:text-white"><span aria-hidden="true">↗</span> Activity</a>
+        <a href="#accounts" class="flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-neutral-400 transition hover:bg-white/5 hover:text-white"><span aria-hidden="true">▤</span> Accounts</a>
+        <a href="#insights" class="flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-neutral-400 transition hover:bg-white/5 hover:text-white"><span aria-hidden="true">⌁</span> Insights</a>
+      </nav>
+      <div class="mt-10 hidden rounded-2xl border border-violet-300/15 bg-violet-300/[0.04] p-4 lg:block">
+        <div class="flex items-center gap-2 text-xs font-medium text-violet-200"><span class="h-1.5 w-1.5 rounded-full bg-violet-300 shadow-[0_0_10px_rgba(196,181,253,0.9)]"></span> Exploration mode</div>
+        <p class="mt-2 text-xs leading-5 text-neutral-500">A visual prototype using invented sample figures. No accounts are connected.</p>
+      </div>
+      <div class="mt-8 hidden text-[11px] leading-5 text-neutral-600 lg:block">Independent UI sandbox<br>feature/modern-stack-exploration</div>
+    </aside>
+    <main id="overview" class="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+      <header class="flex flex-wrap items-start justify-between gap-4">
+        <div><div class="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300/80"><span class="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.9)]"></span> Personal finance / workspace</div><h1 class="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Your overview<span class="text-cyan-300">.</span></h1><p class="mt-2 text-sm text-neutral-500">A clearer view of the numbers that move you forward.</p></div>
+        <div class="flex items-center gap-3"><span class="rounded-full border border-amber-300/20 bg-amber-300/[0.07] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">Demo data</span><button id="profile-button" type="button" class="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-neutral-900 text-sm font-semibold text-neutral-300 transition hover:border-cyan-300/40 hover:text-cyan-100" aria-label="Profile menu">C</button></div>
+      </header>
+      <section class="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Financial summary">
+        <article class="rounded-2xl border border-cyan-300/25 bg-neutral-900/80 p-5 shadow-[0_0_24px_rgba(34,211,238,0.07)]"><div class="flex items-center justify-between"><p class="text-xs text-neutral-400">Total balance</p><span class="text-cyan-200">↗</span></div><p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">$48,290<span class="text-neutral-500">.42</span></p><p class="mt-2 text-xs text-cyan-200/80">+4.8% <span class="text-neutral-500">vs. previous month</span></p></article>
+        <article class="rounded-2xl border border-white/10 bg-neutral-900/70 p-5"><div class="flex items-center justify-between"><p class="text-xs text-neutral-400">Income</p><span class="text-emerald-300">＋</span></div><p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">$6,840<span class="text-neutral-500">.00</span></p><p class="mt-2 text-xs text-neutral-500">This month</p></article>
+        <article class="rounded-2xl border border-white/10 bg-neutral-900/70 p-5"><div class="flex items-center justify-between"><p class="text-xs text-neutral-400">Expenses</p><span class="text-rose-300">−</span></div><p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">$2,416<span class="text-neutral-500">.38</span></p><p class="mt-2 text-xs text-neutral-500">This month</p></article>
+        <article class="rounded-2xl border border-white/10 bg-neutral-900/70 p-5"><div class="flex items-center justify-between"><p class="text-xs text-neutral-400">Savings rate</p><span class="text-violet-300">◌</span></div><p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">64.7<span class="text-neutral-500">%</span></p><p class="mt-2 text-xs text-neutral-500">This month</p></article>
+      </section>
+      <section class="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.85fr)]" id="insights">
+        <article class="rounded-2xl border border-white/10 bg-neutral-900/65 p-5 sm:p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3"><div><p class="text-sm font-semibold text-white">Cash flow</p><p class="mt-1 text-xs text-neutral-500">Income against expenses</p></div><div class="flex rounded-lg border border-white/10 bg-neutral-950 p-1" role="group" aria-label="Chart period"><button type="button" data-period="1M" class="period-button rounded-md bg-cyan-300/10 px-3 py-1.5 text-xs text-cyan-100">1M</button><button type="button" data-period="3M" class="period-button rounded-md px-3 py-1.5 text-xs text-neutral-500 hover:text-white">3M</button><button type="button" data-period="6M" class="period-button rounded-md px-3 py-1.5 text-xs text-neutral-500 hover:text-white">6M</button></div></div>
+          <div class="mt-6 flex items-end gap-2"><span class="text-2xl font-semibold tabular-nums">$4,423.62</span><span class="mb-1 text-xs text-emerald-300">net positive</span></div>
+          <div class="mt-5 h-44 w-full"><svg viewBox="0 0 680 180" preserveAspectRatio="none" class="h-full w-full" role="img" aria-label="Illustrative cash flow chart showing income above expenses"><defs><linearGradient id="area-cyan" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#67e8f9" stop-opacity=".22"/><stop offset="1" stop-color="#67e8f9" stop-opacity="0"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g stroke="#ffffff" stroke-opacity=".08" stroke-dasharray="3 6"><path d="M0 25H680M0 70H680M0 115H680M0 160H680"/></g><path d="M0 110 C45 96 62 78 105 88 S165 115 210 75 S280 56 315 67 S390 44 420 58 S485 25 525 46 S600 18 680 28 L680 180H0Z" fill="url(#area-cyan)"/><path d="M0 110 C45 96 62 78 105 88 S165 115 210 75 S280 56 315 67 S390 44 420 58 S485 25 525 46 S600 18 680 28" fill="none" stroke="#67e8f9" stroke-width="2.5" filter="url(#glow)"/><path d="M0 145 C50 137 65 128 105 135 S165 148 210 127 S280 118 315 128 S390 106 420 119 S485 101 525 112 S600 91 680 100" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5 5"/></svg></div>
+          <div class="mt-3 flex justify-between text-[10px] text-neutral-600"><span>OCT 01</span><span>OCT 07</span><span>OCT 14</span><span>OCT 21</span><span>OCT 31</span></div><p id="period-feedback" class="mt-4 text-[11px] text-neutral-600" aria-live="polite">Showing the illustrative one-month view.</p>
+        </article>
+        <article class="rounded-2xl border border-white/10 bg-neutral-900/65 p-5 sm:p-6" id="accounts">
+          <div class="flex items-center justify-between"><div><p class="text-sm font-semibold text-white">Account mix</p><p class="mt-1 text-xs text-neutral-500">Illustrative balances</p></div><span class="text-xs text-neutral-600">04 accounts</span></div>
+          <div class="mt-7 flex items-center justify-center"><div class="relative grid h-40 w-40 place-items-center rounded-full" style="background: conic-gradient(#67e8f9 0 48%, #a78bfa 48% 76%, #34d399 76% 91%, #fbbf24 91% 100%)"><div class="grid h-28 w-28 place-items-center rounded-full border border-white/5 bg-neutral-900 text-center"><span><strong class="block text-xl tabular-nums">$48.3k</strong><small class="text-[10px] text-neutral-500">total assets</small></span></div></div></div>
+          <div class="mt-7 space-y-3 text-xs"><div class="flex items-center justify-between"><span class="flex items-center gap-2 text-neutral-400"><i class="h-2 w-2 rounded-full bg-cyan-300"></i>Checking</span><span class="tabular-nums text-neutral-200">$23,179</span></div><div class="flex items-center justify-between"><span class="flex items-center gap-2 text-neutral-400"><i class="h-2 w-2 rounded-full bg-violet-300"></i>Savings</span><span class="tabular-nums text-neutral-200">$13,520</span></div><div class="flex items-center justify-between"><span class="flex items-center gap-2 text-neutral-400"><i class="h-2 w-2 rounded-full bg-emerald-300"></i>Brokerage</span><span class="tabular-nums text-neutral-200">$7,245</span></div><div class="flex items-center justify-between"><span class="flex items-center gap-2 text-neutral-400"><i class="h-2 w-2 rounded-full bg-amber-300"></i>Other</span><span class="tabular-nums text-neutral-200">$4,346</span></div></div>
+        </article>
+      </section>
+      <section class="mt-6 rounded-2xl border border-white/10 bg-neutral-900/65 p-5 sm:p-6" id="activity">
+        <div class="flex flex-wrap items-center justify-between gap-3"><div><p class="text-sm font-semibold text-white">Recent activity</p><p class="mt-1 text-xs text-neutral-500">Invented sample transactions · October 2026</p></div><button id="activity-filter" type="button" class="rounded-lg border border-white/10 px-3 py-2 text-xs text-neutral-400 transition hover:border-cyan-300/30 hover:text-cyan-100">Show all activity</button></div>
+        <div id="activity-list" class="mt-4 divide-y divide-white/[0.06]"></div>
+      </section>
+      <footer class="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-5 text-[10px] text-neutral-600"><span>UI exploration only · No financial data connected or persisted</span><span>Tailwind CSS v4 Play CDN · Vanilla JavaScript</span></footer>
+    </main>
+  </div>
+</body>
+</html>
