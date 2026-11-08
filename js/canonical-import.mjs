@@ -317,6 +317,29 @@ function categoryRuleKey(activity) {
   return {accountId:activity.accountId,institutionId:activity.institutionId,currency:activity.currency,normalizedDescription:activity.normalizedDescription ?? activity.sourceDescription,sourceAction:activity.sourceAction};
 }
 
+function categoryRuleMatches(key, activity) {
+  // Adapters use string/null fields, but older accepted JSON can include a
+  // structured sourceAction. Keep its former JCS equality without serializing
+  // the ordinary primitive fields on every activity/event comparison.
+  const same=(left,right)=>left===right || (left!==null && right!==null &&
+    typeof left==='object' && typeof right==='object' && canonicalizeJcs(left)===canonicalizeJcs(right));
+  return key.accountId===activity.accountId && key.institutionId===activity.institutionId &&
+    same(key.currency,activity.currency) && same(key.normalizedDescription,activity.normalizedDescription ?? activity.sourceDescription) &&
+    same(key.sourceAction,activity.sourceAction);
+}
+
+function prospectiveCategoryRule(ledger, activity) {
+  const key=categoryRuleKey(activity), enabled=Boolean(key.normalizedDescription.trim());
+  // The immutable account, currency and source fields keep unrelated activities
+  // outside this rule forever. Retain only earlier exact-key peers, including
+  // inactive history, so later imports can inherit without recategorizing peers.
+  // Version 1 also accepts the older full-ledger inventories without rewriting them.
+  const existingActivityIds=enabled
+    ? ledger.activities.filter(prior=>categoryRuleMatches(key,prior)).map(prior=>prior.activityId)
+    : [activity.activityId];
+  return {version:1,enabled,key,existingActivityIds};
+}
+
 function effective(ledger, activity, visited = new Set()) {
   if(visited.has(activity.activityId)) fail('cyclic-refund-link');
   const ancestry=new Set(visited);ancestry.add(activity.activityId);
@@ -324,7 +347,7 @@ function effective(ledger, activity, visited = new Set()) {
   for(const e of ledger.events) {
     // The recorded membership boundary makes rules prospective without relying on
     // clocks or mutable array ordering. Existing peers keep their historical category.
-    if(e.eventType==='category-correction' && e.prospectiveRule?.enabled && !e.prospectiveRule.existingActivityIds.includes(activity.activityId) && canonicalizeJcs(e.prospectiveRule.key)===canonicalizeJcs(categoryRuleKey(activity))) result.categoryId=e.categoryId;
+    if(e.eventType==='category-correction' && e.prospectiveRule?.enabled && categoryRuleMatches(e.prospectiveRule.key,activity) && !e.prospectiveRule.existingActivityIds.includes(activity.activityId)) result.categoryId=e.categoryId;
     if(e.activityId!==activity.activityId) continue;
     if(e.eventType==='bank-correction') Object.assign(result,e.proposedValues);
     if(e.eventType==='category-correction') result.categoryId=e.categoryId;
@@ -361,7 +384,7 @@ export function applyFinancialEvent(ledger, command, options={}) {
   const next=clone(ledger), original=activityFor(next,activityId), a=effective(next,original);
   if(!activeActivities(next).some(active=>active.activityId===activityId)) fail('inactive-financial-target');
   const event={eventId:id(options),commandId,commandSignature:signature,eventType:type,activityId,recordedAt:stamp(options),evidence:clone(command.evidence??null),appendOnly:true};
-  if(type==='category-correction') {if(typeof command.categoryId!=='string'||!command.categoryId) fail('category-required');event.categoryId=command.categoryId;event.priorCategoryId=a.categoryId;event.prospectiveRule={version:1,enabled:Boolean(categoryRuleKey(a).normalizedDescription.trim()),key:categoryRuleKey(a),existingActivityIds:next.activities.map(activity=>activity.activityId)};}
+  if(type==='category-correction') {if(typeof command.categoryId!=='string'||!command.categoryId) fail('category-required');event.categoryId=command.categoryId;event.priorCategoryId=a.categoryId;event.prospectiveRule=prospectiveCategoryRule(next,a);}
   else if(type==='bank-correction') {if(!command.evidence) fail('correction-evidence-required');event.priorValues={amountMinor:a.amountMinor,amountDecimal:a.amountDecimal,currency:a.currency};event.proposedValues=parseMoney(command.amountText,a.currency);}
   else if(type==='classification') {
     if(!['income','spending','transfer','refund','unclassified'].includes(command.activityKind)) fail('unsupported-classification');
