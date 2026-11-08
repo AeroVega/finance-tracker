@@ -1,5 +1,5 @@
 import {parseProviderCsv} from './provider-csv.mjs';
-import {createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvents, summarizeLedger, validateLedger} from './canonical-import.mjs';
+import {createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvents, summarizeLedgerPeriods, validateLedger} from './canonical-import.mjs';
 
 export const DEFAULT_SYNTHETIC_YEAR = 2025;
 export const SYNTHETIC_YEAR_DESCRIPTOR = Object.freeze({
@@ -106,10 +106,10 @@ export async function createSyntheticFinancialYear({year = DEFAULT_SYNTHETIC_YEA
     ledger=applyFinancialEvents(ledger,commands,options);
   }
   validateLedger(ledger);
-  const monthly = expectedMonthly.map(({month}) => summarizeLedger(ledger, {start: `${month}-01`,
-    end: `${month}-${new Date(Date.UTC(year, Number(month.slice(5)), 0)).getUTCDate()}`, currency: 'USD'}));
+  const [summary,...monthly] = summarizeLedgerPeriods(ledger, [{start,end,currency:'USD'},...expectedMonthly.map(({month}) => ({start: `${month}-01`,
+    end: `${month}-${new Date(Date.UTC(year, Number(month.slice(5)), 0)).getUTCDate()}`, currency: 'USD'}))]);
   return {syntheticOnly: true, descriptor: {...SYNTHETIC_YEAR_DESCRIPTOR}, year, ledger, accounts, sources,
-    summary: summarizeLedger(ledger, {start, end, currency: 'USD'}), monthly, expectedMonthly,
+    summary, monthly, expectedMonthly,
     limitations: ['Known subtotals only; declared fixture coverage is not reconciled financial completeness.',
       'No opening balances, historical balances, valuations, net worth or investment performance are supplied.',
       'Fidelity actions and amounts are preserved, but unknown lifecycle and unsupported investment classification exclude them from income and spending.',

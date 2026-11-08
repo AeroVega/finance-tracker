@@ -571,16 +571,37 @@ function buildFinancialEvent(next,command,options,{replay,commands,activeIds,ref
 }
 
 export function summarizeLedger(ledger,{start,end,currency,accountIds=ledger.accounts.map(a=>a.accountId)}) {
-  const {replay}=validateAndProject(ledger);
+  return summarizePeriod(createReportContext(ledger),{start,end,currency,accountIds});
+}
+
+// One explicit read operation: validation, replay and indexes are discarded after
+// the requested reports. Nothing is cached on the ledger or between calls.
+export function summarizeLedgerPeriods(ledger,scopes) {
+  const context=createReportContext(ledger);
+  if(!Array.isArray(scopes)) fail('invalid-report-scopes');
+  return scopes.map(scope=>summarizePeriod(context,scope));
+}
+
+function createReportContext(ledger) {
+  const {replay,byId}=validateAndProject(ledger);
+  return {ledger,replay,accounts:byId.accounts,
+    active:activeActivities(ledger),
+    unresolved:ledger.observations.filter(o=>!o.resolved&&['review','rejected'].includes(o.disposition))};
+}
+
+function summarizePeriod({ledger,replay,accounts,active,unresolved},{start,end,currency,accountIds=ledger.accounts.map(a=>a.accountId)}) {
   if(!isCalendarDate(start)||!isCalendarDate(end)||start>end||!/^[A-Z]{3}$/.test(currency)) fail('invalid-report-scope');
-  accountIds.forEach(value=>accountFor(ledger,value));
+  accountIds.forEach(value=>{if(!accounts.has(value))fail('unknown-account');});
+  // Preserve the legacy forEach/includes failure behavior for malformed scopes.
+  const selected=Array.isArray(accountIds)?new Set(accountIds):{has:value=>accountIds.includes(value)};
   const reasons=new Set(['coverage-not-reconciled']);
   let income='0',spending='0',cash='0'; const excluded=[];
   for(const accountId of accountIds) if(!ledger.imports.some(r=>r.accountId===accountId&&r.declaredCoverage.start<=start&&r.declaredCoverage.end>=end)) reasons.add('missing-declared-coverage');
-  for(const o of ledger.observations.filter(o=>accountIds.includes(o.accountId)&&!o.resolved&&['review','rejected'].includes(o.disposition))) {
+  for(const o of (Array.isArray(accountIds)?unresolved.filter(o=>selected.has(o.accountId)):
+    ledger.observations.filter(o=>accountIds.includes(o.accountId)&&!o.resolved&&['review','rejected'].includes(o.disposition)))) {
     if(!isCalendarDate(o.candidate.effectiveDate)||(o.candidate.effectiveDate>=start&&o.candidate.effectiveDate<=end)) reasons.add('unresolved-observations');
   }
-  for(const original of activeActivities(ledger).filter(a=>accountIds.includes(a.accountId))) {
+  for(const original of active.filter(a=>selected.has(a.accountId))) {
     const a=replay.get(original.activityId), date=a.activityKind==='refund'?a.postedDate:a.effectiveDate;
     // A source activity date is not proof of a refund's posting period.
     // Its unknown posting date can affect any requested period for this account.
@@ -602,7 +623,7 @@ export function summarizeLedger(ledger,{start,end,currency,accountIds=ledger.acc
     if(a.activityKind==='income') income=add(income,value);
     if(a.activityKind==='spending'||a.activityKind==='refund') spending=add(spending,negate(value));
     // Only checking/savings cash movement; cards are liabilities, not cash accounts.
-    if(['checking','savings'].includes(accountFor(ledger,a.accountId).accountType)&&a.activityKind!=='transfer') cash=add(cash,value);
+    if(['checking','savings'].includes(accounts.get(a.accountId).accountType)&&a.activityKind!=='transfer') cash=add(cash,value);
   }
   return {start,end,currency,income,spending,cash,complete:false,reasons:[...reasons],excluded};
 }
