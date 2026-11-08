@@ -3,6 +3,45 @@ import { createLocatorCatalog, locatorKey, resolveSnapshotLocators } from "./dri
 import { encode, hashRaw, writeVerified, verifyCatalogHistory, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
 import { archiveOriginalImports, restoreOriginalImports, validateArchivedOriginalImports } from "./drive-original-retention.mjs";
 
+// Observers receive only fixed phases and aggregate counts. They cannot delay
+// a storage operation or turn an observer failure into a copy failure.
+function reportProgress(onProgress, phase, completed = null, total = null) {
+  if (typeof onProgress !== "function") return;
+  try { Promise.resolve(onProgress(Object.freeze({ phase, completed, total }))).catch(() => {}); }
+  catch { /* progress is observational */ }
+}
+
+/** Copy only independent retained bytes, never transaction/publication writes. */
+async function copyRetainedObjects(verified, adapter, guard, onProgress) {
+  const entries = Object.entries(verified.catalog.entries);
+  const additions = new Array(entries.length);
+  let next = 0, completed = 0;
+  let failed = false, failure, failureIndex = Infinity;
+  reportProgress(onProgress, "copying-objects", completed, entries.length);
+  const worker = async () => {
+    while (!failed && next < entries.length) {
+      const index = next++;
+      const [key, entry] = entries[index];
+      try {
+        const location = await writeVerified(adapter, { content: verified.objects.get(key),
+          kind: entry.kind === "data-object" ? "snapshot-object" : entry.kind,
+          transactionId: entry.transactionId || verified.transactionId, name: "ft-" + entry.kind + ".bin" }, guard);
+        additions[index] = { ...entry, ...location };
+        reportProgress(onProgress, "copying-objects", ++completed, entries.length);
+      } catch (error) {
+        // Keep the earliest input failure even when later work rejects first.
+        if (index < failureIndex) { failure = error; failureIndex = index; }
+        failed = true;
+      }
+    }
+  };
+  // Every admitted create and its exact-ID verification must settle before
+  // quarantine, publication, or either session gate can complete.
+  await Promise.all(Array.from({ length: Math.min(4, entries.length) }, worker));
+  if (failed) throw failure;
+  return additions;
+}
+
 function base64(bytes) {
   let text = "";
   for (let offset = 0; offset < bytes.length; offset += 0x8000) text += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
@@ -44,9 +83,10 @@ export async function validateRetainedStructure({ manifest, catalog, objects, va
 }
 
 /** Version 2 carries exact retained history; version-1 archives remain legacy-only. */
-export async function exportCatalogArchive({ adapter, manifestFileId, withSourceLock, validateStructure, now = new Date().toISOString() }) {
+export async function exportCatalogArchive({ adapter, manifestFileId, withSourceLock, validateStructure, now = new Date().toISOString(), onProgress }) {
   if (typeof withSourceLock !== "function") throw storageError("source-lock-required", "Export requires the source session gate.");
   return withSourceLock(async () => {
+    reportProgress(onProgress, "source-verification");
     const manifest = await adapter.readJson(manifestFileId);
     if (manifest.catalogFinalizationPending !== null) throw storageError("recovery-required", "Complete catalog recovery before export.");
     const { catalog, objects } = await verifyCatalogHistory(adapter, manifest);
@@ -65,7 +105,8 @@ export async function exportCatalogArchive({ adapter, manifestFileId, withSource
   });
 }
 
-export async function verifyCatalogArchive(archive, { validateStructure } = {}) {
+export async function verifyCatalogArchive(archive, { validateStructure, onProgress } = {}) {
+  reportProgress(onProgress, "archive-verification");
   if (archive?.format !== "finance-tracker-portable-backup" || archive.version !== 2 || !Array.isArray(archive.objects) ||
       archive.manifest?.storageBinding?.provider !== "portable-archive" || archive.manifest.storageBinding.folderId !== null ||
       archive.manifest.copyId !== archive.sourceCopyId || archive.manifest.locatorCatalog || archive.manifest.copyPreparationFileId ||
@@ -102,12 +143,12 @@ export async function verifyCatalogArchive(archive, { validateStructure } = {}) 
 
 /** A prepared-state marker precedes the manifest; any failed copy stays quarantined. */
 export async function restoreCatalogArchive({ archive, targetAdapter, newCopyId = globalThis.crypto.randomUUID(),
-  role = "primary", withTargetLock, assertTargetWritable, validateStructure, beforePublish = async () => {} }) {
+  role = "primary", withTargetLock, assertTargetWritable, validateStructure, beforePublish = async () => {}, onProgress }) {
   if (typeof withTargetLock !== "function" || typeof assertTargetWritable !== "function") throw storageError("target-lock-required", "A verified destination session gate is required.");
   const knownCopyIds = [archive?.sourceCopyId, archive?.manifest?.copyId, archive?.manifest?.restoredFromCopyId];
   if (typeof newCopyId !== "string" || !newCopyId.trim() || knownCopyIds.includes(newCopyId) || !["primary", "backup"].includes(role)) throw storageError("invalid-copy-identity", "A distinct destination copy identity and supported role are required.");
   return withTargetLock(async () => {
-    const verified = await verifyCatalogArchive(archive, { validateStructure });
+    const verified = await verifyCatalogArchive(archive, { validateStructure, onProgress });
     for (const [key, bytes] of verified.objects) {
       if (key.startsWith("journal-event:") || key.startsWith("migration-record:")) {
         let evidence;
@@ -117,6 +158,7 @@ export async function restoreCatalogArchive({ archive, targetAdapter, newCopyId 
         if (origin === newCopyId) throw storageError("invalid-copy-identity", "The destination cannot reuse an archived source-copy identity.");
       }
     }
+    reportProgress(onProgress, "destination-preparation");
     const children = await targetAdapter.listChildren();
     if (children.some((file) => !(file.name === "finance-tracker-active-session.json" && file.appProperties?.financeTrackerSession === "v1"))) {
       throw storageError("fresh-destination-required", "Copy only into a fresh synthetic folder. Partial destinations remain evidence.");
@@ -129,12 +171,7 @@ export async function restoreCatalogArchive({ archive, targetAdapter, newCopyId 
       const marker = await writeVerified(targetAdapter, { content: preparation, kind: "copy-preparation", transactionId,
         name: "ft-copy-preparation.json" }, assertTargetWritable);
       markerId = marker.fileId;
-      const additions = [];
-      for (const [key, entry] of Object.entries(verified.catalog.entries)) {
-        const location = await writeVerified(targetAdapter, { content: verified.objects.get(key), kind: entry.kind === "data-object" ? "snapshot-object" : entry.kind,
-          transactionId: entry.transactionId || transactionId, name: "ft-" + entry.kind + ".bin" }, assertTargetWritable);
-        additions.push({ ...entry, ...location });
-      }
+      const additions = await copyRetainedObjects({ ...verified, transactionId }, targetAdapter, assertTargetWritable, onProgress);
       const catalog = createLocatorCatalog({ databaseId: verified.manifest.databaseId, copyId: newCopyId, additions });
       const pointer = await writeVerified(targetAdapter, { content: catalog, kind: "locator-catalog", transactionId,
         name: "ft-locator-catalog.json" }, assertTargetWritable);
@@ -142,14 +179,17 @@ export async function restoreCatalogArchive({ archive, targetAdapter, newCopyId 
         storageBinding: { provider: "google-drive", folderId: targetAdapter.folderId }, locatorCatalog: pointer,
         restoredFromCopyId: archive.sourceCopyId, copyPreparationFileId: markerId };
       await restoreOriginalImports({ adapter: targetAdapter, imports: archive.originalImports, guard: assertTargetWritable });
+      reportProgress(onProgress, "destination-verification");
       // Mark preparation ready before publication; without the final manifest
       // this folder still cannot be selected as a database copy.
       await assertTargetWritable();
       await targetAdapter.publishManifest(markerId, { ...preparation, state: "ready" }, { beforeMutation: assertTargetWritable });
       await verifyCatalogHistory(targetAdapter, manifest);
       await beforePublish();
+      reportProgress(onProgress, "publishing-manifest");
       const result = await writeVerified(targetAdapter, { content: manifest, kind: "dashboard-synthetic-manifest", transactionId,
         name: "ft-synthetic-dashboard-manifest.json" }, assertTargetWritable);
+      reportProgress(onProgress, "final-verification");
       await verifyCatalogHistory(targetAdapter, await targetAdapter.readJson(result.fileId));
       return { manifestFileId: result.fileId, manifest, objectCount: additions.length };
     } catch (error) {
@@ -165,15 +205,16 @@ export async function restoreCatalogArchive({ archive, targetAdapter, newCopyId 
 }
 
 export async function backupCatalogCopy({ sourceAdapter, sourceManifestFileId, withSourceLock, assertSourceWritable,
-  targetAdapter, withTargetLock, assertTargetWritable, validateStructure }) {
+  targetAdapter, withTargetLock, assertTargetWritable, validateStructure, onProgress }) {
   if (sourceAdapter.folderId === targetAdapter.folderId) throw storageError("same-backup-destination", "Backup requires a separate physical folder.");
   if (typeof withSourceLock !== "function" || typeof assertSourceWritable !== "function") throw storageError("source-lock-required", "Backup requires the active source session gate.");
   return withSourceLock(async () => {
     const base = await sourceAdapter.readJson(sourceManifestFileId);
     const archive = await exportCatalogArchive({ adapter: sourceAdapter, manifestFileId: sourceManifestFileId,
-      withSourceLock: (operation) => operation(), validateStructure });
+      withSourceLock: (operation) => operation(), validateStructure, onProgress });
     return restoreCatalogArchive({ archive, targetAdapter, role: "backup", withTargetLock, assertTargetWritable,
-      validateStructure, beforePublish: async () => {
+      validateStructure, onProgress, beforePublish: async () => {
+        reportProgress(onProgress, "source-recheck");
         await assertSourceWritable();
         if (canonicalizeJcs(await sourceAdapter.readJson(sourceManifestFileId)) !== canonicalizeJcs(base)) throw storageError("source-changed", "The source changed during backup.");
       } });

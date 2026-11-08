@@ -21,6 +21,18 @@ jobs:
         with:
           node-version: 26
       - name: Check browser and dashboard module syntax
-        run: node --check js/app.js && node --check js/dashboard-synthetic-storage.mjs && node --check prototype/application-storage-lifecycle-test.mjs && node --check prototype/pr25-acceptance.mjs
+        run: |
+          node --check js/app.js
+          node --check js/dashboard-synthetic-storage.mjs
+          node --check js/provider-csv.mjs
+          node --check js/canonical-import.mjs
+          node --check js/canonical-ledger-storage.mjs
+          node --check js/synthetic-application-structure.mjs
+          node --check prototype/application-storage-lifecycle-test.mjs
+          node --check prototype/pr25-acceptance.mjs
+          node --check prototype/pr28-import.mjs
+          node --check prototype/pr28-testing.mjs
+          node --check prototype/pr28-testing-plan.mjs
+          node --check prototype/pr28-testing-checks.mjs
       - name: Run complete Node contract suite
         run: node --test tests/*.test.mjs
