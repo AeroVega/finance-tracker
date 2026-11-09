@@ -5,9 +5,10 @@ import vm from 'node:vm';
 // Execute the checked-in controller with a deliberately small DOM. Imports are
 // supplied explicitly: financial code stays real; browser/service seams vary.
 // This checks handlers, not layout, native browser permissions or live Google.
-export async function pageController(name, imports, { source = 'a'.repeat(40), session = new Map() } = {}) {
-  const html = await readFile(new URL(`../../prototype/${name}.html`, import.meta.url), 'utf8');
-  const script = await readFile(new URL(`../../prototype/${name}.mjs`, import.meta.url), 'utf8');
+export async function pageController(name, imports, { source = 'a'.repeat(40), session = new Map(),
+  htmlPath = `prototype/${name}.html`, scriptPath = `prototype/${name}.mjs` } = {}) {
+  const html = await readFile(new URL(`../../${htmlPath}`, import.meta.url), 'utf8');
+  const script = await readFile(new URL(`../../${scriptPath}`, import.meta.url), 'utf8');
   const nodes = new Map(), listeners = new Map(), intervals = new Set();
   const observed = { focused: null, selected: null, copied: [], clipboardFailure: false, storageFailure: false, confirmations: [], confirm: true };
   function forget(node) {

@@ -129,17 +129,17 @@ test('workspace navigation follows hash and back/forward without intercepting cl
 });
 
 test('shared static theme covers every retained tool and guarded navigation targets', () => {
-  const root = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const root = readFileSync(new URL('../prototype/local-preview.html', import.meta.url), 'utf8');
   assert.match(root, /class="brand" href="#overview"/);
   assert.match(root, /Browser warnings may not appear/);
   assert.match(root, /not reconciled income, spending or account balances/);
-  assert.match(root, /prototype\/pr28-import.html/);
+  assert.match(root, /pr28-import.html/);
   for (const name of readdirSync(new URL('../prototype/', import.meta.url)).filter(name => name.endsWith('.html'))) {
     const html = readFileSync(new URL('../prototype/' + name, import.meta.url), 'utf8');
-    assert.match(html, /href="\.\/tools.css"/, name);
+    assert.match(html, name === 'local-preview.html' ? /href="\.\.\/styles.css"/ : /href="\.\/tools.css"/, name);
     const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
     assert.equal(new Set(ids).size, ids.length, name + ' has unique IDs');
-    assert.match(html, /tool-navigation/, name);
+    assert.match(html, name === 'local-preview.html' ? /primary-nav/ : /tool-navigation/, name);
   }
   const hub = readFileSync(new URL('../prototype/index.html', import.meta.url), 'utf8');
   assert.match(hub, /pr25-acceptance.html\?guide=pr28/);
