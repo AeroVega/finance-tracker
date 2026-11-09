@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync,
+  cpSync, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync,
+  readlinkSync, realpathSync, rmSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,8 +29,8 @@ function filesUnder(directory) {
   });
 }
 
-function frontmatter(name) {
-  const match = /^---\n([\s\S]*?)\n---\n/.exec(readSkill(name));
+function frontmatter(name, text = readSkill(name)) {
+  const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
   assert.ok(match, `${name} needs YAML frontmatter`);
   return match[1];
 }
@@ -56,6 +58,35 @@ test('Codex discovery links resolve to the new canonical skill folders without c
     assert.equal(readlinkSync(link), `../../engineering-workflows/skills/${name}`);
     assert.equal(realpathSync(link), realpathSync(path.join(skillsRoot, name)));
     assert.equal(readFileSync(path.join(link, 'SKILL.md'), 'utf8'), readSkill(name));
+  }
+});
+
+test('an isolated package copy preserves all sixteen self-contained skills and licenses', (t) => {
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'engineering-workflows-'));
+  t.after(() => rmSync(temporaryRoot, { recursive: true, force: true }));
+  const copy = path.join(temporaryRoot, 'engineering-workflows');
+  cpSync(packageRoot, copy, { recursive: true, dereference: true });
+
+  const copiedSkills = path.join(copy, 'skills');
+  const directories = readdirSync(copiedSkills, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  assert.deepEqual(directories, names);
+  for (const name of names) {
+    const text = readFileSync(path.join(copiedSkills, name, 'SKILL.md'), 'utf8');
+    assert.ok(text.startsWith(`---\nname: ${name}\n`), `${name} needs matching name frontmatter`);
+    const metadata = frontmatter(name, text);
+    const description = /^description: (.+)$/m.exec(metadata);
+    assert.ok(description, `${name} needs a description`);
+    const parsedDescription = JSON.parse(description[1]);
+    assert.equal(typeof parsedDescription, 'string');
+    assert.ok(parsedDescription.trim(), `${name} needs a nonempty description`);
+    assert.doesNotMatch(metadata, /disable-model-invocation: true/);
+    assert.doesNotMatch(text, /\.\.\//, `${name} must not depend on files outside its folder`);
+  }
+  for (const name of ['matt-pocock-MIT.txt', 'pstack-MIT.txt']) {
+    const license = readFileSync(path.join(copy, 'licenses', name), 'utf8');
+    assert.match(license, /MIT License/);
+    assert.match(license, /Permission is hereby granted/);
   }
 });
 

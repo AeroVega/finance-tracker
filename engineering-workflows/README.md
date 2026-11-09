@@ -18,12 +18,16 @@ relevant approved scope before acting. Git must preserve symlinks for Codex
 discovery. If your host checks them out as plain text or does not discover local
 skills, read the canonical `SKILL.md` files directly rather than making copies.
 
-Check the package and discovery links from the project root:
+Check the package, discovery links, and isolated-copy portability from the
+project root:
 
 ```sh
 node --test tests/skills-contract.test.mjs
-python3 -B -m unittest discover -s engineering-workflows/tests
 ```
+
+The Node suite copies the package into a temporary directory and checks all
+sixteen skills and both upstream licenses there. GitHub CI includes this test
+in its complete `tests/*.test.mjs` run. No separate Python test runner is needed.
 
 Invoke a skill by its name using your client's skill interface or request the
 behavior in natural language. For example, ask for `blast radius` using
