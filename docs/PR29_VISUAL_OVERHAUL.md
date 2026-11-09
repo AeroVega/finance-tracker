@@ -1,5 +1,7 @@
 # PR29 visual overhaul
 
+**Later update, November 8, 2026:** the owner subsequently authorized safe prototype cleanup. The isolated modern-stack runtime is now retired, with its [architecture record preserved](archive/MODERN_UI_EXPLORATION.md). The statements below describe PR29 as verified at that time. See [the current inventory](PROTOTYPE_CLEANUP.md).
+
 ## Scope and status
 
 **User-confirmed:** after reviewing the prototype and proposed approach, the owner authorized extending PR29's visual language across the application and improving its workflows. Removal of old prototype code was deferred. No merge, deployment, production activation or real-data testing is authorized by this work.

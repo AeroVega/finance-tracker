@@ -88,3 +88,33 @@ test("source changes during copying quarantine the destination and never alter t
     assertSourceWritable: async () => { const manifest = await adapter.readJson(manifestFileId); adapter.files.get(manifestFileId).bytes = encode({ ...manifest, syntheticChange: true }); },
     targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure }), (error) => error.code === "copy-quarantined" && error.cause.code === "source-changed");
 });
+
+test('retained validation rejects callback changes to the catalog before returning to copy/export', async t => {
+  const { validateRetainedStructure } = await import('../js/catalog-backup.mjs');
+  const { createLocatorCatalog } = await import('../js/drive-locator-catalog.mjs');
+  const hash = 'a'.repeat(64);
+  for (const mutation of ['invalid', 'valid rebound', 'changed kind', 'changed map', 'hidden binding']) await t.test(mutation, async () => {
+    const catalog = createLocatorCatalog({ databaseId: 'invented-db', copyId: 'invented-copy', additions: [
+      { kind: 'data-object', identity: hash, sha256: hash, fileId: 'invented-data' },
+      ...['one', 'two'].map(identity => ({ kind: 'commit-record', identity, sha256: hash, fileId: 'invented-' + identity }))
+    ] });
+    const entry = catalog.entries['data-object:' + hash];
+    if (mutation === 'hidden binding') Object.defineProperty(entry, 'fileId', { enumerable: false });
+    const objects = new Map(['one', 'two'].map((id, i) => ['commit-record:' + id, new TextEncoder().encode(JSON.stringify({
+      format: 'finance-tracker-commit', version: 2, databaseId: 'invented-db', commitId: id,
+      revision: i, parentCommitId: i ? 'one' : null, snapshot: { path: hash }
+    }))]));
+    let calls = 0;
+    await assert.rejects(validateRetainedStructure({ manifest: { databaseId: 'invented-db' }, catalog, objects,
+      validateStructure: async () => {
+        if (++calls === 1) {
+          await Promise.resolve();
+          if (mutation === 'invalid') entry.fileId = '';
+          else if (mutation === 'changed kind') catalog.entries['commit-record:two'].kind = 'protocol-object';
+          else if (mutation === 'changed map') catalog.entries = {};
+          else entry.fileId = 'invented-rebound';
+        }
+        return true;
+      } }));
+  });
+});

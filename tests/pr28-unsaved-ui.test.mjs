@@ -21,7 +21,7 @@ function deferred() {
 async function controller({ guided = false } = {}) {
   const nodes = new Map(), allNodes = [], listeners = new Map(), prompts = [];
   let focused, storage;
-  const state = { saved: null, answer: true, onSave: null, onLoad: null, onConnect: null };
+  const state = { saved: null, answer: true, onSave: null, onLoad: null, onConnect: null, cacheFailure: false, preserveBaseOnSaveError: false };
   const calls = { connects: 0, loads: 0, saves: 0, releases: 0, recoveries: 0 };
   function element(tag = '') {
     let text = '';
@@ -60,14 +60,18 @@ async function controller({ guided = false } = {}) {
     async release() { calls.releases++; this.lifecycle = null; }
   }
   class Store {
-    async load() { calls.loads++; await state.onLoad?.(); return structuredClone(state.saved); }
+    async load() { this.base = null; calls.loads++; await state.onLoad?.(); this.base = { databaseId: 'invented-database', copyId: 'invented-copy', revision: calls.saves }; return structuredClone(state.saved); }
     async save(next) {
-      calls.saves++; await state.onSave?.(next);
+      const priorBase = this.base; this.base = null; calls.saves++;
+      try { await state.onSave?.(next); } catch (error) { if (state.preserveBaseOnSaveError) this.base = priorBase; throw error; }
       await storage.options.afterMutation();
-      state.saved = structuredClone(next); return structuredClone(state.saved);
+      state.saved = structuredClone(next); this.base = { databaseId: 'invented-database', copyId: 'invented-copy', revision: calls.saves }; return structuredClone(state.saved);
     }
   }
-  const context = { ...canonical, applyFinancialEvent: (ledger, command) => canonical.applyFinancialEvent(ledger, JSON.parse(JSON.stringify(command))), parseProviderCsv, DashboardSyntheticStorage: Storage, CanonicalLedgerStore: Store,
+  const context = { ...canonical, createLedgerSessionOwner: () => {
+    const owner = canonical.createLedgerSessionOwner();
+    return { invalidate: owner.invalidate, open: (...args) => { if (state.cacheFailure) throw new Error('invented cache allocation failure'); return owner.open(...args); } };
+  }, applyFinancialEvent: (ledger, command) => canonical.applyFinancialEvent(ledger, JSON.parse(JSON.stringify(command))), parseProviderCsv, DashboardSyntheticStorage: Storage, CanonicalLedgerStore: Store,
     document: { getElementById: get, createElement: element, querySelectorAll: controls },
     window: { addEventListener(type, callback) { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(callback); } },
     navigator: { onLine: true }, crypto, canonicalizeJcs: value => canonicalizeJcs(JSON.parse(JSON.stringify(value))), structuredClone, URL, Uint8Array,
@@ -75,7 +79,7 @@ async function controller({ guided = false } = {}) {
     fetch: async url => { const bytes = await readFile(url); return { ok: true, arrayBuffer: async () => bytes }; }
   };
   const executable = source.replace(/^import .*;$/gm, '').replace(/^export /gm, '').replaceAll('import.meta.url', JSON.stringify(moduleUrl.href));
-  vm.runInNewContext(executable + '\nglobalThis.page = { withAcceptanceWorkbench, subscribeAcceptanceStatus, pausePreparedInterruption, inspect: () => ({ ledger, dirty, busy, store, saveState }) };', context);
+  vm.runInNewContext(executable + '\nglobalThis.page = { withAcceptanceWorkbench, subscribeAcceptanceStatus, pausePreparedInterruption, inspect: () => ({ ledger, dirty, busy, store, saveState, ledgerSession }) };', context);
   await tick();
   const click = id => get(id).emit('click');
   return { state, calls, get, click, prompts, listeners, context, page: context.page, storage: () => storage, focused: () => focused,
@@ -363,4 +367,110 @@ for (const retry of ['connect', 'reopen', 'recover', 'stale']) test(`a verified 
   assert.doesNotMatch(h.get('result').textContent, /verification-failed|Staged changes remain/);
   assert.equal(h.page.inspect().dirty, false); assert.equal(h.page.inspect().ledger.events.length, 0);
   assert.equal(h.calls.saves, 1, 'reopen/reconnect did not save the discarded draft');
+});
+
+
+test('financial session survives local events and reads, then closes before save awaits', async () => {
+  const h = await controller(); await h.click('connect'); await h.stage();
+  const first = h.page.inspect().ledgerSession;
+  assert.ok(first); assert.equal(Object.isFrozen(h.page.inspect().ledger), true);
+  h.get('activity').value = h.page.inspect().ledger.activities[0].activityId;
+  h.get('evidence').value = 'Invented cached event'; h.get('classification').value = 'spending';
+  await h.click('event');
+  assert.equal(h.page.inspect().ledgerSession, first); assert.equal(first.revision(), 1);
+  const staged = h.page.inspect().ledger;
+  h.get('report-start').value = '2026-01-01'; h.get('report-end').value = '2026-01-31';
+  await h.click('summarize'); assert.equal(h.page.inspect().ledgerSession, first);
+  assert.equal(h.page.inspect().ledger, staged); assert.match(h.get('summary').textContent, /"spending": "100.00"/);
+  const gate = deferred(); h.state.onSave = () => gate.promise;
+  const saving = h.click('save');
+  assert.equal(h.page.inspect().ledgerSession, null);
+  assert.throws(() => first.snapshot(), /ledger-session-closed/);
+  gate.resolve(); await saving;
+  const second = h.page.inspect().ledgerSession;
+  assert.ok(second); assert.notEqual(second, first); assert.equal(second.revision(), 0);
+  assert.deepEqual(second.snapshot(), h.state.saved);
+});
+
+test('uncertain save closes the session, retains its frozen draft and does not rebind it', async () => {
+  const h = await controller(); await h.click('connect'); await h.stage();
+  const first = h.page.inspect().ledgerSession, staged = h.page.inspect().ledger;
+  h.state.onSave = next => { h.state.saved = structuredClone(next); throw Object.assign(new Error('uncertain'), { code: 'recovery-required' }); };
+  await h.click('save');
+  assert.equal(h.page.inspect().ledgerSession, null); assert.equal(h.page.inspect().ledger, staged);
+  assert.throws(() => first.snapshot(), /ledger-session-closed/);
+  await h.click('reopen');
+  assert.ok(h.page.inspect().ledgerSession); assert.notEqual(h.page.inspect().ledgerSession, first);
+  assert.equal(h.page.inspect().dirty, false); assert.equal(h.calls.saves, 1);
+});
+
+test('offline, storage-base replacement, release and failed reopen invalidate old handles', async () => {
+  for (const boundary of ['offline', 'base', 'release', 'reopen']) {
+    const h = await controller(); await h.click('connect'); await h.stage();
+    const first = h.page.inspect().ledgerSession, staged = h.page.inspect().ledger;
+    if (boundary === 'offline') {
+      h.context.navigator.onLine = false; for (const callback of h.listeners.get('offline')) callback();
+      h.context.navigator.onLine = true; for (const callback of h.listeners.get('online')) callback();
+    } else if (boundary === 'base') {
+      h.page.inspect().store.base = { ...h.page.inspect().store.base };
+      h.storage().options.onStatus({ message: 'Invented new storage base.' });
+    } else if (boundary === 'release') await h.click('release');
+    else {
+      h.state.onLoad = () => { throw Object.assign(new Error('unavailable'), { code: 'offline' }); };
+      await h.click('reopen');
+    }
+    assert.equal(h.page.inspect().ledgerSession, null, boundary);
+    assert.equal(h.page.inspect().ledger, staged, boundary);
+    assert.throws(() => first.snapshot(), /ledger-session-closed/, boundary);
+    assert.equal(h.calls.saves, 0, boundary);
+  }
+});
+
+
+test('optional cache failure cannot turn an independently verified save into failure', async () => {
+  const h = await controller(); await h.click('connect'); await h.stage();
+  const old = h.page.inspect().ledgerSession;
+  h.state.cacheFailure = true; await h.click('save');
+  assert.throws(() => old.snapshot(), /ledger-session-closed/);
+  assert.equal(h.page.inspect().ledgerSession, null); assert.equal(h.page.inspect().dirty, false);
+  assert.equal(h.page.inspect().saveState, 'idle'); assert.match(status(h), /No unsaved changes/);
+  assert.match(h.get('result').textContent, /saved and verified/); assert.equal(h.calls.saves, 1);
+  h.get('activity').value = h.page.inspect().ledger.activities[0].activityId;
+  h.get('evidence').value = 'Invented pure fallback'; h.get('classification').value = 'spending';
+  await h.click('event'); assert.equal(h.page.inspect().ledger.events.length, 1);
+  assert.equal(h.page.inspect().ledgerSession, null); assert.equal(h.page.inspect().dirty, true);
+});
+
+test('new imports and closed cache handles cannot leave a stale session in use', async () => {
+  const h = await controller(); await h.click('connect'); await h.stage();
+  const first = h.page.inspect().ledgerSession;
+  await h.stage(); const second = h.page.inspect().ledgerSession;
+  assert.ok(second); assert.notEqual(second, first);
+  assert.throws(() => first.snapshot(), /ledger-session-closed/);
+  second.close(); h.storage().options.onStatus({ message: 'Invented closed cache.' });
+  assert.equal(h.page.inspect().ledgerSession, null);
+  h.get('activity').value = h.page.inspect().ledger.activities[0].activityId;
+  h.get('evidence').value = 'Invented post-close fallback'; h.get('classification').value = 'spending';
+  await h.click('event'); assert.equal(h.page.inspect().ledger.events.length, 1);
+  assert.ok(h.page.inspect().ledgerSession); assert.notEqual(h.page.inspect().ledgerSession, second);
+});
+
+
+test('failed-save fence survives retained base, recovery with declined reopen and pure fallback edits', async () => {
+  const h = await controller(); await h.click('connect'); await h.stage();
+  const oldBase = h.page.inspect().store.base, old = h.page.inspect().ledgerSession;
+  h.state.preserveBaseOnSaveError = true;
+  h.state.onSave = () => { throw Object.assign(new Error('preflight'), { code: 'ownership-unverified' }); };
+  await h.click('save');
+  assert.equal(h.page.inspect().store.base, oldBase); assert.equal(h.page.inspect().ledgerSession, null);
+  h.state.answer = question => !question.includes('Discard unsaved'); await h.click('recover');
+  const loads = h.calls.loads;
+  h.get('activity').value = h.page.inspect().ledger.activities[0].activityId;
+  h.get('evidence').value = 'Invented pure edit while verification remains open'; h.get('classification').value = 'spending';
+  await h.click('event');
+  assert.equal(h.page.inspect().ledger.events.length, 1); assert.equal(h.page.inspect().ledgerSession, null);
+  assert.equal(h.page.inspect().saveState, 'unverified'); assert.equal(h.calls.loads, loads);
+  assert.throws(() => old.snapshot(), /ledger-session-closed/);
+  h.state.answer = true; h.state.onSave = null; await h.click('save');
+  assert.equal(h.page.inspect().saveState, 'idle'); assert.ok(h.page.inspect().ledgerSession);
 });

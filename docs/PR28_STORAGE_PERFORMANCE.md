@@ -1,5 +1,7 @@
 # PR28 storage performance
 
+The measurements below record PR28 checkpoints. The later [Drive history verification change](DRIVE_HISTORY_VERIFICATION.md) reduces repeated body downloads using private session evidence checked against fresh Drive versions. Its measurements and remaining growth limits supersede the earlier no-cache behavior described here.
+
 ## Evidence and limits
 
 **Verified in an invented HTTP simulation:** at commit `b9229cdcc3c90b83b932d742c3d9282bab3abe02`, the 24-step live recipe before human reconnect made 9,590 Drive API requests. The simulation used the actual live runner, application lifecycle, catalog transaction engine, Google Drive transaction adapter, and session adapter. Fetch returned invented in-memory files. It exercised the deployed bulk snapshot path, not the older per-record test fallback.
@@ -30,17 +32,17 @@ Ten successive small save-and-reopen operations, each adding one invented accoun
 
 ## Changes and safety boundaries
 
-The performance work preserves the existing storage format, immutable history, exact manifest comparisons, session ownership checks, and recovery protocol. It does not introduce a persistent or cross-operation verification cache. Every application read and save still verifies retained history, including objects no longer selected by the current snapshot.
+The performance work preserves the existing storage format, immutable history, exact manifest comparisons, session ownership checks, and recovery protocol. At the PR28 checkpoint it introduced no persistent or cross-operation verification cache. The later [history verification change](DRIVE_HISTORY_VERIFICATION.md) adds bounded private byte reuse within a session. Every application read and save still verifies retained history, including objects no longer selected by the current snapshot.
 
 Independent immutable history reads use a bounded pool. Canonical transaction writes, financial publication, catalog finalization and session updates remain ordered. The backup follow-up below separately permits up to four independent immutable destination copies. A failed read stops admission of more reads and waits for already-started reads to settle before reporting failure.
 
-For Google Drive, fresh complete folder enumerations provide metadata for the retained objects before and after their body reads. This replaces individual metadata requests. Every requested file must appear exactly once with a valid location, kind, transaction binding, and hash. Incomplete pages, duplicate IDs, missing files, or changed bindings fail closed. Every body is still fetched and hashed. Adapters without bulk metadata support retain their individual metadata reads; a failed bulk request never silently falls back or returns a partial result.
+For Google Drive, fresh complete folder enumerations provide metadata for the retained objects before and after their body reads. This replaces individual metadata requests. Every requested file must appear exactly once with a valid location, kind, transaction binding, and hash. Incomplete pages, duplicate IDs, missing files, or changed bindings fail closed. At that checkpoint every body was fetched and hashed. The later version-checked path can reuse private verified bytes, hashes them again, and retains both complete metadata brackets. Adapters without bulk metadata support retain their individual metadata reads; a failed bulk request never silently falls back or returns a partial result.
 
-Folder enumeration is not an atomic snapshot. The two listings bracket the body reads and detect binding changes during that interval, but they do not turn Drive or the session marker into a server-enforced transaction or lock. No metadata or body verification is cached across calls.
+Folder enumeration is not an atomic snapshot. The two listings bracket the body reads and detect binding changes during that interval, but they do not turn Drive or the session marker into a server-enforced transaction or lock. Metadata is never reused across calls. The later history change permits private byte reuse only with fresh matching versions and bindings.
 
 The Drive adapter can return the metadata and bytes it actually read back after an immutable create. The outer storage verifier rechecks their exact identity, location, kind, transaction binding, and SHA-256. A successful upload response or a hash-only return value is insufficient. Adapters without a complete receipt and ambiguous outcomes still use exact-ID read-back.
 
-Recovery can reuse a journal's already-verified bytes within that same recovery operation only when the folder enumeration agrees with its catalog binding. New or unindexed journal files still require a full read. Recovery retains its final history check, and transaction staging can use that result only after confirming the exact manifest has not changed. Verification remains separate before financial publication, before catalog finalization, and after commit.
+Recovery can reuse a journal's already-verified bytes within that same recovery operation only when the folder enumeration agrees with its catalog binding. The later history change also checks the enumerated version and begins explicit recovery with an uncached scan. New or unindexed journal files still require a full read. Recovery retains its final history check, and transaction staging can use that result only after confirming the exact manifest has not changed. Verification remains separate before financial publication, before catalog finalization, and after commit.
 
 A changed canonical save checks fresh ownership and the exact expected manifest before handing off to the engine. The engine then verifies all retained history before any mutation. This avoids a duplicate preflight history scan. An unchanged save still performs its full storage verification. Stale proposals and corrupted unselected history remain failures.
 

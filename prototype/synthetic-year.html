@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#09090b">
+  <title>Synthetic financial year · Finance Tracker</title>
+  <link rel="stylesheet" href="./tools.css">
+  <link rel="stylesheet" href="./synthetic-year.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+  <script src="../js/build-info.js" defer></script>
+  <script type="module" src="./synthetic-year.mjs"></script>
+</head>
+<body><a class="skip-link" href="#tool-main">Skip to main content</a><main id="tool-main" tabindex="-1">
+  <nav class="tool-navigation" aria-label="Development navigation"><a href="./acceptance.html">← Acceptance tests</a><a href="../index.html">Finance overview</a><span>Synthetic data only</span></nav>
+  <header><p class="eyebrow">Engine development</p><h1>A year of invented finances.</h1>
+    <p>Upload January through December 2025 into a new empty Google Drive folder. Use the saved canonical records to test future visualizations, insights and projections.</p>
+    <p class="notice">Development only. Production financial-data persistence remains NO-GO. This page never imports your files or uploads real financial records.</p>
+    <p class="metric-note">Deployed source: <span id="build-sha">development (not deployed)</span></p>
+  </header>
+  <section aria-labelledby="recipe-title"><h2 id="recipe-title">What the year contains</h2>
+    <p>Invented checking, savings, credit-card and brokerage accounts; recurring pay and bills; seasonal spending; paired transfers and card payments; a refund and a correction. Source observations and audit history remain inspectable.</p>
+    <p>Investment activity is preserved separately and excluded from ordinary income and spending when the engine cannot classify it. These are known subtotals, not verified complete finances. Opening balances, historical valuations and current holdings are unavailable, not zero.</p>
+    <button id="preview">Preview invented year locally</button><p id="preview-result" role="status">Preview needs no Google authorization and writes nothing to Drive.</p>
+  </section>
+  <section aria-labelledby="upload-title"><h2 id="upload-title">Choose a folder and upload</h2>
+    <ol><li>Create a new empty folder in Google Drive with <strong>synthetic</strong> in its name.</li><li>Check in Drive that it is empty. Limited drive.file access cannot prove that files outside this app's visibility are absent.</li><li>Confirm below, then choose that folder. Existing visible files, including a prior session or database, are refused before any write.</li></ol>
+    <label class="confirmation"><input id="empty-confirmed" type="checkbox">I will choose a newly created empty synthetic folder, separate from all real financial data.</label>
+    <label for="storage-layout">Storage format for a new empty copy</label>
+    <select id="storage-layout"><option value="chunks-v2">Grouped version 2, default</option><option value="fragments-v3">Fragmented version 3, supports larger individual records</option></select>
+    <p class="metric-note">Version 3 splits large records into bounded objects and adds encoding overhead. Older clients cannot open it. Existing copies keep their saved format; no conversion occurs.</p>
+    <div class="actions"><button id="upload" class="primary-action" disabled>Upload synthetic year to Drive</button></div>
+    <p id="configuration" role="status">Loading Google setup. No connection or upload starts automatically.</p>
+    <p id="connection" role="status">No folder connected.</p>
+    <p id="result" role="status" aria-live="polite">Not uploaded.</p>
+    <p id="progress" class="metric-note" role="status"></p>
+    <p class="metric-note">The default format groups records into 15 payload objects before the existing audited engine adds journals. This cuts simulated Drive requests while retaining evidence and verification. A live upload can still take time. Keep this tab open, online and awake. Progress counts verified writes, not a completion percentage. Live duration is not yet measured.</p>
+  </section>
+  <section aria-labelledby="recovery-title"><h2 id="recovery-title">Verify, recover or release</h2>
+    <p>After an error, do not start another upload into the same folder. Reconnect to it, recover only if offered, then verify. An exact saved year is a no-op. Only a folder admitted as empty in this tab can retry after verified recovery to its original empty state.</p>
+    <p>After closing or reloading this tab, an empty or incomplete copy cannot be seeded again here. Preserve it for inspection and choose a new empty folder. An interrupted initial setup without a valid manifest also requires a new folder. Nothing is deleted automatically. If failed setup leaves no usable release or recovery control, close this tab, wait for its session to expire, and start in a new empty folder. Do not reopen the old folder on another device while its session may still be active.</p>
+    <div class="actions"><button id="reconnect" disabled>Reconnect, verify or safely retry</button><button id="verify" disabled>Verify or finish safe retry</button><button id="stale" disabled>Confirm stopped session and recover</button><button id="recover" disabled>Recover interrupted operation</button><button id="release" disabled>Release storage session</button></div>
+    <p>Release before opening the same folder in another tool or device. Session coordination is best-effort, not a server lock. Navigation warnings are not guaranteed on mobile or after the browser terminates.</p>
+    <p>After verified release, open the <a href="./pr28-import.html">canonical import workbench</a> to inspect the saved records, or the <a href="./pr25-acceptance.html?guide=pr28">backup and restore guide</a>. The main workspace's four-row preview does not display this canonical year yet.</p>
+    <a href="../docs/SYNTHETIC_FINANCIAL_YEAR.md">Read the recipe and validation limits</a>
+  </section>
+  <noscript><p class="notice">JavaScript is required. No upload has run.</p></noscript>
+</main></body></html>

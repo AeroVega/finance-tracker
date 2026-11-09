@@ -154,6 +154,16 @@ export async function inspectPr25Folder(adapter) {
   return { manifestFileId: null, manifest: null };
 }
 
+/** Strict fresh-target admission, before even a session marker is written.
+ * drive.file can enumerate only app-visible children. The owner must also
+ * confirm in Drive that the selected folder is newly created and empty.
+ */
+export async function requireEmptySyntheticFolder(adapter) {
+  if ((await adapter.listChildren()).length !== 0) {
+    throw storageError("empty-folder-required", "Choose a newly created empty synthetic folder. Existing files and sessions will not be overwritten.");
+  }
+}
+
 export async function findOrCreateManifest(adapter, guard) {
   const existing = await inspectPr25Folder(adapter);
   if (existing.manifestFileId) {
@@ -164,11 +174,12 @@ export async function findOrCreateManifest(adapter, guard) {
 }
 
 export class DashboardSyntheticStorage {
-  constructor({ onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {}, afterMutation = null } = {}) {
+  constructor({ onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {}, afterMutation = null, maintainOriginals = true } = {}) {
     this.onStatus = onStatus;
     this.onSnapshot = onSnapshot;
     this.onDiagnostic = onDiagnostic;
     this.afterMutation = afterMutation;
+    this.maintainOriginals = maintainOriginals;
     this.accessToken = "";
     this.tokenExpiresAt = 0;
     this.config = null;
@@ -203,7 +214,7 @@ export class DashboardSyntheticStorage {
     return this.accessToken;
   }
 
-  async connect() {
+  async connect({ requireEmpty = false, requireExisting = false } = {}) {
     if (this.busy) throw new Error("A storage operation is already in progress.");
     this.busy = true;
     try {
@@ -236,16 +247,19 @@ export class DashboardSyntheticStorage {
             const item = data.docs?.[0];
             if (!item?.id) return reject(new Error("Google Picker returned no folder."));
             try {
-              const metadataResponse = await fetch(DRIVE_FILES + "/" + encodeURIComponent(item.id) + "?fields=id,name,mimeType", {
+              const metadataResponse = await fetch(DRIVE_FILES + "/" + encodeURIComponent(item.id) + "?fields=id,name,mimeType,trashed", {
                 headers: { Authorization: "Bearer " + this.token() }
               });
               if (!metadataResponse.ok) throw new Error("Drive folder verification failed (HTTP " + metadataResponse.status + ").");
               const metadata = await metadataResponse.json();
-              if (metadata.mimeType !== FOLDER_MIME) throw new Error("Select a Drive folder, not a file.");
+              if (metadata.id !== item.id || metadata.trashed || metadata.mimeType !== FOLDER_MIME) throw new Error("Select an available Drive folder, not a file.");
               if (metadata.name === PRODUCTION_FOLDER_NAME || !/synthetic/i.test(metadata.name || "")) {
                 throw new Error("For safety, select a dedicated folder whose name contains “synthetic”. The production database folder is blocked.");
               }
-              if (!window.confirm("Confirm that “" + metadata.name + "” is a dedicated synthetic test folder containing no personal financial data. Only invented sample fixtures will be saved.")) {
+              const confirmation = requireEmpty
+                ? "Confirm that “" + metadata.name + "” is a newly created EMPTY folder you checked in Google Drive, dedicated only to invented test data. This app cannot see files outside its drive.file access. Upload the synthetic year here?"
+                : "Confirm that “" + metadata.name + "” is a dedicated synthetic test folder containing no personal financial data. Only invented sample fixtures will be saved.";
+              if (!window.confirm(confirmation)) {
                 throw new Error("Folder selection cancelled.");
               }
               this.folderId = metadata.id;
@@ -262,7 +276,11 @@ export class DashboardSyntheticStorage {
         folderId: this.folderId,
         accessToken: () => this.token()
       });
-      await inspectPr25Folder(preflightAdapter);
+      if (requireEmpty) await requireEmptySyntheticFolder(preflightAdapter);
+      const inspected = await inspectPr25Folder(preflightAdapter);
+      if (requireExisting && !inspected.manifestFileId) {
+        throw storageError("existing-copy-required", "No existing synthetic copy was found. Reconnect does not initialize a new folder.");
+      }
       if (this.lifecycle && this.lifecycle.folderId !== this.folderId) {
         if (this.lifecycle.coordinator?.canWrite) {
           await this.lifecycle.release({ reason: "synthetic-folder-change" });
@@ -298,19 +316,7 @@ export class DashboardSyntheticStorage {
         await this.lifecycle.start();
       }
       const snapshot = await this.readSnapshot();
-      this.originals = new SyntheticOriginalRetentionStore({ adapter: this.lifecycle.transactionAdapter,
-        withWrite: (operation) => this.lifecycle.coordinator.withWrite(operation),
-        assertWritable: async () => {
-          if (this.lifecycle.engine.recoveryRequired) throw storageError("recovery-required", "Finish transaction recovery before retention maintenance.");
-          await this.lifecycle.coordinator.assertCanWrite({ online: navigator.onLine !== false });
-        } });
-      await this.originals.process();
-      if (this.retentionTimer) clearInterval(this.retentionTimer);
-      this.retentionTimer = setInterval(() => {
-        if (this.lifecycle?.state === "ready" && this.lifecycle.acceptingWrites) {
-          void this.originals.process().catch(() => this.onDiagnostic({ event: "retention-retry-required" }));
-        }
-      }, 60 * 60 * 1000);
+      await this.startOriginalRetention();
       this.onSnapshot(snapshot);
       this.publish("ready", "Synthetic storage connected. CSV imports remain local to this page.", "success");
       return { folderName: this.folderName, snapshot };
@@ -321,6 +327,27 @@ export class DashboardSyntheticStorage {
     } finally {
       this.busy = false;
     }
+  }
+
+  async startOriginalRetention() {
+    if (this.retentionTimer) clearInterval(this.retentionTimer);
+    this.retentionTimer = null;
+    this.originals = null;
+    // A dedicated fixture seeder never retains originals and must not run
+    // deletion/retention maintenance before it recognizes a reselected copy.
+    if (!this.maintainOriginals) return;
+    this.originals = new SyntheticOriginalRetentionStore({ adapter: this.lifecycle.transactionAdapter,
+      withWrite: (operation) => this.lifecycle.coordinator.withWrite(operation),
+      assertWritable: async () => {
+        if (this.lifecycle.engine.recoveryRequired) throw storageError("recovery-required", "Finish transaction recovery before retention maintenance.");
+        await this.lifecycle.coordinator.assertCanWrite({ online: navigator.onLine !== false });
+      } });
+    await this.originals.process();
+    this.retentionTimer = setInterval(() => {
+      if (this.lifecycle?.state === "ready" && this.lifecycle.acceptingWrites) {
+        void this.originals.process().catch(() => this.onDiagnostic({ event: "retention-retry-required" }));
+      }
+    }, 60 * 60 * 1000);
   }
 
   async readSnapshot() {

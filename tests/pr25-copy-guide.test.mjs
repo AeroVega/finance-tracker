@@ -5,7 +5,7 @@ import { mountCopyGuide } from '../prototype/pr25-copy-guide.mjs';
 import { createCopyGuideDriver, logicalArchiveGraph } from '../prototype/pr25-copy-guide-driver.mjs';
 import { startCopyProgress, copyProgressText } from '../prototype/pr25-copy-progress.mjs';
 import { MemoryCatalogDrive, setupCatalog } from './helpers/catalog-drive.mjs';
-import { serializeCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
+import { serializeCanonicalLedger, serializePackedCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
 import { createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent } from '../js/canonical-import.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { exportCatalogArchive } from '../js/catalog-backup.mjs';
@@ -17,7 +17,7 @@ const failure = code => Object.assign(new Error('Private provider body: secret-f
 const tick = () => new Promise(setImmediate);
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
-async function sourceFixture() {
+async function sourceFixture(serialize = serializeCanonicalLedger) {
   const setup = await setupCatalog();
   let ledger = registerAccount(createLedger(), { institutionId: 'wells-fargo', displayName: 'Invented source', currency: 'USD', accountType: 'checking' });
   const accountId = ledger.accounts[0].accountId;
@@ -29,8 +29,8 @@ async function sourceFixture() {
   // history, not hardcoded event counts or dates, is the comparison contract.
   ledger = applyFinancialEvent(ledger, { type: 'category-correction', commandId: 'invented-correction', activityId: ledger.activities[0].activityId, categoryId: 'invented-corrected' });
   await setup.engine.transact({ manifestFileId: setup.manifestFileId, expectedBase: setup.manifest,
-    objects: [...serializeCanonicalLedger(ledger)].map(([logicalPath, content]) => ({ logicalPath, content })), commitRecord: { operationType: 'synthetic-canonical-guide-test' } });
-  return setup;
+    objects: [...serialize(ledger)].map(([logicalPath, content]) => ({ logicalPath, content })), commitRecord: { operationType: 'synthetic-canonical-guide-test' } });
+  return { ...setup, counts: Object.fromEntries(['accounts', 'imports', 'activities', 'events'].map(name => [name, ledger[name].length])) };
 }
 
 function element(id) {
@@ -38,8 +38,8 @@ function element(id) {
     addEventListener(type, callback) { this.events.set(type, callback); }, emit(type, event) { return this.events.get(type)?.(event); },
     after(node) { node.afterId = id; } };
 }
-async function page() {
-  const source = await sourceFixture();
+async function page(serialize = serializeCanonicalLedger) {
+  const source = await sourceFixture(serialize);
   const sourceId = source.adapter.folderId, backupId = 'invented-backup-folder', restoreId = 'invented-restore-folder';
   const drives = new Map([[sourceId, source.adapter], [backupId, new MemoryCatalogDrive(backupId)], [restoreId, new MemoryCatalogDrive(restoreId)]]);
   const state = { picks: [sourceId, backupId, restoreId], calls: [], sessions: [], downloads: [], now: 0, timers: new Map(), sequence: 0,
@@ -76,11 +76,14 @@ async function page() {
 }
 async function throughExport(h) { await h.click('source'); await h.click('backup'); await h.click('export'); }
 
-test('actual guide handlers complete corrected-source backup, saved-file roundtrip, independent restores and release', async () => {
-  const h = await page();
+for (const [layout, serialize] of [['records-v1', serializeCanonicalLedger], ['chunks-v2', serializePackedCanonicalLedger], ['fragments-v3', serializeFragmentedCanonicalLedger]])
+test(layout + ': actual guide handlers complete corrected-source backup, saved-file roundtrip, independent restores and release', async () => {
+  const h = await page(serialize);
   assert.equal(h.state.calls.length, 0, 'page load must not select or write');
   const mutations = h.source.adapter.mutations;
   await h.click('source'); assert.equal(h.get('guide-source-result').dataset.result, 'pass');
+  const { accounts, imports, activities, events } = h.source.counts;
+  assert.ok(h.get('guide-source-result').textContent.includes(`${accounts} accounts, ${imports} imports, ${activities} activities and ${events} audit events`));
   assert.equal(h.get('guide-backup').disabled, false); assert.equal(h.get('guide-restore').disabled, true);
   await h.click('backup'); assert.equal(h.get('guide-backup-reopen-result').dataset.result, 'pass');
   await h.click('export'); assert.match(h.get('guide-export-result').textContent, /Download requested/);
@@ -97,6 +100,19 @@ test('actual guide handlers complete corrected-source backup, saved-file roundtr
   assert.equal(h.state.calls.filter(([call]) => call === 'release').length, 5);
   assert.doesNotMatch(h.text(), /Private|secret-folder|invented-token|invented-backup-folder/);
   assert.match(h.get('guide-backup-time').textContent, /share this operation time/);
+});
+
+test('fragmented source corruption cannot produce a summary or enable backup', async () => {
+  const h = await page(serializeFragmentedCanonicalLedger);
+  const file = [...h.source.adapter.files.values()].find(file =>
+    JSON.parse(new TextDecoder().decode(file.bytes)).format === 'finance-tracker-canonical-fragment');
+  assert.ok(file, 'fixture must contain a canonical fragment');
+  file.bytes = encode({});
+  await h.click('source');
+  assert.notEqual(h.get('guide-source-result').dataset.result, 'pass');
+  assert.equal(h.get('guide-backup').disabled, true);
+  assert.equal(h.drives.get(h.backupId).files.size, 0);
+  await h.click('release');
 });
 
 test('empty, wrong and cancelled source choices never initialize storage or pass', async () => {
@@ -206,7 +222,7 @@ test('explicit release reauthorizes and resumes only the same session, then rese
   assert.equal(h.state.authorizations, 2); assert.ok(h.state.calls.some(([name]) => name === 'resume'));
   assert.equal(h.driver.hasSessions(), false); assert.equal(h.get('guide-source').disabled, false);
   for (const id of ['backup', 'export', 'archive', 'restore']) assert.equal(h.get('guide-' + id).disabled, true);
-  assert.match(h.get('guide-next').textContent, /choose your existing completed PR28 source/);
+  assert.match(h.get('guide-next').textContent, /choose your existing completed canonical synthetic source/);
 });
 
 test('already-released matching session is confirmed, replaced or stale sessions require safe resolution', async () => {

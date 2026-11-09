@@ -21,10 +21,16 @@ jobs:
           node-version: 26
       - name: Check browser module syntax
         run: |
+          node --check js/synthetic-financial-year.mjs
+          node --check js/synthetic-year-seeder.mjs
+          node --check prototype/synthetic-year.mjs
           node --check prototype/pr28-import.mjs
+          node --check prototype/acceptance.mjs
+          node --check prototype/acceptance-plan.mjs
           node --check prototype/pr28-testing.mjs
           node --check prototype/pr28-testing-plan.mjs
           node --check prototype/pr28-testing-checks.mjs
           node --check prototype/pr28-live-checks.mjs
       - name: Run complete Node test suite
-        run: node --test tests/*.test.mjs
+        # Dense synthetic storage regressions must not compete for heap across files.
+        run: node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs

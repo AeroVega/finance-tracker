@@ -4,7 +4,7 @@ import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
 import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
 import { validateSyntheticApplicationSnapshot } from '../js/synthetic-application-structure.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
-import { createLedger, registerAccount, prepareCanonicalImport, applyReviewDecision, applyFinancialEvent, reverseReviewDecision, getEffectiveActivities, summarizeLedger } from '../js/canonical-import.mjs';
+import { createLedger, registerAccount, prepareCanonicalImport, applyReviewDecision, applyFinancialEvent, reverseReviewDecision, getEffectiveActivities, summarizeLedger, createLedgerSessionOwner } from '../js/canonical-import.mjs';
 
 const $ = id => document.getElementById(id);
 const fixtures = Object.freeze({
@@ -18,6 +18,43 @@ const fixtures = Object.freeze({
 let pauseAfterFirstWrite = false;
 let busy = false, configured = false, ledger = null, store = null, parsed = null, dirty = false;
 let saveState = 'idle';
+// Owned, frozen local proposals are separate from the storage write authority.
+// A cache never establishes ownership or bypasses the store's verified save.
+const sessionOwner = createLedgerSessionOwner();
+let ledgerSession = null, sessionBoundary = null, cacheRequiresVerifiedOpen = false;
+function invalidateLedgerSession(requireVerifiedOpen = false) {
+  if (requireVerifiedOpen) cacheRequiresVerifiedOpen = true;
+  sessionOwner.invalidate(); ledgerSession = null; sessionBoundary = null;
+}
+function currentLedgerSession() {
+  const lifecycle = storage.lifecycle;
+  if (ledgerSession && (sessionBoundary.store !== store || sessionBoundary.base !== store?.base ||
+      sessionBoundary.lifecycle !== lifecycle || lifecycle?.state !== 'ready' ||
+      !lifecycle.acceptingWrites || navigator.onLine === false)) invalidateLedgerSession(true);
+  if (ledgerSession) {
+    // A failed cache reconstruction can close the handle without publishing a
+    // partial draft. The ordinary validated path remains available.
+    try { ledgerSession.revision(); } catch { invalidateLedgerSession(); }
+  }
+  return ledgerSession;
+}
+function openLedgerSession() {
+  invalidateLedgerSession();
+  const lifecycle = storage.lifecycle, base = store?.base;
+  if (cacheRequiresVerifiedOpen || !ledger || !base || lifecycle?.state !== 'ready' || !lifecycle.acceptingWrites || navigator.onLine === false) return;
+  // The exact verified base is retained by reference for cheap invalidation.
+  // This label is descriptive binding, not a reusable authorization token.
+  const binding = JSON.stringify([base.databaseId, base.copyId, base.revision, lifecycle.folderId]);
+  try {
+    ledgerSession = sessionOwner.open(JSON.stringify(ledger), binding);
+    sessionBoundary = { store, base, lifecycle };
+    ledger = ledgerSession.snapshot();
+  } catch {
+    // An optional cache must not relabel an independently verified save as a
+    // failure. Retain the ledger and let the ordinary path validate/read it.
+    invalidateLedgerSession();
+  }
+}
 let savedAuditEvents = 0, lastStagedAction = null;
 let mappingForms = [];
 let previewGeneration = 0, parsedFixture = null;
@@ -69,6 +106,7 @@ function refreshSaveStatus(ready) {
   $('show-save').textContent = dirty ? 'Review and save changes' : 'Review save status';
 }
 function refresh() {
+  currentLedgerSession();
   const lifecycle = storage.lifecycle;
   const ready = lifecycle?.state === 'ready' && lifecycle.acceptingWrites && navigator.onLine !== false;
   for (const control of (document.getElementById('workbench') || document).querySelectorAll('button,input,select')) control.disabled = busy || control.dataset.pageBoundary === 'true';
@@ -117,7 +155,7 @@ async function run(operation, feedbackId = null) {
   finally { busy = false; refresh(); }
 }
 function action(id, operation, feedbackId = null) { $(id).addEventListener('click', () => run(operation, feedbackId)); }
-function changed(next) { if (ledger?.ledgerId !== next.ledgerId) resetReviewState(); ledger = next; dirty = true; return renderLedger(); }
+function changed(next) { invalidateLedgerSession(); if (ledger?.ledgerId !== next.ledgerId) resetReviewState(); ledger = next; dirty = true; openLedgerSession(); return renderLedger(); }
 function option(select, value, label) { const node = element('option', label); node.value = value; select.append(node); }
 function labelled(parent, text, node) { const label = element('label', text); label.append(node); parent.append(label); return node; }
 function lazyEvidence(title, records) {
@@ -199,9 +237,10 @@ function renderMappings() {
   }
 }
 async function loadLedger() {
+  invalidateLedgerSession(true);
   const nextStore = new CanonicalLedgerStore({ lifecycle: storage.lifecycle });
   const savedLedger = await nextStore.load(), nextLedger = savedLedger || createLedger();
-  store = nextStore; ledger = nextLedger; savedAuditEvents = ledger.events.length;
+  store = nextStore; ledger = nextLedger; cacheRequiresVerifiedOpen = false; openLedgerSession(); savedAuditEvents = ledger.events.length;
   lastStagedAction = null; resetReviewState(); dirty = false; saveState = 'idle';
   $('event-result').textContent = savedLedger ? 'Verified saved ledger loaded. Choose an activity to stage an auditable change.' : 'No saved canonical ledger yet. Stage an invented import to begin.';
   $('event-result').dataset.error = 'false';
@@ -212,10 +251,13 @@ async function loadLedger() {
   return Boolean(savedLedger);
 }
 async function saveLedger(next = ledger) {
+  // Invalidate before the first await, including no-op or failed saves. The
+  // frozen draft remains readable, but a failed save cannot reuse its cache.
+  invalidateLedgerSession(true);
   saveState = 'saving'; refresh();
   try {
     const saved = await store.save(next);
-    ledger = saved; savedAuditEvents = saved.events.length; dirty = false; saveState = 'idle'; renderLedger();
+    ledger = saved; cacheRequiresVerifiedOpen = false; openLedgerSession(); savedAuditEvents = saved.events.length; dirty = false; saveState = 'idle'; renderLedger();
     $('event-result').textContent = `${saved.events.length} audit events saved and verified. No unsaved changes.`; $('event-result').dataset.error = 'false';
     $('stage-result').textContent = 'Imports saved and verified. Preview a fixture to stage another import.'; $('stage-result').dataset.error = 'false';
     return saved;
@@ -225,10 +267,10 @@ async function saveLedger(next = ledger) {
     saveState = 'unverified'; refresh(); throw error;
   }
 }
-action('connect', async () => { if (dirty && !confirm('Discard unsaved local changes and connect?')) return; store=null; await storage.connect(); if (storage.lifecycle?.state === 'ready') await loadLedger(); });
-action('stale', async () => { if (confirm('Confirm all prior tabs and devices using this synthetic folder have stopped.')) { await storage.recoverStaleSession(); if (!dirty || confirm('Session recovered. Discard unsaved local changes and reopen?')) await loadLedger(); } });
-action('recover', async () => { await storage.lifecycle.recover(); if (!dirty || confirm('Recovery completed. Discard unsaved local changes and reopen?')) await loadLedger(); });
-action('release', async () => { if (dirty && !confirm('Release without saving local changes? They remain in this tab only.')) return; await storage.release(); store=null; });
+action('connect', async () => { if (dirty && !confirm('Discard unsaved local changes and connect?')) return; invalidateLedgerSession(true); store=null; await storage.connect(); if (storage.lifecycle?.state === 'ready') await loadLedger(); });
+action('stale', async () => { if (confirm('Confirm all prior tabs and devices using this synthetic folder have stopped.')) { invalidateLedgerSession(true); await storage.recoverStaleSession(); if (!dirty || confirm('Session recovered. Discard unsaved local changes and reopen?')) await loadLedger(); } });
+action('recover', async () => { invalidateLedgerSession(true); await storage.lifecycle.recover(); if (!dirty || confirm('Recovery completed. Discard unsaved local changes and reopen?')) await loadLedger(); });
+action('release', async () => { if (dirty && !confirm('Release without saving local changes? They remain in this tab only.')) return; invalidateLedgerSession(true); await storage.release(); store=null; });
 action('parse', async () => {
   clearPreview();
   const generation = previewGeneration, fixtureKey = $('fixture').value;
@@ -242,6 +284,7 @@ action('parse', async () => {
 });
 action('stage', async () => {
   if (!parsed || parsedFixture !== $('fixture').value) inputError('preview-required');
+  invalidateLedgerSession();
   let next = ledger; const accountMappings={}, coverageByAccount={};
   for (const form of mappingForms) {
     if (!form.select.value) inputError('account-mapping-required');
@@ -285,7 +328,11 @@ async function stageEvent(allowRepeat = false) {
   if (!$('evidence').value.trim()) inputError('evidence-required');
   const input = eventInput(), event = { ...input, commandId: crypto.randomUUID() };
   const activity = ledger.activities.find(item => item.activityId === event.activityId);
-  changed(applyFinancialEvent(ledger,event));
+  const session = currentLedgerSession();
+  if (session) {
+    session.applyBatchJson(JSON.stringify([{ command: event, eventId: crypto.randomUUID(), recordedAt: new Date().toISOString() }]), session.revision());
+    ledger = session.snapshot(); dirty = true; renderLedger();
+  } else changed(applyFinancialEvent(ledger,event));
   lastStagedAction = { ledgerId: ledger.ledgerId, eventId: ledger.events.at(-1).eventId, input: JSON.stringify(input) };
   // Keep the selected target visible so the adjacent receipt identifies exactly
   // what was staged. Equal commands are protected only in this UI, not the engine.
@@ -302,9 +349,10 @@ action('repeat-event', async () => {
   }
   await stageEvent(true);
 }, 'event-result');
-action('summarize', async () => { const result = summarizeLedger(ledger,{start:$('report-start').value,end:$('report-end').value,currency:'USD',accountIds:ledger.accounts.map(a=>a.accountId)}); $('summary').textContent=JSON.stringify(result,null,2)+'\nDeclared coverage is not independent proof of complete history.'; });
+action('summarize', async () => { const scope = {start:$('report-start').value,end:$('report-end').value,currency:'USD',accountIds:ledger.accounts.map(a=>a.accountId)}; const session = currentLedgerSession(); const result = session ? session.summarizePeriodsJson(JSON.stringify([scope]))[0] : summarizeLedger(ledger,scope); $('summary').textContent=JSON.stringify(result,null,2)+'\nDeclared coverage is not independent proof of complete history.'; });
 function renderLedger() {
-  const effectiveActivities = getEffectiveActivities(ledger);
+  const session = currentLedgerSession();
+  const effectiveActivities = session ? session.effectiveActivities() : getEffectiveActivities(ledger);
   const activeActivities = effectiveActivities.filter(activity=>activity.active);
   for (const id of ['activity','original']) { $(id).replaceChildren(); option($(id),'','Choose activity'); for (const activity of activeActivities) option($(id),activity.activityId,activity.sourceDescription+' · '+activity.effectiveDate+' · '+activity.activityKind+' · '+(activity.categoryId || 'Uncategorized')+' · '+activity.activityId); }
   $('provenance').replaceChildren();
@@ -394,6 +442,7 @@ function renderReviews(activeActivities) {
         if (decision==='keep-separate' && currency && !/^[A-Z]{3}$/.test(currency.value.trim().toUpperCase())) inputError('currency-required');
         // applyReviewDecision validates the current ledger, target activity,
         // active state, account, currency and amount before it stages anything.
+        invalidateLedgerSession();
         const status = changed(applyReviewDecision(ledger,{observationId:review.observationId,action:decision,activityId:draft.targetId||undefined,rationale:rationale.value.trim(),...(decision==='keep-separate' && currency ? {currency:currency.value.trim().toUpperCase()} : {})}));
         status.pendingStatus.focus();
         reviewDrafts.delete(review.observationId); message('Review decision staged locally.');
@@ -416,6 +465,7 @@ function renderReviews(activeActivities) {
       const button=element('button','Return to review');button.type = 'button';button.addEventListener('click',()=>run(async()=>{
         if (!store || !storage.lifecycle?.acceptingWrites) inputError('reconnect-required');
         if (!rationale.value.trim()) inputError('review-rationale-required');
+        invalidateLedgerSession();
         const status = changed(reverseReviewDecision(ledger,{reviewDecisionId:decision.reviewDecisionId,rationale:rationale.value.trim()}));
         status.pendingStatus.focus();
         reversalDrafts.delete(decision.reviewDecisionId); message('Return to review staged locally. Save to persist the audit record.');
@@ -454,6 +504,7 @@ export async function withAcceptanceWorkbench(operation) {
         ready();
         const manifest = await lifecycle.readManifest();
         if (manifest.syntheticOnly !== true || manifest.revision !== 0 || Object.keys(manifest.snapshot || {}).length || manifest.catalogFinalizationPending !== null) inputError('fresh-empty-copy-required');
+        invalidateLedgerSession();
         if (await store.load() !== null || store.base?.revision !== 0 || Object.keys(store.base?.snapshot || {}).length || store.base?.syntheticOnly !== true || store.base?.catalogFinalizationPending !== null) inputError('fresh-empty-copy-required');
         // The store uses this verified base and will refuse any competing change.
       },
@@ -468,9 +519,10 @@ export async function withAcceptanceWorkbench(operation) {
         await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });
         // The archive is neither downloaded, shared nor stored in checklist state.
       },
-      async revalidate() { ready(); await lifecycle.handleOnline(); ready(); },
+      async revalidate() { ready(); invalidateLedgerSession(true); await lifecycle.handleOnline(); ready(); },
       async release() {
         ready(); if (dirty) inputError('unsaved-changes');
+        invalidateLedgerSession(true);
         await storage.release();
         if (lifecycle.started || lifecycle.coordinator?.canWrite || lifecycle.releasePending) inputError('release-unverified');
         store = null;

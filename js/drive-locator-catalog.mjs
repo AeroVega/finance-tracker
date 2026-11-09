@@ -179,9 +179,42 @@ export function resolveLocator(catalog, { kind, identity } = {}) {
   return entry;
 }
 
+/** Private operation-local lookup. It snapshots and validates all bindings;
+ * callers cannot supply a trusted flag or mutate the checked scalar fields.
+ * This is schema validation, not remote byte or ownership verification.
+ */
+export function createCatalogResolver(catalog) {
+  validateLocatorCatalog(catalog);
+  const pinned = { ...catalog, format: catalog.format, version: catalog.version,
+    databaseId: catalog.databaseId, copyId: catalog.copyId, generation: catalog.generation,
+    parentCatalogHash: catalog.parentCatalogHash,
+    entries: Object.fromEntries(Object.entries(catalog.entries).map(([key, entry]) => {
+      const copied = { ...entry, kind: entry.kind, identity: entry.identity, fileId: entry.fileId, sha256: entry.sha256 };
+      if (copied.kind === "journal-event") {
+        copied.transactionId = entry.transactionId; copied.sequence = entry.sequence;
+      }
+      return [key, copied];
+    })) };
+  validateLocatorCatalog(pinned);
+  const entries = new Map(Object.entries(pinned.entries));
+  const resolve = ({ kind, identity } = {}) => {
+    const key = locatorKey(kind, identity);
+    const entry = entries.get(key);
+    if (!entry) fail("locator-not-found", "The selected physical copy has no locator for the requested immutable object.", { key });
+    return { ...entry };
+  };
+  return Object.freeze({ resolve, resolveSnapshot: snapshot => resolveSnapshotWith(snapshot, resolve),
+    bindings: () => ({ format: pinned.format, version: pinned.version, databaseId: pinned.databaseId,
+      copyId: pinned.copyId, generation: pinned.generation, parentCatalogHash: pinned.parentCatalogHash,
+      entries: Object.fromEntries([...entries].map(([key, entry]) => [key, { ...entry }])) }) });
+}
+
 /** Resolve a commit's logicalPath -> SHA-256 map through this physical copy's catalog. */
 export function resolveSnapshotLocators(snapshot, catalog) {
-  validateLocatorCatalog(catalog);
+  return createCatalogResolver(catalog).resolveSnapshot(snapshot);
+}
+
+function resolveSnapshotWith(snapshot, resolve) {
   if (!isRecord(snapshot)) fail("invalid-logical-snapshot", "A committed snapshot must be a logical path-to-hash map.");
 
   const resolved = {};
@@ -189,7 +222,7 @@ export function resolveSnapshotLocators(snapshot, catalog) {
     if (!logicalPath.trim() || FORBIDDEN_KEYS.has(logicalPath) || typeof hash !== "string" || !SHA256.test(hash)) {
       fail("invalid-logical-snapshot-entry", "A committed snapshot contains an invalid logical path or content hash.", { logicalPath });
     }
-    const entry = resolveLocator(catalog, { kind: "data-object", identity: hash });
+    const entry = resolve({ kind: "data-object", identity: hash });
     if (entry.sha256 !== hash) {
       fail("locator-hash-mismatch", "The data-object locator does not match the committed content hash.", { logicalPath, hash });
     }

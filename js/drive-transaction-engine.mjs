@@ -79,6 +79,9 @@ export class GoogleDriveTransactionAdapter {
     if (!token) fail("authorization-required", "Google Drive authorization is unavailable.");
     const response = await this.fetch(url, {
       ...options,
+      // Verification versions, exact manifests and media must come from Drive,
+      // never an HTTP cache in the browser. Private byte reuse is gated above.
+      cache: "no-store",
       headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
     });
     this.onRequest?.({ method: options.method || "GET", url: String(url), status: response.status });

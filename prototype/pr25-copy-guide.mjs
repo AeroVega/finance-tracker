@@ -5,9 +5,9 @@ const labels = Object.freeze({
   "selection-cancelled": "Selection cancelled. Nothing passed. Choose again when ready.",
   "authorization-cancelled": "Google authorization was closed or blocked. Try the source button again.",
   "authorization-required": "Google authorization is unavailable or expired. Release sessions, then reconnect before retrying.",
-  "canonical-source-required": "Choose the existing completed PR28 source. An empty folder, backup or unrelated fixture is not a source for this check. No database was created.",
+  "canonical-source-required": "Choose the existing completed canonical synthetic source. An empty folder, backup or unrelated fixture is not a source for this check. No database was created.",
   "original-source-required": "That folder was used as a destination in this run. Choose the original completed source.",
-  "retained-originals-unsupported": "This source includes separately retained original files. This guide is limited to PR28 canonical fixtures without those files. Release this source and use Advanced PR25 tools for original-file retention checks. No backup or restore was started.",
+  "retained-originals-unsupported": "This source includes separately retained original files. This guide is limited to canonical synthetic fixtures without those files. Release this source and use Advanced PR25 tools for original-file retention checks. No backup or restore was started.",
   "source-changed": "The source changed since verification. Release sessions and choose the source again. Do not rerun the 25 live checks.",
   "recovery-required": "The source needs catalog transaction recovery. Release its session, then use the PR28 workbench recovery controls on this same source. Recovering a stale session alone does not repair a transaction.",
   "unfinished-history": "The source contains unfinished transaction history. Release its session and use the PR28 workbench to recover this same source before copying it.",
@@ -52,8 +52,8 @@ export function mountCopyGuide({ document, window, driver, progressFactory = sta
     for (const id of ["guide-return", "prototype-tools"]) $(id).ariaDisabled = String(held || busy);
     const next = interrupted ? labels["page-interrupted"] : busy ? "Keep this tab open and the device awake. Wait for verification and session release, even when all objects have copied." :
       releaseBlocked ? "Next: resolve session release below. No further backup, export or restore is allowed until release is confirmed." :
-      states.restore ? "Copy checks passed for this run. Backup and restored copy were independently reopened after release, compared with your source, and released again. Return to PR28 for the other device checks." :
-      !states.source ? "Next: choose your existing completed PR28 source. You do not need to run the 25 live checks again." :
+      states.restore ? "Copy checks passed for this run. Backup and restored copy were independently reopened after release, compared with your source, and released again. Return to the acceptance suite for the other device checks." :
+      !states.source ? "Next: choose your existing completed canonical synthetic source. You do not need to run the 25 live checks again." :
       !states.backup ? "Next: choose a new empty BACKUP folder. Its content checks, independent reopen and session release run automatically." :
       !states.export ? "Next: request the portable archive download. The source session is released automatically before this step finishes." :
       !states.archive ? "Next: save the download in Files, then select that exact saved JSON file below. A download request alone does not verify that it was saved." :

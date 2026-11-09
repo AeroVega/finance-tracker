@@ -25,7 +25,7 @@
         <a href="#transactions"><span aria-hidden="true">↔</span> Transactions</a>
         <a href="#storage"><span aria-hidden="true">▤</span> Synthetic storage</a>
       </nav>
-      <div class="sidebar-tools"><p class="nav-label">Development</p><a href="prototype/pr28-testing.html">Guided checks <span aria-hidden="true">↗&#xfe0e;</span></a><a href="prototype/">Prototype tools <span aria-hidden="true">↗&#xfe0e;</span></a></div>
+      <div class="sidebar-tools"><p class="nav-label">Development</p><a href="prototype/synthetic-year.html">Seed a synthetic year <span aria-hidden="true">↗&#xfe0e;</span></a><a href="prototype/acceptance.html">Acceptance tests <span aria-hidden="true">↗&#xfe0e;</span></a><a href="prototype/">All test tools <span aria-hidden="true">↗&#xfe0e;</span></a></div>
       <div class="workspace-note"><span class="status-dot" aria-hidden="true"></span><strong>Development workspace</strong><p>Local CSV preview and invented fixtures. Production financial storage is disabled.</p></div>
     </aside>
     <main class="app-shell" id="overview" tabindex="-1">
@@ -55,7 +55,7 @@
         <label class="file-picker" for="csv-file"><span class="file-picker-icon" aria-hidden="true">↑</span><span><strong>Choose a CSV file</strong><small>Processed locally in your browser</small></span><input id="csv-file" type="file" accept=".csv,text/csv"></label>
         <p id="import-status" class="status-message" role="status" aria-live="polite">No file imported yet.</p>
         <div class="import-help">
-          <details class="sample-details"><summary>File format and import limits</summary><p>Use columns named <code>Date</code>, <code>Description</code>, and <code>Amount</code>. Negative amounts are money out; positive amounts are money in. Supported provider layouts are recognized when their documented headers are present.</p><p>This local preview detects repeat imports of the same file in this tab only. It does not reconcile overlapping exports, pending transactions, transfers or corrections.</p></details>
+          <p><a href="prototype/synthetic-year.html">Upload a full invented year to a new synthetic Drive folder</a> for canonical engine testing.</p><details class="sample-details"><summary>File format and import limits</summary><p>Use columns named <code>Date</code>, <code>Description</code>, and <code>Amount</code>. Negative amounts are money out; positive amounts are money in. Supported provider layouts are recognized when their documented headers are present.</p><p>This local preview detects repeat imports of the same file in this tab only. It does not reconcile overlapping exports, pending transactions, transfers or corrections.</p></details>
           <details class="sample-details"><summary>Try invented sample data</summary><p>Load four invented rows without choosing a file. If synthetic Drive is connected, this action saves and verifies only the sample rows there.</p><button id="load-sample" class="secondary-button" type="button">Load sample transactions</button></details>
         </div>
       </section>

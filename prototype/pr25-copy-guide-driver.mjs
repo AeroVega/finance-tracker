@@ -5,7 +5,8 @@ import { createDriveSessionAdapter } from "../js/drive-session-adapter.mjs";
 import { chooseSyntheticFolder } from "../js/synthetic-folder-picker.mjs";
 import { backupCatalogCopy, exportCatalogArchive, verifyCatalogArchive, restoreCatalogArchive } from "../js/catalog-backup.mjs";
 import { validateSyntheticApplicationSnapshot } from "../js/synthetic-application-structure.mjs";
-import { CANONICAL_INDEX } from "../js/canonical-ledger-storage.mjs";
+import { reassembleCanonicalObjects } from "../js/canonical-fragments.mjs";
+import { CANONICAL_INDEX, CANONICAL_PREFIX } from "../js/canonical-ledger-storage.mjs";
 import { canonicalizeJcs } from "../js/transaction-protocol.mjs";
 import { storageError } from "../js/catalog-storage.mjs";
 
@@ -94,7 +95,16 @@ export function createCopyGuideDriver({ storage, authorize = () => authorizeCopy
     if (!archive.manifest.snapshot[CANONICAL_INDEX] || archive.manifest.revision < 1) fail("canonical-source-required");
     if (archive.originalImports.length) fail("retained-originals-unsupported");
     const verified = await verifyCatalogArchive(archive, { validateStructure, onProgress: progress?.onProgress });
-    const index = JSON.parse(new TextDecoder().decode(verified.objects.get("data-object:" + archive.manifest.snapshot[CANONICAL_INDEX])));
+    const decode = bytes => new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    let index = JSON.parse(decode(verified.objects.get("data-object:" + archive.manifest.snapshot[CANONICAL_INDEX])));
+    if (index.version === 3) {
+      // Summarize the logical index using only the current snapshot's already
+      // verified bytes. Do not reread Drive or change archive/copy verification.
+      const physical = new Map(Object.entries(archive.manifest.snapshot)
+        .filter(([path]) => path.startsWith(CANONICAL_PREFIX))
+        .map(([path, identity]) => [path, decode(verified.objects.get("data-object:" + identity))]));
+      index = JSON.parse(reassembleCanonicalObjects(index, physical).get(CANONICAL_INDEX));
+    }
     baseline = archive;
     return { revision: archive.manifest.revision, objects: archive.objects.length,
       counts: Object.fromEntries(["accounts", "imports", "activities", "events"].map(name => [name, index.collections[name].length])) };
@@ -152,7 +162,7 @@ export function createCopyGuideDriver({ storage, authorize = () => authorizeCopy
       baseline = exported = localArchive = null; source = null;
       // Invoke OAuth before an await so Safari retains the user's activation.
       await authorize(); active(); progress?.setPhase("choosing-source");
-      const folder = await pick("SOURCE: choose your completed PR28 synthetic folder, not an empty destination");
+      const folder = await pick("SOURCE: choose your completed canonical synthetic folder, not an empty destination");
       active();
       if (used.has(folder.id)) fail("original-source-required");
       const inspected = await inspectPr25Folder(makeAdapter(folder));

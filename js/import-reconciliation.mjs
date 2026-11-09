@@ -139,15 +139,7 @@ export function reconcileImport({
   const observations = [];
   const events = [];
   const counts = { rowsSeen: rows.length, rowsRecognized: 0, created: 0, matched: 0, review: 0, rejected: 0, ignored: 0 };
-  const validDates = [];
-  // The caller supplies retained accepted evidence for review only. Never let
-  // historical records revive an inactive ID or cross its account/currency.
-  const activeById = new Map(existingActivities.map(activity => [activity.activityId, activity]));
-  const compositeEvidence = [...existingActivities, ...existingCompositeEvidence.filter(evidence => {
-    const active = activeById.get(evidence.activityId);
-    return active && active.institutionId === evidence.institutionId &&
-      active.accountId === evidence.accountId && active.currency === evidence.currency;
-  })];
+  let coverageStart = null, coverageEnd = null;
   // Repeated provider IDs with contradictory monetary identity in one input file
   // are not resolved by row order. Keep every conflicting occurrence for review.
   const sourceIdRows = new Map();
@@ -172,16 +164,103 @@ export function reconcileImport({
     }
   }
 
-  const workingActivity = (activity) => {
-    if (!activity) return activity;
-    const current = { ...activity };
-    for (const event of events.filter(event => event.activityId === activity.activityId && event.eventType === 'lifecycle-transition')) {
-      current.lifecycleStatus = event.to;
-      current.effectiveDate = event.effectiveDate;
-      current.postedDate = event.postedDate;
-      current.settlementDate = event.settlementDate;
+  // Array.find uses the first duplicate ID. Keep existing and new records
+  // separate so reversal lookup never includes a row created in this import.
+  const requestedSourceIds = new Set(rows.filter(row => row && row.sourceRecordId && !row.reversalOfActivityId).map(row => row.sourceRecordId));
+  const firstActivityById = new Map();
+  if (requestedSourceIds.size || rows.some(row => row?.reversalOfActivityId)) {
+    for (const activity of existingActivities) {
+      if (!firstActivityById.has(activity.activityId)) firstActivityById.set(activity.activityId, activity);
     }
-    return current;
+  }
+  const createdActivityById = new Map();
+  const sourceActivities = new Map();
+  const indexObservation = (observation) => {
+    if (observation.accountId !== accountId || !observation.activityId || !requestedSourceIds.has(observation.sourceRecordId)) return;
+    let candidates = sourceActivities.get(observation.sourceRecordId);
+    if (!candidates) sourceActivities.set(observation.sourceRecordId, candidates = new Set());
+    candidates.add(observation.activityId);
+  };
+  if (requestedSourceIds.size) for (const observation of existingObservations) indexObservation(observation);
+  const transitions = new Map();
+  const workingActivity = (activity) => transitions.has(activity.activityId)
+    ? { ...activity, ...transitions.get(activity.activityId) } : activity;
+
+  // Native Map keys preserve strict field identity, including object references,
+  // without serializing user-supplied descriptions or actions. NaN never equals
+  // itself under sameComposite's strict comparisons, so it gets no bucket.
+  const compositeFields = activity => [
+    activity.institutionId, activity.accountId, activity.currency,
+    activity.effectiveDate, activity.normalizedDescription ?? activity.sourceDescription ?? "",
+    activity.sourceAction ?? "",
+  ];
+  const decimalKey = activity => {
+    // Incoming monetary rows require string currencies. Do not coerce an
+    // unrelated retained object's currency while building this lookup.
+    if (Number.isSafeInteger(activity.amountMinor) && typeof activity.currency !== "string") return null;
+    const decimal = exactSignedDecimal(activity);
+    if (decimal === null) return null;
+    const negative = decimal.startsWith("-");
+    const [whole, fraction = ""] = (negative ? decimal.slice(1) : decimal).split(".");
+    const normalized = (whole.replace(/^0+/, "") || "0") + "." + fraction.replace(/0+$/, "");
+    return (negative && normalized !== "0." ? "-" : "") + normalized;
+  };
+  let compositeIndex = null;
+  const compositeBucket = (activity, create) => {
+    let node = compositeIndex;
+    for (const field of compositeFields(activity)) {
+      if (typeof field === "number" && Number.isNaN(field)) return null;
+      if (!node.has(field)) {
+        if (!create) return null;
+        node.set(field, new Map());
+      }
+      node = node.get(field);
+    }
+    return node;
+  };
+  const rawMoney = Symbol("raw-money"), decimalMoney = Symbol("decimal-money");
+  const amountBucket = (bucket, kind, key, create) => {
+    if (!bucket.has(kind)) {
+      if (!create) return null;
+      bucket.set(kind, new Map());
+    }
+    const amounts = bucket.get(kind);
+    if (!amounts.has(key)) {
+      if (!create) return null;
+      amounts.set(key, new Map());
+    }
+    return amounts.get(key);
+  };
+  const rawBucket = (bucket, activity, create) => {
+    const minor = activity.amountMinor, decimal = activity.amountDecimal ?? null;
+    if (Number.isNaN(minor) || Number.isNaN(decimal)) return null;
+    const minors = amountBucket(bucket, rawMoney, minor, create);
+    if (!minors) return null;
+    if (!minors.has(decimal)) {
+      if (!create) return null;
+      minors.set(decimal, new Map());
+    }
+    return minors.get(decimal);
+  };
+  const getCompositeIndex = () => {
+    if (compositeIndex) return;
+    compositeIndex = new Map();
+    // Historical accepted evidence remains review-only. Last-wins active IDs
+    // preserve the original evidence validity rule, distinct from Array.find.
+    const activeById = new Map(existingActivities.map(activity => [activity.activityId, activity]));
+    const compositeEvidence = [...existingActivities, ...existingCompositeEvidence.filter(evidence => {
+      const active = activeById.get(evidence.activityId);
+      return active && active.institutionId === evidence.institutionId &&
+        active.accountId === evidence.accountId && active.currency === evidence.currency;
+    })];
+    for (const evidence of compositeEvidence) {
+      if (evidence.institutionId !== institutionId || evidence.accountId !== accountId) continue;
+      const bucket = compositeBucket(evidence, true);
+      if (!bucket) continue;
+      rawBucket(bucket, evidence, true)?.set(evidence.activityId, evidence);
+      const decimal = decimalKey(evidence);
+      if (decimal !== null) amountBucket(bucket, decimalMoney, decimal, true).set(evidence.activityId, evidence);
+    }
   };
 
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -200,7 +279,8 @@ export function reconcileImport({
     }
 
     counts.rowsRecognized++;
-    validDates.push(row.effectiveDate);
+    if (coverageStart === null || row.effectiveDate < coverageStart) coverageStart = row.effectiveDate;
+    if (coverageEnd === null || row.effectiveDate > coverageEnd) coverageEnd = row.effectiveDate;
     if (conflictingSourceIdRows.has(rowIndex)) {
       counts.review++;
       observations.push({
@@ -221,7 +301,7 @@ export function reconcileImport({
     let reasonCode = null;
 
     if (row.reversalOfActivityId) {
-      match = existingActivities.find((activity) => activity.activityId === row.reversalOfActivityId) ?? null;
+      match = firstActivityById.get(row.reversalOfActivityId) ?? null;
       if (!match) {
         disposition = "review"; reasonCode = "reversal-target-not-found";
       } else if (match.institutionId !== institutionId || match.accountId !== accountId) {
@@ -240,11 +320,15 @@ export function reconcileImport({
         });
       }
     } else if (row.sourceRecordId) {
-      const candidates = [...existingObservations, ...observations]
-        .filter((obs) => obs.sourceRecordId === row.sourceRecordId && obs.accountId === accountId && obs.activityId)
-        .map((obs) => workingActivity(existingActivities.find((a) => a.activityId === obs.activityId) ?? activities.find((a) => a.activityId === obs.activityId)))
-        .filter((activity) => activity && activity.institutionId === institutionId && activity.accountId === accountId);
-      const unique = [...new Map(candidates.map((a) => [a.activityId, a])).values()];
+      const unique = [];
+      for (const id of sourceActivities.get(row.sourceRecordId) ?? []) {
+        const activity = firstActivityById.get(id) ?? createdActivityById.get(id);
+        if (activity && activity.institutionId === institutionId && activity.accountId === accountId) {
+          unique.push(workingActivity(activity));
+          // Only uniqueness matters; two candidates already require review.
+          if (unique.length === 2) break;
+        }
+      }
       if (unique.length > 1) {
         disposition = "review"; reasonCode = "source-id-multiple-candidates";
       } else if (unique.length === 1) {
@@ -263,12 +347,28 @@ export function reconcileImport({
         } else if (isPendingPostedTransition(match, incoming)) {
           disposition = "matched";
           events.push({ eventType: "lifecycle-transition", activityId: match.activityId, from: "pending", to: "posted", effectiveDate: row.effectiveDate, postedDate: row.postedDate ?? null, settlementDate: row.settlementDate ?? null, observationRowOrdinal: row.rowOrdinal, appendOnly: true });
+          transitions.set(match.activityId, { lifecycleStatus: "posted", effectiveDate: row.effectiveDate, postedDate: row.postedDate ?? null, settlementDate: row.settlementDate ?? null });
         } else {
           disposition = "matched";
         }
       }
     } else {
-      const candidates = new Set(compositeEvidence.filter((a) => sameComposite(a, incoming)).map(a => a.activityId));
+      const candidates = new Set();
+      getCompositeIndex();
+      const bucket = compositeBucket(incoming, false);
+      if (bucket) {
+        const decimal = decimalKey(incoming);
+        const matches = [
+          rawBucket(bucket, incoming, false),
+          decimal === null ? null : amountBucket(bucket, decimalMoney, decimal, false),
+        ];
+        candidateAmounts: for (const amounts of matches) {
+          for (const evidence of amounts?.values() ?? []) {
+            if (sameComposite(evidence, incoming)) candidates.add(evidence.activityId);
+            if (candidates.size === 2) break candidateAmounts;
+          }
+        }
+      }
       if (candidates.size === 1) {
         disposition = "review"; reasonCode = "insufficient-composite-evidence";
       } else if (candidates.size > 1) {
@@ -280,6 +380,7 @@ export function reconcileImport({
     if (disposition === "created") {
       activityId = idFactory();
       activities.push({ ...incoming, activityId, processingStatus: "processed" });
+      if (!createdActivityById.has(activityId)) createdActivityById.set(activityId, activities.at(-1));
       counts.created++;
     } else if (disposition === "matched") {
       counts.matched++;
@@ -293,13 +394,13 @@ export function reconcileImport({
       sourceFields: row.sourceFields ?? {}, disposition, reasonCode,
       sourceRowFingerprint: row.sourceRowFingerprint ?? null,
     });
+    indexObservation(observations.at(-1));
   }
 
   const unresolved = counts.review > 0 || counts.rejected > 0;
   return {
     status: unresolved ? "needs-review" : "processed",
     activities, observations, events, counts,
-    coverageStart: validDates.length ? validDates.sort()[0] : null,
-    coverageEnd: validDates.length ? validDates.sort().at(-1) : null,
+    coverageStart, coverageEnd,
   };
 }

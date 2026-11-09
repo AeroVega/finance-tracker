@@ -1,12 +1,12 @@
-# Google Cloud setup for the Finance Tracker Drive probe
+# Google Cloud setup for synthetic acceptance
 
-This guide creates the three values needed by the synthetic Drive probe: a web OAuth client ID, a restricted browser API key, and the Cloud project number. It does not configure production ledger storage.
+This guide describes the three values needed by the synthetic tools: a web OAuth client ID, a restricted browser API key, and the Cloud project number. It does not configure production ledger storage.
 
 ## Before you start
 
 Use a Google account that owns or can access the private Drive folder. Keep this project for the Finance Tracker prototype. Do not put the folder ID, credentials, access tokens, or financial records in this public repository.
 
-The probe is published at `https://aerovega.github.io/finance-tracker/prototype/drive-probe.html` when the GitHub Pages deployment from `main` is current. Confirm **Settings → Pages** and the latest Actions deployment before relying on that URL. The web origin is `https://aerovega.github.io`.
+**Current entry point:** use the [owner acceptance suite](../prototype/acceptance.html) after a separately authorized deployment. Confirm Settings → Pages, the latest Actions deployment, and the full source commit before testing. The site is one shared deployment. Its web origin is `https://aerovega.github.io`. The original manually configured probe UI was retired in the [prototype cleanup](PROTOTYPE_CLEANUP.md); its historical result below remains unchanged.
 
 ## 1. Create a Cloud project
 
@@ -75,17 +75,13 @@ Google documents these restrictions in its [web Picker setup guide](https://deve
 
 Open **IAM & Admin → Settings** in the same project and copy the numeric **Project number**. Do not use the project ID. The probe passes this number to Google Picker as its App ID.
 
-## 7. Run the synthetic check
+## 7. Configure the deployed synthetic tools
 
-After the probe is served from the authorized site:
+The current tools use public configuration stamped by `.github/workflows/deploy-pages.yml`, rather than fields in the retired probe UI. The owner configures `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_PICKER_API_KEY` as repository or `github-pages` environment variables or secrets. The workflow supplies the reviewed public project number. Confirm it belongs to the same project before deploying. Never place a client secret or token in these values.
 
-1. Enter the OAuth client ID, restricted API key, and project number in the page.
-2. Choose **Connect Google Drive** and authorize the `drive.file` request with the test-user account.
-3. Choose **Choose Drive folder** and select the intended private folder.
-4. Confirm the folder name, then run the synthetic read/write check.
-5. The probe creates one invented JSON file, reads it back, compares its contents, then asks before deleting that temporary file. It never opens or changes the canonical ledger and never uploads a CSV.
+After a separately authorized deployment, open the [owner acceptance suite](../prototype/acceptance.html), verify its full source SHA and follow its Google connection check. Use only new empty synthetic folders, never the real database. The suite links the current import and year tools, which independently verify saved invented data. It does not load Google scripts or open a connection itself.
 
-If deletion is declined or fails, remove only the clearly named `finance-tracker-drive-probe-…json` test file from the selected folder.
+Do not remove files from an earlier test to make a folder look empty. Preserve failed or uncertain copies and choose a new folder when the guide requires one. See [configuration review and remaining owner checks](GOOGLE_DRIVE_CONFIGURATION.md).
 
 ## Recorded live test result
 
