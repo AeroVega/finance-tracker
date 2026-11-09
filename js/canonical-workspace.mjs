@@ -1,6 +1,6 @@
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
-import { createWorkspaceView, getWorkspaceActivity } from './canonical-workspace-model.mjs';
+import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-workspace-model.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
 
 const $ = id => document.getElementById(id);
@@ -20,6 +20,16 @@ function money(value, currency) {
 }
 const monthLabel = month => new Date(month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 let busy = false, configured = false, page = 0, selectedActivity = null, view = null, operationStarted = null;
+let viewLedger = null, viewReader = null, searchTimer = null, composingSearch = false;
+const reviewButtons = new Map();
+let reviewQueueButton = null;
+function cancelSearch() { clearTimeout(searchTimer); searchTimer = null; }
+function scheduleSearch() {
+  cancelSearch();
+  if (busy || composingSearch || !session.ledger) return;
+  // Coalesce typing only; account/month changes and completed corrections stay immediate.
+  searchTimer = setTimeout(() => { searchTimer = null; if (!busy) { page = 0; render(); } }, 120);
+}
 const storage = new DashboardSyntheticStorage({
   maintainOriginals: false,
   onStatus(status) {
@@ -39,6 +49,13 @@ const messages = {
   'category-required': 'Enter a category for this transaction.',
   'invalid-amount': 'Enter an exact decimal amount, for example -125.50.',
   'reopen-before-editing': 'Reopen verified saved records before editing. Your local changes have not been discarded.',
+  'authorization-cancelled': 'Google authorization was cancelled. No saved records were replaced.',
+  'picker-cancelled': 'Folder selection was cancelled. No saved records were replaced.',
+  'synthetic-folder-required': 'Choose an existing invented-data folder with “synthetic” in its name. No saved records were replaced.',
+  'base-conflict': 'The saved copy changed. Reopen verified records before deciding what to retry.',
+  'transaction-unresolved': 'The save result is uncertain. Recover if offered, then reopen saved records before retrying.',
+  'reconnect-required': 'The connection could not be verified. Reconnect and reopen saved records before editing.',
+  'verified-draft-required': 'There is no verified draft eligible for saving. Reopen saved records before editing.',
   'release-unconfirmed': 'Release was not verified. Keep this copy selected and resolve its session before switching devices.'
 };
 function announce(text, kind = 'info') {
@@ -54,9 +71,13 @@ function refresh() {
   $('reopen-ledger').disabled = busy || !ready;
   $('release-ledger').disabled = busy || !lifecycle;
   $('recover-ledger').hidden = lifecycle?.state !== 'recovery-required';
-  $('recover-ledger').disabled = busy || !lifecycle?.coordinator?.canWrite;
+  $('recover-ledger').disabled = busy || navigator.onLine === false || lifecycle?.state !== 'recovery-required' || !lifecycle?.coordinator?.canWrite;
   $('recover-stale').hidden = lifecycle?.state !== 'stale-session';
-  $('recover-stale').disabled = busy;
+  $('recover-stale').disabled = busy || navigator.onLine === false || lifecycle?.state !== 'stale-session';
+  $('close-detail').disabled = busy;
+  for (const button of reviewButtons.values()) button.disabled = busy;
+  if (reviewQueueButton) reviewQueueButton.disabled = busy;
+  $('transactions').setAttribute('aria-busy', String(busy));
   for (const id of ['account-filter', 'month-filter', 'transaction-search', 'review-only']) $(id).disabled = busy || !session.ledger;
   for (const id of ['correction-type', 'classification', 'category', 'amount', 'correction-rationale']) $(id).disabled = !editable;
   $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim();
@@ -78,18 +99,25 @@ function refresh() {
 }
 async function run(message, operation) {
   if (busy) return;
+  // Apply a queued query before an action so cancellation leaves rows and input aligned.
+  if (searchTimer !== null) { cancelSearch(); page = 0; render(); }
   busy = true; operationStarted = Date.now(); refresh(); announce(message);
   const timer = setInterval(refresh, 1000);
   try { await operation(); }
   catch (error) {
     const candidate = error?.code || (error instanceof TypeError ? error.message : '');
-    const code = /^[a-z][a-z0-9-]{0,95}$/.test(candidate) ? candidate : 'operation-unavailable';
-    announce((messages[code] || `Action did not complete: ${code}. Check the connection and available recovery actions.`) + (session.dirty ? ' Your staged changes remain in this tab.' : ''), 'error');
+    // Provider details and arbitrary codes are not safe user-facing diagnostics.
+    const message = Object.hasOwn(messages, candidate) ? messages[candidate] : 'Action did not complete. Check the connection and available recovery actions.';
+    announce(message + (session.dirty ? ' Your staged changes remain in this tab.' : ''), 'error');
   } finally { clearInterval(timer); busy = false; operationStarted = null; refresh(); }
 }
-const action = (id, message, callback) => $(id).addEventListener('click', () => run(message, callback));
+const action = (id, message, callback) => $(id).addEventListener('click', () => {
+  if (!$(id).disabled) return run(message, callback);
+});
 function confirmReplace() {
-  return !session.dirty || window.confirm('Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.');
+  if (!session.dirty || window.confirm('Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.')) return true;
+  announce('Action cancelled. Your local draft is unchanged.');
+  return false;
 }
 function addOptions(select, options, selected, first) {
   select.replaceChildren();
@@ -97,9 +125,14 @@ function addOptions(select, options, selected, first) {
   select.value = options.some(([value]) => value === selected) ? selected : '';
 }
 function render({ reset = false } = {}) {
+  cancelSearch();
   if (!session.ledger) return;
   if (reset) { page = 0; selectedActivity = null; $('transaction-search').value = ''; $('review-only').checked = false; $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; }
-  view = createWorkspaceView(session.ledger, { accountId: $('account-filter').value, month: $('month-filter').value, query: $('transaction-search').value, reviewOnly: $('review-only').checked, page });
+  if (viewLedger !== session.ledger) {
+    const reader = createWorkspaceViewReader(session.ledger);
+    viewReader = reader; viewLedger = session.ledger;
+  }
+  view = viewReader.view({ accountId: $('account-filter').value, month: $('month-filter').value, query: $('transaction-search').value, reviewOnly: $('review-only').checked, page });
   page = view.page;
   addOptions($('account-filter'), view.accounts.map(a => [a.accountId, a.displayName]), view.scope.accountId, 'All accounts');
   const months = view.scope.month && !view.months.includes(view.scope.month) ? [view.scope.month, ...view.months] : view.months;
@@ -120,6 +153,7 @@ function render({ reset = false } = {}) {
   $('coverage-summary').textContent = `${view.coverage.importCount} import runs. Latest source activity: ${view.coverage.latestActivityDate || 'unavailable'}. Coverage has not been reconciled. Imported dates do not prove complete history.`;
   $('transaction-count').textContent = String(view.totalCount);
   $('filter-count').textContent = `${view.filteredCount} matching activities of ${view.totalCount} in this account and period. Search and review filters do not change totals.`;
+  reviewButtons.clear();
   $('transaction-rows').replaceChildren();
   for (const row of view.rows) {
     const tr = node('tr'), description = node('td');
@@ -128,6 +162,8 @@ function render({ reset = false } = {}) {
     classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', row.categoryId || 'No category', 'transaction-detail'));
     if (row.needsReview) classification.append(node('small', 'Needs review: ' + row.reviewReasons.map(reviewReason).join(', '), 'transaction-detail'));
     const inspect = node('button', 'Review', 'text-button'); inspect.type = 'button'; inspect.setAttribute('aria-label', `Review ${row.sourceDescription} on ${row.reportingDate || 'unknown date'}`);
+    reviewButtons.set(row.activityId, inspect);
+    inspect.setAttribute('aria-controls', 'activity-detail');
     inspect.addEventListener('click', () => { if (!busy) showDetail(row.activityId); });
     const actionCell = node('td'); actionCell.append(inspect);
     tr.append(node('td', row.reportingDate || 'Unknown date'), description, classification, node('td', money(row.amountText, row.currency)), actionCell);
@@ -138,10 +174,11 @@ function render({ reset = false } = {}) {
   $('transaction-table-wrap').hidden = !view.filteredCount;
   $('page-status').textContent = `Page ${view.page + 1} of ${view.pages}`;
   $('review-summary').textContent = `${view.review.activityCount} activities need review in this account and period. ${view.review.sourceCount} source observations await a decision. Unknown investment activity remains excluded from known totals.`;
+  reviewQueueButton = null;
   $('review-queue').replaceChildren();
   if (view.review.activityCount) {
     const reviewButton = node('button', `Show ${view.review.activityCount} activities needing review`);
-    reviewButton.type = 'button';
+    reviewButton.type = 'button'; reviewQueueButton = reviewButton;
     reviewButton.addEventListener('click', () => {
       if (busy) return;
       $('review-only').checked = true; $('transaction-search').value = ''; page = 0; render();
@@ -149,7 +186,7 @@ function render({ reset = false } = {}) {
     });
     $('review-queue').append(reviewButton);
   }
-  if (view.sourceReviews.length > 10) $('review-queue').append(node('p', `Showing 10 of ${view.sourceReviews.length} unresolved source observations. Open the advanced import workbench for the full queue.`));
+  if (view.review.sourceCount) $('review-queue').append(node('p', `Showing ${Math.min(10, view.review.sourceCount)} of ${view.review.sourceCount} unresolved source observations in this account and period. Search does not filter this queue. Open the advanced import workbench for the full queue.`));
   for (const observation of view.sourceReviews.slice(0, 10)) {
     const item = node('article', undefined, 'review-item');
     item.append(node('h3', observation.sourceDescription || 'Unresolved source observation', 'review-title'), node('p', `${observation.accountName || ''} · ${label(observation.reasonCode)}`, 'review-meta'));
@@ -229,14 +266,14 @@ action('reopen-ledger', 'Reopening and verifying saved records. No new financial
   await session.reopen(); render({ reset: true }); announce('Saved records reopened and verified.', 'success');
 });
 action('release-ledger', 'Closing and verifying the storage session.', async () => {
-  if (session.dirty && !window.confirm('Close the storage session without saving? Your draft stays in this tab only. Reconnecting will require reopening saved records.')) return;
+  if (session.dirty && !window.confirm('Close the storage session without saving? Your draft stays in this tab only. Reconnecting will require reopening saved records.')) { announce('Release cancelled. Your local draft and session are unchanged.'); return; }
   await session.release(); announce('Storage session closed and verified. The last loaded records remain read-only in this tab.', 'success');
 });
 action('recover-ledger', 'Recovering the interrupted transaction. Your local draft stays in this tab.', async () => {
   await session.recover(); announce('Recovery finished. Reopen saved records to verify what was saved before making another change.');
 });
 action('recover-stale', 'Checking stale-session recovery.', async () => {
-  if (!window.confirm('Confirm every prior tab and device using this synthetic folder has stopped. Recover this stale session?')) return;
+  if (!window.confirm('Confirm every prior tab and device using this synthetic folder has stopped. Recover this stale session?')) { announce('Recovery cancelled. The stopped session has not been recovered.'); return; }
   await session.recover({ stale: true }); announce('Session recovered. Reopen saved records before editing.');
 });
 action('stage-correction', 'Checking your correction locally.', async () => {
@@ -245,16 +282,24 @@ action('stage-correction', 'Checking your correction locally.', async () => {
   announce(session.mode === 'preview' ? 'Correction added to this local preview only. Source evidence is unchanged.' : 'Correction staged locally. Source evidence is unchanged. Choose Save changes to persist it.', 'success');
 });
 $('correction-form').addEventListener('submit', event => event.preventDefault());
-$('close-detail').addEventListener('click', () => { $('activity-detail').hidden = true; selectedActivity = null; $('transaction-search').focus(); refresh(); });
+$('close-detail').addEventListener('click', () => {
+  if (busy) return;
+  $('activity-detail').hidden = true;
+  (reviewButtons.get(selectedActivity) || $('transaction-search')).focus();
+  selectedActivity = null; refresh();
+});
 $('correction-type').addEventListener('change', correctionFields);
 $('correction-rationale').addEventListener('input', refresh);
-for (const id of ['account-filter', 'month-filter', 'review-only']) $(id).addEventListener('change', () => { page = 0; render(); });
-$('transaction-search').addEventListener('input', () => { page = 0; render(); });
+for (const id of ['account-filter', 'month-filter', 'review-only']) $(id).addEventListener('change', () => { if (!busy) { page = 0; render(); } });
+$('transaction-search').addEventListener('input', scheduleSearch);
+$('transaction-search').addEventListener('compositionstart', () => { composingSearch = true; cancelSearch(); });
+$('transaction-search').addEventListener('compositionend', () => { composingSearch = false; scheduleSearch(); });
 $('previous-page').addEventListener('click', () => { if (!busy && page > 0) { page--; render(); } });
 $('next-page').addEventListener('click', () => { if (!busy && view && page + 1 < view.pages) { page++; render(); } });
 window.addEventListener('beforeunload', event => { if (busy || session.dirty) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('offline', () => { session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
+refresh();
 storage.prepare().then(() => { configured = true; refresh(); }).catch(() => {
   $('connection-status').textContent = 'Google configuration is unavailable. Local preview still works. Use a configured deployment to open saved copies.'; refresh();
 });

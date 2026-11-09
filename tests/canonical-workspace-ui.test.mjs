@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
-import {createWorkspaceView, getWorkspaceActivity} from '../js/canonical-workspace-model.mjs';
+import {createWorkspaceViewReader, getWorkspaceActivity} from '../js/canonical-workspace-model.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {CanonicalLedgerStore, serializePackedCanonicalLedger} from '../js/canonical-ledger-storage.mjs';
-import {registerAccount} from '../js/canonical-import.mjs';
-import {replayFixture} from './helpers/ledger-replay-fixtures.mjs';
+import {registerAccount, prepareCanonicalImport, applyReviewDecision} from '../js/canonical-import.mjs';
+import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
 import {pageController, deferred} from './helpers/page-controller.mjs';
 
 const recipe = await createSyntheticFinancialYear();
@@ -13,17 +14,21 @@ const text = element => [element.textContent, ...element.children.map(text)].joi
 
 async function workspacePage({ledger = recipe.ledger} = {}) {
   const state = {connects:[],writes:0,snapshotReads:0,releases:0,recovers:0,connectionError:null,saveGate:null,readbackGate:null,
-    loseResponse:false,failSave:false,releaseVerified:true};
+    loseResponse:false,failSave:false,releaseVerified:true,snapshotError:false,recoveryGate:null};
   const manifest = {syntheticOnly:true,databaseId:'invented-ui-db',copyId:'invented-ui-copy',revision:1,snapshot:{}};
   const objects = Object.fromEntries([...serializePackedCanonicalLedger(ledger)].map(([path, value]) => [path,new TextEncoder().encode(value)]));
   for (const path of Object.keys(objects)) manifest.snapshot[path] = 'invented-hash';
   let storage, session, browserNavigator;
+  const timeouts = new Map();
+  const timers = { setTimeout(callback, delay) { timeouts.set(callback, delay); return callback; }, clearTimeout(callback) { timeouts.delete(callback); } };
+  const flushSearch = async () => { const callbacks = [...timeouts.keys()]; timeouts.clear(); for (const callback of callbacks) await callback(); };
   const lifecycle = {
     state:'ready',acceptingWrites:true,coordinator:{canWrite:true},folderId:'invented-ui-folder',
     async readManifest() { return structuredClone(manifest); },
     async readObject(path) { return objects[path]; },
     async readVerifiedSnapshot() {
       state.snapshotReads++;
+      if (state.snapshotError) throw Object.assign(new Error('Private provider body'), {code:'snapshot-unavailable'});
       if (manifest.revision > 1 && state.readbackGate) await state.readbackGate.promise;
       return {manifest:structuredClone(manifest),objects:structuredClone(objects)};
     },
@@ -43,7 +48,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       }
     },
     async recover() {
-      state.recovers++; lifecycle.state = 'ready'; lifecycle.acceptingWrites = true;
+      state.recovers++; if (state.recoveryGate) await state.recoveryGate.promise; lifecycle.state = 'ready'; lifecycle.acceptingWrites = true;
       storage.options.onStatus({state:'ready'});
     },
   };
@@ -69,15 +74,15 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     constructor(options) { super({...options, online:() => browserNavigator?.onLine !== false}); session = this; }
   }
   const page = await pageController('canonical-workspace', {DashboardSyntheticStorage:Storage,
-    CanonicalWorkspaceSession:BrowserSession, createWorkspaceView,getWorkspaceActivity,createSyntheticFinancialYear,TypeError},
-  {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs'});
+    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,createSyntheticFinancialYear,TypeError},
+  {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs',timers});
   browserNavigator = page.navigator;
-  return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,
+  return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,timeouts,flushSearch,
     summary:() => text(page.get('summary-cards')),
-    async search(value) { page.get('transaction-search').value = value; await page.get('transaction-search').emit('input'); },
+    async search(value) { page.get('transaction-search').value = value; await page.get('transaction-search').emit('input'); await flushSearch(); },
     async detail(description = 'INVENTED UTILITY') {
       await page.choose('month-filter', '2025-01');
-      page.get('transaction-search').value = description; await page.get('transaction-search').emit('input');
+      page.get('transaction-search').value = description; await page.get('transaction-search').emit('input'); await flushSearch();
       const row = page.get('transaction-rows').children[0]; assert.ok(row, 'Expected an activity row');
       await row.children.at(-1).children[0].click();
     },
@@ -87,6 +92,13 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       page.get('correction-rationale').value = 'Invented corrected utility receipt';
       await page.get('correction-rationale').emit('input');
       await page.click('stage-correction');
+    },
+    replaceSavedLedger(next) {
+      for (const path of Object.keys(objects)) delete objects[path];
+      manifest.snapshot = {}; manifest.revision++;
+      for (const [path, value] of serializePackedCanonicalLedger(next)) {
+        objects[path] = new TextEncoder().encode(value); manifest.snapshot[path] = 'invented-hash';
+      }
     },
     async storedLedger() { return new CanonicalLedgerStore({lifecycle}).load(); },
   };
@@ -338,7 +350,7 @@ test('invalid classification preserves the current graph and reports no staged c
   assert.equal(h.state.writes, 0);
   await h.click('close-detail');
   assert.equal(h.get('activity-detail').hidden, true);
-  assert.equal(h.observed.focused, h.get('transaction-search'));
+  assert.equal(h.observed.focused, h.get('transaction-rows').children[0].children.at(-1).children[0]);
 });
 
 test('a positive spending correction stays visible in review with its financial exclusion explained', async () => {
@@ -350,5 +362,186 @@ test('a positive spending correction stays visible in review with its financial 
   assert.match(text(h.get('transaction-rows')), /Needs review:/);
   assert.match(h.summary(), /\$2,311\.25/);
   assert.equal(h.modelSession.dirty, true);
+  assert.equal(h.state.writes, 0);
+});
+
+test('cancelled reopening explicitly announces cancellation without suggesting ongoing work', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
+  h.observed.confirm = false;
+  h.get('transaction-search').value = 'nothing matches'; await h.get('transaction-search').emit('input');
+  await h.click('reopen-ledger');
+  assert.equal(h.timeouts.size, 0);
+  assert.equal(h.get('transaction-rows').children.length, 0);
+  assert.match(h.get('action-status').textContent, /cancelled/i);
+  assert.doesNotMatch(h.get('action-status').textContent, /Reopening and verifying/);
+  assert.equal(h.modelSession.dirty, true);
+  assert.equal(h.intervals.size, 0);
+});
+
+test('recovery controls are disabled offline and reject manually dispatched clicks', async () => {
+  const h = await workspacePage(); await h.click('open-ledger');
+  h.lifecycle.state = 'recovery-required'; h.lifecycle.acceptingWrites = false;
+  h.navigator.onLine = false; await h.event('offline');
+  assert.equal(h.get('recover-ledger').disabled, true);
+  await h.get('recover-ledger').emit('click');
+  assert.equal(h.state.recovers, 0);
+  h.lifecycle.state = 'stale-session'; await h.event('offline');
+  assert.equal(h.get('recover-stale').disabled, true);
+  await h.get('recover-stale').emit('click');
+  assert.equal(h.state.recovers, 0);
+});
+
+test('unknown provider error codes cannot echo identifiers into the workspace status', async () => {
+  const h = await workspacePage();
+  h.state.connectionError = 'private-provider-account-identifier';
+  await h.click('open-ledger');
+  assert.equal(h.get('action-status').dataset.kind, 'error');
+  assert.doesNotMatch(h.get('action-status').textContent, /private-provider-account-identifier/);
+  assert.match(h.get('action-status').textContent, /Action did not complete/);
+});
+
+test('typing coalesces into one search and respects composition without changing financial totals', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  const summary = h.summary(), rows = h.get('transaction-rows').children;
+  for (const value of ['u', 'ut', 'util', 'utility']) {
+    h.get('transaction-search').value = value; await h.get('transaction-search').emit('input');
+  }
+  assert.equal(h.timeouts.size, 1);
+  assert.equal([...h.timeouts.values()][0], 120);
+  assert.equal(h.get('transaction-rows').children, rows);
+  await h.flushSearch();
+  assert.equal(h.get('transaction-rows').children.length, 12);
+  assert.equal(h.summary(), summary);
+  await h.get('transaction-search').emit('compositionstart');
+  h.get('transaction-search').value = 'unmatched invented'; await h.get('transaction-search').emit('input');
+  assert.equal(h.timeouts.size, 0);
+  assert.equal(h.get('transaction-rows').children.length, 12);
+  await h.get('transaction-search').emit('compositionend');
+  assert.equal(h.timeouts.size, 1); await h.flushSearch();
+  assert.equal(h.get('transaction-rows').children.length, 0);
+  assert.equal(h.summary(), summary);
+});
+
+test('account and period selections consume the latest pending search without a delayed stale render', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  h.get('transaction-search').value = 'utility'; await h.get('transaction-search').emit('input');
+  await h.choose('month-filter', '2025-01');
+  assert.equal(h.timeouts.size, 0);
+  assert.equal(h.get('transaction-rows').children.length, 1);
+  assert.match(h.summary(), /\$2,471\.25/);
+  await h.flushSearch();
+  assert.equal(h.get('transaction-rows').children.length, 1);
+  await h.choose('account-filter', recipe.accounts.investment);
+  assert.equal(h.get('transaction-rows').children.length, 0);
+  assert.equal((h.summary().match(/Unavailable/g) || []).length, 3);
+});
+
+test('filter changes preserve staged draft and a failed reopen preserves the last visible financial view', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
+  const proposal = structuredClone(h.modelSession.ledger);
+  await h.search(''); await h.choose('month-filter', ''); await h.click('next-page');
+  await h.choose('account-filter', recipe.accounts.card); await h.search('purchase');
+  assert.deepEqual(h.modelSession.ledger, proposal);
+  assert.equal(h.modelSession.dirty, true);
+  const summary = h.summary(), count = h.get('filter-count').textContent;
+  h.state.snapshotError = true; await h.click('reopen-ledger');
+  assert.deepEqual(h.modelSession.ledger, proposal);
+  assert.equal(h.summary(), summary);
+  assert.equal(h.get('filter-count').textContent, count);
+  assert.match(h.get('action-status').textContent, /Your staged changes remain/);
+  assert.equal(h.get('save-ledger').disabled, true);
+  assert.equal(h.get('stage-correction').disabled, true);
+  h.state.snapshotError = false; await h.click('reopen-ledger');
+  assert.deepEqual(h.modelSession.ledger, recipe.ledger);
+  assert.equal(h.modelSession.canEdit(), true);
+});
+
+test('pending operations disable review controls and ignore queued repeated actions', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
+  const inspect = h.get('transaction-rows').children[0].children.at(-1).children[0];
+  const selected = h.get('detail-title').textContent;
+  h.state.saveGate = deferred(); const pending = h.click('save-ledger');
+  await h.until(() => h.modelSession.busy);
+  assert.equal(inspect.disabled, true);
+  assert.equal(h.get('close-detail').disabled, true);
+  assert.equal(h.get('transactions').attributes['aria-busy'], 'true');
+  await inspect.emit('click'); await h.get('close-detail').emit('click');
+  await h.get('stage-correction').emit('click'); await h.get('release-ledger').emit('click');
+  assert.equal(h.get('activity-detail').hidden, false);
+  assert.equal(h.get('detail-title').textContent, selected);
+  assert.equal(h.state.releases, 0);
+  h.state.saveGate.resolve(); await pending;
+  assert.equal(h.state.writes, 1);
+  assert.equal(h.get('transactions').attributes['aria-busy'], 'false');
+});
+
+test('recovery keeps the draft and duplicate clicks cannot repeat recovery before verified reopen', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
+  const proposal = structuredClone(h.modelSession.ledger);
+  h.state.loseResponse = true; await h.click('save-ledger'); h.state.loseResponse = false;
+  h.state.recoveryGate = deferred(); const pending = h.click('recover-ledger');
+  await h.until(() => h.state.recovers === 1);
+  await h.get('recover-ledger').emit('click'); await h.get('reopen-ledger').emit('click');
+  assert.equal(h.state.recovers, 1);
+  assert.deepEqual(h.modelSession.ledger, proposal);
+  h.state.recoveryGate.resolve(); await pending;
+  assert.equal(h.get('stage-correction').disabled, true);
+  assert.equal(h.get('save-ledger').disabled, true);
+  assert.deepEqual(h.modelSession.ledger, proposal);
+  await h.click('reopen-ledger');
+  assert.equal(h.modelSession.canEdit(), true);
+  assert.deepEqual(h.modelSession.ledger, proposal);
+  assert.equal(h.state.writes, 1);
+});
+
+test('closing detail returns keyboard focus to its review button, or search if that row was filtered out', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.detail();
+  assert.equal(h.observed.focused, h.get('detail-title'));
+  const review = h.get('transaction-rows').children[0].children.at(-1).children[0];
+  assert.equal(review.attributes['aria-controls'], 'activity-detail');
+  await h.click('close-detail'); assert.equal(h.observed.focused, review);
+  await h.detail(); await h.search('no results'); await h.click('close-detail');
+  assert.equal(h.observed.focused, h.get('transaction-search'));
+});
+
+test('workspace status and paging markup expose atomic announcements and labelled correction context', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  for (const id of ['action-status', 'filter-count', 'page-status']) {
+    const tag = html.match(new RegExp(`<[^>]+id="${id}"[^>]*>`))[0];
+    assert.match(tag, /role="status"/); assert.match(tag, /aria-live="polite"/); assert.match(tag, /aria-atomic="true"/);
+  }
+  assert.match(html, /id="correction-form"[^>]+aria-describedby="correction-help"/);
+  assert.match(html, /id="transaction-table-wrap"[^>]+tabindex="0"[^>]+aria-label=/);
+});
+
+test('unresolved source preview reports full scoped count and refreshes after resolved records reopen', async () => {
+  let {ledger, options} = replayFixture();
+  const account = ledger.accounts[0];
+  const invalid = Array.from({length:13}, (_, index) => replayRow(index, {
+    valid:false, errorCode:'invented-missing-evidence', effectiveDate:index < 12 ? '2026-01-15' : '2026-02-15'
+  }));
+  ledger = prepareCanonicalImport(ledger, replayInput(account, invalid, 'invented-review-preview'), options).ledger;
+  ledger = registerAccount(ledger, {institutionId:'sofi',displayName:'Invented second account',currency:'USD',accountType:'checking'}, options);
+  const emptyAccount = ledger.accounts.at(-1).accountId;
+  const h = await workspacePage({ledger}); await h.click('open-ledger'); await h.choose('month-filter', '2026-01');
+  assert.match(h.get('review-summary').textContent, /12 source observations await a decision/);
+  assert.match(text(h.get('review-queue')), /Showing 10 of 12 unresolved source observations in this account and period/);
+  assert.equal(h.get('review-queue').children.filter(item => item.tagName === 'ARTICLE').length, 10);
+  assert.equal(h.get('transaction-count').textContent, '1');
+  await h.search('nothing matches');
+  assert.match(text(h.get('review-queue')), /Showing 10 of 12/);
+  assert.match(text(h.get('review-queue')), /Search does not filter this queue/);
+  await h.choose('month-filter', '2026-02');
+  assert.match(h.get('review-summary').textContent, /1 source observations await a decision/);
+  assert.equal(h.get('review-queue').children.filter(item => item.tagName === 'ARTICLE').length, 1);
+  await h.choose('account-filter', emptyAccount);
+  assert.match(h.get('review-summary').textContent, /0 source observations await a decision/);
+  assert.equal(h.get('review-queue').children.length, 0);
+  const rejected = ledger.observations.find(item => item.disposition === 'rejected');
+  ledger = applyReviewDecision(ledger, {observationId:rejected.observationId, action:'reject', rationale:'Invented decision from advanced workbench'}, options);
+  h.replaceSavedLedger(ledger); await h.click('reopen-ledger'); await h.choose('month-filter', '2026-01');
+  assert.match(h.get('review-summary').textContent, /11 source observations await a decision/);
+  assert.match(text(h.get('review-queue')), /Showing 10 of 11/);
+  assert.equal(h.modelSession.ledger.activities.length, 1);
   assert.equal(h.state.writes, 0);
 });

@@ -59,17 +59,8 @@ function countBy(records, key) {
   return counts;
 }
 
-/** Read-only presentation of the validated canonical graph.
- * Account/month select the financial scope. Search/review select display rows.
- * Summary values are exact decimal strings from the canonical report engine.
- * Refunds use their posting month; an unknown posting month stays visible.
- */
-export function createWorkspaceView(ledger, {accountId = '', month = '', query = '', reviewOnly = false, page = 0, pageSize = 25} = {}) {
-  // This API validates the full graph and projects its append-only history.
-  const effective = getEffectiveActivities(ledger);
-  if (typeof accountId !== 'string' || typeof query !== 'string' || typeof reviewOnly !== 'boolean' ||
-      !Number.isSafeInteger(page) || page < 0 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500) fail('invalid-workspace-options');
-  if (month !== '') monthBounds(month);
+/** Calculate only when the validated snapshot or financial scope changes. */
+function buildWorkspaceScope(ledger, effective, {accountId, month}) {
   const accountsById = new Map(ledger.accounts.map(account => [account.accountId, account]));
   if (accountId && !accountsById.has(accountId)) fail('unknown-account');
   const accountIds = accountId ? [accountId] : ledger.accounts.map(account => account.accountId);
@@ -99,18 +90,8 @@ export function createWorkspaceView(ledger, {accountId = '', month = '', query =
   const eventCounts = countBy(ledger.events, 'activityId');
   const scopedRows = scopedActivities.filter(activity => inPeriod(reportingDate(activity)))
     .map(activity => rowFor(activity, accountsById, observationCounts, eventCounts, exclusions));
-  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const matches = row => {
-    const text = [row.sourceDescription, row.normalizedDescription, row.accountName, row.categoryId,
-      row.activityKind, row.lifecycleStatus, row.sourceAction, row.securitySymbol, row.currency,
-      row.effectiveDate, row.postedDate].filter(value => typeof value === 'string').join(' ').toLowerCase();
-    return terms.every(term => text.includes(term));
-  };
-  const filtered = scopedRows.filter(row => (!reviewOnly || row.needsReview) && matches(row));
-  filtered.sort((a, b) => (b.reportingDate ?? b.effectiveDate).localeCompare(a.reportingDate ?? a.effectiveDate) ||
+  scopedRows.sort((a, b) => (b.reportingDate ?? b.effectiveDate).localeCompare(a.reportingDate ?? a.effectiveDate) ||
     a.activityId.localeCompare(b.activityId));
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  page = Math.min(page, pages - 1);
   const summaryAvailability = Object.fromEntries(summary.map(report => {
     const excluded = new Set(report.excluded.map(value => value.activityId));
     const eligible = scopedActivities.filter(activity => {
@@ -144,9 +125,9 @@ export function createWorkspaceView(ledger, {accountId = '', month = '', query =
     'Declared coverage is not reconciled. This workspace does not upload or maintain original source files; row evidence is preserved.',
   ];
   if (!summary.length) qualifications.unshift('No dated coverage is available, so financial totals are unavailable.');
-  return structuredClone({accounts:ledger.accounts, months:[...months].sort().reverse(),
-    rows:filtered.slice(page * pageSize, (page + 1) * pageSize), totalCount:scopedRows.length,
-    filteredCount:filtered.length, page, pages, pageSize, summary, summaryAvailability, scope:{accountId, month, start, end, accountIds},
+  return {accounts:ledger.accounts, months:[...months].sort().reverse(),
+    rows:scopedRows, totalCount:scopedRows.length,
+    summary, summaryAvailability, scope:{accountId, month, start, end, accountIds},
     coverage:{imports, importCount:imports.length, needsReviewImportCount:imports.filter(run => run.status === 'needs-review').length,
       latestImportAt:newest(selectedImports.flatMap(run => [run.completedAt, ...run.retryAttempts.map(attempt => attempt.completedAt)])),
       latestActivityDate:newest(scopedActivities.map(activity => activity.effectiveDate)),
@@ -155,7 +136,57 @@ export function createWorkspaceView(ledger, {accountId = '', month = '', query =
     review:{activityCount:scopedRows.filter(row => row.needsReview).length, sourceCount:sourceReviews.length,
       unknownClassificationCount:scopedRows.filter(row => row.reviewReasons.includes('unclassified-activity')).length,
       unknownLifecycleCount:scopedRows.filter(row => row.reviewReasons.includes('unknown-lifecycle')).length},
-    sourceReviews, qualifications});
+    sourceReviews, qualifications};
+}
+
+function workspaceOptions({accountId = '', month = '', query = '', reviewOnly = false, page = 0, pageSize = 25} = {}) {
+  if (typeof accountId !== 'string' || typeof query !== 'string' || typeof reviewOnly !== 'boolean' ||
+      !Number.isSafeInteger(page) || page < 0 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500) fail('invalid-workspace-options');
+  if (month !== '') monthBounds(month);
+  return {accountId, month, query, reviewOnly, page, pageSize};
+}
+
+const searchableText = row => [row.sourceDescription, row.normalizedDescription, row.accountName, row.categoryId,
+  row.activityKind, row.lifecycleStatus, row.sourceAction, row.securitySymbol, row.currency,
+  row.effectiveDate, row.postedDate].filter(value => typeof value === 'string').join(' ').toLowerCase();
+
+/** A reader owns a defensive snapshot, never a cache over a caller's mutable graph.
+ * Create a new reader after open, correction, save or verified reopen. Its private,
+ * single-scope cache is bounded: changing account/month replaces the prior scope.
+ * Search/review/pagination reuse reports but cannot change their financial scope.
+ * Every result is detached so UI mutation cannot poison subsequent reads.
+ */
+export function createWorkspaceViewReader(ledger) {
+  const snapshot = structuredClone(ledger);
+  const effective = getEffectiveActivities(snapshot); // validate before any cache can be used
+  let cached = null;
+  let searchTexts = null;
+  return Object.freeze({view(options) {
+    const selection = workspaceOptions(options);
+    const {accountId, month, query, reviewOnly, pageSize} = selection;
+    if (!cached || cached.scope.accountId !== accountId || cached.scope.month !== month) {
+      cached = buildWorkspaceScope(snapshot, effective, {accountId, month});
+      searchTexts = cached.rows.map(searchableText);
+    }
+    return selectWorkspaceRows(cached, searchTexts, selection);
+  }});
+}
+
+function selectWorkspaceRows(scope, searchTexts, {query, reviewOnly, page:requestedPage, pageSize}) {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const filtered = scope.rows.filter((row, i) => (!reviewOnly || row.needsReview) && terms.every(term => searchTexts[i].includes(term)));
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = Math.min(requestedPage, pages - 1);
+  return structuredClone({...scope, rows:filtered.slice(page * pageSize, (page + 1) * pageSize),
+    filteredCount:filtered.length, page, pages, pageSize});
+}
+
+/** Safe one-shot read for callers that do not retain a snapshot reader. */
+export function createWorkspaceView(ledger, options) {
+  const effective = getEffectiveActivities(ledger);
+  const selection = workspaceOptions(options);
+  const scope = buildWorkspaceScope(ledger, effective, selection);
+  return selectWorkspaceRows(scope, scope.rows.map(searchableText), selection);
 }
 
 /** Fetch provenance only when an activity detail is opened. */

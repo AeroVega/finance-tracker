@@ -38,6 +38,43 @@ A failed or uncertain save keeps the local proposal but blocks saving it again. 
 
 The page requests an unload warning during work or while a draft is unsaved. Mobile browsers do not guarantee that warning. Keep the tab open until verification completes and release the session before moving to another device or tool.
 
+## Pre-acceptance quality pass
+
+**Implemented, synthetic-only:** the workspace now retains a private defensive snapshot reader for the current loaded ledger. Financial reports, sorted rows and searchable text are reused only while the account and month remain the same. Search, review-only filtering and pagination do not recalculate the financial reports. Switching account or month replaces the single cached scope; opening, correcting, saving or verified reopening replaces the reader because the session supplies a new ledger object. Returned views are detached from the cache. The one-shot model API still validates and computes a fresh result.
+
+Search waits 120 ms after typing stops and respects text composition. Scope changes and completed corrections render immediately. This is a small typing-coalescing delay, not a performance acceptance threshold. Initial graph validation, snapshot creation and account/month report calculation still scale with the loaded history. This optimization adds an in-memory defensive snapshot and a single scope cache; it is not a new persistence format or an unlimited multi-period cache.
+
+The source review count covers every unresolved observation in the selected account and period. The page explicitly labels its ten-item preview as a preview of that count. Search does not filter the source queue. Unknown-date observations stay visible in any selected month rather than disappearing; resolved observations disappear after verified reopening. Resolution remains in the advanced import workbench, and a view never creates financial activities.
+
+Cancellation now reports cancellation rather than leaving an operation-in-progress message. Recovery controls are disabled offline, dynamic review controls expose their busy state, arbitrary provider error text is not echoed, and closing transaction detail returns keyboard focus to its visible Review button (or search if the row is no longer displayed). Page and filter status messages are atomic live announcements.
+
+No canonical engine, ledger contract, monetary calculation, audit record, session protocol, storage format, deployment workflow or production permission changes are part of this pass. The existing v1/v2/v3 save/reopen tests remain required. Physical Safari, live Google behavior and mobile memory capacity remain owner acceptance work.
+
+### Automated evidence for the quality pass
+
+**Verified:** the deterministic scale fixture contains 3,000 activities across four accounts and USD/EUR, 3,400 events including 400 amount corrections, and 320 unresolved observations. Tests assert independently expected exact totals, compare scoped reports with the canonical engine, exercise repeated filtering and pagination, reject corrupt input, isolate caller/result mutations, and verify that resolved observations disappear without adding activities.
+
+The controller regressions cover cancelled actions, failed and uncertain saves, repeated actions while pending, draft preservation, search after corrections, recovery followed by verified reopening, offline control gating, safe errors, focus restoration and accessible status markup. The small simulated DOM does not establish Safari compatibility.
+
+A separate local Chromium run exercised the real page and canonical engines with an invented in-memory storage service. It passed at 1440×1000, 820×1180, 1180×820, 390×844 and 320×740. Search preserved totals; staged corrections survived a deliberately lost save response, recovery and verified reopen; repeated actions made one write; no page errors or horizontal document overflow occurred. This did not contact Google or test a physical device.
+
+### Measured model cost
+
+**Verified locally on Node 24.22.1:** four interleaved baseline/current runs of the fixture above, after the full test suites finished. The baseline is PR32 commit `ef1c85157ef80d8ccf0c3b79514bf97b28516457`. Values below are median milliseconds. The script measures model work, not DOM rendering, Drive, physical Safari or whole-app latency. Fixture construction is excluded.
+
+| Operation | Baseline | Snapshot reader | Reduction |
+| --- | ---: | ---: | ---: |
+| Search within the loaded scope | 225.36 | 8.92 | 96.0% |
+| Next page within the same search | 223.15 | 4.97 | 97.8% |
+| Change month | 212.85 | 104.04 | 51.1% |
+| Change account | 187.22 | 86.73 | 53.7% |
+
+Cold opening is a tradeoff. Creating the defensive reader and its first scope took a combined median **287.28 ms**, compared with **226.76 ms** for the original one-shot first view. The snapshot adds memory and setup cost so later presentation changes can avoid financial reconstruction. This pass does not claim faster startup, constant-time history loading or lower Drive latency. The single-scope cache bounds retained report copies, but total memory still grows with loaded history.
+
+Reproduce with `node tests/benchmark-canonical-workspace-view.mjs --baseline-ref ef1c85157ef80d8ccf0c3b79514bf97b28516457`. There is no wall-clock pass/fail threshold.
+
+**Verified automated validation:** final full suites on Node 24.22.1 and 26.13.0 each passed **1,025/1,025**, with zero failures, cancellations or skips. The 63 focused workspace model/session/controller/scale tests passed separately on Node 24.22.1. Syntax checks passed for all 149 JavaScript modules under `js`, `prototype` and `tests`; changed-document links and `git diff --check` passed. Independent standards and specification reviews found no remaining blocker.
+
 ## Validation and owner acceptance
 
 **Open:** the new main-app flow has not been accepted on physical iPad/iPhone Safari or live Drive. PR30's nine owner-reported iPad passes apply to the PR30 tested commit only, not this change. Partial iPhone testing does not establish complete iPhone coverage.

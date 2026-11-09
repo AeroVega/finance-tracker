@@ -6,7 +6,7 @@ import vm from 'node:vm';
 // supplied explicitly: financial code stays real; browser/service seams vary.
 // This checks handlers, not layout, native browser permissions or live Google.
 export async function pageController(name, imports, { source = 'a'.repeat(40), session = new Map(),
-  htmlPath = `prototype/${name}.html`, scriptPath = `prototype/${name}.mjs` } = {}) {
+  htmlPath = `prototype/${name}.html`, scriptPath = `prototype/${name}.mjs`, timers = {setTimeout, clearTimeout} } = {}) {
   const html = await readFile(new URL(`../../${htmlPath}`, import.meta.url), 'utf8');
   const script = await readFile(new URL(`../../${scriptPath}`, import.meta.url), 'utf8');
   const nodes = new Map(), listeners = new Map(), intervals = new Set();
@@ -54,7 +54,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
     window, navigator, confirm: window.confirm, crypto, structuredClone, URL, Blob, TextEncoder, TextDecoder, Uint8Array,
     sessionStorage: { getItem: key => session.get(key) ?? null, setItem(key, value) { if (observed.storageFailure) throw new Error('Invented storage refusal'); session.set(key, value); }, removeItem: key => session.delete(key) },
     setInterval(callback) { intervals.add(callback); return callback; }, clearInterval: callback => intervals.delete(callback),
-    setTimeout, clearTimeout, fetch() { throw new Error('Network is forbidden in controller tests'); } };
+    setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout, fetch() { throw new Error('Network is forbidden in controller tests'); } };
   vm.runInNewContext(executable, context, { filename: `${name}.mjs` });
   await new Promise(setImmediate);
   return {
