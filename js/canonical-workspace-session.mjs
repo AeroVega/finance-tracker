@@ -1,5 +1,6 @@
 import { CanonicalLedgerStore } from './canonical-ledger-storage.mjs';
 import { applyFinancialEvent, validateLedger } from './canonical-import.mjs';
+import { canonicalizeJcs } from './transaction-protocol.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
@@ -89,6 +90,67 @@ export class CanonicalWorkspaceSession {
     this.ledger = applyFinancialEvent(this.ledger, command);
     this.dirty = true;
     return this.ledger;
+  }
+
+  linkTransfer({ outgoingActivityId, counterpartyActivityId, rationale }) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    if (typeof rationale !== 'string' || !rationale.trim()) fail('transfer-link-rationale-required');
+    this.ledger = applyFinancialEvent(this.ledger, {
+      activityId: outgoingActivityId,
+      type: 'transfer-link',
+      counterpartyActivityId,
+      commandId: crypto.randomUUID(),
+      evidence: { rationale: rationale.trim() }
+    });
+    this.dirty = true;
+    return this.ledger;
+  }
+
+  async savePreviewToNewCopy() {
+    if (this.mode !== 'preview' || !this.ledger || this.busy || this.unverified || this.storage.lifecycle) {
+      fail('verified-preview-required');
+    }
+    validateLedger(this.ledger);
+    if (this.ledger.syntheticOnly !== true) fail('synthetic-data-required');
+    const proposal = structuredClone(this.ledger);
+    return this.operation(async () => {
+      let store = null;
+      try {
+        await this.storage.connect({ requireEmpty: true });
+        const lifecycle = this.storage.lifecycle;
+        if (!this.ready() || !lifecycle) fail('reconnect-required');
+        const genesis = await lifecycle.readManifest();
+        if (genesis.syntheticOnly !== true || genesis.revision !== 0 ||
+            genesis.catalogFinalizationPending !== null || Object.keys(genesis.snapshot || {}).length !== 0) {
+          fail('new-empty-folder-required');
+        }
+        store = new CanonicalLedgerStore({ lifecycle, layout: 'fragments-v3' });
+        const existing = await store.load();
+        if (existing !== null || !store.base || canonicalizeJcs(store.base) !== canonicalizeJcs(genesis)) {
+          fail('new-empty-folder-required');
+        }
+        if (!this.ready() || lifecycle !== this.storage.lifecycle) fail('reconnect-required');
+        this.store = store;
+        this.needsReopen = true;
+        await store.save(proposal);
+        if (!this.ready() || lifecycle !== this.storage.lifecycle) fail('reconnect-required');
+        const verifier = new CanonicalLedgerStore({ lifecycle });
+        const reopened = await verifier.load();
+        if (!reopened || canonicalizeJcs(reopened) !== canonicalizeJcs(proposal)) fail('seed-readback-mismatch');
+        this.store = verifier;
+        this.ledger = reopened;
+        this.mode = 'saved';
+        this.dirty = false;
+        this.unverified = false;
+        this.needsReopen = false;
+        this.savedEventCount = reopened.events.length;
+        return reopened;
+      } catch (error) {
+        this.unverified = true;
+        this.needsReopen = true;
+        throw error;
+      }
+    });
   }
 
   async save() {
