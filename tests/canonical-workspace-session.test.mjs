@@ -205,8 +205,8 @@ test('transfer linking rejects amount mismatches, same-account pairs and non-tra
     commandId: 'invented-same-account-transfer', evidence: rationale
   }), { message: 'invalid-transfer-link' });
   const nonTransfer = recipe.ledger.activities.find(activity =>
-    activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED PAYROLL FIRST' &&
-    activity.effectiveDate === '2025-01-01');
+    activity.accountId === recipe.accounts.savings && activity.sourceDescription === 'INVENTED SAVINGS INTEREST' &&
+    activity.effectiveDate === '2025-01-28');
   assert.throws(() => applyFinancialEvent(recipe.ledger, {
     type: 'transfer-link', activityId: outgoing.activityId, counterpartyActivityId: nonTransfer.activityId,
     commandId: 'invented-nontransfer', evidence: rationale
