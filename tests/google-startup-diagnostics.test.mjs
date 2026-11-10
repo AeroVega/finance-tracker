@@ -23,7 +23,7 @@ async function withGoogleEnvironment({fetchImpl, windowImpl, now}, operation) {
 
 test("configuration fetch failure is identified as a deployment configuration problem", () => {
   const message = googleStartupMessage(googleStartupError("google-config-network", "private network detail"));
-  assert.match(message, /deployment configuration request failed/i);
+  assert.match(message, /deployment configuration could not be reached/i);
   assert.doesNotMatch(message, /Google browser libraries/i);
   assert.match(message, /Local preview still works/);
 });
