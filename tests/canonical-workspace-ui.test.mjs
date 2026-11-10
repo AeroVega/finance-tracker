@@ -6,7 +6,8 @@ import {createWorkspaceViewReader, getWorkspaceActivity} from '../js/canonical-w
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {googleStartupMessage} from '../js/google-startup-diagnostics.mjs';
 import {CanonicalLedgerStore, serializePackedCanonicalLedger} from '../js/canonical-ledger-storage.mjs';
-import {registerAccount, prepareCanonicalImport, applyReviewDecision} from '../js/canonical-import.mjs';
+import {registerAccount, prepareCanonicalImport, applyReviewDecision, getEffectiveActivities} from '../js/canonical-import.mjs';
+import {exactSignedDecimal} from '../js/import-reconciliation.mjs';
 import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
 import {pageController, deferred} from './helpers/page-controller.mjs';
 
@@ -75,7 +76,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     constructor(options) { super({...options, online:() => browserNavigator?.onLine !== false}); session = this; }
   }
   const page = await pageController('canonical-workspace', {DashboardSyntheticStorage:Storage,
-    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,createSyntheticFinancialYear,googleStartupMessage,TypeError},
+    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,createSyntheticFinancialYear,googleStartupMessage,TypeError},
   {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs',timers});
   browserNavigator = page.navigator;
   return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,timeouts,flushSearch,
