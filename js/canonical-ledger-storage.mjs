@@ -8,8 +8,26 @@ export const CANONICAL_PREFIX = "synthetic/canonical-v1/";
 export const CANONICAL_INDEX = CANONICAL_PREFIX + "index.json";
 export const CANONICAL_COLLECTIONS = Object.freeze({
   accounts: "accountId", imports: "importRunId", observations: "observationId",
-  activities: "activityId", events: "eventId", reviewDecisions: "reviewDecisionId"
+  activities: "activityId", events: "eventId", reviewDecisions: "reviewDecisionId", positionEvents: "eventId"
 });
+
+// Position history is optional so historical six-collection ledgers retain
+// their exact representation. If present it must be indexed, never metadata.
+const REQUIRED_COLLECTIONS = Object.keys(CANONICAL_COLLECTIONS).filter(name => name !== "positionEvents");
+function ledgerCollections(ledger) {
+  return Object.keys(CANONICAL_COLLECTIONS).filter(name => name !== "positionEvents" || Object.hasOwn(ledger, name));
+}
+function indexCollections(index) {
+  const collections = index?.collections;
+  if (!collections || typeof collections !== "object" || Array.isArray(collections) ||
+      REQUIRED_COLLECTIONS.some(name => !Object.hasOwn(collections, name)) ||
+      Object.keys(collections).some(name => !Object.hasOwn(CANONICAL_COLLECTIONS, name) || !Array.isArray(collections[name])) ||
+      !index.metadata || typeof index.metadata !== "object" || Array.isArray(index.metadata) ||
+      Object.keys(CANONICAL_COLLECTIONS).some(name => Object.hasOwn(index.metadata, name))) {
+    fail("invalid-canonical-index", "The canonical index has an invalid collection inventory or embedded collection metadata.");
+  }
+  return Object.keys(CANONICAL_COLLECTIONS).filter(name => Object.hasOwn(collections, name));
+}
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 function safeId(value) {
@@ -31,7 +49,8 @@ function canonicalIndex(ledger, objects = null) {
   if (ledger.syntheticOnly !== true) fail("synthetic-data-required", "Only invented canonical records may use this adapter.");
   const metadata = { ...ledger };
   const collections = {};
-  for (const [name, idField] of Object.entries(CANONICAL_COLLECTIONS)) {
+  for (const name of ledgerCollections(ledger)) {
+    const idField = CANONICAL_COLLECTIONS[name];
     if (!Array.isArray(ledger[name])) fail("invalid-ledger", "A canonical collection is missing.");
     const seen = new Set();
     collections[name] = ledger[name].map((record) => {
@@ -60,7 +79,7 @@ export function serializeFragmentedCanonicalLedger(ledger, previousRoot = null) 
   index.version = 3;
   index.groups = {};
   const objects = new Map();
-  for (const name of Object.keys(CANONICAL_COLLECTIONS)) {
+  for (const name of indexCollections(index)) {
     index.groups[name] = [];
     for (let offset = 0; offset < ledger[name].length; offset += CANONICAL_GROUP_RECORDS) {
       const path = groupPath(name, offset / CANONICAL_GROUP_RECORDS);
@@ -81,7 +100,7 @@ function validateFragmentedIndex(index) {
       !index.collections || !index.groups || typeof index.collections !== "object" || typeof index.groups !== "object") {
     fail("invalid-canonical-index", "The fragmented v3 logical index is invalid.");
   }
-  const names = Object.keys(CANONICAL_COLLECTIONS);
+  const names = indexCollections(index);
   if (Object.keys(index.collections).length !== names.length || Object.keys(index.groups).length !== names.length ||
       names.some(name => !Array.isArray(index.collections[name]) || !Array.isArray(index.groups[name]))) {
     fail("invalid-canonical-index", "The fragmented v3 group inventory is incomplete.");
@@ -98,7 +117,7 @@ function validateFragmentedIndex(index) {
 }
 
 function validateLegacyV3Index(index) {
-  const names = Object.keys(CANONICAL_COLLECTIONS);
+  const names = indexCollections(index);
   if (!index || index.format !== "finance-tracker-canonical-index" || index.version !== 2 ||
       index.syntheticOnly !== true || index.metadata?.syntheticOnly !== true ||
       Object.keys(index).sort().join(",") !== "chunks,collections,format,metadata,syntheticOnly,version" ||
@@ -144,10 +163,11 @@ function groupRecords(index, name, ordinal, value) {
 function validateIndex(index) {
   if (!index || index.format !== "finance-tracker-canonical-index" || index.version !== 1 ||
       index.syntheticOnly !== true || index.metadata?.syntheticOnly !== true ||
+      Object.keys(index).sort().join(",") !== "collections,format,metadata,syntheticOnly,version" ||
       !index.collections || typeof index.collections !== "object") {
     fail("invalid-canonical-index", "The canonical index is not a supported synthetic record set.");
   }
-  const names = Object.keys(CANONICAL_COLLECTIONS);
+  const names = indexCollections(index);
   if (Object.keys(index.collections).length !== names.length || names.some((name) => !Array.isArray(index.collections[name]))) {
     fail("invalid-canonical-index", "The canonical index has an invalid collection inventory.");
   }
@@ -192,7 +212,7 @@ function validateSnapshotObjects(objects, fragmented) {
   if (fragmented && index?.version === 2) {
     validateLegacyV3Index(index);
     Object.assign(ledger, index.metadata);
-    for (const name of Object.keys(CANONICAL_COLLECTIONS)) {
+    for (const name of indexCollections(index)) {
       ledger[name] = index.chunks[name].flatMap((path, ordinal) => {
         expected.add(path);
         return legacyV3GroupRecords(index, name, ordinal, read(path));
@@ -201,7 +221,7 @@ function validateSnapshotObjects(objects, fragmented) {
   } else if (fragmented && index?.version === 3) {
     validateFragmentedIndex(index);
     Object.assign(ledger, index.metadata);
-    for (const name of Object.keys(CANONICAL_COLLECTIONS)) {
+    for (const name of indexCollections(index)) {
       ledger[name] = index.groups[name].flatMap((path, ordinal) => {
         expected.add(path);
         return groupRecords(index, name, ordinal, read(path));
@@ -210,7 +230,8 @@ function validateSnapshotObjects(objects, fragmented) {
   } else {
     validateIndex(index);
     Object.assign(ledger, index.metadata);
-    for (const [name, idField] of Object.entries(CANONICAL_COLLECTIONS)) {
+    for (const name of indexCollections(index)) {
+      const idField = CANONICAL_COLLECTIONS[name];
       ledger[name] = index.collections[name].map((id) => {
         const path = recordPath(name, id);
         expected.add(path);
@@ -313,7 +334,7 @@ export class CanonicalLedgerStore {
     if (fragmented && index.version === 2) {
       validateLegacyV3Index(index);
       Object.assign(ledger, index.metadata);
-      for (const name of Object.keys(CANONICAL_COLLECTIONS)) {
+      for (const name of indexCollections(index)) {
         ledger[name] = [];
         for (const [ordinal, path] of index.chunks[name].entries()) {
           if (!logicalObjects.has(path)) fail("canonical-record-missing", "A legacy v3 logical group is missing.");
@@ -323,7 +344,7 @@ export class CanonicalLedgerStore {
     } else if (fragmented) {
       validateFragmentedIndex(index);
       Object.assign(ledger, index.metadata);
-      for (const name of Object.keys(CANONICAL_COLLECTIONS)) {
+      for (const name of indexCollections(index)) {
         ledger[name] = [];
         for (const [ordinal, path] of index.groups[name].entries()) {
           if (!logicalObjects.has(path)) fail("canonical-record-missing", "A logical v3 group is missing.");
@@ -333,7 +354,8 @@ export class CanonicalLedgerStore {
     } else {
       validateIndex(index);
       Object.assign(ledger, index.metadata);
-      for (const [name, idField] of Object.entries(CANONICAL_COLLECTIONS)) {
+      for (const name of indexCollections(index)) {
+        const idField = CANONICAL_COLLECTIONS[name];
         ledger[name] = [];
         for (const id of index.collections[name]) {
           const path = recordPath(name, id);
@@ -381,8 +403,11 @@ export class CanonicalLedgerStore {
       // records or substitutes a new ledger for an existing one.
       if (this.ledger && ledger.ledgerId !== this.ledger.ledgerId) fail("ledger-identity-mismatch", "A save cannot replace the selected canonical ledger identity.");
       if (this.ledger) {
+        if (Object.hasOwn(this.ledger, "positionEvents") && !Object.hasOwn(ledger, "positionEvents")) {
+          fail("history-removal-refused", "Existing position history cannot be removed.");
+        }
         for (const [name, idField] of Object.entries(CANONICAL_COLLECTIONS)) {
-          if (this.ledger[name].some((record, position) => ledger[name][position]?.[idField] !== record[idField])) {
+          if ((this.ledger[name] || []).some((record, position) => ledger[name]?.[position]?.[idField] !== record[idField])) {
             fail("history-order-change-refused", "Existing canonical record order is append-only.");
           }
         }
@@ -392,7 +417,7 @@ export class CanonicalLedgerStore {
         if (path === CANONICAL_INDEX && canonicalizeJcs(JSON.parse(this.records.get(path)).metadata) !== canonicalizeJcs(JSON.parse(objects.get(path)).metadata)) {
           fail("ledger-metadata-rewrite-refused", "Existing ledger identity and creation evidence are immutable.");
         }
-        const immutable = ["accounts/", "activities/", "events/", "reviewDecisions/"]
+        const immutable = ["accounts/", "activities/", "events/", "reviewDecisions/", "positionEvents/"]
           .some((part) => path.startsWith(CANONICAL_PREFIX + part));
         if (immutable && objects.get(path) !== this.records.get(path)) {
           fail("history-rewrite-refused", "Existing financial records must be corrected through additional events.");

@@ -12,6 +12,12 @@ Transfer links are append-only canonical financial events. The effective view ex
 
 The existing `DashboardSyntheticStorage`, `CanonicalLedgerStore`, canonical financial-event and reporting engines remain responsible for ownership, exact-base checks, durable writes, integrity, append-only history, recovery and financial meaning. There is no automatic migration, automatic save or complete-history assertion. Existing per-record v1 copies remain readable and retain their layout. Existing fragmented-v3 copies using the earlier logical envelope remain readable and upgrade to the current v3 group schema only on an explicit save. Standalone grouped-v2 copies are rejected outright by both the application store and backup validator. New canonical stores and fresh preview saves default to fragmented v3, whose version-3 logical group schema is distinct from deprecated v2 and whose physical objects are bounded fragments.
 
+## Financial-position follow-up
+
+The separately authorized [financial-position milestone](FINANCIAL_POSITION.md) adds a **Try balances & reconciliation** local scenario, an independent position-as-of date, per-currency known position totals, source/conflict evidence, manual account/balance staging, dated holdings and conflict selection, cash/card and statement-component reconciliation, and explicit zero-balance closure. The position date is independent of the activity month. Balance/closure changes share the same explicit save, uncertainty, reopen, staged undo and revert behavior as activity corrections. The original invented-year recipe and its activity semantics remain unchanged.
+
+The earlier scope and acceptance record below describe the canonical activity milestone. The new position contract supersedes its balance-availability limitation only where dated position evidence exists; old activity-only ledgers still have no invented balances. Provider balance/holdings file importers are outside this milestone. Live synthetic acceptance and physical-device validation remain outstanding.
+
 ## Ordinary flow
 
 1. Open the main page and choose **Open saved synthetic year**. Select the existing folder used by the synthetic-year tool, with `synthetic` in its name. Do not select a production folder or any folder containing personal financial data. This action never initializes a new empty copy.

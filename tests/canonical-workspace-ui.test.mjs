@@ -1,3 +1,5 @@
+import {buildFinancialPosition, buildAccountMonthCoverage} from '../js/financial-position.mjs';
+import {createSyntheticFinancialPosition} from '../js/synthetic-financial-position.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -7,7 +9,7 @@ import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {googleStartupMessage} from '../js/google-startup-diagnostics.mjs';
 import {CanonicalLedgerStore, serializeCanonicalLedger} from '../js/canonical-ledger-storage.mjs';
 import {registerAccount, prepareCanonicalImport, applyReviewDecision, getEffectiveActivities} from '../js/canonical-import.mjs';
-import {exactSignedDecimal} from '../js/import-reconciliation.mjs';
+import {exactSignedDecimal, isCalendarDate} from '../js/import-reconciliation.mjs';
 import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
 import {pageController, deferred} from './helpers/page-controller.mjs';
 
@@ -82,7 +84,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     constructor(options) { super({...options, online:() => browserNavigator?.onLine !== false}); session = this; }
   }
   const page = await pageController('canonical-workspace', {DashboardSyntheticStorage:Storage,
-    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,createSyntheticFinancialYear,googleStartupMessage,TypeError},
+    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,isCalendarDate,buildFinancialPosition,buildAccountMonthCoverage,createSyntheticFinancialPosition,createSyntheticFinancialYear,googleStartupMessage,TypeError},
   {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs',timers});
   browserNavigator = page.navigator;
   return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,timeouts,flushSearch,
@@ -128,7 +130,7 @@ test('main workspace load and local preview cannot connect, persist or silently 
   assert.equal(h.state.writes, 0);
   assert.equal(h.session.size, 0);
   await h.stageAmount();
-  assert.match(h.get('save-state').textContent, /Local preview changes only/);
+  assert.match(h.get('save-state').textContent, /Staged local preview changes/);
   assert.equal(h.get('save-ledger').disabled, true);
   assert.equal(h.state.writes, 0);
   assert.equal(h.intervals.size, 0);
@@ -604,4 +606,196 @@ test('preview revert-all restores the original generated year without storage ac
   assert.equal(h.get('detail-amount').textContent, '-$160.00');
   assert.equal(h.state.connects.length, 0);
   assert.equal(h.state.writes, 0);
+});
+
+
+test('financial position is dated separately from activity month and old ledgers show missing balances', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  assert.match(text(h.get('position-accounts')), /Unavailable/);
+  assert.equal((text(h.get('position-totals')).match(/Unavailable/g) || []).length, 3);
+  assert.match(h.get('position-warning').textContent, /Incomplete/);
+  h.get('position-date').value = '2025-01-31'; await h.get('position-date').emit('change');
+  await h.choose('month-filter', '2025-02');
+  assert.match(h.get('position-scope').textContent, /2025-01-31/);
+  assert.match(h.get('position-coverage-help').textContent, /2025-02/);
+});
+
+test('synthetic position preview stages balances, resolves contradictory evidence and undoes without storage', async () => {
+  const h = await workspacePage(); await h.click('preview-position');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.match(text(h.get('position-totals')), /9,700.00/);
+  const accountId = h.modelSession.ledger.accounts.find(account => account.accountType === 'checking').accountId;
+  await h.choose('balance-account', accountId);
+  h.get('balance-date').value = '2025-01-31'; h.get('balance-amount').value = '2300.00';
+  h.get('balance-source').value = 'INVENTED corrected January statement'; await h.get('balance-source').emit('input');
+  await h.click('stage-balance');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.match(text(h.get('position-accounts')), /Conflicting balances/);
+  const card = h.get('position-accounts').children.find(card => text(card).includes('Invented checking'));
+  const input = card.children.find(child => child.tagName === 'INPUT'); input.value = 'INVENTED statement supersedes the prior balance';
+  const button = card.children.find(child => child.tagName === 'BUTTON' && child.textContent.includes('2300.00'));
+  await button.emit('click');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.match(text(h.get('position-totals')), /9,800.00/);
+  await h.click('undo-last-change');
+  assert.match(text(h.get('position-accounts')), /Conflicting balances/);
+  await h.click('undo-last-change');
+  assert.match(text(h.get('position-totals')), /9,700.00/);
+  assert.equal(h.state.writes, 0);
+});
+
+
+test('balance evidence survives explicit save and independent reopen; reconciliation requires valid anchors', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger}); await h.click('open-ledger');
+  h.get('position-date').value = fixture.asOf; await h.get('position-date').emit('change');
+  await h.choose('month-filter', fixture.month);
+  await h.choose('balance-account', fixture.accounts.mortgage);
+  h.get('balance-date').value = '2025-02-28'; h.get('balance-amount').value = '98000.00';
+  h.get('balance-source').value = 'INVENTED February mortgage statement'; await h.get('balance-source').emit('input');
+  await h.click('stage-balance');
+  assert.equal(h.modelSession.dirty, true);
+  const proposal = structuredClone(h.modelSession.ledger);
+  await h.click('save-ledger'); await h.click('reopen-ledger');
+  assert.deepEqual(h.modelSession.ledger, proposal);
+  await h.choose('month-filter', fixture.month);
+  await h.choose('reconcile-account', fixture.accounts.checking);
+  const anchors = h.modelSession.ledger.positionEvents.filter(event => event.eventType === 'balance-snapshot' && event.accountId === fixture.accounts.checking);
+  await h.choose('reconcile-opening', anchors.find(event => event.effectiveDate === '2024-12-31').eventId);
+  await h.choose('reconcile-closing', anchors.find(event => event.effectiveDate === '2025-01-31').eventId);
+  h.get('reconcile-source').value = 'INVENTED independently checked statement'; await h.get('reconcile-source').emit('input');
+  await h.click('stage-reconciliation');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.match(text(h.get('position-coverage')), /reconciled complete/);
+  assert.match(h.get('position-coverage-help').textContent, /Not reconciled complete/);
+  assert.equal(h.state.writes, 1);
+});
+
+test('account closure requires explicit zero evidence and preserves account history across undo', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger}); await h.click('open-ledger');
+  assert.equal(h.get('stage-closure').disabled, true);
+  assert.equal(h.get('reconcile-account').children.some(option => option.value === fixture.accounts.mortgage), true);
+  await h.choose('balance-account', fixture.accounts.autoLoan);
+  h.get('balance-date').value = '2025-02-28'; h.get('balance-amount').value = '0.00';
+  h.get('balance-source').value = 'INVENTED paid-off auto statement'; await h.get('balance-source').emit('input');
+  await h.click('stage-balance');
+  const zero = h.modelSession.ledger.positionEvents.at(-1);
+  await h.choose('closure-anchor', zero.eventId);
+  assert.equal(h.get('stage-closure').disabled, true);
+  h.get('closure-source').value = 'INVENTED account closure confirmation'; await h.get('closure-source').emit('input');
+  await h.click('stage-closure');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.equal(h.modelSession.ledger.positionEvents.at(-1).eventType, 'account-closure');
+  assert.equal(h.modelSession.ledger.accounts.length, fixture.ledger.accounts.length);
+  h.get('position-date').value = '2025-03-01'; await h.get('position-date').emit('change');
+  assert.match(text(h.get('position-accounts')), /closed/);
+  await h.click('undo-last-change');
+  assert.equal(h.modelSession.ledger.positionEvents.at(-1).eventType, 'balance-snapshot');
+  assert.equal(h.state.writes, 0);
+});
+
+function editorFields(h, container) {
+  return h.get(container).children.at(-1).children.filter(child => child.tagName === 'LABEL').map(label => label.children[0]);
+}
+
+test('manual holdings corrections resolve with audit evidence, undo, save and reopen', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger}); await h.click('open-ledger');
+  h.get('position-date').value = fixture.asOf; await h.get('position-date').emit('change');
+  await h.choose('holdings-account', fixture.accounts.brokerage);
+  await h.choose('holdings-scope', 'complete');
+  h.get('holdings-date').value = fixture.asOf;
+  h.get('holdings-source').value = 'INVENTED replacement holdings statement'; await h.get('holdings-source').emit('input');
+  await h.click('add-holding');
+  const [symbol,type,quantity,value] = editorFields(h,'holdings-rows');
+  symbol.value = 'INVENTED-ETF'; type.value = 'etf'; quantity.value = '12.5000'; value.value = '5000.00';
+  await h.click('stage-holdings');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.equal(h.modelSession.ledger.positionEvents.at(-1).holdings[0].quantity, '12.5000');
+  assert.match(text(h.get('position-accounts')), /Conflicting holdings statements/);
+  const card = h.get('position-accounts').children.find(card => text(card).includes('Invented brokerage'));
+  card.children.find(child => child.tagName === 'INPUT').value = 'INVENTED corrected statement verified';
+  await card.children.find(child => child.tagName === 'BUTTON' && child.textContent.includes('replacement holdings')).emit('click');
+  assert.equal(h.modelSession.ledger.positionEvents.at(-1).eventType, 'holdings-resolution');
+  assert.doesNotMatch(text(h.get('position-accounts')), /Conflicting holdings statements/);
+  await h.click('undo-last-change');
+  assert.match(text(h.get('position-accounts')), /Conflicting holdings statements/);
+  const restoredCard = h.get('position-accounts').children.find(card => text(card).includes('Invented brokerage'));
+  restoredCard.children.find(child => child.tagName === 'INPUT').value = 'INVENTED selection confirmed after undo';
+  await restoredCard.children.find(child => child.tagName === 'BUTTON' && child.textContent.includes('replacement holdings')).emit('click');
+  assert.equal(h.modelSession.ledger.positionEvents.at(-1).eventType, 'holdings-resolution');
+  const proposal = structuredClone(h.modelSession.ledger);
+  await h.click('save-ledger'); await h.click('reopen-ledger');
+  assert.deepEqual(h.modelSession.ledger, proposal);
+  assert.equal(h.state.writes, 1);
+});
+
+test('manual loan statements distinguish partial evidence from declared complete month and reject blank components', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger}); await h.click('open-ledger');
+  await h.choose('balance-account', fixture.accounts.mortgage);
+  h.get('balance-date').value = '2024-12-31'; h.get('balance-amount').value = '100000.00';
+  h.get('balance-source').value = 'INVENTED opening mortgage statement'; await h.get('balance-source').emit('input'); await h.click('stage-balance');
+  await h.choose('month-filter', '2025-01'); await h.choose('reconcile-account', fixture.accounts.mortgage);
+  const anchors = h.modelSession.ledger.positionEvents.filter(event => event.eventType === 'balance-snapshot' && event.accountId === fixture.accounts.mortgage);
+  await h.choose('reconcile-opening', anchors.find(event => event.effectiveDate === '2024-12-31').eventId);
+  await h.choose('reconcile-closing', anchors.find(event => event.effectiveDate === '2025-01-31').eventId);
+  h.get('reconcile-source').value = 'INVENTED complete January mortgage statement'; await h.get('reconcile-source').emit('input');
+  await h.click('add-component');
+  const [kind,amount,reference] = editorFields(h,'component-rows');
+  kind.value = 'principal-change'; amount.value = '-1000.00';
+  const before = h.modelSession.ledger.positionEvents.length;
+  await h.click('stage-reconciliation');
+  assert.equal(h.get('action-status').dataset.kind, 'error'); assert.equal(h.modelSession.ledger.positionEvents.length, before);
+  reference.value = 'INVENTED principal movement on statement'; await h.click('stage-reconciliation');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.equal(h.modelSession.ledger.positionEvents.at(-1).statementCoverage, undefined);
+  assert.equal(buildAccountMonthCoverage(h.modelSession.ledger,{month:'2025-01',accountIds:[fixture.accounts.mortgage]}).complete,false);
+  h.get('statement-full-month').checked = true; await h.click('stage-reconciliation');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.deepEqual(h.modelSession.ledger.positionEvents.at(-1).statementCoverage,{start:'2025-01-01',end:'2025-01-31'});
+  assert.equal(buildAccountMonthCoverage(h.modelSession.ledger,{month:'2025-01',accountIds:[fixture.accounts.mortgage]}).complete,true);
+  assert.equal(h.get('statement-full-month').checked, false);
+  h.get('statement-full-month').checked = true; amount.value = '-999.00'; await h.click('stage-reconciliation');
+  assert.equal(buildAccountMonthCoverage(h.modelSession.ledger,{month:'2025-01',accountIds:[fixture.accounts.mortgage]}).complete,false);
+  await h.click('undo-last-change');
+  assert.equal(buildAccountMonthCoverage(h.modelSession.ledger,{month:'2025-01',accountIds:[fixture.accounts.mortgage]}).complete,true);
+});
+
+test('a new synthetic mortgage can receive dated evidence and undo each stage without CSV activity', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  const initialCount = h.modelSession.ledger.accounts.length;
+  h.get('new-account-name').value = 'Invented second mortgage'; h.get('new-account-currency').value = 'USD';
+  await h.choose('new-account-type','mortgage'); await h.get('new-account-name').emit('input');
+  await h.click('stage-account');
+  assert.equal(h.get('action-status').dataset.kind,'success');
+  assert.equal(h.get('new-account-name').value, '');
+  assert.equal(h.get('stage-account').disabled, true);
+  const account = h.modelSession.ledger.accounts.at(-1);
+  await h.choose('balance-account',account.accountId);
+  h.get('balance-date').value = '2026-06-30'; h.get('balance-amount').value = '50000.00';
+  h.get('balance-source').value = 'INVENTED new mortgage statement'; await h.get('balance-source').emit('input'); await h.click('stage-balance');
+  await h.choose('account-filter',account.accountId); await h.choose('month-filter','2026-06');
+  assert.match(h.get('position-coverage-help').textContent,/2026-06/);
+  await h.click('undo-last-change'); await h.click('undo-last-change');
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+  assert.equal(h.get('account-filter').value, '');
+  assert.equal(h.modelSession.ledger.accounts.length,initialCount);
+  assert.equal(h.state.writes,0);
+});
+
+
+test('statement declaration is invalidated by account, month and ledger replacement', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger}); await h.click('open-ledger');
+  await h.choose('month-filter','2025-01'); await h.choose('reconcile-account',fixture.accounts.mortgage);
+  h.get('statement-full-month').checked = true; await h.click('add-component');
+  await h.choose('reconcile-account',fixture.accounts.autoLoan);
+  assert.equal(h.get('statement-full-month').checked,false); assert.equal(h.get('component-rows').children.length,0);
+  h.get('statement-full-month').checked = true; await h.choose('month-filter','2024-12');
+  assert.equal(h.get('statement-full-month').checked,false);
+  assert.match(h.get('statement-coverage-period').textContent,/2024-12/);
+  h.get('statement-full-month').checked = true; await h.click('add-component'); await h.click('reopen-ledger');
+  assert.equal(h.get('statement-full-month').checked,false); assert.equal(h.get('component-rows').children.length,0);
 });

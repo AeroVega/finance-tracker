@@ -31,13 +31,21 @@ Field names below are normative for the first implementation unless an ADR chang
 | `accountId` | string | yes | Stable app identity; never derived from a raw account number |
 | `institutionId` | string | yes | Stable provider key, e.g. `wells-fargo`, `sofi`, `fidelity` |
 | `displayName` | string | yes | User-editable label; no raw account number |
-| `accountType` | enum | yes | `checking`, `savings`, `credit-card`, `brokerage`, `retirement`, `other` |
+| `accountType` | enum | yes | `checking`, `savings`, `credit-card`, `brokerage`, `retirement`, `mortgage`, `auto-loan`, `other` |
 | `currency` | ISO 4217 code | yes | Default account currency; each activity still records its own currency |
 | `sourceAccountRef` | string or null | no | Protected source-side mapping value; never log or expose in public diagnostics |
 | `createdAt` | ISO timestamp | yes | Creation time |
 | `archivedAt` | ISO timestamp or null | yes | Null while active; archiving does not delete history |
 
 Account mapping must be explicit when a file contains multiple accounts. A display name or masked identifier is not sufficient to silently map an unknown account.
+
+### Synthetic financial-position extension
+
+**User-confirmed scope, November 10, 2026:** [Financial position and reconciled coverage](FINANCIAL_POSITION.md) adds optional append-only `positionEvents` to the version-1 synthetic ledger. Its event types are `balance-snapshot`, `balance-resolution`, `holdings-snapshot`, `holdings-resolution`, `account-closure` and `reconciliation`. Each event has `eventId`, `commandId`, `recordedAt`, `accountId`, `eventType` and `appendOnly: true`, plus validated event-specific evidence.
+
+Balances and holdings use exact normalized decimal strings and the account currency. They do not rewrite activities or source observations. Reconciliation derives completeness from current evidence rather than trusting a saved completeness flag. The existing import-level `coverageReconciled: false` remains unchanged; the new per-account/month report owns its evidence-based result. Mortgage and auto-loan types extend the account enum without migrating existing accounts.
+
+Old ledgers may omit `positionEvents`. New storage indexes the collection when present, and existing position records cannot be removed, reordered or rewritten. See the linked contract and `js/financial-position-contract.mjs` for required fields, source references, anchor checks, conflict rules and compatibility limits. This extension does not authorize production data or new provider formats.
 
 ### Canonical activity
 

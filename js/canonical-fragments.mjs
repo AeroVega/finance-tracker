@@ -14,7 +14,7 @@ function base64(bytes) {
   return btoa(binary);
 }
 function fragmentPath(path, ordinal) { return PREFIX + 'fragments/' + path.slice(PREFIX.length, -5) + '/' + String(ordinal).padStart(6, '0') + '.json'; }
-function logicalPath(path) { return path === INDEX || /^synthetic\/canonical-v1\/chunks\/(accounts|imports|observations|activities|events|reviewDecisions)\/\d{6,}\.json$/.test(path); }
+function logicalPath(path) { return path === INDEX || /^synthetic\/canonical-v1\/chunks\/(accounts|imports|observations|activities|events|reviewDecisions|positionEvents)\/\d{6,}\.json$/.test(path); }
 export function fragmentInventory(root) {
   if (!root || Object.keys(root).sort().join(',') !== 'format,fragments,syntheticOnly,version' ||
       root.format !== 'finance-tracker-canonical-index' || root.version !== 3 || root.syntheticOnly !== true ||

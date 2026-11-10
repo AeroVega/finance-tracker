@@ -46,7 +46,7 @@
 
       <section class="ledger-entry" aria-labelledby="entry-heading">
         <div class="entry-copy"><span class="entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5zM3 10h18"/></svg></span><div><p class="eyebrow">START WITH YOUR SAVED YEAR</p><h2 id="entry-heading">One ledger. Every source in reach.</h2><p>Open an existing synthetic folder in Google Drive, or explore an invented year locally.</p></div></div>
-        <div class="entry-actions"><button id="open-ledger" class="primary-button" type="button">Open saved synthetic year <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></button><button id="preview-year" class="secondary-button" type="button">Try a local preview</button><button id="save-preview" class="secondary-button" type="button" disabled>Save this preview to a new folder</button></div>
+        <div class="entry-actions"><button id="open-ledger" class="primary-button" type="button">Open saved synthetic year <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></button><button id="preview-year" class="secondary-button" type="button">Try a local preview</button><button id="preview-position" class="secondary-button" type="button">Try balances &amp; reconciliation</button><button id="save-preview" class="secondary-button" type="button" disabled>Save this preview to a new folder</button></div>
         <div class="entry-footnote"><p>Local preview stays in this tab until you explicitly save it to a newly created, empty synthetic Drive folder.</p><a href="prototype/synthetic-year.html">Need a saved year? Seed one <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></div>
       </section>
       <p id="action-status" class="status-message action-status" role="status" aria-live="polite" aria-atomic="true">Choose a saved synthetic year or try the local preview.</p>
@@ -64,6 +64,76 @@
           <article class="metric-card metric-card-emphasis"><p class="metric-label">Known cash movement <span class="metric-symbol" aria-hidden="true">⇄</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only. Not a balance.</p></article>
         </div>
         <div class="summary-context"><div><p>Known subtotals only. Transfers and card payments do not count as income or spending.</p><details class="summary-explainer"><summary>How these totals are calculated</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p></details></div><p id="coverage-summary">Coverage has not been loaded. Missing data is unavailable, not zero.</p></div>
+      </section>
+
+      <section class="panel position-panel" id="position" aria-labelledby="position-heading">
+        <div class="panel-heading"><h2 id="position-heading">Financial position</h2><span class="tag">Dated evidence · synthetic only</span></div>
+        <label for="position-date">Position as of<input id="position-date" type="date" disabled></label>
+        <p id="position-scope">Choose a ledger. The position date is independent of the activity month.</p>
+        <p id="position-warning" role="status" aria-live="polite">Missing balances are unavailable, not zero.</p>
+        <div id="position-totals" class="metric-grid"></div>
+        <div id="position-accounts" class="position-accounts"></div>
+        <details><summary>Add a synthetic account</summary>
+          <form id="account-form" class="position-form">
+            <p>Invented account names only. Do not enter account numbers or real financial information. This stages an account without connecting to an institution.</p>
+            <label for="new-account-name">Invented display name<input id="new-account-name" type="text" maxlength="200" disabled></label>
+            <label for="new-account-institution">Institution<select id="new-account-institution" disabled><option value="wells-fargo">Wells Fargo</option><option value="sofi">SoFi</option><option value="fidelity">Fidelity</option></select></label>
+            <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Brokerage</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
+            <label for="new-account-currency">Three-letter currency<input id="new-account-currency" type="text" maxlength="3" placeholder="USD" disabled></label>
+            <button id="stage-account" type="button" class="secondary-button" disabled>Stage synthetic account</button>
+          </form>
+        </details>
+        <details><summary>Add or correct a dated synthetic balance</summary>
+          <form id="position-form" class="position-form" aria-describedby="position-help">
+            <p id="position-help">Invented data only. Enter the signed asset balance or a nonnegative amount owed for a liability. Each entry appends evidence; a correction on the same date creates a conflict until you select the supported source below. Staging does not save.</p>
+            <label for="balance-account">Account<select id="balance-account" disabled></select></label>
+            <label for="balance-date">Effective date<input id="balance-date" type="date" disabled></label>
+            <label for="balance-amount">Exact balance<input type="text" id="balance-amount" inputmode="decimal" placeholder="100.00" disabled></label>
+            <label for="balance-basis">Basis<select id="balance-basis" disabled><option value="manual">Manual</option><option value="statement">Statement</option></select></label>
+            <label for="balance-source">Evidence reference / correction reason<input type="text" id="balance-source" maxlength="300" disabled></label>
+            <button id="stage-balance" type="button" class="secondary-button" disabled>Stage dated balance</button>
+          </form>
+        </details>
+        <details><summary>Record an account closure</summary>
+          <form id="closure-form" class="position-form">
+            <p>Closure requires a selected zero balance on the closure date. It preserves the account and all its history. Later contradictory evidence prevents a complete closure claim.</p>
+            <label for="closure-anchor">Zero-balance evidence<select id="closure-anchor" disabled></select></label>
+            <label for="closure-source">Closure evidence reference<input type="text" id="closure-source" maxlength="300" disabled></label>
+            <button id="stage-closure" type="button" class="secondary-button" disabled>Stage account closure</button>
+          </form>
+        </details>
+        <details><summary>Enter dated synthetic holdings</summary>
+          <form id="holdings-form" class="position-form">
+            <p>Copy invented statement evidence only. Quantities and values remain exact decimals. Holdings do not replace account balances or fetch prices. Same-date conflicting statements require a deliberate selection.</p>
+            <label for="holdings-account">Investment account<select id="holdings-account" disabled></select></label>
+            <label for="holdings-date">Holdings effective date<input id="holdings-date" type="date" disabled></label>
+            <label for="holdings-scope">Statement scope<select id="holdings-scope" disabled><option value="partial">Partial holdings</option><option value="complete">Complete holdings</option></select></label>
+            <label for="holdings-source">Statement evidence reference<input id="holdings-source" type="text" maxlength="300" disabled></label>
+            <div id="holdings-rows" class="position-editor-rows"></div>
+            <button id="add-holding" type="button" class="secondary-button" disabled>Add holding row</button>
+            <button id="stage-holdings" type="button" class="secondary-button" disabled>Stage dated holdings</button>
+          </form>
+        </details>
+        <h3>Account-month reconciliation</h3>
+        <p id="position-coverage-help">Select an activity month above to inspect coverage. Declared imports alone do not prove completeness.</p>
+        <div id="position-coverage"></div>
+        <details><summary>Record reconciliation evidence</summary>
+          <form id="reconciliation-form" class="position-form">
+            <p>Checking, savings and credit cards use posted cash movement. Investments and loans use statement components: enter every change that explains closing balance minus opening balance, including signs. A debt reduction is negative. A complete statement declaration is evidence, not automatic reconciliation. Select the account and balance anchors for the activity month selected above. Evidence is checked against activity and unresolved records; recording a review never silently marks a month complete.</p>
+            <label for="reconcile-account">Account<select id="reconcile-account" disabled></select></label>
+            <label for="reconcile-opening">Opening balance evidence<select id="reconcile-opening" disabled></select></label>
+            <label for="reconcile-closing">Closing balance evidence<select id="reconcile-closing" disabled></select></label>
+            <label for="reconcile-source">Reconciliation evidence reference<input type="text" id="reconcile-source" maxlength="300" disabled></label>
+            <div id="statement-components-panel" class="position-editor-rows" hidden>
+              <p id="statement-coverage-period">Select an activity month above.</p>
+              <label class="checkbox-field" for="statement-full-month"><input id="statement-full-month" type="checkbox" disabled><span>I have a complete statement covering this entire selected month for this account.</span></label>
+              <p>Leave unchecked for partial evidence. Missing coverage or unexplained differences keep the month incomplete. An empty component list means no statement movement was recorded; it is not evidence of no movement.</p>
+              <div id="component-rows"></div>
+              <button id="add-component" type="button" class="secondary-button" disabled>Add statement component</button>
+            </div>
+            <button id="stage-reconciliation" type="button" class="secondary-button" disabled>Stage reconciliation evidence</button>
+          </form>
+        </details>
       </section>
 
       <section class="panel transactions-panel" id="transactions" aria-labelledby="transactions-heading">

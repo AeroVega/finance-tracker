@@ -1,3 +1,4 @@
+import { validatePositionEvents } from './financial-position-contract.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal, sameComposite } from './import-reconciliation.mjs';
 
@@ -37,7 +38,7 @@ function validateAndProject(ledger) {
   const findAccount = accountId => byId.accounts.get(accountId) ?? fail('unknown-account');
   const findActivity = activityId => byId.activities.get(activityId) ?? fail('unknown-activity');
   const importObservationIds = new Map();
-  for (const a of ledger.accounts) if (!['wells-fargo','sofi','fidelity'].includes(a.institutionId) || !/^[A-Z]{3}$/.test(a.currency) || typeof a.displayName !== 'string' || !a.displayName.trim() || !['checking','savings','credit-card','brokerage','retirement','other'].includes(a.accountType)) fail('invalid-account');
+  for (const a of ledger.accounts) if (!['wells-fargo','sofi','fidelity'].includes(a.institutionId) || !/^[A-Z]{3}$/.test(a.currency) || typeof a.displayName !== 'string' || !a.displayName.trim() || !['checking','savings','credit-card','mortgage','auto-loan','brokerage','retirement','other'].includes(a.accountType)) fail('invalid-account');
   for (const a of ledger.activities) {
     const account = findAccount(a.accountId);
     if (account.institutionId !== a.institutionId || !isCalendarDate(a.effectiveDate) || typeof a.sourceDescription !== 'string' || !['pending','posted','unknown','reversed','corrected'].includes(a.lifecycleStatus)) fail('invalid-activity');
@@ -120,6 +121,7 @@ function validateAndProject(ledger) {
     }
     priorDecisions.set(d.reviewDecisionId,d);
   }
+  validatePositionEvents(ledger,ids,commands);
   inspectJson(ledger);
   return {replay,ids,commands,byId};
 }

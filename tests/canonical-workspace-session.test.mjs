@@ -316,3 +316,109 @@ test('staged history is cleared only after verified save or verified reopen', as
   assert.equal(h.session.dirty, false);
   assert.equal(h.session.canUndo(), false);
 });
+
+function positionCommand(ledger, amountText = '1250.00') {
+  return { type: 'balance-snapshot', accountId: ledger.accounts.find(account => account.accountType === 'checking').accountId,
+    effectiveDate: '2025-12-31', amountText, basis: 'manual',
+    source: { kind: 'manual', reference: 'INVENTED statement checked by fixture owner' } };
+}
+
+test('position updates stage locally, preserve observations and independently save/reopen', async () => {
+  const h = setup(); await h.session.open();
+  const original = structuredClone(h.session.ledger);
+  h.session.recordPosition(positionCommand(h.session.ledger));
+  assert.equal(h.calls.writes, 0);
+  assert.equal(h.session.dirty, true);
+  assert.equal(h.session.ledger.positionEvents.length, 1);
+  assert.deepEqual(h.session.ledger.observations, original.observations);
+  assert.deepEqual(h.session.ledger.activities, original.activities);
+  const proposed = structuredClone(h.session.ledger);
+  await h.session.save(); await h.session.reopen();
+  assert.deepEqual(h.session.ledger, proposed);
+  assert.equal(h.session.canUndo(), false);
+  assert.equal(h.calls.writes, 1);
+});
+
+test('mixed activity and position undo restores exact previous graphs including absent collection', () => {
+  const h = setup(); h.session.preview(recipe.ledger);
+  const original = structuredClone(h.session.ledger);
+  assert.equal(Object.hasOwn(original, 'positionEvents'), false);
+  h.session.recordPosition(positionCommand(h.session.ledger));
+  const balanceOnly = structuredClone(h.session.ledger);
+  h.session.correct(correction(h.session.ledger));
+  const corrected = structuredClone(h.session.ledger);
+  h.session.recordPosition({ ...positionCommand(h.session.ledger, '1275.00'), effectiveDate: '2026-01-01' });
+  h.session.undoLastStagedChange(); assert.deepEqual(h.session.ledger, corrected);
+  h.session.undoLastStagedChange(); assert.deepEqual(h.session.ledger, balanceOnly);
+  h.session.undoLastStagedChange(); assert.deepEqual(h.session.ledger, original);
+  assert.equal(h.session.dirty, false);
+  h.session.recordPosition(positionCommand(h.session.ledger));
+  h.session.revertAllStagedChanges(); assert.deepEqual(h.session.ledger, original);
+});
+
+test('invalid position evidence leaves the draft and undo history unchanged', () => {
+  const h = setup(); h.session.preview(recipe.ledger);
+  const original = structuredClone(h.session.ledger);
+  assert.throws(() => h.session.recordPosition({ ...positionCommand(h.session.ledger), source: { kind: 'manual', reference: '' } }));
+  assert.throws(() => h.session.recordPosition(positionCommand(h.session.ledger, 'not-a-number')));
+  assert.deepEqual(h.session.ledger, original);
+  assert.equal(h.session.stagedHistory.length, 0);
+  assert.equal(h.session.dirty, false);
+});
+
+test('lost position save response retains proposal and blocks edits and retry until independent reopen', async () => {
+  const h = setup(); await h.session.open();
+  h.session.recordPosition(positionCommand(h.session.ledger));
+  const proposed = structuredClone(h.session.ledger);
+  h.calls.loseResponse = true;
+  await assert.rejects(h.session.save());
+  assert.equal(h.session.unverified, true);
+  assert.throws(() => h.session.recordPosition(positionCommand(h.session.ledger)), { code: 'reopen-before-editing' });
+  await assert.rejects(h.session.save(), { code: 'verified-draft-required' });
+  assert.equal(h.calls.writes, 1);
+  assert.deepEqual(h.session.ledger, proposed);
+  h.calls.loseResponse = false; await h.session.reopen();
+  assert.deepEqual(h.session.ledger, proposed);
+  assert.equal(h.session.ledger.positionEvents.length, 1);
+});
+
+test('a position-only local preview saves to a fresh synthetic copy and release blocks later edits', async () => {
+  const h = setup('fragments-v3', true); h.session.preview(recipe.ledger);
+  h.session.recordPosition(positionCommand(h.session.ledger));
+  const proposed = structuredClone(h.session.ledger);
+  await h.session.savePreviewToNewCopy();
+  await h.session.reopen(); assert.deepEqual(h.session.ledger, proposed);
+  await h.session.release();
+  assert.throws(() => h.session.recordPosition(positionCommand(h.session.ledger)), { code: 'reopen-before-editing' });
+  assert.deepEqual(h.session.ledger, proposed);
+});
+
+test('manual synthetic liability creation and balances stage, undo and save through existing history rules', async () => {
+  const h = setup(); await h.session.open();
+  const original = structuredClone(h.session.ledger);
+  h.session.addAccount({ institutionId:'sofi', accountType:'mortgage', displayName:'Invented new mortgage', currency:'USD' });
+  const accountOnly = structuredClone(h.session.ledger);
+  const accountId = h.session.ledger.accounts.at(-1).accountId;
+  h.session.recordPosition({ ...positionCommand(h.session.ledger,'75000.00'), accountId });
+  assert.equal(h.session.ledger.positionEvents.at(-1).accountId,accountId);
+  assert.equal(h.calls.writes,0);
+  h.session.undoLastStagedChange(); assert.deepEqual(h.session.ledger,accountOnly);
+  h.session.undoLastStagedChange(); assert.deepEqual(h.session.ledger,original);
+  h.session.addAccount({ institutionId:'sofi', accountType:'auto-loan', displayName:'Invented new auto loan', currency:'USD' });
+  h.session.recordPosition({ ...positionCommand(h.session.ledger,'8000.00'), accountId:h.session.ledger.accounts.at(-1).accountId });
+  const proposed = structuredClone(h.session.ledger);
+  await h.session.save(); await h.session.reopen();
+  assert.deepEqual(h.session.ledger,proposed);
+  assert.equal(h.session.canUndo(),false);
+  assert.deepEqual(h.session.ledger.accounts.slice(0,original.accounts.length),original.accounts);
+});
+
+test('invalid or read-only account creation cannot change the canonical draft', async () => {
+  const h = setup(); await h.session.open();
+  const original = structuredClone(h.session.ledger);
+  assert.throws(()=>h.session.addAccount({ institutionId:'invented-unsupported',accountType:'mortgage',displayName:'Invented',currency:'USD' }));
+  assert.deepEqual(h.session.ledger,original);assert.equal(h.session.stagedHistory.length,0);
+  await h.session.release();
+  assert.throws(()=>h.session.addAccount({ institutionId:'sofi',accountType:'mortgage',displayName:'Invented',currency:'USD' }),{code:'reopen-before-editing'});
+  assert.deepEqual(h.session.ledger,original);
+});

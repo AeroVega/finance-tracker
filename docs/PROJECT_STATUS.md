@@ -4,6 +4,18 @@
 
 The synthetic canonical workspace and storage foundation are implemented. **Alpha is not complete.** Financial position, reconciled coverage, monthly-history migration and production controls remain. Production financial-data persistence is **NO-GO**.
 
+## Financial-position branch update, November 10, 2026
+
+**Implemented, under review:** The owner-authorized [financial-position milestone](FINANCIAL_POSITION.md) builds on main `e0420a70a27cec6f7d13fe6b65258643433e4c64`. It adds dated balance selection, source/conflict history, a 35-day freshness warning, separate-currency position totals, holdings evidence, credit-card/mortgage/auto-loan balances, explicit zero-balance closure and evidence-backed account/month coverage. Position changes use append-only records and the existing verified save/reopen/portable-restore path.
+
+The workspace can stage accounts, balances, balance/holdings conflict decisions, dated holdings, cash/card reconciliation, statement-component reconciliation and closures. Manual investment/loan statements can explicitly declare the full month without a fabricated CSV import; declaration alone does not prove completeness. General provider balance/holdings file importers are outside this milestone. The legacy synthetic-year fixture remains unchanged.
+
+**Verified final local tests:** 1,074/1,074 passed on Node 24.22.1, with no failures or skips. Manual-editor follow-ups and no-CSV reconciliation are included. Changed module syntax and diff checks passed.
+
+**Verification limits:** Automated suites exercise synthetic domain records and in-memory storage/recovery adapters. Browser rendering could not be verified in this environment: Chromium could not create its local socket, and the provided browser could not reach the local test server. Physical iPhone/iPad Safari, live synthetic Drive acceptance and deployment remain outstanding. No real records or live financial services were used.
+
+This branch does not complete Alpha or authorize production persistence. The tables below remain the dated main audit, not a claim that this branch has merged or deployed.
+
 ## Repository and deployment
 
 | Work | Verified state | What that establishes |

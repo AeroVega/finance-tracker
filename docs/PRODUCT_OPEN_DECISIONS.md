@@ -19,6 +19,12 @@ After the reporting, savings-rate, forecast, investment/debt, reliability, and r
 
 Scope and recorded decisions are unchanged except for the owner confirmations already recorded in the Product Definition. The numerical Health Score, goals, saved what-if scenarios, and other explicitly deferred capabilities must not return as v1 prerequisites. Topics without a release decision remain proposals or unresolved details; this organization does not silently defer them.
 
+## Financial-position implementation decision, November 10, 2026
+
+**User-confirmed:** The owner approved the financial-position plan as a whole and authorized its synthetic implementation. [The contract](FINANCIAL_POSITION.md) records latest-applicable dated balances, source/basis provenance, explicit conflicts and resolutions, the initial 35-day freshness warning, evidence-based account/month reconciliation, investment totals counted once with dated holdings support, manual credit-card/mortgage/auto-loan balances without invented splits, and separate-currency known subtotals with explicit scope.
+
+This resolves those bounded implementation choices within Q9/Q10, Q35, Q4, Q13/Q54 and the liability-schema follow-up. It does not close their remaining broader questions or change the inventory counts below. Cost basis, employer-match treatment, savings-rate edge cases, trade/settlement reporting, rates/payment schedules/amortization, forecasts, production activation and release approval remain outside this decision.
+
 ## Three remaining v1 owner-review bundles
 
 - **O1. Financial reporting and budget rules.** Settle the remaining financial meanings and report boundaries: remaining savings-rate inputs and edge cases, pending activity and dates, corrections/chargebacks, and unresolved budget behavior. Engineering should supply a coherent calculation proposal first. 5 detailed entries below.
