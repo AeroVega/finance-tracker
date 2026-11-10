@@ -41,7 +41,7 @@ The [Second Generation Product Definition](docs/PRODUCT_DEFINITION.md) records t
 
 ## Canonical application workflow
 
-**Implemented, synthetic-only:** [Open the main workspace](index.html) to explore a saved synthetic year by account and month, inspect source evidence, stage auditable corrections, and explicitly save/reopen through the existing canonical storage engines. A local invented-year preview needs no Google connection. See [scope, limits and the new owner acceptance checks](docs/CANONICAL_MAIN_WORKSPACE.md). The previous PR30 device results do not validate this new screen. Balances, holdings, migration and production authorization remain later work.
+**Implemented, synthetic-only:** [Open the main workspace](index.html) to explore saved synthetic years by account and month, inspect source evidence, stage auditable corrections, explicitly save/reopen through the existing canonical storage engines, save the exact local preview (including staged corrections) to a new empty synthetic folder, and manually link outgoing/incoming transfer activities with append-only audit evidence. See [scope, limits and the new owner acceptance checks](docs/CANONICAL_MAIN_WORKSPACE.md). The previous PR30 device results do not validate this new screen. Balances, holdings, migration and production authorization remain later work.
 
 ## Synthetic financial year
 
