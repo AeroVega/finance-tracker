@@ -163,9 +163,9 @@ test('year reconnect opts out of original-file retention and deletion even for a
 });
 
 
-test('explicit fragmented seeder option creates v3 and default reconnect preserves it', async () => {
+test('default seeder creates fragmented v3 and reconnect preserves it; grouped v2 is rejected', async () => {
   const lifecycle = fakeLifecycle(), generated = recipe();
-  const seeder = new SyntheticYearSeeder({ createRecipe: () => generated, layout: 'fragments-v3' });
+  const seeder = new SyntheticYearSeeder({ createRecipe: () => generated });
   await seeder.admitFreshConnection(lifecycle); await seeder.verifyOrSeed(lifecycle);
   const index = JSON.parse(new TextDecoder().decode(await lifecycle.readObject('synthetic/canonical-v1/index.json')));
   assert.equal(index.version, 3);
@@ -174,4 +174,5 @@ test('explicit fragmented seeder option creates v3 and default reconnect preserv
   assert.equal((await reopened.verifyOrSeed(lifecycle)).alreadySaved, true);
   assert.equal(lifecycle.mutations, writes);
   assert.throws(() => new SyntheticYearSeeder({ layout: 'unknown' }), { code: 'unsupported-canonical-layout' });
+  assert.throws(() => new SyntheticYearSeeder({ layout: 'chunks-v2' }), { code: 'unsupported-canonical-layout' });
 });

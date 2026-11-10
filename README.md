@@ -49,7 +49,7 @@ The [Second Generation Product Definition](docs/PRODUCT_DEFINITION.md) records t
 
 The [Drive history verification follow-up](docs/DRIVE_HISTORY_VERIFICATION.md) reduces repeated downloads during saves by checking private, bounded session evidence against fresh Drive file versions. Full reconnect and backup integrity checks remain. This is a synthetic implementation, not production or live-Google acceptance.
 
-The [PR30 integrated performance report](docs/PR30_PERFORMANCE_INTEGRATION.md) collects the reviewed CPU, session, CSV and storage changes, final combined checks, and remaining limits. The new fragmented layout is opt-in for fresh synthetic copies; it does not migrate existing folders or establish mobile capacity.
+The [PR30 integrated performance report](docs/PR30_PERFORMANCE_INTEGRATION.md) collects the reviewed CPU, session, CSV and storage changes, final combined checks, and remaining limits. Fragmented v3 is the default for new canonical stores and fresh synthetic copies. Existing per-record v1 copies remain readable; standalone grouped-v2 copies are rejected. Existing folders are not silently migrated, and this does not establish mobile capacity.
 
 ## PR28 canonical import foundation
 

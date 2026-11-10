@@ -46,6 +46,7 @@ const storage = new DashboardSyntheticStorage({
 const session = new CanonicalWorkspaceSession({ storage });
 const messages = {
   'canonical-ledger-required': 'This copy has no saved canonical ledger. Release it, seed a synthetic year in a new empty folder, then open that saved copy here.',
+  'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. It was not initialized or modified. Preserve it and create a new synthetic copy using fragmented version 3.',
   'existing-copy-required': 'Choose the folder where you already saved the synthetic year. This workspace does not initialize empty folders.',
   'correction-rationale-required': 'Explain the evidence or reason for this correction.',
   'classification-amount-conflict': 'That classification conflicts with the amount. Income must not be negative and spending must not be positive.',
@@ -78,6 +79,8 @@ function refresh() {
   $('save-preview').disabled = busy || !configured || navigator.onLine === false || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.unverified;
   $('save-preview').textContent = session.mode === 'preview' ? 'Save this preview to a new folder' : 'Save this preview to a new folder';
   $('save-ledger').disabled = busy || !session.canSave();
+  $('undo-last-change').disabled = busy || !session.canUndo();
+  $('revert-all-changes').disabled = busy || !session.canRevertAll();
   $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
   $('reopen-ledger').disabled = busy || !ready;
   $('release-ledger').disabled = busy || !lifecycle;
@@ -100,7 +103,7 @@ function refresh() {
   if (busy) text = 'Working and verifying. Keep this tab open.';
   else if (session.unverified) text = 'Save unverified. Keep your draft here. Recover if offered, then reopen to check what reached Drive before retrying.';
   else if (session.mode === 'preview') text = session.dirty ? 'Local preview changes only. They cannot be saved to Drive.' : 'Local preview only. Open your saved copy to make changes that you can save.';
-  else if (session.dirty) text = `${session.ledger.events.length - session.savedEventCount} unsaved correction(s). ${session.canSave() ? 'Save when you are ready.' : 'Saving is blocked. Reconnect and reopen before continuing.'}`;
+  else if (session.dirty) text = `${session.stagedHistory.length} staged change(s). ${session.canSave() ? 'Save when you are ready.' : 'Saving is blocked. Reconnect and reopen before continuing.'}`;
   else if (session.needsReopen) text = 'Read-only last loaded records. Reconnect or reopen before editing.';
   else text = session.ledger ? 'All changes saved and verified.' : 'No ledger loaded. Open your saved year or try a local preview.';
   if ($('save-state').textContent !== text) $('save-state').textContent = text;
@@ -337,6 +340,19 @@ action('link-transfer', 'Recording and validating this transfer relationship loc
   session.linkTransfer({ outgoingActivityId: selectedActivity, counterpartyActivityId: $('transfer-counterparty').value, rationale: $('transfer-link-rationale').value });
   render(); showDetail(selectedActivity);
   announce('Transfer activities linked with an auditable relationship. Save changes to persist the link.', 'success');
+});
+action('undo-last-change', 'Reverting the most recent staged change locally. No Drive write.', async () => {
+  session.undoLastStagedChange(); render();
+  if (selectedActivity && getWorkspaceActivity(session.ledger, selectedActivity)) showDetail(selectedActivity);
+  announce('Most recent staged change reverted. No saved records were changed.', 'success');
+});
+action('revert-all-changes', 'Reverting all staged changes to the last verified baseline. No Drive write.', async () => {
+  if (!window.confirm('Discard all staged changes and return to the last verified saved year or original preview? Saved records will not change.')) {
+    announce('Revert cancelled. Your staged changes are unchanged.'); return;
+  }
+  session.revertAllStagedChanges(); render();
+  if (selectedActivity && getWorkspaceActivity(session.ledger, selectedActivity)) showDetail(selectedActivity);
+  announce('All staged changes reverted to the last verified baseline. No saved records were changed.', 'success');
 });
 action('stage-correction', 'Checking your correction locally.', async () => {
   session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value, rationale: $('correction-rationale').value });

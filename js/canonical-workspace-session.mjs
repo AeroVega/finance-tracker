@@ -18,6 +18,8 @@ export class CanonicalWorkspaceSession {
     this.needsReopen = false;
     this.busy = false;
     this.savedEventCount = 0;
+    this.baselineLedger = null;
+    this.stagedHistory = [];
   }
 
   invalidate() { if (this.mode === 'saved') this.needsReopen = true; }
@@ -34,6 +36,12 @@ export class CanonicalWorkspaceSession {
   }
 
   canSave() { return this.mode === 'saved' && this.dirty && this.canEdit(); }
+  canUndo() { return this.canEdit() && this.stagedHistory.length > 0; }
+  canRevertAll() { return this.canUndo(); }
+
+  updateDirty() {
+    this.dirty = Boolean(this.baselineLedger && canonicalizeJcs(this.ledger) !== canonicalizeJcs(this.baselineLedger));
+  }
 
   async operation(callback) {
     if (this.busy) fail('operation-in-progress');
@@ -55,6 +63,8 @@ export class CanonicalWorkspaceSession {
     this.needsReopen = false;
     this.dirty = false;
     this.unverified = false;
+    this.baselineLedger = structuredClone(ledger);
+    this.stagedHistory = [];
     this.savedEventCount = ledger.events.length;
     return ledger;
   }
@@ -76,7 +86,10 @@ export class CanonicalWorkspaceSession {
     if (ledger.syntheticOnly !== true) fail('synthetic-data-required');
     this.ledger = structuredClone(ledger);
     this.mode = 'preview'; this.store = null; this.dirty = false;
-    this.unverified = false; this.needsReopen = false; this.savedEventCount = ledger.events.length;
+    this.unverified = false; this.needsReopen = false;
+    this.baselineLedger = structuredClone(this.ledger);
+    this.stagedHistory = [];
+    this.savedEventCount = ledger.events.length;
   }
 
   correct({ activityId, type, activityKind, categoryId, amountText, rationale }) {
@@ -87,22 +100,47 @@ export class CanonicalWorkspaceSession {
     if (type === 'classification') command.activityKind = activityKind;
     if (type === 'category-correction') command.categoryId = typeof categoryId === 'string' ? categoryId.trim() : categoryId;
     if (type === 'bank-correction') command.amountText = typeof amountText === 'string' ? amountText.trim() : amountText;
-    this.ledger = applyFinancialEvent(this.ledger, command);
-    this.dirty = true;
+    const next = applyFinancialEvent(this.ledger, command);
+    this.stagedHistory.push(this.ledger.events.length);
+    this.ledger = next;
+    this.updateDirty();
     return this.ledger;
   }
 
   linkTransfer({ outgoingActivityId, counterpartyActivityId, rationale }) {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (typeof rationale !== 'string' || !rationale.trim()) fail('transfer-link-rationale-required');
-    this.ledger = applyFinancialEvent(this.ledger, {
+    const next = applyFinancialEvent(this.ledger, {
       activityId: outgoingActivityId,
       type: 'transfer-link',
       counterpartyActivityId,
       commandId: crypto.randomUUID(),
       evidence: { rationale: rationale.trim() }
     });
-    this.dirty = true;
+    this.stagedHistory.push(this.ledger.events.length);
+    this.ledger = next;
+    this.updateDirty();
+    return this.ledger;
+  }
+
+  undoLastStagedChange() {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    if (!this.stagedHistory.length) fail('no-staged-changes');
+    const previousEventCount = this.stagedHistory.pop();
+    const next = structuredClone(this.ledger);
+    next.events = next.events.slice(0, previousEventCount);
+    validateLedger(next);
+    this.ledger = next;
+    this.updateDirty();
+    return this.ledger;
+  }
+
+  revertAllStagedChanges() {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    if (!this.stagedHistory.length || !this.baselineLedger) fail('no-staged-changes');
+    this.ledger = structuredClone(this.baselineLedger);
+    this.stagedHistory = [];
+    this.dirty = false;
     return this.ledger;
   }
 
@@ -145,6 +183,8 @@ export class CanonicalWorkspaceSession {
         this.dirty = false;
         this.unverified = false;
         this.needsReopen = false;
+        this.baselineLedger = structuredClone(reopened);
+        this.stagedHistory = [];
         this.savedEventCount = reopened.events.length;
         return reopened;
       } catch (error) {
@@ -166,7 +206,10 @@ export class CanonicalWorkspaceSession {
         const ledger = await this.store.save(this.ledger);
         if (!this.ready() || this.store.lifecycle !== this.storage.lifecycle) fail('reconnect-required');
         this.ledger = ledger; this.dirty = false; this.unverified = false;
-        this.needsReopen = false; this.savedEventCount = ledger.events.length;
+        this.needsReopen = false;
+        this.baselineLedger = structuredClone(ledger);
+        this.stagedHistory = [];
+        this.savedEventCount = ledger.events.length;
         return ledger;
       } catch (error) { this.unverified = true; throw error; }
     });

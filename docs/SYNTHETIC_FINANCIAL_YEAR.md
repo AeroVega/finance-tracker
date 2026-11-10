@@ -6,7 +6,7 @@
 
 **Implemented:** [Seed a synthetic year](../prototype/synthetic-year.html), linked from the main workspace and prototype hub. The default recipe is calendar year **2025**, the last complete calendar year at implementation time. The UI intentionally offers one reproducible version rather than importing user files. It is not a production dashboard, an investment engine or a projection implementation.
 
-Production financial-data persistence remains **NO-GO** under [PR #27](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md). No real-data test, live Drive action, merge, deployment, or production activation is authorized or claimed by this implementation. No paid service, framework or new authentication scope was introduced. After the owner asked to rethink storage for speed, this feature added an opt-in grouped canonical payload layout for new synthetic copies; the catalog, transaction, recovery and session protocols are unchanged. The initial feature preserved existing prototype pages. The later owner-authorized [cleanup](PROTOTYPE_CLEANUP.md) retires superseded UI while preserving earlier acceptance records.
+Production financial-data persistence remains **NO-GO** under [PR #27](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md). No real-data test, live Drive action, merge, deployment, or production activation is authorized or claimed by this implementation. No paid service, framework or new authentication scope was introduced. The current synthetic-year page writes fragmented v3 by default, using a version-3 logical group schema and bounded physical fragments. Standalone grouped-v2 copies are rejected. Existing per-record v1 copies remain readable and are not silently migrated; the catalog, transaction, recovery and session protocols remain in use. The initial feature preserved existing prototype pages. The later owner-authorized [cleanup](PROTOTYPE_CLEANUP.md) retires superseded UI while preserving earlier acceptance records.
 
 ## Recipe and financial meaning
 
@@ -50,15 +50,15 @@ Beforeunload asks the browser to warn while an operation or session is active. M
 
 ## Performance and acceptance
 
-### Grouped canonical payloads
+### Historical grouped canonical experiment (deprecated)
 
-**User-confirmed follow-up:** the owner asked to rethink the storage format as an opportunity to improve speed. The new year uses the opt-in `chunks-v2` layout. It groups each canonical collection into fixed append-order buckets of at most 64 records and at most 128 KiB of stored UTF-8 JSON per chunk. The same 722 logical objects become **15 physical payload objects**. The largest fixture chunk is 128,922 bytes, below the 131,072-byte limit.
+**Historical implementation, superseded by the current v3-only policy above:** the earlier synthetic-year page offered a grouped `chunks-v2` layout as an opt-in performance experiment. Standalone grouped-v2 copies are now rejected and the old writer/selector has been removed. The measurements below remain historical evidence only; they are not the current seeder format. It groups each canonical collection into fixed append-order buckets of at most 64 records and at most 128 KiB of stored UTF-8 JSON per chunk. The same 722 logical objects become **15 physical payload objects**. The largest fixture chunk is 128,922 bytes, below the 131,072-byte limit.
 
-The index remains at the existing canonical index path but declares version 2. Old clients reject the unsupported version rather than interpreting the copy as empty. Current clients read versions 1 and 2, plus the explicit version-3 option described below. An existing version-1 ledger continues writing version 1 even if a caller requests chunks. No existing copy is migrated, compacted or rewritten; historical snapshots retain their original format. A conversion tool is not part of this work.
+The index remains at the existing canonical index path but declares version 2. Old clients reject the unsupported version rather than interpreting the copy as empty. Current clients read per-record v1 and fragmented v3. Standalone grouped v2 is rejected. An existing version-1 ledger continues writing version 1 even if a caller requests chunks. No existing copy is migrated, compacted or rewritten; historical snapshots retain their original format. A conversion tool is not part of this work.
 
 All record identities, source observations, collection order and events remain unchanged. Before packing, the store performs the same per-record immutable-history, source-evidence, retry and metadata checks as before. Grouping changes physical placement, not financial meaning. New records extend the last bucket or add a bucket. Corrections append events; mutable review records can change only under the existing logical rules. Unchanged chunks reuse their content hashes. A chunk's old bytes remain in immutable retained history after replacement.
 
-Chunk boundaries do not move when a record changes size. An oversized chunk fails before any write instead of repartitioning, truncating or silently changing formats. Readers enforce raw-byte size as well as exact chunk identity, inventory, record order and envelope keys. Missing, extra, mixed or malformed canonical paths fail closed. The 128 KiB limit is a synthetic implementation bound, not a Google service limit. Version 2 still refuses these oversized groups. Fresh copies can explicitly choose the [version-3 fragmentation extension](FRAGMENTED_CANONICAL_STORAGE.md).
+Chunk boundaries do not move when a record changes size. An oversized chunk fails before any write instead of repartitioning, truncating or silently changing formats. Readers enforce raw-byte size as well as exact chunk identity, inventory, record order and envelope keys. Missing, extra, mixed or malformed canonical paths fail closed. The 128 KiB limit is a synthetic implementation bound, not a Google service limit. The historical grouped-v2 writer refused these oversized groups. New copies now use the [fragmented version-3 format](FRAGMENTED_CANONICAL_STORAGE.md) by default.
 
 The existing engine still saves changed payloads and their journals serially. Ownership and exact-base checks, independent read-back, hash verification of all retained history, recovery and backup/export/restore validation remain in force. No persistent cache or verification shortcut was introduced. Repeated edits still retain historical chunks, so this is not a solution to unlimited retained-history growth or production scale.
 
@@ -90,7 +90,7 @@ The same seeder admission, save/independent-reopen, repeat verification and rele
 
 **Verified in this simulation:** save/reopen uses **97.3% fewer HTTP requests**. Its version-1 request mix was 3,594 listings, 136 ID allocations, 2,184 metadata reads, 13,084 body reads, 2,175 creates and two updates. Version 2 used 85 listings, four ID allocations, 63 metadata reads, 358 body reads, 54 creates and two updates.
 
-Run `node tests/benchmark-synthetic-year.mjs` to repeat both layouts, or pass `--layout=chunks-v2` / `--layout=records-v1` to run one. The benchmark uses invented HTTP responses only and asserts full ledger equality; it does not contact Google.
+Run `node tests/benchmark-synthetic-year.mjs` to compare per-record v1 with fragmented v3, or pass `--layout=fragments-v3` / `--layout=records-v1` to run one. The benchmark uses invented HTTP responses only and asserts full ledger equality; it does not contact Google.
 
 A single local end-to-end run including setup, generation, repeat verification and release took 82.407 seconds for version 1 and 4.868 seconds for version 2. These are local synthetic measurements, not Google latency, iPhone performance, a quota limit or a live speed guarantee. Live timing and quota behavior remain to be measured; token expiry still requires revalidation and recovery rather than skipping verification.
 
@@ -112,6 +112,6 @@ Local Chromium checked 320×740, 390×844, 768×1024, 844×390 and 1440×1000 la
 6. If any operation fails, preserve the folder and use the documented reconnect/recovery path. An interrupted initial setup or post-reload empty copy requires a new folder, not deletion or repeated blind upload.
 
 
-## Explicit fragmented storage option
+## Current fragmented storage v3
 
-**Implemented, synthetic-only:** fresh copies may now opt into [version-3 fragmented canonical storage](FRAGMENTED_CANONICAL_STORAGE.md). It preserves exact logical records while splitting oversized inventories and the logical index into bounded physical objects. The version-2 limits described above remain unchanged for existing copies. No implicit migration occurs. See the linked format, limits and verification record before choosing it.
+**Implemented, synthetic-only:** new synthetic copies use [version-3 fragmented canonical storage](FRAGMENTED_CANONICAL_STORAGE.md) by default. It preserves exact logical records while splitting oversized inventories and the logical index into bounded physical objects. Standalone grouped-v2 copies are rejected. Existing per-record v1 copies remain readable without implicit migration. See the linked format, limits and verification record before choosing it.

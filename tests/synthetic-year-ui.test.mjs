@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
-import { serializeCanonicalLedger, serializePackedCanonicalLedger, serializeFragmentedCanonicalLedger, CANONICAL_INDEX } from '../js/canonical-ledger-storage.mjs';
+import { serializeCanonicalLedger, serializeFragmentedCanonicalLedger, CANONICAL_INDEX } from '../js/canonical-ledger-storage.mjs';
 import { pageController, deferred } from './helpers/page-controller.mjs';
 
 async function yearPage() {
@@ -48,10 +48,10 @@ async function yearPage() {
     async release() { state.releases++; if (state.releaseVerified) this.lifecycle = null; return { released: state.releaseVerified }; }
   }
   const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder,
-    serializeCanonicalLedger, serializePackedCanonicalLedger, serializeFragmentedCanonicalLedger });
+    serializeCanonicalLedger, serializeFragmentedCanonicalLedger });
   return { ...page, state, manifest, objects, storage,
-    async upload(layout = 'chunks-v2') {
-      await page.choose('storage-layout', layout); await page.choose('empty-confirmed', true); await page.click('upload');
+    async upload() {
+      await page.choose('empty-confirmed', true); await page.click('upload');
       await page.until(() => !page.get('preview').disabled);
     },
     storedVersion: () => JSON.parse(new TextDecoder().decode(objects[CANONICAL_INDEX])).version
@@ -83,7 +83,7 @@ test('pending upload disables repeated clicks and never reports success before c
   const h = await yearPage(); h.state.saveGate = deferred();
   await h.choose('empty-confirmed', true); await h.click('upload');
   await h.until(() => h.state.snapshotReads > 0);
-  assert.equal(h.get('upload').disabled, true); assert.equal(h.get('storage-layout').disabled, true);
+  assert.equal(h.get('upload').disabled, true);
   assert.notEqual(h.get('result').dataset.state, 'success');
   await h.click('upload'); await h.click('verify'); assert.equal(h.state.connects.length, 1); assert.equal(h.state.writes, 0);
   const warning = { preventDefault() { this.prevented = true; } }; await h.event('beforeunload', warning); assert.equal(warning.prevented, true);
@@ -119,26 +119,26 @@ test('unverified release remains a failure and holds the connection until verifi
   await h.click('release'); await h.until(() => !h.get('preview').disabled);
   assert.equal(h.state.releases, 1); assert.equal(h.get('result').dataset.state, 'error');
   assert.match(h.get('result').textContent, /Release was not verified/); assert.doesNotMatch(h.get('result').textContent, /You can now open another tool/);
-  assert.equal(h.get('upload').disabled, true); assert.equal(h.get('storage-layout').disabled, true);
+  assert.equal(h.get('upload').disabled, true);
   h.state.releaseVerified = true; await h.click('release'); await h.until(() => !h.get('preview').disabled);
   assert.equal(h.get('result').dataset.state, 'success'); assert.match(h.get('result').textContent, /released and verified/);
-  assert.equal(h.storage.lifecycle, null); assert.equal(h.get('storage-layout').disabled, false); assert.equal(h.state.writes, 1);
+  assert.equal(h.storage.lifecycle, null); assert.equal(h.state.writes, 1);
 });
 
-for (const [layout, opposite, version, count] of [['chunks-v2', 'fragments-v3', 2, 15], ['fragments-v3', 'chunks-v2', 3, 24]]) {
-  test(`${layout} survives opposite-selector reconnect without reseeding or conversion`, async () => {
-    const h = await yearPage(); await h.upload(layout);
-    assert.equal(h.get('result').dataset.state, 'success', h.get('result').textContent);
-    assert.equal(h.storedVersion(), version); assert.equal(Object.keys(h.objects).length, count);
-    await h.click('release'); await h.until(() => !h.get('preview').disabled);
-    await h.choose('storage-layout', opposite);
-    const saved = structuredClone(h.objects);
-    await h.click('reconnect'); await h.until(() => !h.get('preview').disabled);
-    assert.equal(h.state.connects.at(-1).requireExisting, true); assert.equal(h.state.writes, 1);
-    assert.equal(h.storedVersion(), version); assert.deepEqual(h.objects, saved);
-    assert.match(h.get('preview-result').textContent, new RegExp(`${count} storage objects`));
-    assert.equal(h.get('result').dataset.state, 'success'); assert.equal(h.get('storage-layout').disabled, true);
-    h.navigator.onLine = false; await h.event('offline');
-    for (const id of ['upload', 'reconnect', 'verify']) assert.equal(h.get(id).disabled, true);
-  });
-}
+test('new synthetic-year uploads use fragmented v3 and reconnect without conversion or a second write', async () => {
+  const h = await yearPage(); await h.upload();
+  assert.equal(h.get('result').dataset.state, 'success', h.get('result').textContent);
+  assert.equal(h.storedVersion(), 3);
+  const saved = structuredClone(h.objects);
+  const physicalCount = Object.keys(saved).length;
+  assert.ok(physicalCount > 15);
+  await h.click('release'); await h.until(() => !h.get('preview').disabled);
+  await h.click('reconnect'); await h.until(() => !h.get('preview').disabled);
+  assert.equal(h.state.connects.at(-1).requireExisting, true);
+  assert.equal(h.state.writes, 1);
+  assert.deepEqual(h.objects, saved);
+  assert.match(h.get('preview-result').textContent, new RegExp(`${physicalCount} storage objects`));
+  assert.equal(h.get('result').dataset.state, 'success');
+  h.navigator.onLine = false; await h.event('offline');
+  for (const id of ['upload', 'reconnect', 'verify']) assert.equal(h.get(id).disabled, true);
+});

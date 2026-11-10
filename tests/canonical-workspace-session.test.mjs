@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { applyFinancialEvent, getEffectiveActivities, summarizeLedgerPeriods } from '../js/canonical-import.mjs';
 import { CanonicalWorkspaceSession } from '../js/canonical-workspace-session.mjs';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
-import { serializePackedCanonicalLedger, serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
+import { serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
 
 const recipe = await createSyntheticFinancialYear();
-function setup(layout = 'chunks-v2', fresh = false) {
+function setup(layout = 'fragments-v3', fresh = false) {
   const manifest = { syntheticOnly: true, databaseId: 'invented-db', copyId: 'invented-copy', revision: fresh ? 0 : 1, catalogFinalizationPending: null, snapshot: {} };
-  const serialize = {'records-v1': serializeCanonicalLedger, 'chunks-v2': serializePackedCanonicalLedger, 'fragments-v3': serializeFragmentedCanonicalLedger}[layout];
+  const serialize = {'records-v1': serializeCanonicalLedger, 'fragments-v3': serializeFragmentedCanonicalLedger}[layout];
   let objects = fresh ? {} : Object.fromEntries([...serialize(recipe.ledger)].map(([path, text]) => [path, new TextEncoder().encode(text)]));
   for (const path of Object.keys(objects)) manifest.snapshot[path] = 'invented-hash';
   const calls = { connects: [], writes: 0, reads: 0, fail: false, loseResponse: false };
@@ -57,7 +57,7 @@ test('corrections preserve source and base activities; explicit save then reopen
   const proposed = structuredClone(h.session.ledger);
   await h.session.save(); assert.equal(h.calls.writes, 1); assert.equal(h.session.dirty, false);
   await h.session.reopen(); assert.deepEqual(h.session.ledger, proposed); assert.equal(h.calls.writes, 1);
-  assert.equal(h.session.store.layout, 'chunks-v2');
+  assert.equal(h.session.store.layout, 'fragments-v3');
 });
 
 test('preview remains local and cannot save or run alongside a selected Drive session', async () => {
@@ -244,7 +244,7 @@ test('an uncertain fresh-copy write blocks retry and a verified reopen resolves 
 });
 
 test('transfer-link events save and reopen through the existing canonical store', async () => {
-  const h = setup('chunks-v2');
+  const h = setup('fragments-v3');
   await h.session.open();
   const outgoing = recipe.ledger.activities.find(activity =>
     activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' &&
@@ -265,11 +265,54 @@ test('transfer-link events save and reopen through the existing canonical store'
 
 
 test('preview persistence refuses an existing canonical copy without writing to it', async () => {
-  const h = setup('chunks-v2', false);
+  const h = setup('fragments-v3', false);
   h.session.preview(recipe.ledger);
   await assert.rejects(h.session.savePreviewToNewCopy(), { message: 'new-empty-folder-required' });
   assert.deepEqual(h.calls.connects, [{ requireEmpty: true }]);
   assert.equal(h.calls.writes, 0);
   assert.equal(h.session.mode, 'preview');
   assert.equal(h.session.unverified, false);
+});
+
+test('staged history can undo one change and revert all without changing the saved baseline', async () => {
+  const h = setup(); await h.session.open();
+  const baseline = structuredClone(h.session.ledger);
+  h.session.correct(correction(h.session.ledger, 'Invented first correction'));
+  const first = structuredClone(h.session.ledger);
+  h.session.correct({ ...correction(h.session.ledger, 'Invented second correction'), amountText: '-88.25' });
+  const second = structuredClone(h.session.ledger);
+  assert.equal(h.session.stagedHistory.length, 2);
+  assert.equal(h.session.canUndo(), true);
+  assert.equal(h.session.canRevertAll(), true);
+  h.session.undoLastStagedChange();
+  assert.deepEqual(h.session.ledger, first);
+  assert.equal(h.session.dirty, true);
+  assert.equal(h.session.stagedHistory.length, 1);
+  h.session.revertAllStagedChanges();
+  assert.deepEqual(h.session.ledger, baseline);
+  assert.equal(h.session.dirty, false);
+  assert.equal(h.session.stagedHistory.length, 0);
+  assert.equal(h.session.canUndo(), false);
+  assert.equal(h.session.canRevertAll(), false);
+  assert.equal(h.calls.writes, 0);
+  assert.equal(h.manifest.revision, 1);
+  assert.notDeepEqual(second, baseline);
+});
+
+test('staged history is cleared only after verified save or verified reopen', async () => {
+  const h = setup(); await h.session.open();
+  h.session.correct(correction(h.session.ledger));
+  assert.equal(h.session.stagedHistory.length, 1);
+  await h.session.save();
+  assert.equal(h.session.stagedHistory.length, 0);
+  assert.equal(h.session.canUndo(), false);
+  h.session.correct(correction(h.session.ledger, 'Invented later correction'));
+  const savedBaseline = structuredClone(h.session.baselineLedger);
+  const staged = structuredClone(h.session.ledger);
+  assert.notDeepEqual(staged, savedBaseline);
+  await h.session.reopen();
+  assert.deepEqual(h.session.ledger, savedBaseline);
+  assert.equal(h.session.stagedHistory.length, 0);
+  assert.equal(h.session.dirty, false);
+  assert.equal(h.session.canUndo(), false);
 });

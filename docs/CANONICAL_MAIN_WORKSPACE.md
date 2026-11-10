@@ -8,7 +8,7 @@
 
 Transfer links are append-only canonical financial events. The effective view exposes the same transfer-group identity and reciprocal counterpart activity on both sides; original activities and source observations remain unchanged. Transfer links do not change income, spending or cash totals.
 
-The existing `DashboardSyntheticStorage`, `CanonicalLedgerStore`, canonical financial-event and reporting engines remain responsible for ownership, exact-base checks, durable writes, integrity, append-only history, recovery and financial meaning. There is no new persistence format, migration, automatic save or complete-history assertion. Existing v1, grouped v2 and fragmented v3 copies keep their layout.
+The existing `DashboardSyntheticStorage`, `CanonicalLedgerStore`, canonical financial-event and reporting engines remain responsible for ownership, exact-base checks, durable writes, integrity, append-only history, recovery and financial meaning. There is no automatic migration, automatic save or complete-history assertion. Existing per-record v1 copies remain readable and retain their layout. Existing fragmented-v3 copies using the earlier logical envelope remain readable and upgrade to the current v3 group schema only on an explicit save. Standalone grouped-v2 copies are rejected outright by both the application store and backup validator. New canonical stores and fresh preview saves default to fragmented v3, whose version-3 logical group schema is distinct from deprecated v2 and whose physical objects are bounded fragments.
 
 ## Ordinary flow
 
@@ -50,7 +50,7 @@ The source review count covers every unresolved observation in the selected acco
 
 Cancellation now reports cancellation rather than leaving an operation-in-progress message. Recovery controls are disabled offline, dynamic review controls expose their busy state, arbitrary provider error text is not echoed, and closing transaction detail returns keyboard focus to its visible Review button (or search if the row is no longer displayed). Page and filter status messages are atomic live announcements.
 
-No canonical engine, ledger contract, monetary calculation, audit record, session protocol, storage format, deployment workflow or production permission changes are part of this pass. The existing v1/v2/v3 save/reopen tests remain required. Physical Safari, live Google behavior and mobile memory capacity remain owner acceptance work.
+No canonical financial-event contract, monetary calculation, audit record, session protocol, deployment workflow or production permission changes are part of this pass. Storage now defaults to fragmented v3 with a per-record logical index; legacy per-record v1 remains readable, and standalone grouped v2 is rejected. Physical Safari, live Google behavior and mobile memory capacity remain owner acceptance work.
 
 ### Automated evidence for the quality pass
 
@@ -88,7 +88,7 @@ Before calling the new workflow accepted, review PR #34 and then deploy the foll
 Run these checks with invented data only:
 
 1. Local preview before authorization: all four accounts and twelve months appear, known annual totals match the values above, and nothing opens Google or writes Drive.
-2. Open an existing v2 synthetic year, inspect all accounts and a month, then repeat with an existing v3 copy. No reseed or format conversion occurs.
+2. Open an existing per-record v1 copy and a fragmented v3 copy. Confirm a standalone grouped-v2 copy is rejected with a clear unsupported-layout message, no initialization and no write. Confirm a new saved preview uses fragmented v3.
 3. Select the investment account: activities and evidence remain visible but known reports show unavailable, not complete investment totals.
 4. Search, page and change account/month. Confirm search does not change totals, while account/month does. Check narrow portrait, tablet portrait/landscape and browser Back/Forward navigation.
 5. Correct a category and an amount with a reason. Inspect unchanged original source and added audit evidence, save once, reopen and compare. Try a repeated click while saving.
@@ -99,5 +99,6 @@ Run these checks with invented data only:
 10. From a local preview with no edits, save the untouched generated year to a newly created empty synthetic folder. Reopen it and compare the full canonical graph. Repeat from a separate preview after staging corrections; confirm every correction and audit event is present. Confirm an existing or nonempty folder is refused without overwriting or appending, and canceling Picker leaves the preview usable.
 11. Exercise an interrupted fresh-copy save using a disposable synthetic folder. Preserve the uncertain folder, recover if offered, and reopen to establish whether the full graph committed. Confirm a blind retry is blocked until verification resolves the outcome.
 12. Link a clearly matching outgoing/incoming transfer pair. Confirm the same transfer path and rationale appear when inspecting either side, the relationship survives save/reopen, and income/spending/cash totals do not change. Confirm ambiguous equal-amount candidates are never auto-linked and that mismatched amounts, currencies, accounts, classifications, inactive activities, or already-linked activities are rejected.
+13. Stage at least two corrections. Undo the latest and confirm only that change is removed; then revert all and confirm the exact verified baseline returns. Repeat in a local preview and confirm the original generated year returns. Neither action may connect to or write Drive.
 
 Automated and local-browser results for the final commit are recorded in the PR handoff separately from these open owner observations. No automated CI result establishes live Google latency, physical Safari behavior, production readiness or deployment.

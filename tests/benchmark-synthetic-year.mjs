@@ -1,5 +1,5 @@
 // Synthetic HTTP only. No credentials, external fetches or actual Drive files.
-// Usage: node tests/benchmark-synthetic-year.mjs [--layout=both|records-v1|chunks-v2]
+// Usage: node tests/benchmark-synthetic-year.mjs [--layout=both|records-v1|fragments-v3]
 import assert from 'node:assert/strict';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
@@ -7,11 +7,11 @@ import { setupHttpCanonicalWorkbench } from './helpers/pr28-http-workbench.mjs';
 import { HTTP_CATEGORIES } from './helpers/http-catalog-drive.mjs';
 
 const args = process.argv.slice(2);
-if (args.length > 1 || args.some(arg => !/^--layout=(both|records-v1|chunks-v2)$/.test(arg))) {
-  throw new Error('Usage: node tests/benchmark-synthetic-year.mjs [--layout=both|records-v1|chunks-v2]');
+if (args.length > 1 || args.some(arg => !/^--layout=(both|records-v1|fragments-v3)$/.test(arg))) {
+  throw new Error('Usage: node tests/benchmark-synthetic-year.mjs [--layout=both|records-v1|fragments-v3]');
 }
 const choice = args[0]?.slice('--layout='.length) || 'both';
-for (const layout of choice === 'both' ? ['records-v1', 'chunks-v2'] : [choice]) {
+for (const layout of choice === 'both' ? ['records-v1', 'fragments-v3'] : [choice]) {
   const started = performance.now();
   const h = await setupHttpCanonicalWorkbench();
   const stats = phase => {

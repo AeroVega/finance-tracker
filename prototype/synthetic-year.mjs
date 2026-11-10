@@ -1,6 +1,6 @@
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
-import { serializeCanonicalLedger, serializePackedCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
+import { serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
 
 const $ = id => document.getElementById(id);
 let busy = false, configured = false, writes = 0, started = 0, phase = '', timer = null;
@@ -13,6 +13,7 @@ const messages = {
 };
 const failures = {
   'empty-folder-required': 'The selected folder is not empty. No upload was started. Choose a newly created empty synthetic folder.',
+  'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. No records were changed. Preserve it and choose a new empty synthetic folder for a fragmented version-3 copy.',
   'existing-copy-required': 'No existing synthetic copy was found. Reconnect does not initialize a folder.',
   'fresh-genesis-required': 'The folder is no longer a fresh empty copy. No year was uploaded. Preserve it and choose a new empty folder.',
   'unrecognized-seed-copy': 'This copy is different from this version’s exact invented year. It will not be replaced or appended to. Preserve it and choose a new empty folder.',
@@ -30,7 +31,6 @@ function refresh() {
   const online = navigator.onLine !== false;
   const ready = lifecycle?.state === 'ready' && lifecycle.acceptingWrites && online;
   $('preview').disabled = busy;
-  $('storage-layout').disabled = busy || Boolean(lifecycle);
   $('empty-confirmed').disabled = busy;
   $('upload').disabled = busy || !configured || !online || !$('empty-confirmed').checked || Boolean(lifecycle);
   $('reconnect').disabled = busy || !configured || !online;
@@ -57,8 +57,7 @@ const seeder = new SyntheticYearSeeder({ onProgress: state => {
 } });
 function previewResult(recipe) {
   const ledger = recipe.ledger;
-  const layout = recipe.storageLayout || $('storage-layout').value;
-  const physical = layout === 'fragments-v3' ? serializeFragmentedCanonicalLedger(ledger) : layout === 'chunks-v2' ? serializePackedCanonicalLedger(ledger) : serializeCanonicalLedger(ledger);
+  const physical = serializeFragmentedCanonicalLedger(ledger);
   $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. ${serializeCanonicalLedger(ledger).size} logical canonical objects grouped into ${physical.size} storage objects before journals. January–December 2025. No Drive write is needed for this preview.`;
 }
 async function verify() {
@@ -85,7 +84,6 @@ $('preview').addEventListener('click', () => run(async () => {
 $('upload').addEventListener('click', () => {
   if (!$('empty-confirmed').checked || storage.lifecycle || !configured || navigator.onLine === false) return;
   void run(async () => {
-    seeder.layout = $('storage-layout').value;
     result('Choose your newly created empty synthetic folder.');
     // Keep the Google authorization invocation in the user activation path.
     await storage.connect({ requireEmpty: true });

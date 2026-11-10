@@ -5,7 +5,7 @@ import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
 import {createWorkspaceViewReader, getWorkspaceActivity} from '../js/canonical-workspace-model.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {googleStartupMessage} from '../js/google-startup-diagnostics.mjs';
-import {CanonicalLedgerStore, serializePackedCanonicalLedger} from '../js/canonical-ledger-storage.mjs';
+import {CanonicalLedgerStore, serializeCanonicalLedger} from '../js/canonical-ledger-storage.mjs';
 import {registerAccount, prepareCanonicalImport, applyReviewDecision, getEffectiveActivities} from '../js/canonical-import.mjs';
 import {exactSignedDecimal} from '../js/import-reconciliation.mjs';
 import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
@@ -18,7 +18,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
   const state = {connects:[],writes:0,snapshotReads:0,releases:0,recovers:0,connectionError:null,saveGate:null,readbackGate:null,
     loseResponse:false,failSave:false,releaseVerified:true,snapshotError:false,recoveryGate:null};
   const manifest = {syntheticOnly:true,databaseId:'invented-ui-db',copyId:'invented-ui-copy',revision:1,catalogFinalizationPending:null,snapshot:{}};
-  const objects = Object.fromEntries([...serializePackedCanonicalLedger(ledger)].map(([path, value]) => [path,new TextEncoder().encode(value)]));
+  const objects = Object.fromEntries([...serializeCanonicalLedger(ledger)].map(([path, value]) => [path,new TextEncoder().encode(value)]));
   for (const path of Object.keys(objects)) manifest.snapshot[path] = 'invented-hash';
   let storage, session, browserNavigator;
   const timeouts = new Map();
@@ -104,7 +104,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     replaceSavedLedger(next) {
       for (const path of Object.keys(objects)) delete objects[path];
       manifest.snapshot = {}; manifest.revision++;
-      for (const [path, value] of serializePackedCanonicalLedger(next)) {
+      for (const [path, value] of serializeCanonicalLedger(next)) {
         objects[path] = new TextEncoder().encode(value); manifest.snapshot[path] = 'invented-hash';
       }
     },
@@ -569,4 +569,39 @@ test('main workspace can explicitly save the exact local preview into a fresh sy
   assert.match(h.get('action-status').textContent, /exact preview.*independently verified/i);
   const stored = await h.storedLedger();
   assert.deepEqual(stored, recipe.ledger);
+});
+
+test('workspace undo-last and revert-all controls only change the local staged proposal', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount('-150.00');
+  assert.equal(h.get('undo-last-change').disabled, false);
+  assert.equal(h.get('revert-all-changes').disabled, false);
+  await h.choose('correction-type', 'bank-correction');
+  h.get('amount').value = '-140.00';
+  h.get('correction-rationale').value = 'Invented second correction to undo';
+  await h.get('correction-rationale').emit('input');
+  await h.click('stage-correction');
+  assert.equal(h.get('detail-amount').textContent, '-$140.00');
+  await h.click('undo-last-change');
+  assert.equal(h.get('detail-amount').textContent, '-$150.00');
+  assert.equal(h.modelSession.dirty, true);
+  assert.equal(h.get('save-ledger').disabled, false);
+  await h.click('revert-all-changes');
+  assert.equal(h.get('detail-amount').textContent, '-$160.00');
+  assert.equal(h.modelSession.dirty, false);
+  assert.equal(h.get('save-ledger').disabled, true);
+  assert.equal(h.get('undo-last-change').disabled, true);
+  assert.equal(h.get('revert-all-changes').disabled, true);
+  assert.equal(h.state.writes, 0);
+  assert.equal(h.manifest.revision, 1);
+  assert.equal(h.get('action-status').dataset.kind, 'success');
+});
+
+test('preview revert-all restores the original generated year without storage access', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.stageAmount('-150.00');
+  await h.click('revert-all-changes');
+  assert.equal(h.modelSession.mode, 'preview');
+  assert.equal(h.modelSession.dirty, false);
+  assert.equal(h.get('detail-amount').textContent, '-$160.00');
+  assert.equal(h.state.connects.length, 0);
+  assert.equal(h.state.writes, 0);
 });
