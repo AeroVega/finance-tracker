@@ -212,3 +212,43 @@ test('transfer linking rejects amount mismatches, same-account pairs and non-tra
     commandId: 'invented-nontransfer', evidence: rationale
   }), { message: 'invalid-transfer-link' });
 });
+
+
+test('an uncertain fresh-copy write blocks retry and a verified reopen resolves the outcome', async () => {
+  const h = setup('fragments-v3', true);
+  h.session.preview(recipe.ledger);
+  const proposal = structuredClone(h.session.ledger);
+  h.calls.loseResponse = true;
+  await assert.rejects(h.session.savePreviewToNewCopy());
+  assert.equal(h.session.mode, 'preview');
+  assert.equal(h.session.unverified, true);
+  assert.equal(h.session.canEdit(), false);
+  await assert.rejects(h.session.savePreviewToNewCopy(), { message: 'verified-preview-required' });
+  assert.equal(h.calls.writes, 1);
+  h.calls.loseResponse = false;
+  await h.session.reopen();
+  assert.equal(h.session.mode, 'saved');
+  assert.equal(h.session.unverified, false);
+  assert.deepEqual(h.session.ledger, proposal);
+  assert.equal(h.calls.writes, 1);
+});
+
+test('transfer-link events save and reopen through the existing canonical store', async () => {
+  const h = setup('chunks-v2');
+  await h.session.open();
+  const outgoing = recipe.ledger.activities.find(activity =>
+    activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' &&
+    activity.effectiveDate === '2025-01-16');
+  const incoming = recipe.ledger.activities.find(activity =>
+    activity.accountId === recipe.accounts.savings && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER IN' &&
+    activity.effectiveDate === '2025-01-16');
+  h.session.linkTransfer({ outgoingActivityId: outgoing.activityId, counterpartyActivityId: incoming.activityId,
+    rationale: 'Invented matching transfer confirmation.' });
+  const proposal = structuredClone(h.session.ledger);
+  await h.session.save();
+  await h.session.reopen();
+  assert.deepEqual(h.session.ledger, proposal);
+  const effective = getEffectiveActivities(h.session.ledger);
+  assert.equal(effective.find(activity => activity.activityId === outgoing.activityId).transferCounterpartyActivityId, incoming.activityId);
+  assert.equal(effective.find(activity => activity.activityId === incoming.activityId).transferCounterpartyActivityId, outgoing.activityId);
+});
