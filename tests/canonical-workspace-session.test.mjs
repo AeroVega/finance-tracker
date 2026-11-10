@@ -190,14 +190,25 @@ test('transfer linking rejects amount mismatches, same-account pairs and non-tra
     activity.accountId === recipe.accounts.savings && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER IN' &&
     activity.effectiveDate === '2025-01-16');
   const rationale = { rationale: 'Invented manual confirmation.' };
-  assert.throws(() => applyFinancialEvent(recipe.ledger, {
-    type: 'transfer-link', activityId: outgoing.activityId,
-    counterpartyActivityId: recipe.ledger.activities.find(activity => activity.accountId === recipe.accounts.savings &&
-      activity.sourceDescription === 'INVENTED SAVINGS TRANSFER IN' && activity.effectiveDate === '2025-02-16').activityId,
+  const changed = structuredClone(recipe.ledger);
+  const changedIncoming = changed.activities.find(activity => activity.activityId === incoming.activityId);
+  changedIncoming.amountMinor -= 1;
+  assert.throws(() => applyFinancialEvent(changed, {
+    type: 'transfer-link', activityId: outgoing.activityId, counterpartyActivityId: incoming.activityId,
     commandId: 'invented-mismatched-transfer', evidence: rationale
   }), { message: 'invalid-transfer-link' });
+  const sameAccountTransfer = recipe.ledger.activities.find(activity =>
+    activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED BROKERAGE CONTRIBUTION OUT' &&
+    activity.effectiveDate === '2025-01-17');
   assert.throws(() => applyFinancialEvent(recipe.ledger, {
-    type: 'transfer-link', activityId: outgoing.activityId, counterpartyActivityId: incoming.activityId,
+    type: 'transfer-link', activityId: outgoing.activityId, counterpartyActivityId: sameAccountTransfer.activityId,
+    commandId: 'invented-same-account-transfer', evidence: rationale
+  }), { message: 'invalid-transfer-link' });
+  const nonTransfer = recipe.ledger.activities.find(activity =>
+    activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED PAYROLL FIRST' &&
+    activity.effectiveDate === '2025-01-01');
+  assert.throws(() => applyFinancialEvent(recipe.ledger, {
+    type: 'transfer-link', activityId: outgoing.activityId, counterpartyActivityId: nonTransfer.activityId,
     commandId: 'invented-nontransfer', evidence: rationale
   }), { message: 'invalid-transfer-link' });
 });
