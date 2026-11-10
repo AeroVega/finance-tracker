@@ -59,6 +59,11 @@ const messages = {
   'transaction-unresolved': 'The save result is uncertain. Recover if offered, then reopen saved records before retrying.',
   'reconnect-required': 'The connection could not be verified. Reconnect and reopen saved records before editing.',
   'verified-draft-required': 'There is no verified draft eligible for saving. Reopen saved records before editing.',
+  'verified-preview-required': 'Load a local synthetic preview with no active Drive session before saving it to a new folder.',
+  'new-empty-folder-required': 'The selected folder did not pass fresh-copy admission. No existing copy was changed; choose a newly created empty synthetic folder.',
+  'seed-readback-mismatch': 'The new copy could not be independently verified. Keep this tab open, recover if offered, then reopen before deciding what to do next.',
+  'transfer-link-rationale-required': 'Explain why these two activities represent the same transfer.',
+  'invalid-transfer-link': 'These activities cannot be linked. Confirm that both are active transfers in different accounts, with equal opposite amounts in the same currency, and that neither is already linked.',
   'release-unconfirmed': 'Release was not verified. Keep this copy selected and resolve its session before switching devices.'
 };
 function announce(text, kind = 'info') {
