@@ -2,6 +2,7 @@ import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
 import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-workspace-model.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
+import { googleStartupMessage } from './google-startup-diagnostics.mjs';
 
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => {
@@ -300,7 +301,9 @@ window.addEventListener('beforeunload', event => { if (busy || session.dirty) { 
 window.addEventListener('offline', () => { session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
 refresh();
-storage.prepare().then(() => { configured = true; refresh(); }).catch(() => {
-  $('connection-status').textContent = 'Google configuration is unavailable. Local preview still works. Use a configured deployment to open saved copies.'; refresh();
+storage.prepare().then(() => { configured = true; refresh(); }).catch(error => {
+  configured = false;
+  $('connection-status').textContent = googleStartupMessage(error);
+  refresh();
 });
 correctionFields(); refresh();
