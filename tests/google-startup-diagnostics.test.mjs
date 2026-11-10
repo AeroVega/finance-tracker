@@ -1,6 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { googleStartupError, googleStartupMessage } from "../js/google-startup-diagnostics.mjs";
+import { DashboardSyntheticStorage } from "../js/dashboard-synthetic-storage.mjs";
+
+const validConfig = {clientId:"invented.apps.googleusercontent.com",apiKey:"invented-test-key",projectNumber:"123456789"};
+
+async function withGoogleEnvironment({fetchImpl, windowImpl, now}, operation) {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const originalDateNow = Date.now;
+  globalThis.fetch = fetchImpl;
+  globalThis.window = windowImpl;
+  if (now) Date.now = now;
+  try { await operation(); }
+  finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+    Date.now = originalDateNow;
+  }
+}
 
 test("configuration fetch failure is identified as a deployment configuration problem", () => {
   const message = googleStartupMessage(googleStartupError("google-config-network", "private network detail"));
@@ -42,4 +61,48 @@ test("unknown startup errors fail closed with a generic safe diagnosis", () => {
   const message = googleStartupMessage(new Error("sensitive provider body"));
   assert.match(message, /startup could not be completed/i);
   assert.doesNotMatch(message, /sensitive provider body/i);
+});
+
+
+test("prepare reports a missing deployed config before attempting Google library loading", async () => {
+  await withGoogleEnvironment({
+    fetchImpl: async () => ({ok:false,status:404}),
+    windowImpl: {}
+  }, async () => {
+    const storage = new DashboardSyntheticStorage();
+    await assert.rejects(storage.prepare(), error => error.code === "google-config-http" && error.status === 404);
+  });
+});
+
+test("prepare reports unavailable Google scripts only after valid deployment config loads", async () => {
+  let clockCalls = 0;
+  await withGoogleEnvironment({
+    fetchImpl: async () => ({ok:true,json:async () => validConfig}),
+    windowImpl: {
+      setInterval(callback) { const id = {}; queueMicrotask(callback); return id; },
+      clearInterval() {}
+    },
+    now: () => (++clockCalls <= 2 ? 0 : 16001)
+  }, async () => {
+    const storage = new DashboardSyntheticStorage();
+    await assert.rejects(storage.prepare(), error =>
+      error.code === "google-libraries-unavailable" &&
+      error.components.includes("Google Identity Services") &&
+      error.components.includes("Google API client"));
+  });
+});
+
+test("prepare distinguishes Picker initialization failure after config and base libraries load", async () => {
+  await withGoogleEnvironment({
+    fetchImpl: async () => ({ok:true,json:async () => validConfig}),
+    windowImpl: {
+      google: {accounts:{oauth2:{}}},
+      gapi: {load(_name, options) { options.onerror(); }},
+      setInterval(callback) { const id = {}; queueMicrotask(callback); return id; },
+      clearInterval() {}
+    }
+  }, async () => {
+    const storage = new DashboardSyntheticStorage();
+    await assert.rejects(storage.prepare(), error => error.code === "google-picker-unavailable");
+  });
 });
