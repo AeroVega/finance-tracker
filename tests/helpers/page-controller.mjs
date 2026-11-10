@@ -24,6 +24,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
       append(...children) { this.children.push(...children); if (this.tagName === 'SELECT' && !this.value) this.value = children[0]?.value || ''; },
       replaceChildren(...children) { this.children.forEach(forget); this.children = []; this.append(...children); },
       setAttribute(key, value) { this.attributes[key] = value; },
+      removeAttribute(key) { delete this.attributes[key]; },
       addEventListener(type, callback) { if (!events.has(type)) events.set(type, []); events.get(type).push(callback); },
       async emit(type, event = {}) { for (const callback of events.get(type) || []) await callback(event); },
       focus() { observed.focused = this; }, select() { observed.selected = this; },
@@ -40,7 +41,13 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   }
   const get = id => { assert.ok(nodes.has(id), `Missing control ${id}`); return nodes.get(id); };
   get('build-sha').textContent = source;
-  const window = { addEventListener(type, callback) { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(callback); },
+  const location = {hash:''};
+  const historyEntries = ['']; let historyIndex = 0;
+  const history = {scrollRestoration:'auto',
+    pushState(_state, _title, hash) { historyEntries.splice(++historyIndex); historyEntries.push(hash); location.hash = hash; },
+    replaceState(_state, _title, hash) { historyEntries[historyIndex] = hash; location.hash = hash; }
+  };
+  const window = { location, history, scrollY:0, scrollTo({top}) { this.scrollY = top; }, addEventListener(type, callback) { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(callback); },
     confirm(question) { observed.confirmations.push(question); return observed.confirm; } };
   const navigator = { onLine: true, clipboard: { async writeText(value) {
     if (observed.clipboardFailure) throw new Error('Invented clipboard refusal');
@@ -58,7 +65,10 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   vm.runInNewContext(executable, context, { filename: `${name}.mjs` });
   await new Promise(setImmediate);
   return {
-    get, observed, session, navigator, intervals,
+    get, observed, session, navigator, intervals, location, window,
+    async navigate(hash) { history.pushState(null, "", hash); for (const callback of listeners.get("hashchange") || []) await callback(); },
+    async back() { if (historyIndex > 0) { location.hash = historyEntries[--historyIndex]; for (const callback of listeners.get("popstate") || []) await callback(); } },
+    async forward() { if (historyIndex < historyEntries.length - 1) { location.hash = historyEntries[++historyIndex]; for (const callback of listeners.get("popstate") || []) await callback(); } },
     async click(id) { const node = get(id); if (!node.disabled) await node.emit('click'); await new Promise(setImmediate); },
     async choose(id, value) {
       const node = get(id); assert.equal(node.disabled, false, `${id} must be enabled`);

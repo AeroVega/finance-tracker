@@ -1,3 +1,4 @@
+import { createWorkspacePages } from './workspace-pages.mjs';
 import { createSyntheticFinancialPosition } from './synthetic-financial-position.mjs';
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
@@ -8,6 +9,7 @@ import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
 import { googleStartupMessage } from './google-startup-diagnostics.mjs';
 
 const $ = id => document.getElementById(id);
+const pages = createWorkspacePages({document, window});
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
   if (text !== undefined) result.textContent = text;
@@ -98,7 +100,13 @@ function announce(text, kind = 'info') {
 }
 function refresh() {
   const lifecycle = storage.lifecycle;
+  const needsRecovery = ['recovery-required', 'stale-session'].includes(lifecycle?.state);
+  if (needsRecovery) $('recovery-tools').open = true;
+  pages.setLoaded(Boolean(session.ledger));
   const ready = session.ready(), editable = !busy && session.canEdit();
+  $('start-preview').disabled = busy || Boolean(lifecycle);
+  $('welcome-panel').hidden = Boolean(session.ledger);
+  $('overview-loaded').hidden = !session.ledger;
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false;
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
   $('preview-position').disabled = busy || Boolean(lifecycle);
@@ -146,6 +154,11 @@ function refresh() {
   else text = session.ledger ? 'All changes saved and verified.' : 'No ledger loaded. Open your saved year or try a local preview.';
   if ($('save-state').textContent !== text) $('save-state').textContent = text;
   $('save-state').dataset.state = session.unverified ? 'unverified' : session.dirty ? 'dirty' : busy ? 'busy' : 'clean';
+  $('draft-bar').hidden = !busy && !session.dirty && !session.unverified && !needsRecovery;
+  $('draft-bar').dataset.state = session.unverified ? 'unverified' : busy ? 'busy' : 'dirty';
+  $('draft-summary').textContent = busy ? 'Working. Keep this tab open.' : session.unverified ? 'Save unverified. Check Storage.' : needsRecovery ? 'Recovery needed. Open Storage.' : `${session.stagedHistory.length} staged change${session.stagedHistory.length === 1 ? '' : 's'} · not saved`;
+  $('save-ledger').hidden = session.mode === 'preview';
+  $('draft-storage-link').hidden = session.mode !== 'preview' || session.unverified || busy;
   $('data-mode').dataset.mode = session.mode;
   $('data-mode').textContent = session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
 }
@@ -188,7 +201,7 @@ function render({ reset = false } = {}) {
     $('statement-full-month').checked = false; componentRows.length = 0; holdingRows.length = 0;
     $('component-rows').replaceChildren(); $('holdings-rows').replaceChildren();
     for (const id of ['holdings-source','holdings-date','reconcile-source','balance-source','balance-date','balance-amount','closure-source','new-account-name']) $(id).value = '';
-    page = 0; selectedActivity = null; $('transaction-search').value = ''; $('review-only').checked = false; $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; }
+    page = 0; selectedActivity = null; $('transaction-search').value = ''; $('review-only').checked = false; $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; pages.clearDetail(); }
   if (viewLedger !== session.ledger) {
     const reader = createWorkspaceViewReader(session.ledger);
     viewReader = reader; viewLedger = session.ledger;
@@ -211,13 +224,13 @@ function render({ reset = false } = {}) {
       $('summary-cards').append(card);
     }
   }
-  $('coverage-summary').textContent = `${view.coverage.importCount} import runs. Latest source activity: ${view.coverage.latestActivityDate || 'unavailable'}. Imported dates alone do not prove complete history. Inspect account-month reconciliation below.`;
+  $('coverage-summary').textContent = `${view.coverage.importCount} import runs. Latest source activity: ${view.coverage.latestActivityDate || 'unavailable'}. Imported dates alone do not prove complete history. Inspect account-month reconciliation on the Review page.`;
   $('transaction-count').textContent = String(view.totalCount);
   $('filter-count').textContent = `${view.filteredCount} matching activities of ${view.totalCount} in this account and period. Search and review filters do not change totals.`;
   reviewButtons.clear();
   $('transaction-rows').replaceChildren();
   for (const row of view.rows) {
-    const tr = node('tr'), description = node('td');
+    const tr = node('tr'), description = node('td'); tr.setAttribute('role', 'row');
     description.append(node('strong', row.sourceDescription), node('small', row.accountName, 'transaction-detail'));
     const classification = node('td');
     classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', row.categoryId || 'No category', 'transaction-detail'));
@@ -228,12 +241,14 @@ function render({ reset = false } = {}) {
     inspect.addEventListener('click', () => { if (!busy) showDetail(row.activityId); });
     const actionCell = node('td'); actionCell.append(inspect);
     tr.append(node('td', row.reportingDate || 'Unknown date'), description, classification, node('td', money(row.amountText, row.currency)), actionCell);
+    for (const cell of tr.children) cell.setAttribute('role', 'cell');
     $('transaction-rows').append(tr);
   }
   $('empty-state').hidden = view.filteredCount > 0;
   if (!view.filteredCount) $('empty-state').textContent = 'No activities match this selection. Change the account, month or search to see other records.';
   $('transaction-table-wrap').hidden = !view.filteredCount;
   $('page-status').textContent = `Page ${view.page + 1} of ${view.pages}`;
+  $('overview-review-title').textContent = `${view.review.activityCount + view.review.sourceCount} records need a second look`;
   $('review-summary').textContent = `${view.review.activityCount} activities need review in this account and period. ${view.review.sourceCount} source observations await a decision. Unknown investment activity remains excluded from known totals.`;
   reviewQueueButton = null;
   $('review-queue').replaceChildren();
@@ -243,7 +258,7 @@ function render({ reset = false } = {}) {
     reviewButton.addEventListener('click', () => {
       if (busy) return;
       $('review-only').checked = true; $('transaction-search').value = ''; page = 0; render();
-      $('transaction-search').focus();
+      pages.go('transactions'); $('transaction-search').focus();
     });
     $('review-queue').append(reviewButton);
   }
@@ -349,7 +364,7 @@ function renderPosition() {
     $('position-totals').append(card);
   }
   if (!position.currencies.length) $('position-totals').append(node('p', 'Position unavailable: no accounts in scope.'));
-  $('position-accounts').replaceChildren(); positionButtons.length = 0;
+  $('position-accounts').replaceChildren(); $('holdings-accounts').replaceChildren(); positionButtons.length = 0;
   for (const account of position.accounts) {
     const card = node('article', undefined, 'review-item');
     card.append(node('h3', account.displayName), node('p', `${label(account.role)} · ${money(account.balance, account.currency)} · ${label(account.status)}`), node('p', `Balance date: ${account.balanceDate || 'unavailable'} · Basis: ${account.basis || 'unavailable'} · Source: ${account.source?.reference || 'unavailable'}`), node('p', `${account.stale ? 'Stale evidence. ' : ''}${account.reasons.map(label).join('; ')}`));
@@ -371,11 +386,18 @@ function renderPosition() {
         card.append(button);
       }
     }
-    if (['brokerage', 'retirement'].includes(account.accountType)) card.append(node('p', account.holdings ? 'Dated holdings evidence available. No live prices or performance calculation.' : 'No supported dated holdings evidence. Transaction rows are not holdings.'));
-    if (account.holdings) card.append(node('p', `Holdings date: ${account.holdings.effectiveDate} · ${account.holdings.scope} · ${account.holdings.stale ? 'Stale. ' : ''}${account.holdings.reasons.map(label).join('; ')}`), evidenceDetails('Inspect dated holdings and valuation', () => account.holdings));
-    resolveHoldings(card, account);
+    if (['brokerage', 'retirement'].includes(account.accountType)) {
+      const link = node('a', 'View dated holdings →', 'account-holdings-link'); link.href = '#holdings'; card.append(link);
+      const holdingCard = node('article', undefined, 'review-item');
+      holdingCard.append(node('h3', account.displayName), node('p', account.holdings ? `As of ${account.holdings.effectiveDate} · ${account.holdings.scope} · ${account.currency}` : 'No supported dated holdings evidence. Transaction rows are not holdings.'));
+      if (account.holdings) {
+        holdingCard.append(node('p', `${account.holdings.stale ? 'Stale evidence. ' : ''}${account.holdings.reasons.map(label).join('; ')}`), evidenceDetails('Inspect dated holdings and valuation', () => account.holdings));
+      }
+      resolveHoldings(holdingCard, account); $('holdings-accounts').append(holdingCard);
+    }
     $('position-accounts').append(card);
   }
+  if (!$('holdings-accounts').children.length) $('holdings-accounts').append(node('p', 'No investment accounts in the selected scope.', 'quiet-placeholder'));
   const options = session.ledger.accounts.map(account => [account.accountId, account.displayName]);
   addOptions($('balance-account'), options, $('balance-account').value, 'Choose account');
   addOptions($('reconcile-account'), options, $('reconcile-account').value, 'Choose account');
@@ -405,12 +427,12 @@ function evidenceDetails(title, read) {
   });
   return details;
 }
-function showDetail(activityId) {
+function showDetail(activityId, {navigate = true} = {}) {
   const detail = getWorkspaceActivity(session.ledger, activityId);
   if (!detail) return;
   selectedActivity = activityId;
   const activity = detail.activity;
-  $('activity-detail').hidden = false;
+  pages.openDetail({navigate});
   $('detail-title').textContent = activity.sourceDescription;
   $('detail-description').textContent = `${detail.account.displayName} · ${activity.effectiveDate || 'Unknown date'} · ${label(activity.lifecycleStatus)} · ${label(activity.activityKind)} · ${activity.categoryId || 'No category'}${activity.reviewReasons?.length ? '. Needs review: ' + activity.reviewReasons.map(reviewReason).join(', ') : ''}`;
   $('detail-amount').textContent = money(activity.amountText, activity.currency);
@@ -485,7 +507,7 @@ function showDetail(activityId) {
   $('category').value = activity.categoryId || '';
   $('amount').value = activity.amountText || '';
   $('correction-rationale').value = '';
-  correctionFields(); refresh(); $('detail-title').focus();
+  correctionFields(); refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
 }
 function correctionFields() {
   const type = $('correction-type').value;
@@ -495,9 +517,11 @@ function correctionFields() {
 }
 action('preview-position', 'Preparing invented balances and reconciliation evidence locally.', async () => {
   if (!confirmReplace()) return;
+  const navigationRevision = pages.revision;
   const fixture = await createSyntheticFinancialPosition();
   session.preview(fixture.ledger); $('position-date').value = fixture.asOf; render({reset:true});
   $('month-filter').value = fixture.month; render();
+  if (pages.revision === navigationRevision) pages.go('position');
   announce('Invented financial-position preview ready. No Drive connection or write.', 'success');
 });
 action('stage-balance', 'Validating dated balance evidence locally.', async () => {
@@ -577,11 +601,13 @@ $('month-filter').addEventListener('change', () => {
 });
 action('open-ledger', 'Opening and verifying your saved synthetic copy. This can take time while retained history is checked.', async () => {
   if (!confirmReplace()) return;
-  await session.open(); render({ reset: true }); announce('Saved canonical records opened and verified. Browse locally; nothing is saved until you choose Save changes.', 'success');
+  const navigationRevision = pages.revision;
+  await session.open(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Saved canonical records opened and verified. Browse locally; nothing is saved until you choose Save changes.', 'success');
 });
 action('preview-year', 'Preparing the invented year locally. No Google connection or Drive write.', async () => {
   if (!confirmReplace()) return;
-  session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); announce('Local synthetic preview ready. Open your saved copy to save corrections to Drive.', 'success');
+  const navigationRevision = pages.revision;
+  session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Local synthetic preview ready. Open your saved copy to save corrections to Drive.', 'success');
 });
 action('save-preview', 'Saving this exact local preview into a newly selected, empty synthetic Drive folder and independently verifying it. Keep this tab open.', async () => {
   await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success');
@@ -611,7 +637,7 @@ action('link-transfer', 'Recording and validating this transfer relationship loc
 });
 action('undo-last-change', 'Reverting the most recent staged change locally. No Drive write.', async () => {
   session.undoLastStagedChange(); render();
-  if (selectedActivity && getWorkspaceActivity(session.ledger, selectedActivity)) showDetail(selectedActivity);
+  if (selectedActivity && getWorkspaceActivity(session.ledger, selectedActivity)) showDetail(selectedActivity, {navigate:false});
   announce('Most recent staged change reverted. No saved records were changed.', 'success');
 });
 action('revert-all-changes', 'Reverting all staged changes to the last verified baseline. No Drive write.', async () => {
@@ -619,7 +645,7 @@ action('revert-all-changes', 'Reverting all staged changes to the last verified 
     announce('Revert cancelled. Your staged changes are unchanged.'); return;
   }
   session.revertAllStagedChanges(); render();
-  if (selectedActivity && getWorkspaceActivity(session.ledger, selectedActivity)) showDetail(selectedActivity);
+  if (selectedActivity && getWorkspaceActivity(session.ledger, selectedActivity)) showDetail(selectedActivity, {navigate:false});
   announce('All staged changes reverted to the last verified baseline. No saved records were changed.', 'success');
 });
 action('stage-correction', 'Checking your correction locally.', async () => {
@@ -627,11 +653,13 @@ action('stage-correction', 'Checking your correction locally.', async () => {
   render(); showDetail(selectedActivity);
   announce(session.mode === 'preview' ? 'Correction added to this local preview only. Source evidence is unchanged.' : 'Correction staged locally. Source evidence is unchanged. Choose Save changes to persist it.', 'success');
 });
+$('start-preview').addEventListener('click', () => { if (!$('start-preview').disabled) return $('preview-position').click(); });
 $('correction-form').addEventListener('submit', event => event.preventDefault());
 $('close-detail').addEventListener('click', () => {
   if (busy) return;
-  $('activity-detail').hidden = true;
-  (reviewButtons.get(selectedActivity) || $('transaction-search')).focus();
+  pages.closeDetail();
+  if (pages.current === 'transactions') (reviewButtons.get(selectedActivity) || $('transaction-search')).focus();
+  else $('page-title').focus();
   selectedActivity = null; refresh();
 });
 $('correction-type').addEventListener('change', correctionFields);

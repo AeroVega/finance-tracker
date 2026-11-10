@@ -6,6 +6,10 @@
 
 **Deployment prerequisite:** main's audited Pages run failed before upload. Confirm a successful authorized deployment and full served SHA before attributing new results to it. See [project status](PROJECT_STATUS.md). This guide does not authorize a deployment.
 
+## Focused mobile pages
+
+The [new navigation and layout acceptance](MOBILE_WORKSPACE_PAGES.md#owner-acceptance-on-the-intended-commit) covers the PR36 redesign. Its affected mobile checks need fresh acceptance despite the narrower earlier PR32 pass. Use **Storage** for opening/reconnecting a saved copy, previews, undo/revert, release, recovery and the served source SHA.
+
 ## Run order
 
 1. Confirm the full deployed SHA against the intended successful Pages deployment and select the actual browser. Repeat separately on physical iPhone and iPad Safari; emulation is not device acceptance.

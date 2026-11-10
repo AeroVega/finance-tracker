@@ -1,5 +1,7 @@
 # Canonical main workspace
 
+**Mobile navigation update:** [Focused workspace pages](MOBILE_WORKSPACE_PAGES.md) replaces the single scrolling dashboard with Overview, Activity, Position, Review and Storage. This changes the affected mobile acceptance scope; prior PR32 layout acceptance does not validate the new pages.
+
 ## Scope
 
 **Verified November 10, 2026:** [PR32](https://github.com/AeroVega/finance-tracker/pull/32) merged into main, including [PR34](https://github.com/AeroVega/finance-tracker/pull/34), which had merged into its branch. Implementation and acceptance remain separate. See [project status](PROJECT_STATUS.md) for the exact source and deployment result.
@@ -20,15 +22,15 @@ The earlier scope and acceptance record below describe the canonical activity mi
 
 ## Ordinary flow
 
-1. Open the main page and choose **Open saved synthetic year**. Select the existing folder used by the synthetic-year tool, with `synthetic` in its name. Do not select a production folder or any folder containing personal financial data. This action never initializes a new empty copy.
-2. Select an account and month. These controls scope both rows and reports. Search and **Needs review only** filter displayed rows, not totals. Rows are paginated, 25 at a time.
-3. Choose **Review** beside an activity. The detail panel shows its current values, source observations and audit history. Raw evidence is available on demand.
+1. Open the main page, select **Storage**, then choose **Open saved synthetic year**. Select the existing folder used by the synthetic-year tool, with `synthetic` in its name. Do not select a production folder or any folder containing personal financial data. This action never initializes a new empty copy.
+2. Open **Activity** and select an account and month. These shared controls scope both rows and reports. Search and **Needs review only** filter displayed rows, not totals. Rows are paginated, 25 at a time.
+3. Choose **Review** beside an activity. The detail page shows its current values, source observations and audit history. Raw evidence is available on demand.
 4. Choose a correction, enter a reason, and press **Stage correction**. For an outgoing activity already classified as a transfer, the detail panel may show exact-amount incoming candidates in other accounts. Select the matching activity and record why the pair is the same transfer. No pair is linked automatically; the canonical event validates opposite signs, exact same-currency amounts, distinct accounts, transfer classifications and one-to-one linkage. The change remains local. The source activity and source fields remain unchanged; the canonical engine appends an event. A category correction also records the existing engine's prospective rule for later matching imports in that account and currency. Other existing matching purchases are not recategorized. Linked refunds follow their purchase category unless separately categorized.
 5. Press **Save changes** once. The page blocks repeated operations and shows elapsed time until the store completes its verified read-back. It does not equate a write response with a verified save.
-6. **Reopen saved** independently loads the selected copy again. Unsaved changes require confirmation and are discarded only after a successful verified load.
-7. **Release session** verifies release and clears the workspace's authorization token. Loaded records and any draft remain read-only in this synthetic tab. Close the tab to clear them. Reconnecting reopens the saved copy rather than silently reapplying a draft.
+6. In **Storage**, **Reopen saved** independently loads the selected copy again. Unsaved changes require confirmation and are discarded only after a successful verified load.
+7. In **Storage**, **Release session** verifies release and clears the workspace's authorization token. Loaded records and any draft remain read-only in this synthetic tab. Close the tab to clear them. Reconnecting reopens the saved copy rather than silently reapplying a draft.
 
-If the owner has not seeded a copy, **Preview invented year locally** demonstrates the same canonical records and correction controls without connecting to Google. **Save this preview to a new folder** then requires a newly created, owner-confirmed empty folder with `synthetic` in its name. The workspace checks the fresh genesis manifest, writes the exact in-memory ledger through the existing canonical store using the v3 fragmented layout, and independently reopens and compares the complete graph. It never modifies an existing copy. If a write outcome is uncertain, the draft remains in memory and blind retry is blocked; recover if offered and reopen to establish what reached Drive. The existing synthetic-year tool remains available for deterministic pristine seeding.
+If the owner has not seeded a copy, **Storage → Explore invented data locally → Try a local preview** demonstrates the same canonical records and correction controls without connecting to Google. **Save this preview to a new folder** then requires a newly created, owner-confirmed empty folder with `synthetic` in its name. The workspace checks the fresh genesis manifest, writes the exact in-memory ledger through the existing canonical store using the v3 fragmented layout, and independently reopens and compares the complete graph. It never modifies an existing copy. If a write outcome is uncertain, the draft remains in memory and blind retry is blocked; recover if offered and reopen to establish what reached Drive. The existing synthetic-year tool remains available for deterministic pristine seeding.
 
 ## Meaning and limits
 

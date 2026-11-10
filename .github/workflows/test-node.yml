@@ -21,6 +21,7 @@ jobs:
           node-version: 26
       - name: Check browser module syntax
         run: |
+          node --check js/workspace-pages.mjs
           node --check js/canonical-workspace.mjs
           node --check js/canonical-workspace-model.mjs
           node --check js/canonical-workspace-session.mjs

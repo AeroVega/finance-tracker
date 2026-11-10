@@ -1,3 +1,4 @@
+import {createWorkspacePages} from '../js/workspace-pages.mjs';
 import {buildFinancialPosition, buildAccountMonthCoverage} from '../js/financial-position.mjs';
 import {createSyntheticFinancialPosition} from '../js/synthetic-financial-position.mjs';
 import test from 'node:test';
@@ -32,6 +33,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     async readObject(path) { return objects[path]; },
     async readVerifiedSnapshot() {
       state.snapshotReads++;
+      if (state.openGate) await state.openGate.promise;
       if (state.snapshotError) throw Object.assign(new Error('Private provider body'), {code:'snapshot-unavailable'});
       if (manifest.revision > 1 && state.readbackGate) await state.readbackGate.promise;
       return {manifest:structuredClone(manifest),objects:structuredClone(objects)};
@@ -84,7 +86,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     constructor(options) { super({...options, online:() => browserNavigator?.onLine !== false}); session = this; }
   }
   const page = await pageController('canonical-workspace', {DashboardSyntheticStorage:Storage,
-    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,isCalendarDate,buildFinancialPosition,buildAccountMonthCoverage,createSyntheticFinancialPosition,createSyntheticFinancialYear,googleStartupMessage,TypeError},
+    CanonicalWorkspaceSession:BrowserSession, createWorkspacePages, createWorkspaceViewReader,getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,isCalendarDate,buildFinancialPosition,buildAccountMonthCoverage,createSyntheticFinancialPosition,createSyntheticFinancialYear,googleStartupMessage,TypeError},
   {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs',timers});
   browserNavigator = page.navigator;
   return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,timeouts,flushSearch,
@@ -713,15 +715,15 @@ test('manual holdings corrections resolve with audit evidence, undo, save and re
   await h.click('stage-holdings');
   assert.equal(h.get('action-status').dataset.kind, 'success');
   assert.equal(h.modelSession.ledger.positionEvents.at(-1).holdings[0].quantity, '12.5000');
-  assert.match(text(h.get('position-accounts')), /Conflicting holdings statements/);
-  const card = h.get('position-accounts').children.find(card => text(card).includes('Invented brokerage'));
+  assert.match(text(h.get('holdings-accounts')), /Conflicting holdings statements/);
+  const card = h.get('holdings-accounts').children.find(card => text(card).includes('Invented brokerage'));
   card.children.find(child => child.tagName === 'INPUT').value = 'INVENTED corrected statement verified';
   await card.children.find(child => child.tagName === 'BUTTON' && child.textContent.includes('replacement holdings')).emit('click');
   assert.equal(h.modelSession.ledger.positionEvents.at(-1).eventType, 'holdings-resolution');
-  assert.doesNotMatch(text(h.get('position-accounts')), /Conflicting holdings statements/);
+  assert.doesNotMatch(text(h.get('holdings-accounts')), /Conflicting holdings statements/);
   await h.click('undo-last-change');
-  assert.match(text(h.get('position-accounts')), /Conflicting holdings statements/);
-  const restoredCard = h.get('position-accounts').children.find(card => text(card).includes('Invented brokerage'));
+  assert.match(text(h.get('holdings-accounts')), /Conflicting holdings statements/);
+  const restoredCard = h.get('holdings-accounts').children.find(card => text(card).includes('Invented brokerage'));
   restoredCard.children.find(child => child.tagName === 'INPUT').value = 'INVENTED selection confirmed after undo';
   await restoredCard.children.find(child => child.tagName === 'BUTTON' && child.textContent.includes('replacement holdings')).emit('click');
   assert.equal(h.modelSession.ledger.positionEvents.at(-1).eventType, 'holdings-resolution');
@@ -914,4 +916,123 @@ test('holding account changes protect row evidence and clear complete-scope decl
   assert.equal(h.get('holdings-account').value,account); assert.equal(symbol.value,'INVENTED-ETF');
   h.observed.confirm=true; await h.choose('holdings-account','');
   assert.equal(h.get('holdings-rows').children.length,0); assert.equal(h.get('holdings-scope').value,'partial');
+});
+
+test('focused pages preserve pending transaction editor text and selection across navigation and history', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.detail();
+  await h.choose('correction-type','bank-correction');
+  h.get('amount').value = '-123.456'; h.get('correction-rationale').value = 'INVENTED unfinished correction';
+  await h.get('correction-rationale').emit('input');
+  assert.equal(h.location.hash, '#activity-detail');
+  assert.equal(h.get('transactions').hidden, true);
+  assert.equal(h.get('activity-detail').hidden, false);
+  const ledger = h.modelSession.ledger;
+  for (const hash of ['#position','#holdings','#review','#reconciliation','#storage','#overview','#transactions']) {
+    await h.navigate(hash);
+    assert.equal(h.get(hash.slice(1)).hidden, false);
+    assert.equal(h.get('activity-detail').hidden, true);
+    assert.equal(h.modelSession.ledger, ledger);
+    assert.equal(h.get('amount').value, '-123.456');
+    assert.equal(h.get('correction-rationale').value, 'INVENTED unfinished correction');
+  }
+  await h.navigate('#activity-detail');
+  assert.equal(h.get('stage-correction').disabled, false);
+  await h.back(); assert.equal(h.get('transactions').hidden, false);
+  await h.forward(); assert.equal(h.get('activity-detail').hidden, false);
+  assert.equal(h.get('amount').value, '-123.456');
+  assert.equal(h.state.writes, 0); assert.equal(h.state.connects.length, 0);
+});
+
+test('balances, holdings and statement drafts survive page changes with their distinct scope', async () => {
+  const h = await workspacePage(); await h.click('preview-position');
+  const fixture = h.modelSession.ledger;
+  const mortgage = fixture.accounts.find(account => account.accountType === 'mortgage').accountId;
+  await h.choose('reconcile-account',mortgage); await h.click('add-component'); await h.click('add-holding');
+  const component = editorFields(h,'component-rows'), holding = editorFields(h,'holdings-rows');
+  component[1].value = '-100.00'; component[2].value = 'INVENTED pending mortgage evidence';
+  holding[0].value = 'INVENTED-ETF'; holding[2].value = '0.000123'; holding[3].value = '12.0001';
+  h.get('statement-full-month').checked = true;
+  h.get('balance-amount').value = '123.4567'; h.get('balance-source').value = 'INVENTED pending balance';
+  const month = h.get('month-filter').value, date = h.get('position-date').value;
+  for (const hash of ['#holdings','#storage','#reconciliation','#overview','#position']) {
+    await h.navigate(hash);
+    assert.equal(h.get('balance-amount').value, '123.4567');
+    assert.equal(component[1].value, '-100.00'); assert.equal(holding[2].value, '0.000123');
+    assert.equal(h.get('statement-full-month').checked, true);
+    assert.equal(h.get('month-filter').value, month); assert.equal(h.get('position-date').value, date);
+  }
+  assert.equal(h.get('month-scope').hidden, true);
+  assert.equal(h.get('position-date-scope').hidden, false);
+  assert.equal(h.state.writes, 0);
+});
+
+test('staged changes persist across pages and explicit save remains available without five sticky actions', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount('-150.00');
+  const proposed = structuredClone(h.modelSession.ledger);
+  assert.equal(h.get('draft-bar').hidden, false);
+  assert.match(h.get('draft-summary').textContent, /1 staged change · not saved/);
+  for (const page of ['#storage','#holdings','#reconciliation','#overview']) await h.navigate(page);
+  assert.deepEqual(h.modelSession.ledger, proposed); assert.equal(h.state.writes, 0);
+  await h.click('save-ledger');
+  assert.equal(h.state.writes, 1); assert.equal(h.get('draft-bar').hidden, true);
+  assert.equal(h.location.hash, '#overview');
+  assert.deepEqual(await h.storedLedger(), proposed);
+});
+
+test('page navigation during an uncertain save preserves warning, recovery and the staged ledger', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
+  h.state.loseResponse = true; await h.click('save-ledger');
+  assert.equal(h.modelSession.unverified, true);
+  assert.equal(h.get('draft-bar').hidden, false);
+  assert.match(h.get('draft-summary').textContent, /Save unverified/);
+  const draft = structuredClone(h.modelSession.ledger), writes = h.state.writes;
+  await h.navigate('#position'); await h.navigate('#storage');
+  assert.equal(h.get('recover-ledger').hidden, false);
+  assert.deepEqual(h.modelSession.ledger,draft); assert.equal(h.state.writes,writes);
+  assert.equal(h.get('save-ledger').disabled,true);
+  assert.match(h.get('save-state').textContent,/Recover if offered/);
+});
+
+test('review drilldown opens Activity and first-run preview opens Position without storage calls', async () => {
+  const h = await workspacePage();
+  assert.equal(h.get('workspace-scope').hidden,true);
+  assert.equal(h.get('welcome-panel').hidden,false);
+  await h.click('start-preview');
+  assert.equal(h.location.hash,'#position');
+  assert.equal(h.get('welcome-panel').hidden,true);
+  assert.equal(h.get('workspace-scope').hidden,false);
+  await h.click('preview-year'); await h.navigate('#review');
+  const action = h.get('review-queue').children.find(child => child.tagName === 'BUTTON');
+  await action.click();
+  assert.equal(h.location.hash,'#transactions');
+  assert.equal(h.get('review-only').checked,true);
+  assert.equal(h.observed.focused,h.get('transaction-search'));
+  assert.equal(h.state.writes,0); assert.equal(h.state.connects.length,0);
+});
+
+test('closing detail and loading a replacement ledger never leaves a blank detail route', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.detail();
+  await h.click('close-detail');
+  assert.equal(h.location.hash,'#transactions');
+  assert.equal(h.get('resume-detail').hidden,true);
+  await h.navigate('#activity-detail');
+  assert.equal(h.location.hash,'#transactions');
+  await h.detail(); await h.navigate('#storage'); await h.click('preview-position');
+  await h.navigate('#activity-detail');
+  assert.equal(h.get('transactions').hidden,false);
+  assert.equal(h.get('activity-detail').hidden,true);
+});
+
+
+test('a completed ledger open respects navigation chosen while verification was pending', async () => {
+  const h = await workspacePage(); await h.navigate('#storage');
+  h.state.openGate = deferred();
+  const opening = h.click('open-ledger');
+  await h.until(() => h.state.snapshotReads === 1);
+  await h.navigate('#review');
+  h.state.openGate.resolve(); await opening;
+  assert.equal(h.location.hash, '#review');
+  assert.equal(h.get('review').hidden, false);
+  assert.equal(h.modelSession.mode, 'saved');
+  assert.equal(h.state.writes, 0);
 });
