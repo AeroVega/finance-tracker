@@ -6,7 +6,8 @@ import {createWorkspaceViewReader, getWorkspaceActivity} from '../js/canonical-w
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {googleStartupMessage} from '../js/google-startup-diagnostics.mjs';
 import {CanonicalLedgerStore, serializePackedCanonicalLedger} from '../js/canonical-ledger-storage.mjs';
-import {registerAccount, prepareCanonicalImport, applyReviewDecision} from '../js/canonical-import.mjs';
+import {registerAccount, prepareCanonicalImport, applyReviewDecision, getEffectiveActivities} from '../js/canonical-import.mjs';
+import {exactSignedDecimal} from '../js/import-reconciliation.mjs';
 import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
 import {pageController, deferred} from './helpers/page-controller.mjs';
 
@@ -16,7 +17,7 @@ const text = element => [element.textContent, ...element.children.map(text)].joi
 async function workspacePage({ledger = recipe.ledger} = {}) {
   const state = {connects:[],writes:0,snapshotReads:0,releases:0,recovers:0,connectionError:null,saveGate:null,readbackGate:null,
     loseResponse:false,failSave:false,releaseVerified:true,snapshotError:false,recoveryGate:null};
-  const manifest = {syntheticOnly:true,databaseId:'invented-ui-db',copyId:'invented-ui-copy',revision:1,snapshot:{}};
+  const manifest = {syntheticOnly:true,databaseId:'invented-ui-db',copyId:'invented-ui-copy',revision:1,catalogFinalizationPending:null,snapshot:{}};
   const objects = Object.fromEntries([...serializePackedCanonicalLedger(ledger)].map(([path, value]) => [path,new TextEncoder().encode(value)]));
   for (const path of Object.keys(objects)) manifest.snapshot[path] = 'invented-hash';
   let storage, session, browserNavigator;
@@ -59,8 +60,14 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     async connect(options) {
       state.connects.push(options);
       if (state.connectionError) throw Object.assign(new Error('Private provider detail'), {code:state.connectionError});
-      assert.equal(options.requireExisting, true);
-      assert.equal(options.requireEmpty, undefined);
+      if (options.requireEmpty === true) {
+        assert.equal(options.requireExisting, undefined);
+        for (const path of Object.keys(objects)) delete objects[path];
+        manifest.revision = 0; manifest.snapshot = {};
+      } else {
+        assert.equal(options.requireExisting, true);
+        assert.equal(options.requireEmpty, undefined);
+      }
       this.lifecycle = lifecycle; lifecycle.state = 'ready'; lifecycle.acceptingWrites = true;
       this.options.onStatus({state:'ready'});
     }
@@ -75,7 +82,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     constructor(options) { super({...options, online:() => browserNavigator?.onLine !== false}); session = this; }
   }
   const page = await pageController('canonical-workspace', {DashboardSyntheticStorage:Storage,
-    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,createSyntheticFinancialYear,googleStartupMessage,TypeError},
+    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,createSyntheticFinancialYear,googleStartupMessage,TypeError},
   {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs',timers});
   browserNavigator = page.navigator;
   return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,timeouts,flushSearch,
@@ -545,4 +552,21 @@ test('unresolved source preview reports full scoped count and refreshes after re
   assert.match(text(h.get('review-queue')), /Showing 10 of 11/);
   assert.equal(h.modelSession.ledger.activities.length, 1);
   assert.equal(h.state.writes, 0);
+});
+
+
+test('main workspace can explicitly save the exact local preview into a fresh synthetic copy', async () => {
+  const h = await workspacePage();
+  await h.click('preview-year');
+  assert.equal(h.modelSession.mode, 'preview');
+  assert.equal(h.get('save-preview').disabled, false);
+  await h.click('save-preview');
+  assert.deepEqual(h.state.connects, [{requireEmpty:true}]);
+  assert.equal(h.state.writes, 1);
+  assert.equal(h.modelSession.mode, 'saved');
+  assert.equal(h.modelSession.dirty, false);
+  assert.equal(h.get('save-preview').disabled, true);
+  assert.match(h.get('action-status').textContent, /exact preview.*independently verified/i);
+  const stored = await h.storedLedger();
+  assert.deepEqual(stored, recipe.ledger);
 });

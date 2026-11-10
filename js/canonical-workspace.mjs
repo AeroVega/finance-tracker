@@ -1,6 +1,8 @@
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
 import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-workspace-model.mjs';
+import { getEffectiveActivities } from './canonical-import.mjs';
+import { exactSignedDecimal } from './import-reconciliation.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
 import { googleStartupMessage } from './google-startup-diagnostics.mjs';
 
@@ -57,6 +59,11 @@ const messages = {
   'transaction-unresolved': 'The save result is uncertain. Recover if offered, then reopen saved records before retrying.',
   'reconnect-required': 'The connection could not be verified. Reconnect and reopen saved records before editing.',
   'verified-draft-required': 'There is no verified draft eligible for saving. Reopen saved records before editing.',
+  'verified-preview-required': 'Load a local synthetic preview with no active Drive session before saving it to a new folder.',
+  'new-empty-folder-required': 'The selected folder did not pass fresh-copy admission. No existing copy was changed; choose a newly created empty synthetic folder.',
+  'seed-readback-mismatch': 'The new copy could not be independently verified. Keep this tab open, recover if offered, then reopen before deciding what to do next.',
+  'transfer-link-rationale-required': 'Explain why these two activities represent the same transfer.',
+  'invalid-transfer-link': 'These activities cannot be linked. Confirm that both are active transfers in different accounts, with equal opposite amounts in the same currency, and that neither is already linked.',
   'release-unconfirmed': 'Release was not verified. Keep this copy selected and resolve its session before switching devices.'
 };
 function announce(text, kind = 'info') {
@@ -68,7 +75,10 @@ function refresh() {
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false;
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
   $('preview-year').disabled = busy || Boolean(lifecycle);
+  $('save-preview').disabled = busy || !configured || navigator.onLine === false || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.unverified;
+  $('save-preview').textContent = session.mode === 'preview' ? 'Save this preview to a new folder' : 'Save this preview to a new folder';
   $('save-ledger').disabled = busy || !session.canSave();
+  $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
   $('reopen-ledger').disabled = busy || !ready;
   $('release-ledger').disabled = busy || !lifecycle;
   $('recover-ledger').hidden = lifecycle?.state !== 'recovery-required';
@@ -80,7 +90,7 @@ function refresh() {
   if (reviewQueueButton) reviewQueueButton.disabled = busy;
   $('transactions').setAttribute('aria-busy', String(busy));
   for (const id of ['account-filter', 'month-filter', 'transaction-search', 'review-only']) $(id).disabled = busy || !session.ledger;
-  for (const id of ['correction-type', 'classification', 'category', 'amount', 'correction-rationale']) $(id).disabled = !editable;
+  for (const id of ['correction-type', 'classification', 'category', 'amount', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
   $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim();
   $('previous-page').disabled = busy || !view || view.page === 0;
   $('next-page').disabled = busy || !view || view.page + 1 >= view.pages;
@@ -215,6 +225,40 @@ function showDetail(activityId) {
   $('detail-title').textContent = activity.sourceDescription;
   $('detail-description').textContent = `${detail.account.displayName} · ${activity.effectiveDate || 'Unknown date'} · ${label(activity.lifecycleStatus)} · ${label(activity.activityKind)} · ${activity.categoryId || 'No category'}${activity.reviewReasons?.length ? '. Needs review: ' + activity.reviewReasons.map(reviewReason).join(', ') : ''}`;
   $('detail-amount').textContent = money(activity.amountText, activity.currency);
+  const transferPanel = $('transfer-link-panel');
+  transferPanel.hidden = true;
+  $('transfer-link-status').textContent = '';
+  $('transfer-counterparty').replaceChildren();
+  $('transfer-link-rationale').value = '';
+  if (activity.transferGroupId && activity.transferCounterpartyActivityId) {
+    const counterpart = getWorkspaceActivity(session.ledger, activity.transferCounterpartyActivityId);
+    if (counterpart) {
+      const from = activity.transferRole === 'outgoing' ? detail.account.displayName : counterpart.account.displayName;
+      const to = activity.transferRole === 'incoming' ? detail.account.displayName : counterpart.account.displayName;
+      $('transfer-link-status').textContent = `Verified relationship: ${from} → ${to}. Both original activities and source evidence remain unchanged.`;
+      transferPanel.hidden = false;
+    }
+  } else if (activity.activityKind === 'transfer' && activity.amountText?.startsWith('-')) {
+    const amount = activity.amountText.slice(1);
+    const candidates = getEffectiveActivities(session.ledger).filter(candidate => candidate.active &&
+      candidate.activityKind === 'transfer' &&
+      candidate.currency === activity.currency && candidate.accountId !== activity.accountId &&
+      !candidate.transferGroupId && exactSignedDecimal(candidate) === amount);
+    const accountById = new Map(session.ledger.accounts.map(account => [account.accountId, account]));
+    const placeholder = node('option', 'Choose the matching incoming activity');
+    placeholder.value = '';
+    $('transfer-counterparty').append(placeholder);
+    for (const candidate of candidates) {
+      const account = accountById.get(candidate.accountId);
+      const option = node('option', `${account?.displayName || 'Other account'} · ${candidate.effectiveDate || 'Unknown date'} · ${candidate.sourceDescription}`);
+      option.value = candidate.activityId;
+      $('transfer-counterparty').append(option);
+    }
+    $('transfer-link-status').textContent = candidates.length
+      ? `Found ${candidates.length} exact-amount incoming candidate(s) in another account. Review the date and description, then choose the matching activity. No pair is linked automatically.`
+      : 'No exact-amount incoming candidate is currently available. Both activities must be classified as transfers, in different accounts, with the same currency and opposite equal amounts.';
+    transferPanel.hidden = false;
+  }
   $('detail-source').replaceChildren();
   for (const observation of detail.observations) {
     const source = node('article', undefined, 'review-item');
@@ -227,11 +271,20 @@ function showDetail(activityId) {
   }
   if (!detail.observations.length) $('detail-source').append(node('p', 'No linked source observation is available.'));
   $('detail-history').replaceChildren();
-  for (const event of detail.events) {
+  const historyEvents = [...detail.events];
+  const transferEvent = session.ledger.events.find(event => event.eventType === 'transfer-link' &&
+    (event.activityId === activity.activityId || event.counterpartyActivityId === activity.activityId));
+  if (transferEvent && !historyEvents.some(event => event.eventId === transferEvent.eventId)) historyEvents.push(transferEvent);
+  for (const event of historyEvents) {
     const entry = node('article', undefined, 'history-item');
     entry.append(node('strong', label(event.eventType)), node('p', event.recordedAt, 'review-meta'));
     if (event.eventType === 'classification') entry.append(node('p', `${label(event.priorActivityKind)} → ${label(event.activityKind)}`));
     if (event.eventType === 'category-correction') entry.append(node('p', `${event.priorCategoryId || 'No category'} → ${event.categoryId}`));
+    if (event.eventType === 'transfer-link') {
+      const source = getWorkspaceActivity(session.ledger, event.activityId);
+      const target = getWorkspaceActivity(session.ledger, event.counterpartyActivityId);
+      entry.append(node('p', `${source?.account.displayName || 'Source account'} → ${target?.account.displayName || 'Destination account'} · ${money(source?.activity.amountText, source?.activity.currency)}`));
+    }
     const rationale = event.evidence?.rationale || event.evidence?.reason;
     if (typeof rationale === 'string') entry.append(node('p', rationale));
     entry.append(evidenceDetails('Inspect audit record', () => event));
@@ -259,6 +312,9 @@ action('preview-year', 'Preparing the invented year locally. No Google connectio
   if (!confirmReplace()) return;
   session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); announce('Local synthetic preview ready. Open your saved copy to save corrections to Drive.', 'success');
 });
+action('save-preview', 'Saving this exact local preview into a newly selected, empty synthetic Drive folder and independently verifying it. Keep this tab open.', async () => {
+  await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success');
+});
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
   await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success');
 });
@@ -277,6 +333,11 @@ action('recover-stale', 'Checking stale-session recovery.', async () => {
   if (!window.confirm('Confirm every prior tab and device using this synthetic folder has stopped. Recover this stale session?')) { announce('Recovery cancelled. The stopped session has not been recovered.'); return; }
   await session.recover({ stale: true }); announce('Session recovered. Reopen saved records before editing.');
 });
+action('link-transfer', 'Recording and validating this transfer relationship locally.', async () => {
+  session.linkTransfer({ outgoingActivityId: selectedActivity, counterpartyActivityId: $('transfer-counterparty').value, rationale: $('transfer-link-rationale').value });
+  render(); showDetail(selectedActivity);
+  announce('Transfer activities linked with an auditable relationship. Save changes to persist the link.', 'success');
+});
 action('stage-correction', 'Checking your correction locally.', async () => {
   session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value, rationale: $('correction-rationale').value });
   render(); showDetail(selectedActivity);
@@ -291,6 +352,8 @@ $('close-detail').addEventListener('click', () => {
 });
 $('correction-type').addEventListener('change', correctionFields);
 $('correction-rationale').addEventListener('input', refresh);
+$('transfer-counterparty').addEventListener('change', refresh);
+$('transfer-link-rationale').addEventListener('input', refresh);
 for (const id of ['account-filter', 'month-filter', 'review-only']) $(id).addEventListener('change', () => { if (!busy) { page = 0; render(); } });
 $('transaction-search').addEventListener('input', scheduleSearch);
 $('transaction-search').addEventListener('compositionstart', () => { composingSearch = true; cancelSearch(); });
