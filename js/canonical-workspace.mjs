@@ -227,8 +227,6 @@ function showDetail(activityId) {
   $('transfer-link-rationale').value = '';
   if (activity.transferGroupId && activity.transferCounterpartyActivityId) {
     const counterpart = getWorkspaceActivity(session.ledger, activity.transferCounterpartyActivityId);
-    const outgoing = activity.transferRole === 'outgoing' ? detail : counterpart;
-    const incoming = activity.transferRole === 'incoming' ? detail : counterpart;
     if (counterpart) {
       const from = activity.transferRole === 'outgoing' ? detail.account.displayName : counterpart.account.displayName;
       const to = activity.transferRole === 'incoming' ? detail.account.displayName : counterpart.account.displayName;
@@ -238,12 +236,13 @@ function showDetail(activityId) {
   } else if (activity.activityKind === 'transfer' && activity.amountText?.startsWith('-')) {
     const amount = activity.amountText.slice(1);
     const candidates = getEffectiveActivities(session.ledger).filter(candidate => candidate.active &&
-      candidate.activityKind === 'transfer' && candidate.amountText === undefined &&
+      candidate.activityKind === 'transfer' &&
       candidate.currency === activity.currency && candidate.accountId !== activity.accountId &&
       !candidate.transferGroupId && exactSignedDecimal(candidate) === amount);
     const accountById = new Map(session.ledger.accounts.map(account => [account.accountId, account]));
-    $('transfer-counterparty').append(node('option', 'Choose the matching incoming activity'));
-    $('transfer-counterparty').options[0].value = '';
+    const placeholder = node('option', 'Choose the matching incoming activity');
+    placeholder.value = '';
+    $('transfer-counterparty').append(placeholder);
     for (const candidate of candidates) {
       const account = accountById.get(candidate.accountId);
       const option = node('option', `${account?.displayName || 'Other account'} · ${candidate.effectiveDate || 'Unknown date'} · ${candidate.sourceDescription}`);
