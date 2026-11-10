@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
 import {createWorkspaceViewReader, getWorkspaceActivity} from '../js/canonical-workspace-model.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
+import {googleStartupMessage} from '../js/google-startup-diagnostics.mjs';
 import {CanonicalLedgerStore, serializePackedCanonicalLedger} from '../js/canonical-ledger-storage.mjs';
 import {registerAccount, prepareCanonicalImport, applyReviewDecision} from '../js/canonical-import.mjs';
 import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
@@ -74,7 +75,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     constructor(options) { super({...options, online:() => browserNavigator?.onLine !== false}); session = this; }
   }
   const page = await pageController('canonical-workspace', {DashboardSyntheticStorage:Storage,
-    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,createSyntheticFinancialYear,TypeError},
+    CanonicalWorkspaceSession:BrowserSession, createWorkspaceViewReader,getWorkspaceActivity,createSyntheticFinancialYear,googleStartupMessage,TypeError},
   {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs',timers});
   browserNavigator = page.navigator;
   return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,timeouts,flushSearch,
