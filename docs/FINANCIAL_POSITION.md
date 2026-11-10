@@ -13,12 +13,12 @@ Every balance has an account, effective date, exact amount, account currency, ba
 ## Point-in-time rules
 
 - Select the latest applicable balance date at or before the requested as-of date. Future snapshots cannot affect an earlier view. Do not roll a stale balance forward by adding transactions.
-- Preserve all competing same-date evidence. A differing amount requires an explicit selection and reason. A resolution names the full candidate set and the chosen record. New contradictory evidence reopens the conflict rather than inheriting an old choice silently.
+- Preserve all competing same-date evidence. A differing amount requires an explicit selection and reason. A resolution names the full candidate set and the chosen record. New contradictory evidence reopens the conflict rather than inheriting an old choice silently. Corroborating evidence with the same selected date and exact value does not revoke existing reconciliation or closure references.
 - Show the selected balance's effective date, source, basis and freshness. The initial warning threshold is more than 35 calendar days. A value exactly 35 days old is not stale. No live-current claim follows from a dated value.
 - Missing and unresolved balances remain unavailable. Known assets, liabilities and net worth are labeled subtotals for the selected account scope. Withhold complete totals when that scope is not fully supported. Separate currencies; no implicit exchange rate or cross-currency total.
 - Checking, savings, brokerage and retirement balances are assets. Credit cards, mortgages and auto loans are liabilities. Debt balances represent amounts owed, not negative asset entries or invented payment components. Unsupported account types remain visible and block complete claims.
 - Investment account balances count once. Holdings are dated supporting evidence, never an additional asset total. Unsupported holdings and mismatches remain visible. No source trade row is promoted to a holding.
-- Account closure is explicit and append-only. Closure needs a zero balance anchor and source evidence. It preserves account identity and prior balances; missing imports never imply closure.
+- Account closure is explicit and append-only. Closure needs a zero balance anchor and source evidence. It applies on its effective date, preserves account identity and prior balances, and remains incomplete when later activity, unresolved source evidence or nonzero holdings contradict it. Missing imports never imply closure.
 
 ## Reconciliation is a calculated result
 
@@ -42,6 +42,10 @@ The records are indexed in both supported per-record v1 and fragmented v3 layout
 
 Workspace position changes are staged. Explicit save uses the same verified storage path as activity corrections. Undo can remove a staged change before saving, and reverting restores the exact loaded baseline. Persisted changes need additional events. A lost save response blocks blind retry and editing until recovery/verified reopen resolves the outcome. Portable export and restore preserve position events and validate their history with the other canonical records.
 
+## Adversarial review follow-up
+
+The [PR36 review](PR36_ADVERSARIAL_REVIEW.md) records reproduced financial and audit-integrity defects, corrections, editor improvements, scoped CPU measurements and the remaining rendered/device acceptance limits. Position reports reuse a defensive snapshot during search and pagination without changing financial scope or losing unfinished conflict decisions.
+
 ## Invented scenario and acceptance
 
 `createSyntheticFinancialPosition()` supplies six invented USD accounts as of January 31, 2025:
@@ -60,7 +64,7 @@ Workspace position changes are staged. Explicit save uses the same verified stor
 
 The brokerage holdings support its 5,000.00 total. They are not added again. January checking, savings and card activity reconcile against December 31 and January 31 statements. Investment and loan activity coverage is intentionally incomplete; their dated balances do not prove full history.
 
-**Verified final implementation on Node 24.22.1:** The serial suite passed 1,074/1,074 tests with no failures or skips, including manual account/holdings/component entry and no-CSV reconciliation:
+**Verified adversarial follow-up on Node 24.22.1:** The serial suite passed 1,097/1,097 tests with no failures or skips, including manual account/holdings/component entry, no-CSV reconciliation and the review regressions:
 
 ```sh
 node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs

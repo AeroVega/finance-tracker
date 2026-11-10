@@ -1,7 +1,7 @@
 import {validateLedger,getEffectiveActivities} from './canonical-import.mjs';
 import {isCalendarDate,exactSignedDecimal} from './import-reconciliation.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
-import {LIABILITY_TYPES,INVESTMENT_TYPES,SUPPORTED_HOLDINGS,exactAmount,addExact,negateExact,equalExact,monthBounds,selectBalance} from './financial-position-contract.mjs';
+import {LIABILITY_TYPES,INVESTMENT_TYPES,SUPPORTED_HOLDINGS,exactAmount,addExact,negateExact,equalExact,monthBounds,selectBalance,supportsBalanceAnchor} from './financial-position-contract.mjs';
 
 const fail=message=>{throw new TypeError(message);};
 const eventsFor=ledger=>ledger.positionEvents??[];
@@ -37,6 +37,14 @@ export function applyPositionEvent(ledger,command,options={}) {
   validateLedger(next);
   return next;
 }
+function sameHoldings(left,right) {
+  if(left.scope!==right.scope||left.holdings.length!==right.holdings.length)return false;
+  const bySymbol=new Map(right.holdings.map(h=>[h.symbol,h]));
+  return left.holdings.every(h=>{
+    const other=bySymbol.get(h.symbol);
+    return other&&h.assetType===other.assetType&&equalExact(h.quantity,other.quantity)&&equalExact(h.valueText,other.valueText);
+  });
+}
 function holdingsAt(events,account,asOf,balance) {
   if(!INVESTMENT_TYPES.includes(account.accountType))return null;
   const all=events.filter(e=>e.eventType==='holdings-snapshot'&&e.accountId===account.accountId&&e.effectiveDate<=asOf);
@@ -47,7 +55,7 @@ function holdingsAt(events,account,asOf,balance) {
   const selected=resolved?candidates.find(e=>e.eventId===resolution.selectedEventId):candidates.at(-1);
   if(!selected)return null;
   const reasons=[];
-  if(!resolved&&candidates.some(e=>canonicalizeJcs(e.holdings)!==canonicalizeJcs(selected.holdings)||e.scope!==selected.scope))reasons.push('conflicting-holdings');
+  if(!resolved&&candidates.some(e=>!sameHoldings(e,selected)))reasons.push('conflicting-holdings');
   if(selected.scope!=='complete')reasons.push('partial-holdings');
   if(selected.holdings.some(h=>!SUPPORTED_HOLDINGS.includes(h.assetType)))reasons.push('unsupported-holding-type');
   const total=selected.holdings.reduce((sum,h)=>addExact(sum,h.valueText),'0');
@@ -67,12 +75,21 @@ export function buildFinancialPosition(ledger,{asOf,accountIds}={}) {
     const ageDays=balance?(Date.parse(asOf)-Date.parse(balance.effectiveDate))/86400000:null;
     const stale=ageDays!==null&&ageDays>35;if(stale)reasons.push('stale-balance');
     let status=selection.conflict?'conflict':balance?'known':'missing';
-    const closure=events.filter(e=>e.eventType==='account-closure'&&e.accountId===account.accountId&&e.effectiveDate<asOf).at(-1);
+    const closure=events.filter(e=>e.eventType==='account-closure'&&e.accountId===account.accountId&&e.effectiveDate<=asOf).sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate)).at(-1);
     if(closure) {
       const closureSelection=selectBalance(events,account.accountId,closure.effectiveDate);
       const laterActivity=activities.some(a=>a.accountId===account.accountId&&a.active&&(movementDate(a)===null||(movementDate(a)>closure.effectiveDate&&movementDate(a)<=asOf)));
+      // Rejected or ambiguous imports may have no canonical activity yet. They
+      // still contradict closure when they could describe later movement.
+      const unresolvedLaterSource=ledger.observations.some(o=>o.accountId===account.accountId&&!o.resolved&&['review','rejected'].includes(o.disposition)&&(
+        !isCalendarDate(o.candidate.effectiveDate)||(o.candidate.postedDate!=null&&!isCalendarDate(o.candidate.postedDate))||
+        [o.candidate.effectiveDate,o.candidate.postedDate].some(date=>isCalendarDate(date)&&date>closure.effectiveDate&&date<=asOf)));
+      const closingHoldings=holdingsAt(events,account,closure.effectiveDate,closureSelection.selected);
+      const contradictoryHoldings=(closingHoldings?.effectiveDate===closure.effectiveDate&&(
+        closingHoldings.status==='conflict'||!equalExact(closingHoldings.total,'0')))||events.some(e=>
+        e.eventType==='holdings-snapshot'&&e.accountId===account.accountId&&e.effectiveDate>closure.effectiveDate&&e.effectiveDate<=asOf&&e.holdings.some(h=>!equalExact(h.valueText,'0')));
       const laterNonzero=events.some(e=>e.eventType==='balance-snapshot'&&e.accountId===account.accountId&&e.effectiveDate>closure.effectiveDate&&e.effectiveDate<=asOf&&!equalExact(e.amountText,'0'));
-      if(balance&&equalExact(balance.amountText,'0')&&closureSelection.selected?.eventId===closure.balanceEventId&&!laterActivity&&!laterNonzero) {status='closed';reasons.splice(0,reasons.length);}
+      if(balance&&equalExact(balance.amountText,'0')&&supportsBalanceAnchor(closureSelection,closure.balanceEventId)&&!laterActivity&&!unresolvedLaterSource&&!contradictoryHoldings&&!laterNonzero) {status='closed';reasons.splice(0,reasons.length);}
       else reasons.push('closure-contradicted');
     }
     const holdings=holdingsAt(events,account,asOf,balance);
@@ -124,7 +141,7 @@ export function buildAccountMonthCoverage(ledger,{month,accountIds}={}) {
     else {
       const open=selectBalance(events,account.accountId,opening),close=selectBalance(events,account.accountId,end);
       if(open.conflict||close.conflict)reasons.push('conflicting-balance-anchors');
-      if(open.selected?.eventId!==request.openingBalanceEventId||close.selected?.eventId!==request.closingBalanceEventId)reasons.push('superseded-balance-anchors');
+      if(!supportsBalanceAnchor(open,request.openingBalanceEventId)||!supportsBalanceAnchor(close,request.closingBalanceEventId))reasons.push('superseded-balance-anchors');
       const first=events.find(e=>e.eventId===request.openingBalanceEventId),last=events.find(e=>e.eventId===request.closingBalanceEventId);
       let movement='0';
       if(request.method==='cash-rollforward') {

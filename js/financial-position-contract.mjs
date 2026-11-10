@@ -47,6 +47,13 @@ export function selectBalance(events,accountId,asOf) {
   return {selected:conflict?null:covered?onDate.find(e=>e.eventId===resolution.selectedEventId):onDate.at(-1),candidates:onDate,conflict};
 }
 
+// Corroborating records add provenance without invalidating an anchor's value.
+// A changed date, unresolved conflict, or selected different amount still revokes it.
+export function supportsBalanceAnchor(selection,eventId) {
+  const anchor=selection.candidates.find(e=>e.eventId===eventId);
+  return Boolean(anchor&&selection.selected&&equalExact(anchor.amountText,selection.selected.amountText));
+}
+
 // This boundary has no dependency on canonical replay. References are validated
 // in append order. Completeness is always derived, never trusted from a record.
 export function validatePositionEvents(ledger, existingIds=new Set(), existingCommands=new Map()) {
@@ -76,13 +83,13 @@ export function validatePositionEvents(ledger, existingIds=new Set(), existingCo
         symbols.add(h.symbol);money(h.valueText,e.currency);if(negativeExact(h.valueText))fail('negative-holding-value');
       }
     } else if(e.eventType==='account-closure') {
-      const selected=selectBalance(seen,e.accountId,e.effectiveDate).selected;
-      if(!selected||selected.eventId!==e.balanceEventId||selected.effectiveDate!==e.effectiveDate||!equalExact(selected.amountText,'0'))fail('closure-requires-selected-zero-balance');
+      const selection=selectBalance(seen,e.accountId,e.effectiveDate),selected=selection.selected;
+      if(!supportsBalanceAnchor(selection,e.balanceEventId)||selected.effectiveDate!==e.effectiveDate||!equalExact(selected.amountText,'0'))fail('closure-requires-selected-zero-balance');
     } else if(e.eventType==='reconciliation') {
       const bounds=monthBounds(e.month);
       const anchor=(id,date)=>seen.find(x=>x.eventId===id&&x.eventType==='balance-snapshot'&&x.accountId===e.accountId&&x.effectiveDate===date);
       if(!anchor(e.openingBalanceEventId,bounds.opening)||!anchor(e.closingBalanceEventId,bounds.end))fail('invalid-reconciliation-anchors');
-      if(selectBalance(seen,e.accountId,bounds.opening).selected?.eventId!==e.openingBalanceEventId||selectBalance(seen,e.accountId,bounds.end).selected?.eventId!==e.closingBalanceEventId)fail('reconciliation-requires-selected-anchors');
+      if(!supportsBalanceAnchor(selectBalance(seen,e.accountId,bounds.opening),e.openingBalanceEventId)||!supportsBalanceAnchor(selectBalance(seen,e.accountId,bounds.end),e.closingBalanceEventId))fail('reconciliation-requires-selected-anchors');
       if(!['cash-rollforward','statement-components'].includes(e.method)||e.scope!=='account-total'||!Array.isArray(e.components))fail('invalid-reconciliation-method');
       if(e.method==='cash-rollforward'&&e.components.length)fail('cash-reconciliation-cannot-add-components');
       if(e.method==='statement-components'&&e.source.kind!=='statement')fail('statement-reconciliation-evidence-required');

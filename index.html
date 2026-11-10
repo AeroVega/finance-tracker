@@ -81,6 +81,7 @@
             <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Brokerage</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
             <label for="new-account-currency">Three-letter currency<input id="new-account-currency" type="text" maxlength="3" placeholder="USD" disabled></label>
             <button id="stage-account" type="button" class="secondary-button" disabled>Stage synthetic account</button>
+            <p id="account-form-status" class="status-message" tabindex="-1"></p>
           </form>
         </details>
         <details><summary>Add or correct a dated synthetic balance</summary>
@@ -92,6 +93,7 @@
             <label for="balance-basis">Basis<select id="balance-basis" disabled><option value="manual">Manual</option><option value="statement">Statement</option></select></label>
             <label for="balance-source">Evidence reference / correction reason<input type="text" id="balance-source" maxlength="300" disabled></label>
             <button id="stage-balance" type="button" class="secondary-button" disabled>Stage dated balance</button>
+            <p id="position-form-status" class="status-message" tabindex="-1"></p>
           </form>
         </details>
         <details><summary>Record an account closure</summary>
@@ -100,6 +102,7 @@
             <label for="closure-anchor">Zero-balance evidence<select id="closure-anchor" disabled></select></label>
             <label for="closure-source">Closure evidence reference<input type="text" id="closure-source" maxlength="300" disabled></label>
             <button id="stage-closure" type="button" class="secondary-button" disabled>Stage account closure</button>
+            <p id="closure-form-status" class="status-message" tabindex="-1"></p>
           </form>
         </details>
         <details><summary>Enter dated synthetic holdings</summary>
@@ -112,6 +115,7 @@
             <div id="holdings-rows" class="position-editor-rows"></div>
             <button id="add-holding" type="button" class="secondary-button" disabled>Add holding row</button>
             <button id="stage-holdings" type="button" class="secondary-button" disabled>Stage dated holdings</button>
+            <p id="holdings-form-status" class="status-message" tabindex="-1"></p>
           </form>
         </details>
         <h3>Account-month reconciliation</h3>
@@ -121,8 +125,9 @@
           <form id="reconciliation-form" class="position-form">
             <p>Checking, savings and credit cards use posted cash movement. Investments and loans use statement components: enter every change that explains closing balance minus opening balance, including signs. A debt reduction is negative. A complete statement declaration is evidence, not automatic reconciliation. Select the account and balance anchors for the activity month selected above. Evidence is checked against activity and unresolved records; recording a review never silently marks a month complete.</p>
             <label for="reconcile-account">Account<select id="reconcile-account" disabled></select></label>
-            <label for="reconcile-opening">Opening balance evidence<select id="reconcile-opening" disabled></select></label>
-            <label for="reconcile-closing">Closing balance evidence<select id="reconcile-closing" disabled></select></label>
+            <p id="reconcile-anchor-help">Select an account and activity month to choose balance evidence.</p>
+            <label for="reconcile-opening">Opening balance evidence<select id="reconcile-opening" aria-describedby="reconcile-anchor-help" disabled></select></label>
+            <label for="reconcile-closing">Closing balance evidence<select id="reconcile-closing" aria-describedby="reconcile-anchor-help" disabled></select></label>
             <label for="reconcile-source">Reconciliation evidence reference<input type="text" id="reconcile-source" maxlength="300" disabled></label>
             <div id="statement-components-panel" class="position-editor-rows" hidden>
               <p id="statement-coverage-period">Select an activity month above.</p>
@@ -132,6 +137,7 @@
               <button id="add-component" type="button" class="secondary-button" disabled>Add statement component</button>
             </div>
             <button id="stage-reconciliation" type="button" class="secondary-button" disabled>Stage reconciliation evidence</button>
+            <p id="reconciliation-form-status" class="status-message" tabindex="-1"></p>
           </form>
         </details>
       </section>

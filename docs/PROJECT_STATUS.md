@@ -10,7 +10,9 @@ The synthetic canonical workspace and storage foundation are implemented. **Alph
 
 The workspace can stage accounts, balances, balance/holdings conflict decisions, dated holdings, cash/card reconciliation, statement-component reconciliation and closures. Manual investment/loan statements can explicitly declare the full month without a fabricated CSV import; declaration alone does not prove completeness. General provider balance/holdings file importers are outside this milestone. The legacy synthetic-year fixture remains unchanged.
 
-**Verified final local tests:** 1,074/1,074 passed on Node 24.22.1, with no failures or skips. Manual-editor follow-ups and no-CSV reconciliation are included. Changed module syntax and diff checks passed.
+The [PR36 adversarial follow-up](PR36_ADVERSARIAL_REVIEW.md) corrects closure contradictions, corroborating evidence, holdings comparisons and audit-identity collisions. It improves reconciliation choices, local feedback, draft preservation and repeated financial report work. The review remains synthetic-only.
+
+**Verified local review tests:** 1,097/1,097 passed on Node 24.22.1, with no failures or skips. This includes 23 added review regressions across financial evidence, persistence identity checks, cached readers and editor workflows. Changed module syntax and diff checks passed.
 
 **Verification limits:** Automated suites exercise synthetic domain records and in-memory storage/recovery adapters. Browser rendering could not be verified in this environment: Chromium could not create its local socket, and the provided browser could not reach the local test server. Physical iPhone/iPad Safari, live synthetic Drive acceptance and deployment remain outstanding. No real records or live financial services were used.
 

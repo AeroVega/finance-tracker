@@ -1,5 +1,6 @@
 import {getEffectiveActivities, summarizeLedgerPeriods} from './canonical-import.mjs';
 import {exactSignedDecimal, isCalendarDate} from './import-reconciliation.mjs';
+import {buildFinancialPosition, buildAccountMonthCoverage} from './financial-position.mjs';
 
 const knownKinds = new Set(['income', 'spending', 'transfer', 'refund']);
 const fail = message => { throw new TypeError(message); };
@@ -166,6 +167,13 @@ export function createWorkspaceViewReader(ledger) {
   const effective = getEffectiveActivities(snapshot); // validate before any cache can be used
   let cached = null;
   let searchTexts = null;
+  let positionCache = null;
+  let coverageCache = null;
+  const accountScope = accountId => {
+    if (typeof accountId !== 'string') fail('invalid-workspace-options');
+    if (accountId && !snapshot.accounts.some(account => account.accountId === accountId)) fail('unknown-account');
+    return accountId ? [accountId] : undefined;
+  };
   return Object.freeze({view(options) {
     const selection = workspaceOptions(options);
     const {accountId, month, query, reviewOnly, pageSize} = selection;
@@ -174,6 +182,20 @@ export function createWorkspaceViewReader(ledger) {
       searchTexts = cached.rows.map(searchableText);
     }
     return selectWorkspaceRows(cached, searchTexts, selection);
+  }, position({asOf, accountId = ''} = {}) {
+    const accountIds = accountScope(accountId);
+    if (!isCalendarDate(asOf)) fail('invalid-position-as-of');
+    if (!positionCache || positionCache.asOf !== asOf || positionCache.accountId !== accountId) {
+      positionCache = {asOf, accountId, report:buildFinancialPosition(snapshot, {asOf, accountIds})};
+    }
+    return structuredClone(positionCache.report);
+  }, coverage({month, accountId = ''} = {}) {
+    const accountIds = accountScope(accountId);
+    monthBounds(month);
+    if (!coverageCache || coverageCache.month !== month || coverageCache.accountId !== accountId) {
+      coverageCache = {month, accountId, report:buildAccountMonthCoverage(snapshot, {month, accountIds})};
+    }
+    return structuredClone(coverageCache.report);
   }});
 }
 

@@ -122,6 +122,12 @@ function validateAndProject(ledger) {
     priorDecisions.set(d.reviewDecisionId,d);
   }
   validatePositionEvents(ledger,ids,commands);
+  // The optimized activity session reuses these indexes without revalidating
+  // the whole graph on every command. Reserve position identities there too.
+  for (const event of ledger.positionEvents ?? []) {
+    ids.add(event.eventId);
+    commands.set(event.commandId,event);
+  }
   inspectJson(ledger);
   return {replay,ids,commands,byId};
 }

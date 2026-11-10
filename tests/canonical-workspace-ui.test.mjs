@@ -799,3 +799,119 @@ test('statement declaration is invalidated by account, month and ledger replacem
   h.get('statement-full-month').checked = true; await h.click('add-component'); await h.click('reopen-ledger');
   assert.equal(h.get('statement-full-month').checked,false); assert.equal(h.get('component-rows').children.length,0);
 });
+
+test('reconciliation offers only required month-end anchors and explains missing evidence', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger}); await h.click('open-ledger');
+  await h.choose('month-filter', '2025-01'); await h.choose('reconcile-account', fixture.accounts.checking);
+  const byId = new Map(h.modelSession.ledger.positionEvents.map(event => [event.eventId,event]));
+  for (const option of h.get('reconcile-opening').children.filter(option => option.value)) assert.equal(byId.get(option.value).effectiveDate,'2024-12-31');
+  for (const option of h.get('reconcile-closing').children.filter(option => option.value)) assert.equal(byId.get(option.value).effectiveDate,'2025-01-31');
+  assert.match(h.get('reconcile-anchor-help').textContent,/2024-12-31.*2025-01-31/);
+  await h.choose('reconcile-account', fixture.accounts.mortgage);
+  assert.match(h.get('reconcile-anchor-help').textContent,/Add.*opening/);
+  assert.equal(h.get('stage-reconciliation').disabled,true);
+});
+
+test('holding row add and removal keep keyboard focus in the editor', async () => {
+  const h = await workspacePage(); await h.click('preview-position');
+  await h.click('add-holding');
+  assert.equal(h.observed.focused,editorFields(h,'holdings-rows')[0]);
+  const row = h.get('holdings-rows').children[0];
+  await row.children.at(-1).emit('click');
+  assert.equal(h.observed.focused,h.get('add-holding'));
+});
+
+test('holding validation gives local actionable feedback without losing entered evidence', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger}); await h.click('open-ledger');
+  await h.choose('holdings-account',fixture.accounts.brokerage);
+  h.get('holdings-date').value = fixture.asOf; h.get('holdings-source').value = 'INVENTED negative holding';
+  await h.get('holdings-source').emit('input'); await h.click('add-holding');
+  const [symbol,type,quantity,value] = editorFields(h,'holdings-rows');
+  symbol.value='INVENTED'; type.value='etf'; quantity.value='1'; value.value='-1.00';
+  await h.click('stage-holdings');
+  assert.match(h.get('holdings-form-status').textContent,/nonnegative/);
+  assert.equal(h.observed.focused,h.get('holdings-form-status'));
+  assert.equal(value.value,'-1.00'); assert.equal(h.modelSession.dirty,false); assert.equal(h.state.writes,0);
+});
+
+test('activity search preserves open position evidence and unfinished conflict decisions', async () => {
+  const h = await workspacePage(); await h.click('preview-position');
+  await h.choose('balance-account',h.modelSession.ledger.accounts.find(account => account.accountType === 'checking').accountId);
+  h.get('balance-date').value = '2025-01-31'; h.get('balance-amount').value = '2300.00'; h.get('balance-source').value = 'INVENTED conflict';
+  await h.get('balance-source').emit('input'); await h.click('stage-balance');
+  const card = h.get('position-accounts').children.find(card => card.children.some(child => child.tagName === 'INPUT'));
+  assert.ok(card);
+  const reason = card.children.find(child => child.tagName === 'INPUT'); reason.value = 'INVENTED reason still being checked';
+  const details = card.children.find(child => child.tagName === 'DETAILS'); details.open = true; await details.emit('toggle');
+  await h.search('INVENTED');
+  assert.ok(h.get('position-accounts').children.includes(card));
+  assert.equal(reason.value,'INVENTED reason still being checked'); assert.equal(details.open,true);
+  await h.choose('review-only',true);
+  assert.ok(h.get('position-accounts').children.includes(card));
+});
+
+test('switching the balance account cannot silently reuse another account evidence', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger}); await h.click('open-ledger');
+  await h.choose('balance-account',fixture.accounts.checking);
+  h.get('balance-date').value = fixture.asOf; h.get('balance-amount').value = '42.00'; h.get('balance-source').value = 'INVENTED checking statement';
+  h.observed.confirm = false;
+  await h.choose('balance-account',fixture.accounts.mortgage);
+  assert.equal(h.get('balance-account').value,fixture.accounts.checking); assert.equal(h.get('balance-amount').value,'42.00');
+  h.observed.confirm = true;
+  await h.choose('balance-account',fixture.accounts.mortgage);
+  assert.equal(h.get('balance-amount').value,''); assert.equal(h.get('balance-source').value,'');
+  assert.equal(h.get('stage-balance').disabled,true); assert.equal(h.modelSession.dirty,false);
+});
+
+test('reconciliation scope changes can be cancelled without losing components or statement evidence', async () => {
+  const h = await workspacePage(); await h.click('preview-position');
+  const mortgage = h.modelSession.ledger.accounts.find(account => account.accountType === 'mortgage').accountId;
+  const loan = h.modelSession.ledger.accounts.find(account => account.accountType === 'auto-loan').accountId;
+  await h.choose('reconcile-account',mortgage); await h.click('add-component');
+  const [kind,amount,reference] = editorFields(h,'component-rows');
+  amount.value='-1000.00'; reference.value='INVENTED component';
+  h.get('reconcile-source').value='INVENTED January statement'; h.get('statement-full-month').checked=true;
+  h.observed.confirm=false;
+  await h.choose('reconcile-account',loan);
+  assert.equal(h.get('reconcile-account').value,mortgage); assert.equal(editorFields(h,'component-rows')[1],amount);
+  await h.choose('month-filter','2024-12');
+  assert.equal(h.get('month-filter').value,'2025-01'); assert.equal(amount.value,'-1000.00'); assert.equal(h.get('statement-full-month').checked,true);
+  h.observed.confirm=true; await h.choose('month-filter','2024-12');
+  assert.equal(h.get('component-rows').children.length,0); assert.equal(h.get('reconcile-source').value,'');
+});
+
+test('anchor guidance handles leap February and December rollover', async () => {
+  const h = await workspacePage(); await h.click('preview-position');
+  const account = h.modelSession.ledger.accounts.find(account => account.accountType === 'checking').accountId;
+  await h.choose('reconcile-account',account);
+  for (const [month,opening,closing] of [['2024-02','2024-01-31','2024-02-29'],['2024-12','2024-11-30','2024-12-31'],['2025-01','2024-12-31','2025-01-31']]) {
+    // Inject a legitimate month selection without relying on fixture activity coverage.
+    h.get('month-filter').value=month; await h.get('month-filter').emit('change');
+    assert.match(h.get('reconcile-anchor-help').textContent,new RegExp(opening+'.*'+closing));
+  }
+});
+
+test('invalid as-of date and negative debt give actionable feedback without changing the ledger', async () => {
+  const h = await workspacePage(); await h.click('preview-position');
+  const previous=h.get('position-date').value;
+  h.get('position-date').value=''; await h.get('position-date').emit('change');
+  assert.equal(h.get('position-date').value,previous); assert.match(h.get('action-status').textContent,/valid position date/);
+  await h.choose('balance-account',h.modelSession.ledger.accounts.find(account => account.accountType === 'mortgage').accountId);
+  h.get('balance-date').value='2025-01-31'; h.get('balance-amount').value='-1.00'; h.get('balance-source').value='INVENTED negative debt';
+  await h.get('balance-source').emit('input'); await h.click('stage-balance');
+  assert.match(h.get('position-form-status').textContent,/nonnegative amount owed/); assert.equal(h.modelSession.dirty,false);
+});
+
+test('holding account changes protect row evidence and clear complete-scope declaration only on confirmation', async () => {
+  const h = await workspacePage(); await h.click('preview-position');
+  const account = h.modelSession.ledger.accounts.find(account => account.accountType === 'brokerage').accountId;
+  await h.choose('holdings-account',account); await h.choose('holdings-scope','complete'); await h.click('add-holding');
+  const [symbol] = editorFields(h,'holdings-rows'); symbol.value='INVENTED-ETF';
+  h.observed.confirm=false; await h.choose('holdings-account','');
+  assert.equal(h.get('holdings-account').value,account); assert.equal(symbol.value,'INVENTED-ETF');
+  h.observed.confirm=true; await h.choose('holdings-account','');
+  assert.equal(h.get('holdings-rows').children.length,0); assert.equal(h.get('holdings-scope').value,'partial');
+});
