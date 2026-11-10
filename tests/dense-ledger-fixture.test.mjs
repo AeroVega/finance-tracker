@@ -25,10 +25,13 @@ test('dense invented year uses supported imports and audited commands across fou
 });
 test('dense fixture rejects accidental unbounded size requests',()=>assert.throws(()=>denseLedgerFixture(100),/unsupported-fixture-years/));
 
-test('dense CPU capacity does not imply grouped storage can hold whole-period imports',async()=>{
-  const {serializePackedCanonicalLedger,CANONICAL_CHUNK_BYTES}=await import('../js/canonical-ledger-storage.mjs');
-  const {canonicalizeJcs}=await import('../js/transaction-protocol.mjs');
+test('dense five-year history serializes into bounded physical v3 fragments',async()=>{
+  const {serializeFragmentedCanonicalLedger,CANONICAL_INDEX}=await import('../js/canonical-ledger-storage.mjs');
+  const {FRAGMENT_OBJECT_BYTES}=await import('../js/canonical-fragments.mjs');
   const {ledger}=denseLedgerFixture(5);
-  assert.ok(ledger.imports.some(run=>Buffer.byteLength(canonicalizeJcs(run))>CANONICAL_CHUNK_BYTES));
-  assert.throws(()=>serializePackedCanonicalLedger(ledger),{code:'canonical-chunk-too-large'});
+  const physical=serializeFragmentedCanonicalLedger(ledger);
+  assert.ok(physical.size>0);
+  assert.ok([...physical.values()].every(text=>Buffer.byteLength(text)<=FRAGMENT_OBJECT_BYTES));
+  const root=JSON.parse(physical.get(CANONICAL_INDEX));
+  assert.ok(Object.values(root.fragments).some(item=>item.parts>1), 'large logical objects must be split into multiple physical fragments');
 });

@@ -5,7 +5,7 @@ import { mountCopyGuide } from '../prototype/pr25-copy-guide.mjs';
 import { createCopyGuideDriver, logicalArchiveGraph } from '../prototype/pr25-copy-guide-driver.mjs';
 import { startCopyProgress, copyProgressText } from '../prototype/pr25-copy-progress.mjs';
 import { MemoryCatalogDrive, setupCatalog } from './helpers/catalog-drive.mjs';
-import { serializeCanonicalLedger, serializePackedCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
+import { serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
 import { createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent } from '../js/canonical-import.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { exportCatalogArchive } from '../js/catalog-backup.mjs';
@@ -76,7 +76,7 @@ async function page(serialize = serializeCanonicalLedger) {
 }
 async function throughExport(h) { await h.click('source'); await h.click('backup'); await h.click('export'); }
 
-for (const [layout, serialize] of [['records-v1', serializeCanonicalLedger], ['chunks-v2', serializePackedCanonicalLedger], ['fragments-v3', serializeFragmentedCanonicalLedger]])
+for (const [layout, serialize] of [['records-v1', serializeCanonicalLedger], ['fragments-v3', serializeFragmentedCanonicalLedger]])
 test(layout + ': actual guide handlers complete corrected-source backup, saved-file roundtrip, independent restores and release', async () => {
   const h = await page(serialize);
   assert.equal(h.state.calls.length, 0, 'page load must not select or write');

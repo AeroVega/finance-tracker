@@ -200,7 +200,7 @@ test('detail lazily exposes original evidence and staging requires an explicit l
   assert.equal(h.get('detail-amount').textContent, '-$150.00');
   assert.equal(h.get('save-ledger').disabled, false);
   assert.equal(h.get('save-state').dataset.state, 'dirty');
-  assert.match(h.get('save-state').textContent, /1 unsaved correction/);
+  assert.match(h.get('save-state').textContent, /1 staged change/);
   assert.equal(h.state.writes, 0);
   assert.deepEqual(h.modelSession.ledger.activities, recipe.ledger.activities);
   assert.deepEqual(h.modelSession.ledger.observations, recipe.ledger.observations);
