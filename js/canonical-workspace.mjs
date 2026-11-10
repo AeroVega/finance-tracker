@@ -271,15 +271,19 @@ function showDetail(activityId) {
   }
   if (!detail.observations.length) $('detail-source').append(node('p', 'No linked source observation is available.'));
   $('detail-history').replaceChildren();
-  for (const event of detail.events) {
+  const historyEvents = [...detail.events];
+  const transferEvent = session.ledger.events.find(event => event.eventType === 'transfer-link' &&
+    (event.activityId === activity.activityId || event.counterpartyActivityId === activity.activityId));
+  if (transferEvent && !historyEvents.some(event => event.eventId === transferEvent.eventId)) historyEvents.push(transferEvent);
+  for (const event of historyEvents) {
     const entry = node('article', undefined, 'history-item');
     entry.append(node('strong', label(event.eventType)), node('p', event.recordedAt, 'review-meta'));
     if (event.eventType === 'classification') entry.append(node('p', `${label(event.priorActivityKind)} → ${label(event.activityKind)}`));
     if (event.eventType === 'category-correction') entry.append(node('p', `${event.priorCategoryId || 'No category'} → ${event.categoryId}`));
     if (event.eventType === 'transfer-link') {
-      const source = session.ledger.accounts.find(account => account.accountId === detail.activity.accountId)?.displayName || 'Source account';
+      const source = getWorkspaceActivity(session.ledger, event.activityId);
       const target = getWorkspaceActivity(session.ledger, event.counterpartyActivityId);
-      entry.append(node('p', `${source} → ${target?.account.displayName || 'Destination account'} · ${money(detail.activity.amountText, detail.activity.currency)}`));
+      entry.append(node('p', `${source?.account.displayName || 'Source account'} → ${target?.account.displayName || 'Destination account'} · ${money(source?.activity.amountText, source?.activity.currency)}`));
     }
     const rationale = event.evidence?.rationale || event.evidence?.reason;
     if (typeof rationale === 'string') entry.append(node('p', rationale));
