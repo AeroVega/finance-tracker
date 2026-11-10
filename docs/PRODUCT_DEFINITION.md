@@ -1,13 +1,13 @@
 # Second Generation Finance Tracker — Product Definition
 
-**Status:** Owner-reviewed design baseline in progress  
-**Product:** Second Generation Finance Tracker (working name)  
-**Target release:** v1.0.0  
-**Last updated:** 2026-11-05
+**Status:** Owner-reviewed product baseline merged in PR26; delivery status is tracked separately in [project status](PROJECT_STATUS.md)
+**Product:** Second Generation Finance Tracker (working name)
+**Target release:** v1.0.0
+**Last reconciled:** 2026-11-10; original product decisions dated November 2 through 5 remain attributed below
 
 This document captures the product direction and owner-approved principles established during the November 2–5, 2026 product-design discussions. It is intended to guide future product, architecture, implementation, and review sessions.
 
-It is a product specification, not an implementation plan or authorization to enable production financial-data persistence. Detailed technical contracts and release gates remain in their existing architecture and acceptance documents. Where this document identifies a conflict with an existing approved technical constraint, the conflict is called out rather than silently resolved.
+Use [next steps](NEXT_STEPS.md) for the four-step Alpha implementation sequence and its completion checks. This is a product specification, not an authorization to enable production financial-data persistence. Detailed technical contracts and release gates remain in their existing architecture and acceptance documents. Where this document identifies a conflict with an existing approved technical constraint, the conflict is called out rather than silently resolved.
 
 ## 1. Product vision
 
@@ -365,7 +365,7 @@ Use the following progression to separate foundational correctness from the rich
 
 - **Alpha — trustworthy financial foundation.** Establish supported CSV imports, migration of the prior-generation monthly financial history, the canonical ledger and reconciliation, categorization and auditable corrections, accurate account balances/assets/liabilities/net worth, and dependable storage, backup, recovery, and portability. Alpha is successful when the owner can load and review financial history, correct it, and trust that the information is preserved and represented honestly.
 - **Beta — visual and analytical experience.** Build the dashboard and navigation, present-day overview, historical trends and reports, insights, basic category budgets, and the baseline cash-balance projection on top of the trusted foundation. Goals and saved what-if scenarios are deferred beyond v1.0.0. Use controlled synthetic datasets to test chart layouts, missing data, edge cases, and interactions. Beta is successful when the experience works on target devices against those controlled datasets and is usable.
-- **1.0.0 — integrated first product release.** Combine the Alpha foundation and Beta experience, then validate the integrated application against actual financial data. Release requires reliable import, historical migration, categorization, storage/recovery, and the user-facing experience to work together.
+- **1.0.0 — integrated first product release.** Combine the Alpha foundation and Beta experience, then validate the integrated production-capable path using synthetic financial records. The later [PR27 decision](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#future-production-validation-and-acceptance) removes a separate real-data smoke-test prerequisite. Actual OAuth/configuration, live synthetic acceptance, security/privacy, cost, recovery, owner review and explicit production authorization remain required. Reliable import, monthly migration, categorization, storage/recovery and the user experience must work together.
 - **2.0.0 — expanded capabilities.** Reserve deeper investment analysis, more advanced planning and projection methods, expanded automation, additional integrations, and other deliberately deferred ambitions for later development.
 
 Alpha and Beta are deployable development milestones, not public semantic-version releases. The owner should be able to interact with each milestone on the target devices through the existing GitHub Pages workflow and perform a hands-on smoke test before the next milestone advances. The milestones may be delivered through separate or overlapping PRs; PR number order does not dictate merge order. In particular, a later-numbered PR may merge before an earlier-numbered PR when dependencies and readiness justify it.

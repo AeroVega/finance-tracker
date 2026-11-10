@@ -1,9 +1,9 @@
 # Roadmap
 
-**Status:** Active delivery strategy; minimum v1.0.0 scope established 2026-11-05; dependency-aware schedule and detailed acceptance criteria remain to be baselined  
+**Status:** Active milestone scope, reconciled November 10, 2026. Alpha implementation is incomplete; see [project status](PROJECT_STATUS.md) and the [four-step Alpha plan](NEXT_STEPS.md). Estimates and delivery dates remain open.
 **Target 1.0.0 release date:** 2027-01-01 (owner's intended target; planning target, subject to release gates)
 
-This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints. The owner-reviewed [Second Generation Product Definition](PRODUCT_DEFINITION.md) captures the broader product direction. Unresolved owner questions remain tracked separately until they are resolved or transferred into their appropriate planning and engineering homes. The feature map is not yet a sequenced implementation plan. Re-baseline scope and dates before treating the original schedule as a commitment.
+This is a plan, not a guarantee that all proposed capabilities are feasible under the security and $0 recurring-cost constraints. The owner-reviewed [Second Generation Product Definition](PRODUCT_DEFINITION.md) captures the broader product direction. Unresolved owner questions remain tracked separately until they are resolved or transferred into their appropriate planning and engineering homes. The [Alpha sequence](NEXT_STEPS.md) now defines dependencies and completion checks. It does not establish estimates or a delivery commitment.
 
 ## Product direction and workstream boundaries — 2026-11-02
 
@@ -68,7 +68,7 @@ The owner expects deeper compatible refinements to be considered for minor relea
 
 Release requires:
 - Alpha and Beta capabilities integrated without weakening data integrity, privacy, or recovery.
-- End-to-end validation using actual financial data only after production storage and authorization gates have been approved.
+- End-to-end acceptance with synthetic financial records in the production-capable path, plus actual OAuth/configuration, privacy, cost, recovery and owner authorization gates. PR27 later confirmed that a separate real-data smoke test is not required. Real-data use remains unauthorized until explicit activation approval.
 - Successful validation of imports, historical migration, categorization and corrections, balances and reports, persistence, backup/restore, and recovery.
 - Clear known limitations, documented operational procedures, and a usable target-device experience.
 - Confirmation that ongoing operation remains within the $0 recurring-cost constraint and does not depend on expiring trials, unauthorized scraping, or stored bank passwords.
@@ -87,54 +87,32 @@ Potential scope includes deeper investment analysis, more sophisticated planning
 
 - Alpha and Beta are deployable development milestones, not public semantic-version releases. The owner should be able to use each milestone through the existing GitHub Pages workflow and perform hands-on smoke tests on target devices before advancing.
 - 1.0.0 and 2.0.0 are product release versions.
-- Synthetic data is sufficient for Beta visual and analytical validation. Real-data acceptance belongs to the 1.0.0 integration/release gate and is permitted only after the relevant security approvals.
+- Synthetic data supplies Alpha, Beta and integrated acceptance test evidence. A separate real-data smoke test is not a prerequisite, per the later PR27 decision. Production controls and explicit owner authorization remain required before real-data use.
 - PR numbers do not prescribe merge order. Sequence work by dependency, reviewability, and readiness; a higher-numbered PR may merge before a lower-numbered PR.
 - Keep documentation/design work and engineering implementation in their appropriate PRs. A roadmap milestone does not silently expand the scope or authorization of an existing PR.
 - PR #25's synthetic-only implementation is merged. Its remaining owner-review and production-readiness items are documented separately; this roadmap does not authorize production financial-data persistence.
 
 
-## Current project position — 2026-11-05
+## Current project position, November 10, 2026
 
-**Current phase:** PRs #19 and #24–#25 are merged. PR #26 is the open, ready-for-review documentation-only product-definition PR; its owner-confirmed minimum v1.0.0 scope is recorded, while the dependency-aware schedule and measurable acceptance criteria remain open. Google Drive remains the selected private-storage direction. The tested Drive v3 stale-`If-Match` path failed; the owner accepted single-user, single-active-device operation, with simultaneous multi-device use explicitly unsupported and writes refused when another active session is detected. Synthetic session, transaction, backup, and recovery implementations are merged, but production ledger writes remain blocked pending residual-risk review, Cloud configuration and cost inspection, final privacy/security review, and separate explicit production design/approval and implementation.
+**Verified:** PR26 through PR34 are merged, including the planning-only PR27 and PR34's merge through PR32. The canonical workspace and synthetic import/storage foundation are on main. Main CI passed; the main Pages workflow failed before upload/deployment. [Project status](PROJECT_STATUS.md) records the exact commits, runs and limits.
 
-### Completed or demonstrated
-- Project constraints, provider-export research, and initial Wells Fargo, SoFi, and Fidelity sample-schema observations are documented.
-- The public-repository privacy rules and source-independent, conservative import/reconciliation principles are documented.
-- Google Drive remains the selected private-storage direction. The deployed synthetic probe has passed a user-confirmed create/read-back/confirmed-delete test, including a repeat after API-key rotation.
-- The Drive probe validates only the tested prototype paths. Sequential device handoff is the intended cross-device model; simultaneous multi-device use is unsupported. PRs #20–#25 add synthetic session coordination, transaction, backup/restore, and recovery evidence, but these do not establish production authorization or validate the deployed artifact's privacy/security or actual Cloud project configuration, quotas, usage, and billing.
-- Drive Experiments A+B were integrated in PR #16. PR #17 then hardened folder discovery, Picker fallback, and authorization/error handling; it is merged, and its final-head Node contract-test run #72 passed.
-- PR #19 merged 108 accepted database identity, schema/versioning, immutable storage, commit/journal, initialization, migration, backup/restore, and recovery decisions. It is documentation-only and does not authorize production storage.
+Step 1 of the application sequence is implemented, with additional live acceptance still open. Steps 2 through 4 cover financial position/reconciled coverage, monthly history from January 2023, and production controls/authorization. The app remains synthetic-only.
 
 ### M1 status — Canonical import contract and synthetic reconciliation
 
-**Status: Merged.** PR #11 is merged to `main`. Areas 1–7 were completed, the 540-day (18-month) original-file retention policy was approved and documented, and the cross-institution composite-match gap was fixed with a regression test. The complete Node suite passed 41/41 tests on the final reviewed PR head before merge.
+**Verified:** PR11's contract is merged and later PR28 implemented strict fixture parsers, canonical persistence, review, corrections and reporting tests. Do not treat provider-parser development or synthetic persistence as untouched work. The remaining gap is the complete Alpha application and production-capable owner-file path, not a new canonical foundation.
 
-Recorded decisions: integer minor units with decimal-string fallback; preserve source dates separately from effective/posted dates; one unified typed activity ledger; retain pending and posted observations linked to one activity only with strong evidence; allow explicitly reported partial results; accept valid empty files; strict known-format recognition; retain the original CSV privately; require explicit account mapping; append-only correction/reversal events; no production storage in PR #11; full synthetic reconciliation suite before merge.
-
-**Remaining M1 follow-through:** provider-specific strict parser tests, report-level reversal/correction/transfer accounting, schema/persistence integration, and recovery tests remain outstanding. The pure reference module is not a provider parser, durable ledger, or reporting engine. Keep production Drive writes and real financial data blocked.
-
-**Parallel but separate release gate:** continue documenting and testing Drive authorization, best-effort single-session detection, serialized writes, interruption recovery, backup/restore, revocation, and $0-cost production terms. A successful synthetic round trip is not a substitute for those gates.
-
-## Phase 0 — Foundation and discovery
-- [x] Set North Star, MVP1 file-import path, and $0 recurring-cost constraint.
-- [x] Establish public-repository privacy rules.
-- [x] Record Fidelity export capabilities confirmed by the project owner.
-- [x] Inspect sanitized sample exports for MVP1 account types (Wells Fargo, SoFi, Fidelity).
-- [x] Document observed schemas, date formats, confirmed signs, and available identifiers/activity fields; validate raw CSV mechanics when appropriate.
-- [x] Record and merge canonical ledger/import-run contract decisions and a pure synthetic reconciliation reference module (PR #11; complete).
-- [ ] Complete owner review of PR #25's residual deletion-receipt limitation, inspect actual Cloud OAuth audience/scopes and API-key restrictions plus assigned quotas/usage/billing, and complete deployed-artifact privacy/security inspection. PR #25's synthetic-only backup/restore and retention implementation is merged; production financial-data persistence remains NO-GO pending a separate design/approval milestone and implementation PR.
-- [x] Document and review the database identity/lifecycle/storage architecture (PR #19 merged; production implementation remains separately gated).
-
-Phase 0 discovery is substantially complete. The canonical contract and synthetic reference behavior are merged through PR #11. Provider parsers can now be developed against that contract using invented fixtures; production persistence remains separately gated. The Drive probe does not complete the storage/security phase.
+Earlier PR20 through PR25 storage and recovery results remain in the [synthetic acceptance record](SYNTHETIC_STORAGE_ACCEPTANCE.md). PR28 through PR34 extend that base. Each record's tests and owner observations apply to the revision and workflow actually tested.
 
 ## Current delivery work and dependencies
 
-The stage definitions above describe the intended product progression, not a claim that all work is complete. The owner-confirmed minimum v1.0.0 scope is recorded in the Product Definition and this roadmap. The next planning task is to establish a dependency-aware schedule and measurable acceptance criteria, while preserving PR #25's synthetic-only boundary and completing its documented owner-review items. Alpha implementation must proceed in separate reviewable PRs and remain subject to the required design, security, and production-authorization gates.
+The stage definitions above describe the intended product progression, not a claim that all work is complete. The owner-confirmed minimum v1.0.0 scope is recorded in the Product Definition and this roadmap. The [next-steps plan](NEXT_STEPS.md) defines the Alpha dependencies and completion checks. Estimates and a dependency-based calendar remain open. Complete current acceptance and the documented production controls without weakening the synthetic-only boundary. Alpha implementation must proceed in separate reviewable PRs and remain subject to the required design, security, and production-authorization gates.
 
 The following dependencies apply across Alpha and later stages:
 
 - Complete production evaluation of private storage, authentication, backup/recovery, and portability before enabling persistence for real financial records.
-- Implement provider parsers against strict, synthetic fixtures and the canonical import contract; keep production data out of public repositories and CI.
+- Extend the existing provider parsers and canonical import path only for supported formats and approved application work; preserve strict synthetic regressions and keep production data out of repositories and CI.
 - Preserve manual CSV import as a permanent workflow even if an authorized direct integration is later available.
 - Treat the 540-day (18-month) retention policy for original imported source files separately from the indefinite retention of canonical financial history, unless a future explicit decision changes either policy.
 - Keep simultaneous multi-device use unsupported under the accepted single-active-device operating model; do not imply synchronization guarantees that have not been implemented and tested.

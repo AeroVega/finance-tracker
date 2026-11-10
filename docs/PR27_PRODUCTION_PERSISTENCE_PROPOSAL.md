@@ -1,10 +1,10 @@
 # PR #27: Production financial-data persistence plan
 
-**Status:** Documentation-only draft awaiting owner planning review. Production implementation and acceptance are separate future work.
+**Status:** Documentation-only plan merged November 8, 2026 in [PR27](https://github.com/AeroVega/finance-tracker/pull/27). Production implementation and acceptance remain separate future work. Status reconciled November 10.
 
 **Workstream:** Production persistence planning and documentation review
 
-**Baseline:** PR #25's merged synthetic storage foundation, [PR #26's product definition](https://github.com/AeroVega/finance-tracker/pull/26), and [PR #28's synthetic canonical import implementation](https://github.com/AeroVega/finance-tracker/pull/28). This branch is reconciled with `main` at `c5b1fa916b431debf923d9502d5e8b2447e9b914`.
+**Baseline:** PR #25's merged synthetic storage foundation, [PR #26's product definition](https://github.com/AeroVega/finance-tracker/pull/26), and [PR #28's synthetic canonical import implementation](https://github.com/AeroVega/finance-tracker/pull/28). That was the planning baseline. Current implementation and later merged PR32/PR34 work are tracked in [project status](PROJECT_STATUS.md).
 
 **Production authorization state:** NOT APPROVED. Reviewing or merging this planning PR does not authorize implementation, deployment, real-data use, or production persistence.
 
@@ -28,6 +28,8 @@ Source: owner design discussion. These are planning requirements, not evidence t
 
 ### Grouped storage remains a design direction
 
+**Later implementation, verified November 10:** the recommendation below records the November 8 planning position. Synthetic [fragmented v3](FRAGMENTED_CANONICAL_STORAGE.md) is now implemented and is the default for new canonical copies; per-record v1 remains readable and standalone grouped v2 is rejected. The remaining production question is whether this representation covers the ready-feature record inventory and acceptance requirements, not whether synthetic grouped storage exists. See [remaining design decisions](#design-decisions-required-before-implementation-is-considered-complete). This does not grant production approval.
+
 **Hypothesis, recommended direction:** Evaluate grouped storage for the ready-feature data scope. This is not a final format, partitioning scheme, or replacement for the accepted immutable-object and transaction contracts. Exact group boundaries remain open.
 
 **Open:** Verify compatibility with the existing storage and schema contracts, integrity checks, session ownership, and interrupted-write recovery before accepting the representation. Preserve backup, restore, and portability behavior. Do not claim a latency or API-use improvement until measured with synthetic data.
@@ -49,6 +51,8 @@ Preserve the existing orderly-release sequence: close admission, drain admitted 
 **User-confirmed risk-documentation requirement:** Describe what abrupt closure or device loss can leave behind. Clearing application references is not proof of a secure browser/OS memory wipe, remote device wipe, or revocation of Google access. Do not promise a perfect wipe. Document the remaining exposure from browser/device access and account compromise, and the supported recovery and access-revocation steps before production acceptance.
 
 ### Current PR28 release behavior and production gap
+
+**Verified November 10:** the merged [main workspace](CANONICAL_MAIN_WORKSPACE.md) also keeps loaded records/drafts read-only after release while clearing its token. This same production-clearing gap applies to the newer application path, not only PR28.
 
 **Verified from source:** The merged synthetic workbench confirms release when changes are unsaved, releases the storage session, and retains the in-tab ledger and its unsaved state. Save becomes unavailable after release. Release does not save or erase that draft. See [the PR28 implementation contract](PR28_CANONICAL_IMPORT.md#manual-save-and-leaving-the-page), [the release handler](../prototype/pr28-import.mjs), and the dirty-release regression in [the UI tests](../tests/pr28-unsaved-ui.test.mjs).
 
@@ -185,7 +189,7 @@ The following requirements guide a separately authorized implementation. They ar
 The decision record above settles the scope principle, single-account operating model, local-data policy, and when to define routine backup promises. The remaining details below are open and must be resolved and recorded in the relevant authoritative documents. Recommendations are not confirmed implementation choices.
 
 1. **Production data inventory:** Which exact record classes support the ready features in the first production release, and which are durable and authoritative?
-2. **Storage representation:** How should the proposed grouped storage represent those records while preserving compatibility, integrity, ownership checks, and recovery? Exact objects, metadata, and partition boundaries remain open.
+2. **Storage representation:** Review the existing synthetic fragmented-v3 implementation against the ready production record inventory. New synthetic stores use v3, per-record v1 remains readable and standalone grouped v2 is rejected. Production suitability, new record classes and any needed partition changes still require review; do not restart the old grouped-v2 experiment or infer production approval from synthetic use.
 3. **Import transaction semantics:** What precisely constitutes a committed import, especially for safe partial results and ambiguous rows?
 4. **Account and database initialization:** What explicit owner action binds the app to the production database, and how is wrong-folder/account selection prevented?
 5. **OAuth configuration:** Exact scopes, test/publishing status, token lifecycle, designated-account binding, wrong-account rejection, and least-privilege acceptance. A multiple-authorized-account switching workflow is out of scope.
@@ -221,6 +225,8 @@ The later implementation must satisfy the final production acceptance matrix. Th
 
 ## Planning review, draft exit, and merge rule
 
+**Historical planning gate:** PR27 has merged. The criteria below explain what merging the plan meant, not an instruction to reopen its completed planning review. Production implementation and activation gates remain open.
+
 **User-confirmed:** PR #27 is a planning-only review. Completed production implementation and new live production acceptance are not required to review or merge the plan. This replaces the initial proposal's assumption that PR27 itself would deliver and authorize production persistence.
 
 Before proposing draft exit, verify that:
@@ -249,6 +255,8 @@ This reconciliation leaves the PR in draft for owner review. It does not mark it
 Where this proposal conflicts with an accepted contract, identify the conflict and seek an explicit owner decision. Do not silently override existing decisions.
 
 ## Change log
+
+- **2026-11-10, status reconciliation:** Recorded the plan merge, later synthetic v3 implementation and main-workspace clearing gap. Preserved the planning decisions and separate production controls/authorization. No runtime, configuration or deployment change.
 
 - **2026-11-08, planning review reconciliation:** Updated the README against merged PR26/PR28, separated planning review and merge from later implementation and production authorization, and documented the current PR28 release-preserves-draft behavior versus the future production clear-on-release requirement. No behavior, schema, configuration, or deployment change.
 - **2026-11-08, OAuth clarification:** Recorded the owner's non-blocking planning position against current official Google guidance. Actual project configuration, exception applicability, and token/authorization behavior remain unverified. Preserved the earlier backup deferral and all production gates.

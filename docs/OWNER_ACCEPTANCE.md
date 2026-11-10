@@ -1,19 +1,23 @@
 # Owner acceptance center
 
-**Implemented, not live-verified:** [Start the owner checklist](../prototype/acceptance.html). This is the single manual entry point for the remaining device and live-service observations. It links the existing engines rather than embedding competing sessions or replacing their programmatic checks.
+**Current guide, November 10, 2026.** Use this guide with the [canonical workspace checks](CANONICAL_MAIN_WORKSPACE.md#validation-and-owner-acceptance). The owner already accepted PR32 local exploration, evidence/corrections and mobile experience. The newer Drive-preview persistence and transfer-link paths remain open; do not repeat unaffected accepted checks without reason.
+
+**Verified blocker:** the [checklist page](../prototype/acceptance.html) still requests grouped-v2 seeding and a v2/v3 selector. Current code writes v3 only and rejects standalone v2. Mark the obsolete v2/selector phases **Blocked**, never Pass; its aggregate result cannot establish complete current acceptance until the runtime plan is updated. The remaining tools and their independent evidence are still useful.
+
+**Deployment prerequisite:** main's audited Pages run failed before upload. Confirm a successful authorized deployment and full served SHA before attributing new results to it. See [project status](PROJECT_STATUS.md). This guide does not authorize a deployment.
 
 ## Run order
 
 1. Confirm the full deployed SHA against the intended successful Pages deployment and select the actual browser. Repeat separately on physical iPhone and iPad Safari; emulation is not device acceptance.
 2. Use a separate DEVICE folder for preview-only layout, touch, focus, text enlargement and coverage-calendar checks. Verify release. Test real OAuth/folder-picker cancellation with no active session.
-3. Save/release/reconnect the small invented year in a fresh v2 folder, then a distinct fresh v3 folder. Reconnect with the opposite selector choice must retain the saved format without reseeding. This is not migration or mobile capacity evidence.
+3. Use a fresh empty synthetic folder to save/release/reconnect the small invented year as fragmented v3. There is no v2/v3 selector. Test per-record v1 read compatibility only with a known compatible invented copy, and verify standalone-v2 rejection without writes only with a disposable synthetic fixture. Do not seed new v2 copies. This is not migration or mobile-capacity evidence.
 4. Reconnect a completed year, briefly disconnect this device while idle, check the offline controls, then reconnect and verify the same saved year.
 5. Run assisted canonical import and its separate reconnect verification in a fresh IMPORT source.
 6. Rehearse actual paused-tab close/recovery using the separate disposable INTERRUPTION folder and existing verifier.
 7. Reuse the completed YEAR-V3 source for guided backup, actual downloaded-file reimport and restore. The guide verifies the fragmented source and displays its logical record counts. BACKUP and RESTORE each require their own new empty folder whose name contains "synthetic", such as "synthetic-backup" and "synthetic-restore". A rejected folder-name selection starts no copy; a failed or uncertain copy must still be preserved and never reused.
-8. Release and close device A before reconnecting an exact completed YEAR-V2 or YEAR-V3 source on device B. Use the year tool’s deterministic reconnect verification, not Upload. Verify release on B too. The import runner’s reconnect comparison requires the same tab that completed its run and cannot be used for cross-device validation.
+8. Release and close device A before reconnecting an exact completed YEAR-V3 source on device B. Use the year tool’s deterministic reconnect verification, not Upload. Verify release on B too. The import runner’s reconnect comparison requires the same tab that completed its run and cannot be used for cross-device validation.
 
-The page contains the exact expected observations and links. The detailed engine procedures remain in [PR28 canonical import](PR28_CANONICAL_IMPORT.md), [synthetic year](SYNTHETIC_FINANCIAL_YEAR.md), [fragmented storage](FRAGMENTED_CANONICAL_STORAGE.md), and [PR30 evidence](PR30_PERFORMANCE_INTEGRATION.md). Do not duplicate engine results by marking a manual selection as an automatic assertion.
+The underlying tools contain their observations and verification controls; the checklist page has the documented format drift. The detailed engine procedures remain in [PR28 canonical import](PR28_CANONICAL_IMPORT.md), [synthetic year](SYNTHETIC_FINANCIAL_YEAR.md), [fragmented storage](FRAGMENTED_CANONICAL_STORAGE.md), and [PR30 evidence](PR30_PERFORMANCE_INTEGRATION.md). Do not duplicate engine results by marking a manual selection as an automatic assertion.
 
 ## Safe continuity and reporting
 
@@ -25,7 +29,7 @@ Pass means **User-confirmed manual observation**, never automatic proof. Fail an
 
 ## Boundaries
 
-**Open:** real iPhone/iPad Safari, live OAuth, Drive throughput, memory and all owner-operated checks until actually run. Small-year v3 acceptance does not validate large datasets; the adapter reconstructs full graphs. Sequential handoff does not prove concurrent safety. Interruption rehearsal is one canonical boundary, not every failure point or iOS process termination.
+**Open:** current changed-path physical Safari/live-service acceptance and device capacity until actually run and attributed to a source SHA. Earlier bounded owner observations remain valid for their tested scope, not every later path. Small-year v3 acceptance does not validate large datasets; the adapter reconstructs full graphs. Sequential handoff does not prove concurrent safety. Interruption rehearsal is one canonical boundary, not every failure point or iOS process termination.
 
 No Google libraries, autoconnection, Drive operations or financial engines are loaded by this center. Following a tool link does not authorize production data. Owner-chosen synthetic folders and explicit existing controls are still required. Keep every completed or failed copy separate and preserve uncertain destinations. Session/recovery maintenance may write even when no financial records are added. Production remains **NO-GO**. No merge, deployment or live Drive action is part of this implementation.
 

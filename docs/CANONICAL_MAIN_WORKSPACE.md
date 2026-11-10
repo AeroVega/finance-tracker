@@ -2,6 +2,8 @@
 
 ## Scope
 
+**Verified November 10, 2026:** [PR32](https://github.com/AeroVega/finance-tracker/pull/32) merged into main, including [PR34](https://github.com/AeroVega/finance-tracker/pull/34), which had merged into its branch. Implementation and acceptance remain separate. See [project status](PROJECT_STATUS.md) for the exact source and deployment result.
+
 **User-confirmed:** implement step 1 of the four-PR plan so the owner can deploy the branch and explore the saved synthetic financial year in the main app. This is a synthetic-only application flow. Production financial-data persistence remains **NO-GO**. Merge, deployment and live Google actions by agents are not authorized.
 
 **Implemented:** the main page now opens an existing synthetic canonical copy, browses effective activities by account and month, shows qualified canonical reports, inspects preserved source observations and audit history, stages category, classification and amount corrections, explicitly saves and independently verifies them, and reopens saved records. A separate local preview generates the same invented year without Google access or writes. The owner may explicitly save the exact current preview—including staged corrections, or the untouched original recipe—to a newly selected, empty synthetic Drive folder. This is a fresh-copy operation, never an overwrite or append to an existing copy.
@@ -79,13 +81,13 @@ Reproduce with `node tests/benchmark-canonical-workspace-view.mjs --baseline-ref
 
 ## Validation and owner acceptance
 
-**Open:** the new main-app flow has not been accepted on physical iPad/iPhone Safari or live Drive. PR30's nine owner-reported iPad passes apply to the PR30 tested commit only, not this change. Partial iPhone testing does not establish complete iPhone coverage.
+**Open:** the newer Drive-preview persistence, transfer-link persistence and interruption flows still need owner acceptance. PR30's nine owner-reported iPad passes apply to its tested commit, not these later changes. Preserve the narrower PR32 owner observation below; it is not a complete current iPhone/iPad/live-Drive acceptance pass.
 
 The owner has already accepted the local synthetic-year exploration, source-evidence/correction workflow, and mobile workspace experience on the PR32 head. Do not repeat those checks unless a later change affects them. The new Drive persistence and transfer-link flows below remain unaccepted.
 
-Before calling the new workflow accepted, review PR #34 and then deploy the follow-up branch yourself through **Actions → Deploy static site to GitHub Pages → Run workflow**, select `feature/synthetic-persistence-transfer-links`, and verify the source SHA shown in the page matches the reviewed branch head. This replaces the repository's single shared Pages deployment. No deployment is performed by this implementation work.
+PR34 and PR32 have merged; do not request review or deployment of their retired branch as if it were still pending. Before new acceptance, resolve the [current deployment gap](PROJECT_STATUS.md#repository-and-deployment), review the intended source and verify a successful authorized deployment and matching full SHA in the page. Pages is a single shared deployment. Record the exact SHA, device and capability with each result.
 
-Run these checks with invented data only:
+Run the affected checks below with invented data only. Existing accepted unchanged behavior need not be retested solely because a PR merged:
 
 1. Local preview before authorization: all four accounts and twelve months appear, known annual totals match the values above, and nothing opens Google or writes Drive.
 2. Open an existing per-record v1 copy and a fragmented v3 copy. Confirm a standalone grouped-v2 copy is rejected with a clear unsupported-layout message, no initialization and no write. Confirm a new saved preview uses fragmented v3.
