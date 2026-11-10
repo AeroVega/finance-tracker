@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyFinancialEvent, getEffectiveActivities } from '../js/canonical-import.mjs';
+import { applyFinancialEvent, getEffectiveActivities, summarizeLedgerPeriods } from '../js/canonical-import.mjs';
 import { CanonicalWorkspaceSession } from '../js/canonical-workspace-session.mjs';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
 import { serializePackedCanonicalLedger, serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
@@ -180,6 +180,12 @@ test('transfer links are append-only, reciprocal in the effective view, and pres
   assert.equal(source.transferGroupId, destination.transferGroupId);
   assert.equal(source.transferCounterpartyActivityId, destination.activityId);
   assert.equal(destination.transferCounterpartyActivityId, source.activityId);
+  const period = [{ start: '2025-01-01', end: '2025-12-31', currency: 'USD' }];
+  assert.deepEqual(summarizeLedgerPeriods(linked, period), summarizeLedgerPeriods(before, period));
+  assert.throws(() => applyFinancialEvent(linked, {
+    type: 'transfer-link', activityId: outgoing.activityId, counterpartyActivityId: incoming.activityId,
+    commandId: 'invented-duplicate-transfer-link', evidence: { rationale: 'A second link must be refused.' }
+  }), { message: 'invalid-transfer-link' });
   assert.throws(() => applyFinancialEvent(linked, {
     type: 'bank-correction', activityId: outgoing.activityId, amountText: '-610.00',
     commandId: 'invented-break-transfer-pair', evidence: { rationale: 'This one-sided correction must be rejected.' }
