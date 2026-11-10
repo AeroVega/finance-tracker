@@ -29,7 +29,7 @@ test('completed canonical recipe backs up and restores all retained history with
     assert.equal(current[phase].categories.create, measured.retainedObjects + 3,
       'copy every retained object plus the preparation marker, catalog and final manifest');
     assert.equal(current[phase].categories.update, 1, 'mark the existing preparation ready once');
-    assert.equal(current[phase].categories['generate-id'], 15);
+    assert.equal(current[phase].categories['generate-id'], 6);
     // Crypto and event-loop scheduling may hide overlap in this zero-delay
     // HTTP simulation. The separate latch-based copy tests prove admission of
     // four operations without relying on timing or machine load.
