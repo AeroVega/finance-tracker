@@ -256,3 +256,14 @@ test('transfer-link events save and reopen through the existing canonical store'
   assert.equal(effective.find(activity => activity.activityId === outgoing.activityId).transferCounterpartyActivityId, incoming.activityId);
   assert.equal(effective.find(activity => activity.activityId === incoming.activityId).transferCounterpartyActivityId, outgoing.activityId);
 });
+
+
+test('preview persistence refuses an existing canonical copy without writing to it', async () => {
+  const h = setup('chunks-v2', false);
+  h.session.preview(recipe.ledger);
+  await assert.rejects(h.session.savePreviewToNewCopy(), { message: 'new-empty-folder-required' });
+  assert.deepEqual(h.calls.connects, [{ requireEmpty: true }]);
+  assert.equal(h.calls.writes, 0);
+  assert.equal(h.session.mode, 'preview');
+  assert.equal(h.session.unverified, false);
+});
