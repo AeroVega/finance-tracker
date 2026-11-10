@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#09090b">
+  <meta name="description" content="A private, local CSV preview and synthetic development workspace for Finance Tracker.">
+  <title>Local CSV diagnostic · Finance Tracker</title>
+  <link rel="stylesheet" href="../styles.css">
+  <script async src="https://accounts.google.com/gsi/client"></script>
+  <script async src="https://apis.google.com/js/api.js"></script>
+  <script src="../js/app.js" defer></script>
+  <script src="../js/build-info.js" defer></script>
+  <script src="../js/workspace-navigation.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#overview">Skip to overview</a>
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <a class="brand" href="#overview"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17.5 9 12l3.2 3.2L20 6.5M14.5 6.5H20v5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>FINANCE TRACKER<small>PERSONAL FINANCE</small></span></a>
+      <p class="nav-label">Workspace</p>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="#overview"><span aria-hidden="true">◫</span> Overview</a>
+        <a href="#import"><span aria-hidden="true">↓</span> Import CSV</a>
+        <a href="#transactions"><span aria-hidden="true">↔</span> Transactions</a>
+        <a href="#storage"><span aria-hidden="true">▤</span> Synthetic storage</a>
+      </nav>
+      <div class="sidebar-tools"><a href="../index.html">Canonical workspace</a><p class="nav-label">Development</p><a href="synthetic-year.html">Seed a synthetic year <span aria-hidden="true">↗&#xfe0e;</span></a><a href="acceptance.html">Acceptance tests <span aria-hidden="true">↗&#xfe0e;</span></a><a href="./">All test tools <span aria-hidden="true">↗&#xfe0e;</span></a></div>
+      <div class="workspace-note"><span class="status-dot" aria-hidden="true"></span><strong>Development workspace</strong><p>Local CSV preview and invented fixtures. Production financial storage is disabled.</p></div>
+    </aside>
+    <main class="app-shell" id="overview" tabindex="-1">
+      <header class="topbar">
+        <div><p class="eyebrow">PERSONAL FINANCE / OVERVIEW</p><h1>Your overview<span class="accent-dot">.</span></h1><p class="intro">Preview imported records and inspect the rows behind each total.</p></div>
+        <span class="mode-pill" id="data-mode">No data loaded</span>
+      </header>
+
+      <section class="privacy-note" aria-label="Privacy and preview limits">
+        <span class="status-dot" aria-hidden="true"></span>
+        <p><strong>Local preview.</strong> CSV files stay in this tab and are never uploaded. This page shows raw cash movement, not reconciled income, spending or account balances. <a href="pr28-import.html">Open the synthetic import workbench</a> for account mapping and review.</p>
+      </section>
+
+      <section class="summary-section" aria-labelledby="summary-heading">
+        <div class="section-heading"><h2 id="summary-heading">Loaded cash movement</h2><p id="data-summary">No records loaded. Totals are unavailable.</p></div>
+        <div class="metric-grid">
+          <article class="metric-card"><p class="metric-label">Money in <span class="metric-symbol positive" aria-hidden="true">↙&#xfe0e;</span></p><p class="metric-value" id="income-total">Unavailable</p><p class="metric-note">Positive cash-movement rows</p></article>
+          <article class="metric-card"><p class="metric-label">Money out <span class="metric-symbol" aria-hidden="true">↗&#xfe0e;</span></p><p class="metric-value" id="expense-total">Unavailable</p><p class="metric-note">Negative cash-movement rows</p></article>
+          <article class="metric-card metric-card-emphasis"><p class="metric-label">Net movement <span class="metric-symbol" aria-hidden="true">⇄</span></p><p class="metric-value" id="net-total">Unavailable</p><p class="metric-note">Money in minus money out</p></article>
+        </div>
+        <p class="summary-caveat">All loaded dates. Internal transfers may be included; identified investment activity is excluded. Coverage and classification are not verified here.</p>
+      </section>
+
+      <section class="panel import-panel" id="import" aria-labelledby="import-heading">
+        <div class="panel-heading"><div><p class="eyebrow">01 / BRING IN RECORDS</p><h2 id="import-heading">Import a CSV</h2></div><span class="tag">This tab only</span></div>
+        <p class="panel-copy">Choose a file to preview its rows. Nothing from a CSV is saved to Drive. Closing or reloading this page loses the local preview. Browser warnings may not appear on every device.</p>
+        <label class="file-picker" for="csv-file"><span class="file-picker-icon" aria-hidden="true">↑</span><span><strong>Choose a CSV file</strong><small>Processed locally in your browser</small></span><input id="csv-file" type="file" accept=".csv,text/csv"></label>
+        <p id="import-status" class="status-message" role="status" aria-live="polite">No file imported yet.</p>
+        <div class="import-help">
+          <p><a href="synthetic-year.html">Upload a full invented year to a new synthetic Drive folder</a> for canonical engine testing.</p><details class="sample-details"><summary>File format and import limits</summary><p>Use columns named <code>Date</code>, <code>Description</code>, and <code>Amount</code>. Negative amounts are money out; positive amounts are money in. Supported provider layouts are recognized when their documented headers are present.</p><p>This local preview detects repeat imports of the same file in this tab only. It does not reconcile overlapping exports, pending transactions, transfers or corrections.</p></details>
+          <details class="sample-details"><summary>Try invented sample data</summary><p>Load four invented rows without choosing a file. If synthetic Drive is connected, this action saves and verifies only the sample rows there.</p><button id="load-sample" class="secondary-button" type="button">Load sample transactions</button></details>
+        </div>
+      </section>
+
+      <section class="panel transactions-panel" id="transactions" aria-labelledby="transactions-heading">
+        <div class="panel-heading"><div><p class="eyebrow">02 / INSPECT RECORDS</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><div class="ledger-actions"><button id="save-data" class="secondary-button" type="button" disabled>Save sample to Drive</button><button id="clear-data" class="text-button" type="button" disabled>Clear loaded data</button></div></div>
+        <p class="panel-copy">CSV rows remain local. Save applies only to invented sample rows. Clear removes loaded rows and, when connected, clears the synthetic Drive snapshot.</p>
+        <div class="ledger-filter"><label for="transaction-search">Find a transaction<input id="transaction-search" type="search" placeholder="Search description, date or provider" autocomplete="off"></label><p id="filter-count" role="status" aria-live="polite">No transactions to search.</p></div>
+        <p id="ledger-status" class="status-message" aria-live="off"></p>
+        <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true">↳</div><h3>Your records start here</h3><p>Import a CSV above or try the invented sample. No accounts are connected automatically.</p><a href="#import">Choose your first file <span aria-hidden="true">↑</span></a></div>
+        <div id="search-empty" class="empty-state" hidden><h3>No matching transactions</h3><p>Try another word or clear your search. Your loaded records and totals have not changed.</p></div>
+        <div class="table-wrap" id="transaction-table-wrap" hidden><table><caption class="visually-hidden">Loaded transactions. Search changes displayed rows only, not totals.</caption><thead><tr><th scope="col">Date</th><th scope="col">Description</th><th scope="col">Amount</th></tr></thead><tbody id="transaction-rows"></tbody></table></div>
+      </section>
+
+      <section class="panel storage-panel" id="storage" aria-labelledby="storage-heading">
+        <div class="panel-heading"><div><p class="eyebrow">OPTIONAL / DEVELOPMENT STORAGE</p><h2 id="storage-heading">Synthetic Drive storage</h2></div><span class="tag violet">Invented fixtures only</span></div>
+        <p class="panel-copy">Use a dedicated folder with “synthetic” in its name. Only invented sample rows can be saved here. CSV imports always remain local and are never uploaded.</p>
+        <div class="storage-actions"><button id="connect-synthetic-storage" class="secondary-button" type="button">Connect synthetic Drive folder</button><button id="release-synthetic-storage" class="secondary-button" type="button" disabled>Release storage session</button><button id="recover-stale-storage" class="secondary-button" type="button" hidden>Confirm stale-session recovery</button></div>
+        <p id="storage-status" class="status-message" role="status" aria-live="polite">Not connected. CSV imports continue to work locally.</p>
+        <details id="storage-diagnostics-panel" class="sample-details"><summary>Storage diagnostics</summary><p>Recent lifecycle events only; no tokens, file IDs, folder names or transaction data. This trace is never uploaded or saved. Share it with the visible error and source commit when reporting a problem.</p><pre id="storage-diagnostics">No storage events recorded.</pre></details>
+      </section>
+
+      <footer><p>Development workspace · CSV imports local · Production financial storage disabled</p><p>Source commit <code id="build-sha">development (not deployed)</code></p><a href="./">All prototype tools</a></footer>
+    </main>
+  </div>
+</body>
+</html>

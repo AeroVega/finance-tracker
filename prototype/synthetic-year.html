@@ -27,9 +27,7 @@
   <section aria-labelledby="upload-title"><h2 id="upload-title">Choose a folder and upload</h2>
     <ol><li>Create a new empty folder in Google Drive with <strong>synthetic</strong> in its name.</li><li>Check in Drive that it is empty. Limited drive.file access cannot prove that files outside this app's visibility are absent.</li><li>Confirm below, then choose that folder. Existing visible files, including a prior session or database, are refused before any write.</li></ol>
     <label class="confirmation"><input id="empty-confirmed" type="checkbox">I will choose a newly created empty synthetic folder, separate from all real financial data.</label>
-    <label for="storage-layout">Storage format for a new empty copy</label>
-    <select id="storage-layout"><option value="chunks-v2">Grouped version 2, default</option><option value="fragments-v3">Fragmented version 3, supports larger individual records</option></select>
-    <p class="metric-note">Version 3 splits large records into bounded objects and adds encoding overhead. Older clients cannot open it. Existing copies keep their saved format; no conversion occurs.</p>
+    <p class="metric-note"><strong>Storage format:</strong> fragmented version 3. Canonical records use the version-3 logical group schema and bounded physical fragments. Standalone grouped version 2 is no longer supported. Existing per-record version-1 copies remain readable; no existing folder is silently migrated.</p>
     <div class="actions"><button id="upload" class="primary-action" disabled>Upload synthetic year to Drive</button></div>
     <p id="configuration" role="status">Loading Google setup. No connection or upload starts automatically.</p>
     <p id="connection" role="status">No folder connected.</p>

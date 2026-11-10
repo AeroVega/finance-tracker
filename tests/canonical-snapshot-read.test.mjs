@@ -8,6 +8,7 @@ import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { setupCatalog } from './helpers/catalog-drive.mjs';
 import { resolveSnapshotLocators } from '../js/drive-locator-catalog.mjs';
 import { verifyCatalogHistory } from '../js/catalog-storage.mjs';
+import { reassembleCanonicalObjects } from '../js/canonical-fragments.mjs';
 
 async function setup() {
   const { adapter, manifestFileId } = await setupCatalog();
@@ -55,7 +56,11 @@ test('snapshot bytes are detached and each subsequent call re-verifies stored by
   first.objects[CANONICAL_INDEX].fill(0); first.manifest.revision = -1;
   const second = await lifecycle.readVerifiedSnapshot();
   assert.ok(second.manifest.revision >= 1);
-  assert.equal(JSON.parse(new TextDecoder().decode(second.objects[CANONICAL_INDEX])).metadata.ledgerId, ledger.ledgerId);
+  const decoder = new TextDecoder();
+  const root = JSON.parse(decoder.decode(second.objects[CANONICAL_INDEX]));
+  const physical = new Map(Object.entries(second.objects).map(([path, bytes]) => [path, decoder.decode(bytes)]));
+  const logical = reassembleCanonicalObjects(root, physical);
+  assert.equal(JSON.parse(logical.get(CANONICAL_INDEX)).metadata.ledgerId, ledger.ledgerId);
 });
 
 test('changed manifest during a bulk read clears the canonical base and pauses writes', async () => {

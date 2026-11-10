@@ -110,9 +110,10 @@ export async function measureCanonicalBackupFlow({ variants = [{ name: 'current'
   const retainedByKind = Object.values(sourceHistory.catalog.entries).reduce((counts, entry) => {
     counts[entry.kind] = (counts[entry.kind] || 0) + 1; return counts;
   }, {});
-  assert.equal(Object.keys(manifest.snapshot).length, 66);
-  assert.equal(Object.keys(sourceHistory.catalog.entries).length, 226);
-  assert.equal(retainedByKind['journal-event'], 154);
+  assert.equal(Object.keys(manifest.snapshot).length, 8, 'the v3 snapshot exposes bounded physical fragments rather than per-record objects');
+  assert.equal(Object.keys(sourceHistory.catalog.entries).length,
+    Object.values(retainedByKind).reduce((sum, count) => sum + count, 0));
+  assert.equal(retainedByKind['journal-event'], 62);
   source.http.latencyMs = latencyMs;
   const report = { transportLatencyMs: latencyMs, heartbeatRequests: 0, recipeRequests,
     selectedObjects: Object.keys(manifest.snapshot).length,

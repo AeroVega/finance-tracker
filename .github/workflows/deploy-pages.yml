@@ -83,6 +83,25 @@ jobs:
           }));
           NODE
 
+      - name: Verify generated Google configuration asset
+        shell: bash
+        run: |
+          test -s js/google-config.json
+          node --input-type=module <<'NODE'
+          import { readFileSync, statSync } from "node:fs";
+          import { validateGoogleConfig } from "./js/google-config-validation.mjs";
+          const path = "js/google-config.json";
+          const config = JSON.parse(readFileSync(path, "utf8"));
+          validateGoogleConfig(config);
+          if (statSync(path).size === 0) throw new Error("Generated Google configuration asset is empty.");
+          console.log("Generated Google configuration asset is valid and ready for the Pages artifact.");
+          console.log("Required fields present: " + JSON.stringify({
+            clientId: Boolean(config.clientId),
+            pickerApiKey: Boolean(config.apiKey),
+            projectNumber: Boolean(config.projectNumber)
+          }));
+          NODE
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
 

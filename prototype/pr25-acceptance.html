@@ -21,7 +21,7 @@
   <aside>Release the source on the page where you used it before starting here. Close other tabs using it. Keep this tab open and your iPad awake until each step finishes. No operation starts when this page loads.</aside>
   <div class="guide-roles">
     <p><strong>SOURCE</strong> is the existing folder with your completed invented records. It is only read for these copy checks. Session markers still update.</p>
-    <p><strong>BACKUP</strong> and <strong>RESTORED COPY</strong> are two different new empty synthetic folders you choose. Do not select the source, each other, or an interrupted destination.</p>
+    <p><strong>BACKUP</strong> and <strong>RESTORED COPY</strong> are two different new empty synthetic folders you choose. Each folder name must contain "synthetic", such as "synthetic-backup" and "synthetic-restore". Do not select the source, each other, or an interrupted destination.</p>
     <p><strong>ARCHIVE</strong> is the downloaded JSON file in Files, not a Drive destination folder. Keep it private.</p>
   </div>
   <p id="guide-next" class="guide-next" role="status" aria-live="polite">Loading Google services. No Drive operation has started.</p>
@@ -35,7 +35,7 @@
   </section>
   <section>
     <h2>2. Make the Drive backup</h2>
-    <p>You choose a new empty BACKUP folder. Copying, verification, release and a separate reopen run automatically.</p>
+    <p>You choose a new empty BACKUP folder with "synthetic" in its name. Copying, verification, release and a separate reopen run automatically.</p>
     <button id="guide-backup" disabled class="primary-action">Choose backup folder and run checks</button>
     <p id="guide-backup-result" role="status" aria-live="polite">Backup not run.</p>
     <p id="guide-backup-time" class="step-time"></p>
@@ -58,7 +58,7 @@
   </section>
   <section>
     <h2>5. Restore and independently reopen</h2>
-    <p>You choose another new empty RESTORED COPY folder. The page restores the selected file, releases the folder, opens it through a new session, compares all retained logical bytes, then releases it again.</p>
+    <p>You choose another new empty RESTORED COPY folder with "synthetic" in its name. The page restores the selected file, releases the folder, opens it through a new session, compares all retained logical bytes, then releases it again.</p>
     <button id="guide-restore" disabled class="primary-action">Choose restore folder and run checks</button>
     <p id="guide-restore-result" role="status" aria-live="polite">Restore not run.</p>
     <p id="guide-restore-time" class="step-time"></p>

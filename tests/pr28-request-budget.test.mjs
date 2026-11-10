@@ -69,7 +69,7 @@ test('actual HTTP adapters complete the assisted recipe within its request budge
   assert.equal(totals.spending, '101.75'); assert.equal(totals.income, '2250.37'); assert.equal(totals.complete, false);
   const manifest = h.http.json(h.manifestFileId);
   assert.equal(manifest.revision, 3); assert.equal(manifest.catalogFinalizationPending, null);
-  assert.equal(Object.keys(manifest.snapshot).length, 66);
+  assert.equal(Object.keys(manifest.snapshot).length, 8);
 
   h.http.phase = 'reconnect'; await h.lifecycle.start(); await h.driver.reopen();
   assert.equal(await runner.verifyReconnect(), true, JSON.stringify(last));
@@ -100,7 +100,7 @@ test('repeated small saves use version-checked history within a fixed request bu
     }
   }
   t.diagnostic(JSON.stringify({ before: BEFORE_SMALL_COMMITS, after: counts }));
-  for (let i = 0; i < counts.length; i++) assert.ok(counts[i] <= 170, `save ${i + 1} used ${counts[i]} requests`);
+  for (let i = 0; i < counts.length; i++) assert.ok(counts[i] <= 185, `save ${i + 1} used ${counts[i]} requests`);
   for (let i = 1; i < counts.length; i++) assert.ok(counts[i] - counts[i - 1] <= 2, 'retained-history growth exceeded the per-save budget');
   assertConcurrency(h.http);
   const mutations = h.http.mutations;

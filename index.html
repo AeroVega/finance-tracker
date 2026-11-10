@@ -4,81 +4,111 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#09090b">
-  <meta name="description" content="A private, local CSV preview and synthetic development workspace for Finance Tracker.">
-  <title>Overview · Finance Tracker</title>
+  <meta name="description" content="Explore a saved synthetic financial year, review canonical transactions and save deliberate corrections in Finance Tracker.">
+  <title>Your workspace · Finance Tracker</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="canonical-workspace.css">
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
-  <script src="js/app.js" defer></script>
   <script src="js/build-info.js" defer></script>
   <script src="js/workspace-navigation.js" defer></script>
+  <script type="module" src="js/canonical-workspace.mjs"></script>
 </head>
-<body>
+<body class="canonical-workspace">
   <a class="skip-link" href="#overview">Skip to overview</a>
   <div class="workspace">
     <aside class="sidebar" aria-label="Workspace navigation">
-      <a class="brand" href="#overview"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17.5 9 12l3.2 3.2L20 6.5M14.5 6.5H20v5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>FINANCE TRACKER<small>PERSONAL FINANCE</small></span></a>
+      <a class="brand" href="#overview">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17.5 9 12l3.2 3.2L20 6.5M14.5 6.5H20v5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span>FINANCE TRACKER<small>YOUR FINANCIAL WORKSPACE</small></span>
+      </a>
       <p class="nav-label">Workspace</p>
       <nav class="primary-nav" aria-label="Primary navigation">
-        <a href="#overview"><span aria-hidden="true">◫</span> Overview</a>
-        <a href="#import"><span aria-hidden="true">↓</span> Import CSV</a>
-        <a href="#transactions"><span aria-hidden="true">↔</span> Transactions</a>
-        <a href="#storage"><span aria-hidden="true">▤</span> Synthetic storage</a>
+        <a href="#overview"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.5"/></svg>Overview</a>
+        <a href="#transactions"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg>Transactions</a>
+        <a href="#review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 12 3.2 3.2L17 8.5"/><rect x="3.5" y="3.5" width="17" height="17" rx="5"/></svg>Review</a>
+        <a href="#storage"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5v9c0 2.2 16 2.2 16 0v-9M4 12c0 2.2 16 2.2 16 0"/><ellipse cx="12" cy="7.5" rx="8" ry="3"/></svg>Storage</a>
       </nav>
-      <div class="sidebar-tools"><p class="nav-label">Development</p><a href="prototype/synthetic-year.html">Seed a synthetic year <span aria-hidden="true">↗&#xfe0e;</span></a><a href="prototype/acceptance.html">Acceptance tests <span aria-hidden="true">↗&#xfe0e;</span></a><a href="prototype/">All test tools <span aria-hidden="true">↗&#xfe0e;</span></a></div>
-      <div class="workspace-note"><span class="status-dot" aria-hidden="true"></span><strong>Development workspace</strong><p>Local CSV preview and invented fixtures. Production financial storage is disabled.</p></div>
+      <div class="sidebar-tools">
+        <p class="nav-label">Development</p>
+        <a href="prototype/synthetic-year.html">Seed a synthetic year <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a>
+        <a href="prototype/acceptance.html">Acceptance tests <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a>
+        <a href="prototype/">All test tools <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a>
+      </div>
+      <div class="workspace-note"><span class="status-dot" aria-hidden="true"></span><strong>Synthetic data only</strong><p>Explore invented records. Production financial storage remains disabled.</p></div>
     </aside>
+
     <main class="app-shell" id="overview" tabindex="-1">
       <header class="topbar">
-        <div><p class="eyebrow">PERSONAL FINANCE / OVERVIEW</p><h1>Your overview<span class="accent-dot">.</span></h1><p class="intro">Preview imported records and inspect the rows behind each total.</p></div>
-        <span class="mode-pill" id="data-mode">No data loaded</span>
+        <div><p class="eyebrow">PERSONAL FINANCE / WORKSPACE</p><h1>A clearer view<span class="accent-dot">.</span></h1><p class="intro">Follow the numbers, inspect their sources, and review what needs attention.</p></div>
+        <span class="mode-pill" id="data-mode">No ledger open</span>
       </header>
 
-      <section class="privacy-note" aria-label="Privacy and preview limits">
-        <span class="status-dot" aria-hidden="true"></span>
-        <p><strong>Local preview.</strong> CSV files stay in this tab and are never uploaded. This page shows raw cash movement, not reconciled income, spending or account balances. <a href="prototype/pr28-import.html">Open the synthetic import workbench</a> for account mapping and review.</p>
+      <section class="ledger-entry" aria-labelledby="entry-heading">
+        <div class="entry-copy"><span class="entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5zM3 10h18"/></svg></span><div><p class="eyebrow">START WITH YOUR SAVED YEAR</p><h2 id="entry-heading">One ledger. Every source in reach.</h2><p>Open an existing synthetic folder in Google Drive, or explore an invented year locally.</p></div></div>
+        <div class="entry-actions"><button id="open-ledger" class="primary-button" type="button">Open saved synthetic year <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></button><button id="preview-year" class="secondary-button" type="button">Try a local preview</button><button id="save-preview" class="secondary-button" type="button" disabled>Save this preview to a new folder</button></div>
+        <div class="entry-footnote"><p>Local preview stays in this tab until you explicitly save it to a newly created, empty synthetic Drive folder.</p><a href="prototype/synthetic-year.html">Need a saved year? Seed one <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></div>
       </section>
+      <p id="action-status" class="status-message action-status" role="status" aria-live="polite" aria-atomic="true">Choose a saved synthetic year or try the local preview.</p>
 
       <section class="summary-section" aria-labelledby="summary-heading">
-        <div class="section-heading"><h2 id="summary-heading">Loaded cash movement</h2><p id="data-summary">No records loaded. Totals are unavailable.</p></div>
-        <div class="metric-grid">
-          <article class="metric-card"><p class="metric-label">Money in <span class="metric-symbol positive" aria-hidden="true">↙&#xfe0e;</span></p><p class="metric-value" id="income-total">Unavailable</p><p class="metric-note">Positive cash-movement rows</p></article>
-          <article class="metric-card"><p class="metric-label">Money out <span class="metric-symbol" aria-hidden="true">↗&#xfe0e;</span></p><p class="metric-value" id="expense-total">Unavailable</p><p class="metric-note">Negative cash-movement rows</p></article>
-          <article class="metric-card metric-card-emphasis"><p class="metric-label">Net movement <span class="metric-symbol" aria-hidden="true">⇄</span></p><p class="metric-value" id="net-total">Unavailable</p><p class="metric-note">Money in minus money out</p></article>
+        <div class="section-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="summary-heading">Known income &amp; spending</h2></div><p id="summary-scope">No ledger loaded</p></div>
+        <div class="scope-controls" aria-describedby="scope-help">
+          <label for="account-filter">Account<select id="account-filter" disabled><option value="all">All accounts</option></select></label>
+          <label for="month-filter">Period<select id="month-filter" disabled><option value="all">Full year</option></select></label>
+          <p id="scope-help">Account and period change these totals and the transactions below. Search only changes the rows you see.</p>
         </div>
-        <p class="summary-caveat">All loaded dates. Internal transfers may be included; identified investment activity is excluded. Coverage and classification are not verified here.</p>
-      </section>
-
-      <section class="panel import-panel" id="import" aria-labelledby="import-heading">
-        <div class="panel-heading"><div><p class="eyebrow">01 / BRING IN RECORDS</p><h2 id="import-heading">Import a CSV</h2></div><span class="tag">This tab only</span></div>
-        <p class="panel-copy">Choose a file to preview its rows. Nothing from a CSV is saved to Drive. Closing or reloading this page loses the local preview. Browser warnings may not appear on every device.</p>
-        <label class="file-picker" for="csv-file"><span class="file-picker-icon" aria-hidden="true">↑</span><span><strong>Choose a CSV file</strong><small>Processed locally in your browser</small></span><input id="csv-file" type="file" accept=".csv,text/csv"></label>
-        <p id="import-status" class="status-message" role="status" aria-live="polite">No file imported yet.</p>
-        <div class="import-help">
-          <p><a href="prototype/synthetic-year.html">Upload a full invented year to a new synthetic Drive folder</a> for canonical engine testing.</p><details class="sample-details"><summary>File format and import limits</summary><p>Use columns named <code>Date</code>, <code>Description</code>, and <code>Amount</code>. Negative amounts are money out; positive amounts are money in. Supported provider layouts are recognized when their documented headers are present.</p><p>This local preview detects repeat imports of the same file in this tab only. It does not reconcile overlapping exports, pending transactions, transfers or corrections.</p></details>
-          <details class="sample-details"><summary>Try invented sample data</summary><p>Load four invented rows without choosing a file. If synthetic Drive is connected, this action saves and verifies only the sample rows there.</p><button id="load-sample" class="secondary-button" type="button">Load sample transactions</button></details>
+        <div id="summary-cards" class="metric-grid">
+          <article class="metric-card"><p class="metric-label">Known income <span class="metric-symbol positive" aria-hidden="true">+</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
+          <article class="metric-card"><p class="metric-label">Known spending <span class="metric-symbol" aria-hidden="true">−</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
+          <article class="metric-card metric-card-emphasis"><p class="metric-label">Known cash movement <span class="metric-symbol" aria-hidden="true">⇄</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only. Not a balance.</p></article>
         </div>
+        <div class="summary-context"><div><p>Known subtotals only. Transfers and card payments do not count as income or spending.</p><details class="summary-explainer"><summary>How these totals are calculated</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p></details></div><p id="coverage-summary">Coverage has not been loaded. Missing data is unavailable, not zero.</p></div>
       </section>
 
       <section class="panel transactions-panel" id="transactions" aria-labelledby="transactions-heading">
-        <div class="panel-heading"><div><p class="eyebrow">02 / INSPECT RECORDS</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><div class="ledger-actions"><button id="save-data" class="secondary-button" type="button" disabled>Save sample to Drive</button><button id="clear-data" class="text-button" type="button" disabled>Clear loaded data</button></div></div>
-        <p class="panel-copy">CSV rows remain local. Save applies only to invented sample rows. Clear removes loaded rows and, when connected, clears the synthetic Drive snapshot.</p>
-        <div class="ledger-filter"><label for="transaction-search">Find a transaction<input id="transaction-search" type="search" placeholder="Search description, date or provider" autocomplete="off"></label><p id="filter-count" role="status" aria-live="polite">No transactions to search.</p></div>
-        <p id="ledger-status" class="status-message" aria-live="off"></p>
-        <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true">↳</div><h3>Your records start here</h3><p>Import a CSV above or try the invented sample. No accounts are connected automatically.</p><a href="#import">Choose your first file <span aria-hidden="true">↑</span></a></div>
-        <div id="search-empty" class="empty-state" hidden><h3>No matching transactions</h3><p>Try another word or clear your search. Your loaded records and totals have not changed.</p></div>
-        <div class="table-wrap" id="transaction-table-wrap" hidden><table><caption class="visually-hidden">Loaded transactions. Search changes displayed rows only, not totals.</caption><thead><tr><th scope="col">Date</th><th scope="col">Description</th><th scope="col">Amount</th></tr></thead><tbody id="transaction-rows"></tbody></table></div>
+        <div class="panel-heading"><div><p class="eyebrow">THE RECORDS BEHIND THE TOTALS</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><span class="tag">Canonical ledger</span></div>
+        <div class="transaction-filters"><label class="search-field" for="transaction-search">Find a transaction<input id="transaction-search" type="search" placeholder="Search descriptions, dates or accounts" autocomplete="off" aria-describedby="search-help" disabled></label><label class="checkbox-field" for="review-only"><input id="review-only" type="checkbox" disabled><span>Needs review only</span></label></div>
+        <div class="filter-meta"><p id="search-help">Search and review filters change rows only, not the overview totals.</p><p id="filter-count" role="status" aria-live="polite" aria-atomic="true">No transactions loaded.</p></div>
+        <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 3.5h8A2.5 2.5 0 0 1 18.5 6v14l-3.3-2-3.2 2-3.2-2-3.3 2V6A2.5 2.5 0 0 1 8 3.5ZM9 8h6m-6 4h6"/></svg></div><h3>Your year, transaction by transaction</h3><p>Open a saved ledger or try the local preview. Select any transaction to inspect its source and correction history.</p><a href="#overview">Choose a ledger <span aria-hidden="true">↑</span></a></div>
+        <div class="table-wrap" id="transaction-table-wrap" tabindex="0" aria-label="Transactions, scroll horizontally to see all columns" hidden><p class="table-scroll-hint">Scroll sideways for exact amounts and review controls <span aria-hidden="true">↔</span></p><table><caption class="visually-hidden">Canonical transactions in the selected account and period. Amounts preserve their exact decimal values. Search filters rows only.</caption><thead><tr><th scope="col">Date</th><th scope="col">Description / account</th><th scope="col">Classification / category</th><th scope="col" class="amount-heading">Exact amount</th><th scope="col"><span class="visually-hidden">Review transaction</span></th></tr></thead><tbody id="transaction-rows"></tbody></table></div>
+        <div class="ledger-pagination"><p id="page-status" role="status" aria-live="polite" aria-atomic="true">No transactions to display</p><div><button id="previous-page" class="secondary-button" type="button" disabled><span aria-hidden="true">←</span> Previous</button><button id="next-page" class="secondary-button" type="button" disabled>Next <span aria-hidden="true">→</span></button></div></div>
+      </section>
+
+      <section id="activity-detail" class="panel activity-detail" aria-labelledby="detail-title" hidden>
+        <div class="panel-heading"><div><p class="eyebrow">TRANSACTION DETAIL</p><h2 id="detail-title" tabindex="-1">Inspect transaction</h2></div><button id="close-detail" class="text-button" type="button">Close detail <span aria-hidden="true">×</span></button></div>
+        <div class="detail-overview"><p id="detail-description"></p><p id="detail-amount" class="detail-amount"></p></div>
+        <div class="detail-grid">
+          <div class="detail-evidence"><section aria-labelledby="source-heading"><h3 id="source-heading">Original source</h3><div id="detail-source" class="detail-source"></div></section><section aria-labelledby="history-heading"><h3 id="history-heading">Correction history</h3><div id="detail-history" class="detail-history"></div></section><section id="transfer-link-panel" aria-labelledby="transfer-link-heading" hidden><h3 id="transfer-link-heading">Transfer path</h3><p id="transfer-link-status" class="field-help">Link the outgoing and incoming sides of the same transfer.</p><label for="transfer-counterparty">Matching incoming activity<select id="transfer-counterparty"></select></label><label for="transfer-link-rationale">Why are these the same transfer?<input id="transfer-link-rationale" type="text" maxlength="300" placeholder="e.g. Matching bank transfer reference"></label><button id="link-transfer" class="secondary-button" type="button" disabled>Link transfer activities</button></section></div>
+          <form id="correction-form" class="correction-form" aria-labelledby="correction-heading" aria-describedby="correction-help">
+            <div><p class="eyebrow">MAKE A DELIBERATE CHANGE</p><h3 id="correction-heading">Correct this transaction</h3><p id="correction-help">Corrections preserve the original source. Stage a change here, then save when you are ready.</p></div>
+            <label for="correction-type">What needs changing?<select id="correction-type"><option value="classification">Classification</option><option value="category-correction">Category</option><option value="bank-correction">Amount</option></select></label>
+            <label id="classification-field" for="classification">Classification<select id="classification"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="unclassified">Unclassified</option></select><span class="field-help">Card payments are transfers. Refund linking stays in the advanced workbench.</span></label>
+            <label id="category-field" for="category" hidden>Category<input id="category" type="text" autocomplete="off" placeholder="e.g. groceries" maxlength="200"><span class="field-help">Also remembers this category for later matching imports in the same account and currency. Linked refunds follow the purchase category unless separately categorized.</span></label>
+            <label id="amount-field" for="amount" hidden>Corrected amount<input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. -42.35" aria-describedby="amount-help"><span id="amount-help" class="field-help">Use an exact decimal with a minus sign for money out. Do not include a currency symbol or thousands separator.</span></label>
+            <label for="correction-rationale">Why are you changing it?<textarea id="correction-rationale" rows="3" placeholder="Add a short explanation for the audit history" required></textarea></label>
+            <button id="stage-correction" class="primary-button" type="button" disabled>Stage correction <span aria-hidden="true">→</span></button>
+            <p class="field-help correction-note">Staging does not save to Drive. Local-preview changes stay in this tab.</p>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel review-panel" id="review" aria-labelledby="review-heading">
+        <div class="panel-heading"><div><p class="eyebrow">A SECOND LOOK</p><h2 id="review-heading">Needs review</h2></div><span class="tag violet">Keep uncertainty visible</span></div>
+        <p id="review-summary" class="panel-copy">Open a ledger to see records that need a decision.</p>
+        <div id="review-queue" class="review-queue"><p class="quiet-placeholder">Unclassified activity and other unresolved records will appear here.</p></div>
       </section>
 
       <section class="panel storage-panel" id="storage" aria-labelledby="storage-heading">
-        <div class="panel-heading"><div><p class="eyebrow">OPTIONAL / DEVELOPMENT STORAGE</p><h2 id="storage-heading">Synthetic Drive storage</h2></div><span class="tag violet">Invented fixtures only</span></div>
-        <p class="panel-copy">Use a dedicated folder with “synthetic” in its name. Only invented sample rows can be saved here. CSV imports always remain local and are never uploaded.</p>
-        <div class="storage-actions"><button id="connect-synthetic-storage" class="secondary-button" type="button">Connect synthetic Drive folder</button><button id="release-synthetic-storage" class="secondary-button" type="button" disabled>Release storage session</button><button id="recover-stale-storage" class="secondary-button" type="button" hidden>Confirm stale-session recovery</button></div>
-        <p id="storage-status" class="status-message" role="status" aria-live="polite">Not connected. CSV imports continue to work locally.</p>
-        <details id="storage-diagnostics-panel" class="sample-details"><summary>Storage diagnostics</summary><p>Recent lifecycle events only; no tokens, file IDs, folder names or transaction data. This trace is never uploaded or saved. Share it with the visible error and source commit when reporting a problem.</p><pre id="storage-diagnostics">No storage events recorded.</pre></details>
+        <div class="panel-heading"><div><p class="eyebrow">YOUR WORKING COPY</p><h2 id="storage-heading">Storage &amp; recovery</h2></div><span class="tag">Synthetic only</span></div>
+        <p id="connection-status" class="connection-status">No Drive folder connected. Local preview is available without Google authorization.</p>
+        <p class="panel-copy">Open an existing saved synthetic year above. Changes are saved only when you choose <strong>Save changes</strong>. Keep this tab open during a save and release the session before opening this folder in another tool or on another device.</p>
+        <details class="advanced-tools"><summary>Recovery and advanced tools</summary><div class="advanced-content"><p>Recovery controls appear when an interrupted operation or stopped session needs attention. Only confirm stale-session recovery after the other session has stopped.</p><div class="storage-actions"><button id="recover-ledger" class="secondary-button" type="button" disabled>Recover interrupted operation</button><button id="recover-stale" class="secondary-button" type="button" hidden>Confirm stopped session and recover</button></div><nav class="advanced-links" aria-label="Advanced synthetic tools"><a href="prototype/pr28-import.html"><span>Import workbench<small>Account mapping, matching and linked refunds</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/pr25-acceptance.html?guide=pr28"><span>Backup &amp; restore<small>Copy and verify an existing synthetic ledger</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/local-preview.html"><span>Local CSV preview<small>Separate raw-file diagnostic, not this ledger</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/acceptance.html"><span>Acceptance tests<small>Guided synthetic storage and device checks</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></nav><p class="field-help">Release this session before using another tool with the same folder. Session coordination is best-effort; simultaneous device use is unsupported.</p></div></details>
       </section>
 
-      <footer><p>Development workspace · CSV imports local · Production financial storage disabled</p><p>Source commit <code id="build-sha">development (not deployed)</code></p><a href="prototype/">All prototype tools</a></footer>
+      <footer><p>Synthetic workspace · Production financial storage disabled</p><p>Source commit <code id="build-sha">development (not deployed)</code></p><a href="prototype/">All test tools <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></footer>
+      <div class="save-bar" aria-label="Save and session actions"><div class="save-indicator"><span class="save-status-mark" aria-hidden="true"></span><div><p id="save-state" aria-live="polite">No ledger open</p><p class="save-reminder">Changes are never saved automatically. <span id="operation-timing" aria-live="off"></span></p></div></div><div class="save-actions"><button id="undo-last-change" class="text-button" type="button" disabled>Undo last staged change</button><button id="revert-all-changes" class="text-button" type="button" disabled>Revert all staged changes</button><button id="reopen-ledger" class="text-button" type="button" disabled>Reopen saved</button><button id="release-ledger" class="secondary-button" type="button" disabled>Release session</button><button id="save-ledger" class="primary-button" type="button" disabled>Save changes <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button></div></div>
+      <noscript><p class="status-message" role="alert">JavaScript is required to open a ledger. No connection or save has started.</p></noscript>
     </main>
   </div>
 </body>

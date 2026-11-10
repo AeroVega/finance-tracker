@@ -1,6 +1,7 @@
 import { ApplicationStorageLifecycle } from "./application-storage-lifecycle.mjs";
 import { GoogleDriveTransactionAdapter } from "./drive-transaction-engine.mjs";
 import { validateGoogleConfig } from "./google-config-validation.mjs";
+import { googleStartupError } from "./google-startup-diagnostics.mjs";
 import { initializeCatalogCopy, verifyCatalogHistory, storageError } from "./catalog-storage.mjs";
 import { SyntheticOriginalRetentionStore } from "./drive-original-retention.mjs";
 
@@ -63,7 +64,7 @@ export function createSnapshotTransaction({ manifest, transactions, cryptoImpl =
   };
 }
 
-function waitFor(check, label) {
+function waitFor(check, component) {
   return new Promise((resolve, reject) => {
     const started = Date.now();
     const timer = window.setInterval(() => {
@@ -72,30 +73,54 @@ function waitFor(check, label) {
         resolve();
       } else if (Date.now() - started > 15000) {
         window.clearInterval(timer);
-        reject(new Error("Google " + label + " did not load. Reload and retry."));
+        reject(googleStartupError("google-library-timeout", "Google library timed out.", { component }));
       }
     }, 50);
   });
 }
 
 async function loadGoogleLibraries() {
-  await Promise.all([
-    waitFor(() => window.google?.accounts?.oauth2, "authorization library"),
-    waitFor(() => window.gapi && typeof window.gapi.load === "function", "Picker library")
+  const checks = await Promise.allSettled([
+    waitFor(() => window.google?.accounts?.oauth2, "Google Identity Services (authorization)"),
+    waitFor(() => window.gapi && typeof window.gapi.load === "function", "Google API client")
   ]);
+  const failedComponents = checks.flatMap((result, index) => result.status === "rejected"
+    ? [index === 0 ? "Google Identity Services" : "Google API client"]
+    : []);
+  if (failedComponents.length) {
+    throw googleStartupError("google-libraries-unavailable", "Required Google browser libraries did not load.", {
+      components: failedComponents
+    });
+  }
   await new Promise((resolve, reject) => window.gapi.load("picker", {
     callback: resolve,
-    onerror: () => reject(new Error("Google Picker could not load.")),
+    onerror: () => reject(googleStartupError("google-picker-unavailable", "Google Picker failed to load.")),
     timeout: 10000,
-    ontimeout: () => reject(new Error("Google Picker timed out."))
+    ontimeout: () => reject(googleStartupError("google-picker-unavailable", "Google Picker timed out."))
   }));
 }
 
 async function loadConfig() {
-  const response = await fetch(new URL("./google-config.json", import.meta.url), { cache: "no-store" });
-  if (!response.ok) throw new Error("Google deployment configuration could not be loaded (HTTP " + response.status + ").");
-  const config = await response.json();
-  validateGoogleConfig(config);
+  let response;
+  try {
+    response = await fetch(new URL("./google-config.json", import.meta.url), { cache: "no-store" });
+  } catch {
+    throw googleStartupError("google-config-network", "The Google deployment configuration request failed.");
+  }
+  if (!response.ok) {
+    throw googleStartupError("google-config-http", "Google deployment configuration could not be loaded.", { status: response.status });
+  }
+  let config;
+  try {
+    config = await response.json();
+  } catch {
+    throw googleStartupError("google-config-json", "The deployed Google configuration file is not valid JSON.");
+  }
+  try {
+    validateGoogleConfig(config);
+  } catch (error) {
+    throw googleStartupError("google-config-invalid", error.message);
+  }
   return Object.freeze(config);
 }
 
@@ -194,7 +219,10 @@ export class DashboardSyntheticStorage {
 
   async prepare() {
     if (!this.readyPromise) {
-      this.readyPromise = Promise.all([loadConfig(), loadGoogleLibraries()]).then(([config]) => {
+      // Keep the phases ordered and independently diagnosable. A config failure
+      // must not be misreported as a Google script-loading failure (or vice versa).
+      this.readyPromise = loadConfig().then(async (config) => {
+        await loadGoogleLibraries();
         this.config = config;
         return config;
       });

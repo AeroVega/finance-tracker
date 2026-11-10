@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
-import { fixture, lifecycleFor, correct, now, guard, gate, encode } from './helpers/canonical-storage-fixture.mjs';
-import { CanonicalLedgerStore, CANONICAL_INDEX, CANONICAL_PREFIX, serializeCanonicalLedger, serializePackedCanonicalLedger, serializeFragmentedCanonicalLedger, validateCanonicalSnapshot } from '../js/canonical-ledger-storage.mjs';
+import { fixture, lifecycleFor, correct, now, guard, gate, encode, serializeLegacyGroupedV2ForTest } from './helpers/canonical-storage-fixture.mjs';
+import { CanonicalLedgerStore, CANONICAL_INDEX, CANONICAL_PREFIX, serializeCanonicalLedger, serializeFragmentedCanonicalLedger, validateCanonicalSnapshot } from '../js/canonical-ledger-storage.mjs';
 import { fragmentCanonicalObjects, fragmentInventory, reassembleCanonicalObjects, FRAGMENT_BYTES, FRAGMENT_OBJECT_BYTES, FRAGMENT_LOGICAL_BYTES, FRAGMENT_TOTAL_BYTES } from '../js/canonical-fragments.mjs';
 import { setupCatalog, MemoryCatalogDrive } from './helpers/catalog-drive.mjs';
 import { CatalogTransactionEngine } from '../js/catalog-transaction-engine.mjs';
@@ -25,10 +25,11 @@ test('fragments preserve exact canonical Unicode across byte splits and reject u
   const packed = serializeFragmentedCanonicalLedger(ledger), root = JSON.parse(packed.get(CANONICAL_INDEX));
   assert.equal(root.version, 3);
   assert.ok([...packed.values()].every(text => encode(text).length <= FRAGMENT_OBJECT_BYTES));
-  assert.ok(root.fragments[CANONICAL_PREFIX + 'chunks/accounts/000000.json'].parts > 1);
+  const accountPath = CANONICAL_PREFIX + 'chunks/accounts/000000.json';
+  assert.ok(root.fragments[accountPath].parts > 1);
   assert.equal(validateCanonicalSnapshot({ objects: snapshot(packed) }), true);
   const logical = reassembleCanonicalObjects(root, packed);
-  assert.deepEqual(JSON.parse(logical.get(CANONICAL_PREFIX + 'chunks/accounts/000000.json')).records, ledger.accounts);
+  assert.deepEqual(JSON.parse(logical.get(accountPath)).records, ledger.accounts);
   const store = new CanonicalLedgerStore({ lifecycle: memoryLifecycle(packed) });
   assert.deepEqual(await store.load(), ledger); assert.equal(store.layout, 'fragments-v3');
   // Frozen pre-v3 opening guard: versions other than 1/2 fail, at the same index path.
@@ -36,9 +37,9 @@ test('fragments preserve exact canonical Unicode across byte splits and reject u
   assert.throws(() => oldGuard(root), /unsupported/);
 });
 
-test('fragments roundtrip retries, immutable evidence, no-op and v1/v2 preservation', async () => {
+test('fragments roundtrip retries, immutable evidence, no-op and v1 preservation', async () => {
   const { ledger, reviewInput } = await fixture();
-  for (const layout of ['records-v1', 'chunks-v2', 'fragments-v3']) {
+  for (const layout of ['records-v1', 'fragments-v3']) {
     const lifecycle = memoryLifecycle(), original = new CanonicalLedgerStore({ lifecycle, layout });
     await original.load(); await original.save(ledger);
     const store = new CanonicalLedgerStore({ lifecycle, layout: 'fragments-v3' });
@@ -149,7 +150,7 @@ test('every durable fragmented correction boundary recovers exact old/new histor
 for (const years of (process.env.FRAGMENT_TEST_YEARS || '1').split(',').map(Number)) test(`dense ${years}-year imports save/reopen with bounded physical objects`, async () => {
   const { ledger } = denseLedgerFixture(years);
   assert.ok(encode(serializeCanonicalLedger(ledger).get(CANONICAL_INDEX)).length > FRAGMENT_OBJECT_BYTES);
-  if (years > 1) assert.throws(() => serializePackedCanonicalLedger(ledger), { code: 'canonical-chunk-too-large' });
+  if (years > 1) assert.throws(() => serializeLegacyGroupedV2ForTest(ledger), { code: 'canonical-chunk-too-large' });
   const lifecycle = memoryLifecycle(), store = new CanonicalLedgerStore({ lifecycle, layout: 'fragments-v3' });
   await store.load(); assert.deepEqual(await store.save(ledger), ledger);
   assert.deepEqual(await new CanonicalLedgerStore({ lifecycle }).load(), ledger);
@@ -163,19 +164,19 @@ test('a single dense prospective-rule membership larger than v2 cap saves/reopen
   assert.ok(encode(canonicalizeJcs(ledger.imports[0])).length > FRAGMENT_OBJECT_BYTES);
   assert.equal(ledger.events[0].prospectiveRule.existingActivityIds.length, 4000);
   assert.ok(encode(canonicalizeJcs(ledger.events[0])).length > FRAGMENT_OBJECT_BYTES);
-  assert.throws(() => serializePackedCanonicalLedger(ledger), { code: 'canonical-chunk-too-large' });
+  assert.throws(() => serializeLegacyGroupedV2ForTest(ledger), { code: 'canonical-chunk-too-large' });
   const lifecycle = memoryLifecycle(), store = new CanonicalLedgerStore({ lifecycle, layout: 'fragments-v3' });
   await store.load(); assert.deepEqual(await store.save(ledger), ledger); assert.deepEqual(await store.load(), ledger);
 });
 
-test('reconstructed index and chunk inventories reject wrong versions, identities, order and logical orphans', async () => {
+test('reconstructed v3 group indexes reject wrong versions, identities, duplicates and logical orphans', async () => {
   const { ledger } = await fixture(), physical = serializeFragmentedCanonicalLedger(ledger);
   const root = JSON.parse(physical.get(CANONICAL_INDEX));
   const base = reassembleCanonicalObjects(root, physical);
   const accountPath = CANONICAL_PREFIX + 'chunks/accounts/000000.json';
   for (const mutate of [
     m => { const i = JSON.parse(m.get(CANONICAL_INDEX)); i.version = 1; m.set(CANONICAL_INDEX, canonicalizeJcs(i)); },
-    m => { const i = JSON.parse(m.get(CANONICAL_INDEX)); i.collections.activities.reverse(); m.set(CANONICAL_INDEX, canonicalizeJcs(i)); },
+    m => { const i = JSON.parse(m.get(CANONICAL_INDEX)); i.collections.activities[0] = i.collections.activities[1]; m.set(CANONICAL_INDEX, canonicalizeJcs(i)); },
     m => { const c = JSON.parse(m.get(accountPath)); c.records[0].accountId = 'invented-other'; m.set(accountPath, canonicalizeJcs(c)); },
     m => m.set(CANONICAL_PREFIX + 'chunks/accounts/999999.json', '{}')
   ]) {

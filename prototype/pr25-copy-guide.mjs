@@ -5,6 +5,7 @@ const labels = Object.freeze({
   "selection-cancelled": "Selection cancelled. Nothing passed. Choose again when ready.",
   "authorization-cancelled": "Google authorization was closed or blocked. Try the source button again.",
   "authorization-required": "Google authorization is unavailable or expired. Release sessions, then reconnect before retrying.",
+  "synthetic-folder-required": "Choose a dedicated test folder with 'synthetic' in its name, such as 'synthetic-backup'. No copy was started for this selection. Backup and restore destinations must also be new and empty.",
   "canonical-source-required": "Choose the existing completed canonical synthetic source. An empty folder, backup or unrelated fixture is not a source for this check. No database was created.",
   "original-source-required": "That folder was used as a destination in this run. Choose the original completed source.",
   "retained-originals-unsupported": "This source includes separately retained original files. This guide is limited to canonical synthetic fixtures without those files. Release this source and use Advanced PR25 tools for original-file retention checks. No backup or restore was started.",

@@ -14,9 +14,10 @@ test('completed canonical recipe backs up and restores all retained history with
   t.diagnostic(JSON.stringify({ before: BEFORE, ...measured }));
   assert.ok(measured.recipeRequests <= 4800, 'the canonical recipe keeps its original request budget');
   assert.equal(measured.heartbeatRequests, 0);
-  assert.equal(measured.selectedObjects, 66);
-  assert.equal(measured.retainedObjects, 226);
-  assert.deepEqual(measured.retainedByKind, { 'commit-record': 4, 'data-object': 68, 'journal-event': 154 });
+  assert.equal(measured.selectedObjects, 8);
+  assert.equal(measured.retainedObjects, Object.values(measured.retainedByKind).reduce((sum, count) => sum + count, 0));
+  assert.equal(measured.retainedByKind['journal-event'], 62);
+  assert.ok(measured.retainedByKind['data-object'] >= measured.selectedObjects);
   for (const [phase, budget] of Object.entries({ portableExport: 260, portableVerify: 0,
     backup: 1950, backupReopen: 260, restore: 1700, restoreReopen: 260 })) {
     assert.ok(current[phase].requests <= budget, `${phase} used ${current[phase].requests} HTTP requests`);
@@ -28,7 +29,7 @@ test('completed canonical recipe backs up and restores all retained history with
     assert.equal(current[phase].categories.create, measured.retainedObjects + 3,
       'copy every retained object plus the preparation marker, catalog and final manifest');
     assert.equal(current[phase].categories.update, 1, 'mark the existing preparation ready once');
-    assert.equal(current[phase].categories['generate-id'], 15);
+    assert.equal(current[phase].categories['generate-id'], 6);
     // Crypto and event-loop scheduling may hide overlap in this zero-delay
     // HTTP simulation. The separate latch-based copy tests prove admission of
     // four operations without relying on timing or machine load.

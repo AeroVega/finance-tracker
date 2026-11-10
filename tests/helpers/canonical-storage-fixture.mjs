@@ -1,3 +1,4 @@
+import { canonicalizeJcs } from '../../js/transaction-protocol.mjs';
 import { readFile } from 'node:fs/promises';
 import { createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent } from '../../js/canonical-import.mjs';
 import { parseProviderCsv } from '../../js/provider-csv.mjs';
@@ -34,3 +35,33 @@ const correct = ledger => applyFinancialEvent(ledger, { type: 'bank-correction',
 
 
 export { fixture, lifecycleFor, correct, now, guard, gate, encode };
+
+/** Frozen legacy fixture builder. Production code no longer creates or opens
+ * standalone grouped-v2 copies; this exists only to prove fail-closed refusal.
+ */
+function serializeLegacyGroupedV2ForTest(ledger, { bounded = true } = {}) {
+  const prefix = 'synthetic/canonical-v1/';
+  const chunkRecords = 64, chunkBytes = 128 * 1024;
+  const metadata = { ...ledger }, collections = {}, chunks = {}, objects = new Map();
+  for (const name of ['accounts', 'imports', 'observations', 'activities', 'events', 'reviewDecisions']) {
+    const idField = { accounts: 'accountId', imports: 'importRunId', observations: 'observationId',
+      activities: 'activityId', events: 'eventId', reviewDecisions: 'reviewDecisionId' }[name];
+    collections[name] = ledger[name].map(record => record[idField]);
+    delete metadata[name];
+    chunks[name] = [];
+    for (let offset = 0; offset < ledger[name].length; offset += chunkRecords) {
+      const path = prefix + 'chunks/' + name + '/' + String(offset / chunkRecords).padStart(6, '0') + '.json';
+      const text = canonicalizeJcs({ format: 'finance-tracker-canonical-chunk', version: 1,
+        collection: name, records: ledger[name].slice(offset, offset + chunkRecords) });
+      if (bounded && new TextEncoder().encode(text).byteLength > chunkBytes) {
+        throw Object.assign(new Error('canonical-chunk-too-large'), { code: 'canonical-chunk-too-large' });
+      }
+      chunks[name].push(path); objects.set(path, text);
+    }
+  }
+  const index = { format: 'finance-tracker-canonical-index', version: 2, syntheticOnly: true, metadata, collections, chunks };
+  objects.set(prefix + 'index.json', canonicalizeJcs(index));
+  return objects;
+}
+
+export { serializeLegacyGroupedV2ForTest };

@@ -134,10 +134,9 @@ test('year UI is opt-in, has recovery and release, and cannot ingest user CSVs',
   assert.match(html, /Production financial-data persistence remains NO-GO/);
   assert.match(html, /drive.file access cannot prove/);
   assert.doesNotMatch(html, /type="file"/);
-  assert.match(html, /id="storage-layout"/);
-  assert.ok(html.indexOf('value="chunks-v2"') < html.indexOf('value="fragments-v3"'));
-  assert.match(js, /seeder.layout = \$\('storage-layout'\).value/);
-  assert.match(js, /\$\('storage-layout'\).disabled = busy \|\| Boolean\(lifecycle\)/);
+  assert.doesNotMatch(html, /storage-layout|chunks-v2/);
+  assert.match(html, /fragmented version 3/i);
+  assert.doesNotMatch(js, /storage-layout|chunks-v2|serializePackedCanonicalLedger/);
   for (const id of ['upload','reconnect','verify','recover','stale','release']) assert.match(html, new RegExp('id="' + id + '"[^>]*disabled'));
   assert.match(js, /if \(busy\) return/);
   assert.match(js, /connect\(\{ requireEmpty: true \}\)/);
@@ -163,9 +162,9 @@ test('year reconnect opts out of original-file retention and deletion even for a
 });
 
 
-test('explicit fragmented seeder option creates v3 and default reconnect preserves it', async () => {
+test('default seeder creates fragmented v3 and reconnect preserves it; grouped v2 is rejected', async () => {
   const lifecycle = fakeLifecycle(), generated = recipe();
-  const seeder = new SyntheticYearSeeder({ createRecipe: () => generated, layout: 'fragments-v3' });
+  const seeder = new SyntheticYearSeeder({ createRecipe: () => generated });
   await seeder.admitFreshConnection(lifecycle); await seeder.verifyOrSeed(lifecycle);
   const index = JSON.parse(new TextDecoder().decode(await lifecycle.readObject('synthetic/canonical-v1/index.json')));
   assert.equal(index.version, 3);
@@ -174,4 +173,5 @@ test('explicit fragmented seeder option creates v3 and default reconnect preserv
   assert.equal((await reopened.verifyOrSeed(lifecycle)).alreadySaved, true);
   assert.equal(lifecycle.mutations, writes);
   assert.throws(() => new SyntheticYearSeeder({ layout: 'unknown' }), { code: 'unsupported-canonical-layout' });
+  assert.throws(() => new SyntheticYearSeeder({ layout: 'chunks-v2' }), { code: 'unsupported-canonical-layout' });
 });

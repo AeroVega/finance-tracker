@@ -5,7 +5,7 @@ import { mountCopyGuide } from '../prototype/pr25-copy-guide.mjs';
 import { createCopyGuideDriver, logicalArchiveGraph } from '../prototype/pr25-copy-guide-driver.mjs';
 import { startCopyProgress, copyProgressText } from '../prototype/pr25-copy-progress.mjs';
 import { MemoryCatalogDrive, setupCatalog } from './helpers/catalog-drive.mjs';
-import { serializeCanonicalLedger, serializePackedCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
+import { serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
 import { createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent } from '../js/canonical-import.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { exportCatalogArchive } from '../js/catalog-backup.mjs';
@@ -76,7 +76,7 @@ async function page(serialize = serializeCanonicalLedger) {
 }
 async function throughExport(h) { await h.click('source'); await h.click('backup'); await h.click('export'); }
 
-for (const [layout, serialize] of [['records-v1', serializeCanonicalLedger], ['chunks-v2', serializePackedCanonicalLedger], ['fragments-v3', serializeFragmentedCanonicalLedger]])
+for (const [layout, serialize] of [['records-v1', serializeCanonicalLedger], ['fragments-v3', serializeFragmentedCanonicalLedger]])
 test(layout + ': actual guide handlers complete corrected-source backup, saved-file roundtrip, independent restores and release', async () => {
   const h = await page(serialize);
   assert.equal(h.state.calls.length, 0, 'page load must not select or write');
@@ -143,6 +143,41 @@ test('cancelled backup, same source, and nonempty target cannot copy; a new sele
   h.state.picks = [h.backupId]; await h.click('backup'); assert.equal(h.drives.get(h.backupId).files.size, 1);
   h.state.picks = [h.restoreId]; await h.click('backup'); assert.equal(h.get('guide-backup-reopen-result').dataset.result, 'pass');
   assert.equal(h.source.adapter.mutations, mutations);
+});
+
+test('rejected synthetic folder names explain the requirement without writing or losing verified prerequisites', async () => {
+  const h = await page();
+  h.state.picks = [failure('synthetic-folder-required'), h.sourceId];
+  await h.click('source');
+  assert.match(h.get('guide-source-result').textContent, /with 'synthetic' in its name/);
+  assert.equal(h.state.sessions.length, 0);
+  assert.equal(h.get('guide-backup').disabled, true);
+  await h.click('source');
+  const mutations = h.source.adapter.mutations;
+  for (const kind of ['backup', 'restore']) {
+    const targetId = kind === 'backup' ? h.backupId : h.restoreId;
+    const sessions = h.state.sessions.length;
+    h.state.picks = [failure('synthetic-folder-required'), targetId];
+    await h.click(kind);
+    const result = h.get(`guide-${kind}-result`);
+    assert.equal(result.dataset.result, 'error');
+    assert.match(result.textContent, /with 'synthetic' in its name/);
+    assert.match(result.textContent, /No copy was started for this selection/);
+    assert.doesNotMatch(result.textContent, /Provider details|Private|secret-folder/);
+    assert.equal(h.state.sessions.length, sessions, 'rejected selection must not open a destination session');
+    assert.equal(h.drives.get(targetId).files.size, 0, 'rejected selection must not write a destination');
+    assert.equal(h.source.adapter.mutations, mutations);
+    assert.equal(h.get(`guide-${kind}`).disabled, false, 'allow a deliberate valid selection');
+    if (kind === 'backup') assert.equal(h.get('guide-source-result').dataset.result, 'pass');
+    else assert.equal(h.get('guide-archive-result').dataset.result, 'pass');
+    await h.click(kind);
+    assert.equal(h.get(`guide-${kind}-reopen-result`).dataset.result, 'pass');
+    if (kind === 'backup') {
+      await h.click('export');
+      await h.load(h.savedFile());
+    }
+  }
+  assert.equal(h.driver.hasSessions(), false);
 });
 
 test('double click and overlapping file action are refused, progress is adjacent and durations remain beside earlier steps', async () => {
@@ -280,6 +315,8 @@ test('guide has separate outcomes, advanced controls and no persisted report ide
   const driver = await readFile(new URL('../prototype/pr25-copy-guide-driver.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source + driver, /localStorage|sessionStorage|indexedDB|console\.|innerHTML/);
   assert.match(html, /id="guide-advanced"/); assert.match(html, /id="legacy-tools"/);
+  assert.match(html, /BACKUP folder with "synthetic" in its name/);
+  assert.match(html, /RESTORED COPY folder with "synthetic" in its name/);
   for (const id of ['source', 'backup', 'backup-reopen', 'export', 'archive', 'restore', 'restore-reopen', 'release']) assert.match(html, new RegExp('id="guide-' + id + '-result"'));
 });
 

@@ -4,7 +4,8 @@ import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import {createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent,
   applyReviewDecision, reverseReviewDecision, getEffectiveActivities, summarizeLedger, validateLedger} from '../js/canonical-import.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
-import {CanonicalLedgerStore, serializePackedCanonicalLedger, CANONICAL_CHUNK_BYTES} from '../js/canonical-ledger-storage.mjs';
+import {CanonicalLedgerStore, serializeFragmentedCanonicalLedger, CANONICAL_INDEX} from '../js/canonical-ledger-storage.mjs';
+import {FRAGMENT_OBJECT_BYTES} from '../js/canonical-fragments.mjs';
 import {setupCatalog, MemoryCatalogDrive} from './helpers/catalog-drive.mjs';
 import {CatalogTransactionEngine} from '../js/catalog-transaction-engine.mjs';
 import {verifyCatalogHistory} from '../js/catalog-storage.mjs';
@@ -84,15 +85,18 @@ test('inactive retained peers stay excluded from prospective recategorization',(
   assert.equal(getEffectiveActivities(ledger).find(a=>a.activityId===inactiveId).categoryId,null);
 });
 
-test('1,000 distinct activities support four corrections within the unchanged chunk cap',()=>{
+test('1,000 distinct activities support four corrections in bounded fragmented v3 storage',()=>{
   const {opt,ledger:initial}=setup();let ledger=initial;
   for(let i=1;i<=4;i++)ledger=correct(ledger,opt,ledger.activities[0].activityId,`invented-${i}`);
   assert.ok(ledger.events.every(event=>event.prospectiveRule.existingActivityIds.length===1));
   assert.ok(Buffer.byteLength(canonicalizeJcs(ledger.events))<4000);
-  assert.ok([...serializePackedCanonicalLedger(ledger)].filter(([path])=>path.includes('/chunks/')).every(([,text])=>Buffer.byteLength(text)<=CANONICAL_CHUNK_BYTES));
+  const currentObjects=serializeFragmentedCanonicalLedger(ledger);
+  assert.ok([...currentObjects.values()].every(text=>Buffer.byteLength(text)<=FRAGMENT_OBJECT_BYTES));
   const legacy=structuredClone(ledger);for(const event of legacy.events)event.prospectiveRule.existingActivityIds=initial.activities.map(a=>a.activityId);
   assert.equal(validateLedger(legacy),true);
-  assert.throws(()=>serializePackedCanonicalLedger(legacy),{code:'canonical-chunk-too-large'});
+  const legacyObjects=serializeFragmentedCanonicalLedger(legacy);
+  assert.ok([...legacyObjects.values()].every(text=>Buffer.byteLength(text)<=FRAGMENT_OBJECT_BYTES));
+  assert.ok(legacyObjects.size>=currentObjects.size);
   assert.deepEqual(getEffectiveActivities(ledger),getEffectiveActivities(legacy));
 });
 
@@ -127,7 +131,7 @@ test('year fixture with legacy rules can append scoped rules, save, reopen, expo
   // Reproduce a previously persisted v1 event without changing its command or financial effect.
   ledger.events.at(-1).prospectiveRule.existingActivityIds=year.ledger.activities.map(a=>a.activityId);
   const legacyEvent=canonicalizeJcs(ledger.events.at(-1)),baseline=annual(ledger);
-  const source=await setupCatalog(),store=new CanonicalLedgerStore({lifecycle:lifecycleFor(source),layout:'chunks-v2'});
+  const source=await setupCatalog(),store=new CanonicalLedgerStore({lifecycle:lifecycleFor(source)});
   await store.load();await store.save(ledger);
   for(let i=1;i<=4;i++)ledger=correct(ledger,opt,target.activityId,`scoped-utility-${i}`);
   assert.equal(canonicalizeJcs(ledger.events[year.ledger.events.length]),legacyEvent);
@@ -183,10 +187,13 @@ test('structured source-action JSON retains accepted legacy JCS equality',()=>{
   assert.equal(validateLedger(JSON.parse(canonicalizeJcs(later))),true);
 });
 
-test('dense same-key history still fails closed at the documented unchanged chunk cap',()=>{
+test('dense same-key history is persisted through bounded fragmented v3 groups',()=>{
   const {opt,ledger:initial}=setup(Array.from({length:1000},(_,i)=>row(i,{normalizedDescription:'invented recurring merchant'})));
   let ledger=initial;
   for(let i=1;i<=4;i++)ledger=correct(ledger,opt,ledger.activities[0].activityId,`dense-${i}`);
   assert.ok(ledger.events.every(event=>event.prospectiveRule.existingActivityIds.length===1000));
-  assert.throws(()=>serializePackedCanonicalLedger(ledger),{code:'canonical-chunk-too-large'});
+  const physical=serializeFragmentedCanonicalLedger(ledger);
+  assert.ok([...physical.values()].every(text=>Buffer.byteLength(text)<=FRAGMENT_OBJECT_BYTES));
+  const root=JSON.parse(physical.get(CANONICAL_INDEX));
+  assert.ok(Object.values(root.fragments).some(item=>item.parts>1), 'oversized logical groups must be split across bounded physical fragments');
 });
