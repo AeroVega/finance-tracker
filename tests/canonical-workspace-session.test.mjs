@@ -1,15 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getEffectiveActivities } from '../js/canonical-import.mjs';
+import { applyFinancialEvent, getEffectiveActivities } from '../js/canonical-import.mjs';
 import { CanonicalWorkspaceSession } from '../js/canonical-workspace-session.mjs';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
 import { serializePackedCanonicalLedger, serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
 
 const recipe = await createSyntheticFinancialYear();
-function setup(layout = 'chunks-v2') {
-  const manifest = { syntheticOnly: true, databaseId: 'invented-db', copyId: 'invented-copy', revision: 1, snapshot: {} };
+function setup(layout = 'chunks-v2', fresh = false) {
+  const manifest = { syntheticOnly: true, databaseId: 'invented-db', copyId: 'invented-copy', revision: fresh ? 0 : 1, catalogFinalizationPending: null, snapshot: {} };
   const serialize = {'records-v1': serializeCanonicalLedger, 'chunks-v2': serializePackedCanonicalLedger, 'fragments-v3': serializeFragmentedCanonicalLedger}[layout];
-  let objects = Object.fromEntries([...serialize(recipe.ledger)].map(([path, text]) => [path, new TextEncoder().encode(text)]));
+  let objects = fresh ? {} : Object.fromEntries([...serialize(recipe.ledger)].map(([path, text]) => [path, new TextEncoder().encode(text)]));
   for (const path of Object.keys(objects)) manifest.snapshot[path] = 'invented-hash';
   const calls = { connects: [], writes: 0, reads: 0, fail: false, loseResponse: false };
   const lifecycle = {
@@ -137,4 +137,67 @@ for (const layout of ['records-v1', 'fragments-v3']) test(`${layout} workspace c
   h.session.correct(correction(h.session.ledger)); const proposal = structuredClone(h.session.ledger);
   await h.session.save(); await h.session.reopen();
   assert.equal(h.session.store.layout, layout); assert.deepEqual(h.session.ledger, proposal); assert.equal(h.calls.writes, 1);
+});
+
+
+for (const corrected of [false, true]) test(`local preview saves ${corrected ? 'the staged draft' : 'the untouched original year'} to a new empty folder and verifies an independent reopen`, async () => {
+  const h = setup('fragments-v3', true);
+  h.session.preview(recipe.ledger);
+  if (corrected) h.session.correct(correction(h.session.ledger));
+  const proposal = structuredClone(h.session.ledger);
+  await h.session.savePreviewToNewCopy();
+  assert.deepEqual(h.calls.connects, [{ requireEmpty: true }]);
+  assert.equal(h.calls.writes, 1);
+  assert.equal(h.session.mode, 'saved');
+  assert.equal(h.session.dirty, false);
+  assert.equal(h.session.unverified, false);
+  assert.equal(h.session.store.layout, 'fragments-v3');
+  assert.deepEqual(h.session.ledger, proposal);
+  await h.session.reopen();
+  assert.deepEqual(h.session.ledger, proposal);
+  assert.equal(h.calls.writes, 1);
+});
+
+test('transfer links are append-only, reciprocal in the effective view, and preserve original activities', () => {
+  const outgoing = recipe.ledger.activities.find(activity =>
+    activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' &&
+    activity.effectiveDate === '2025-01-16');
+  const incoming = recipe.ledger.activities.find(activity =>
+    activity.accountId === recipe.accounts.savings && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER IN' &&
+    activity.effectiveDate === '2025-01-16');
+  const before = structuredClone(recipe.ledger);
+  const linked = applyFinancialEvent(recipe.ledger, {
+    type: 'transfer-link', activityId: outgoing.activityId, counterpartyActivityId: incoming.activityId,
+    commandId: 'invented-transfer-link', evidence: { rationale: 'Matching invented transfer amount and date.' }
+  });
+  assert.equal(linked.events.length, before.events.length + 1);
+  assert.deepEqual(linked.activities, before.activities);
+  const effective = getEffectiveActivities(linked);
+  const source = effective.find(activity => activity.activityId === outgoing.activityId);
+  const destination = effective.find(activity => activity.activityId === incoming.activityId);
+  assert.equal(source.transferRole, 'outgoing');
+  assert.equal(destination.transferRole, 'incoming');
+  assert.equal(source.transferGroupId, destination.transferGroupId);
+  assert.equal(source.transferCounterpartyActivityId, destination.activityId);
+  assert.equal(destination.transferCounterpartyActivityId, source.activityId);
+});
+
+test('transfer linking rejects amount mismatches, same-account pairs and non-transfer activities', () => {
+  const outgoing = recipe.ledger.activities.find(activity =>
+    activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' &&
+    activity.effectiveDate === '2025-01-16');
+  const incoming = recipe.ledger.activities.find(activity =>
+    activity.accountId === recipe.accounts.savings && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER IN' &&
+    activity.effectiveDate === '2025-01-16');
+  const rationale = { rationale: 'Invented manual confirmation.' };
+  assert.throws(() => applyFinancialEvent(recipe.ledger, {
+    type: 'transfer-link', activityId: outgoing.activityId,
+    counterpartyActivityId: recipe.ledger.activities.find(activity => activity.accountId === recipe.accounts.savings &&
+      activity.sourceDescription === 'INVENTED SAVINGS TRANSFER IN' && activity.effectiveDate === '2025-02-16').activityId,
+    commandId: 'invented-mismatched-transfer', evidence: rationale
+  }), { message: 'invalid-transfer-link' });
+  assert.throws(() => applyFinancialEvent(recipe.ledger, {
+    type: 'transfer-link', activityId: outgoing.activityId, counterpartyActivityId: incoming.activityId,
+    commandId: 'invented-nontransfer', evidence: rationale
+  }), { message: 'invalid-transfer-link' });
 });
