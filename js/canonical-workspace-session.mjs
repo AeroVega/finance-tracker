@@ -114,7 +114,7 @@ export class CanonicalWorkspaceSession {
     if (this.ledger.syntheticOnly !== true) fail('synthetic-data-required');
     const proposal = structuredClone(this.ledger);
     return this.operation(async () => {
-      let store = null;
+      let store = null, writeStarted = false;
       try {
         await this.storage.connect({ requireEmpty: true });
         const lifecycle = this.storage.lifecycle;
@@ -132,6 +132,7 @@ export class CanonicalWorkspaceSession {
         if (!this.ready() || lifecycle !== this.storage.lifecycle) fail('reconnect-required');
         this.store = store;
         this.needsReopen = true;
+        writeStarted = true;
         await store.save(proposal);
         if (!this.ready() || lifecycle !== this.storage.lifecycle) fail('reconnect-required');
         const verifier = new CanonicalLedgerStore({ lifecycle });
@@ -146,8 +147,9 @@ export class CanonicalWorkspaceSession {
         this.savedEventCount = reopened.events.length;
         return reopened;
       } catch (error) {
-        this.unverified = true;
-        this.needsReopen = true;
+        this.unverified = writeStarted;
+        this.needsReopen = writeStarted;
+        if (!writeStarted) this.store = null;
         throw error;
       }
     });
