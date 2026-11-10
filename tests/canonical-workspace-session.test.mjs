@@ -180,6 +180,10 @@ test('transfer links are append-only, reciprocal in the effective view, and pres
   assert.equal(source.transferGroupId, destination.transferGroupId);
   assert.equal(source.transferCounterpartyActivityId, destination.activityId);
   assert.equal(destination.transferCounterpartyActivityId, source.activityId);
+  assert.throws(() => applyFinancialEvent(linked, {
+    type: 'bank-correction', activityId: outgoing.activityId, amountText: '-610.00',
+    commandId: 'invented-break-transfer-pair', evidence: { rationale: 'This one-sided correction must be rejected.' }
+  }), { message: 'invalid-transfer-link' });
 });
 
 test('transfer linking rejects amount mismatches, same-account pairs and non-transfer activities', () => {
