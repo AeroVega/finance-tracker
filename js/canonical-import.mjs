@@ -97,6 +97,7 @@ function validateAndProject(ledger) {
     validateHistoryEvent(e,a,byId,replay,activeIds);
     replay.append(e);
   }
+  validateTransferLinks(ledger.activities,replay,activeIds);
   const refundTotals=new Map(), refundActivities=new Set();
   for(const event of ledger.events.filter(e=>e.eventType==='refund-link')) {
     const refund=replay.get(event.activityId);
@@ -161,6 +162,29 @@ function validateHistoryEvent(e,a,byId,replay=null,activeIds=null) {
   } else fail('unsupported-persisted-event');
 }
 // Storage records must be JSON, not Date/BigInt/undefined or non-finite values.
+function validateTransferLinks(activities,replay,activeIds) {
+  const groups=new Map();
+  for(const original of activities) {
+    const activity=replay.get(original.activityId);
+    if(!activity.transferGroupId) continue;
+    const other=replay.get(activity.transferCounterpartyActivityId);
+    const amount=exactSignedDecimal(activity),otherAmount=other&&exactSignedDecimal(other);
+    if(!other||!activeIds.has(activity.activityId)||!activeIds.has(other.activityId)||
+      other.transferGroupId!==activity.transferGroupId||
+      other.transferCounterpartyActivityId!==activity.activityId||
+      activity.accountId===other.accountId||activity.currency!==other.currency||
+      activity.activityKind!=='transfer'||other.activityKind!=='transfer'||
+      amount===null||otherAmount===null||
+      (activity.transferRole==='outgoing'&&(compare(amount,'0')>=0||compare(otherAmount,'0')<=0))||
+      (activity.transferRole==='incoming'&&(compare(amount,'0')<=0||compare(otherAmount,'0')>=0))||
+      !['outgoing','incoming'].includes(activity.transferRole)||
+      compare(negate(amount),otherAmount)!==0) fail('invalid-transfer-link');
+    if(!groups.has(activity.transferGroupId)) groups.set(activity.transferGroupId,new Set());
+    groups.get(activity.transferGroupId).add(activity.activityId);
+  }
+  for(const members of groups.values()) if(members.size!==2) fail('invalid-transfer-link');
+}
+
 function inspectJson(value) {
   if(value===undefined || typeof value==='bigint' || typeof value==='function' || typeof value==='symbol' || (typeof value==='number'&&!Number.isFinite(value))) fail('non-json-ledger');
   if(value && typeof value==='object') {
