@@ -1,6 +1,8 @@
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
 import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-workspace-model.mjs';
+import { getEffectiveActivities } from './canonical-import.mjs';
+import { exactSignedDecimal } from './import-reconciliation.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
 import { googleStartupMessage } from './google-startup-diagnostics.mjs';
 
@@ -68,7 +70,10 @@ function refresh() {
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false;
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
   $('preview-year').disabled = busy || Boolean(lifecycle);
+  $('save-preview').disabled = busy || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.unverified;
+  $('save-preview').textContent = session.mode === 'preview' ? 'Save this preview to a new folder' : 'Save this preview to a new folder';
   $('save-ledger').disabled = busy || !session.canSave();
+  $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
   $('reopen-ledger').disabled = busy || !ready;
   $('release-ledger').disabled = busy || !lifecycle;
   $('recover-ledger').hidden = lifecycle?.state !== 'recovery-required';
@@ -215,6 +220,41 @@ function showDetail(activityId) {
   $('detail-title').textContent = activity.sourceDescription;
   $('detail-description').textContent = `${detail.account.displayName} · ${activity.effectiveDate || 'Unknown date'} · ${label(activity.lifecycleStatus)} · ${label(activity.activityKind)} · ${activity.categoryId || 'No category'}${activity.reviewReasons?.length ? '. Needs review: ' + activity.reviewReasons.map(reviewReason).join(', ') : ''}`;
   $('detail-amount').textContent = money(activity.amountText, activity.currency);
+  const transferPanel = $('transfer-link-panel');
+  transferPanel.hidden = true;
+  $('transfer-link-status').textContent = '';
+  $('transfer-counterparty').replaceChildren();
+  $('transfer-link-rationale').value = '';
+  if (activity.transferGroupId && activity.transferCounterpartyActivityId) {
+    const counterpart = getWorkspaceActivity(session.ledger, activity.transferCounterpartyActivityId);
+    const outgoing = activity.transferRole === 'outgoing' ? detail : counterpart;
+    const incoming = activity.transferRole === 'incoming' ? detail : counterpart;
+    if (counterpart) {
+      const from = activity.transferRole === 'outgoing' ? detail.account.displayName : counterpart.account.displayName;
+      const to = activity.transferRole === 'incoming' ? detail.account.displayName : counterpart.account.displayName;
+      $('transfer-link-status').textContent = `Verified relationship: ${from} → ${to}. Both original activities and source evidence remain unchanged.`;
+      transferPanel.hidden = false;
+    }
+  } else if (activity.activityKind === 'transfer' && activity.amountText?.startsWith('-')) {
+    const amount = activity.amountText.slice(1);
+    const candidates = getEffectiveActivities(session.ledger).filter(candidate => candidate.active &&
+      candidate.activityKind === 'transfer' && candidate.amountText === undefined &&
+      candidate.currency === activity.currency && candidate.accountId !== activity.accountId &&
+      !candidate.transferGroupId && exactSignedDecimal(candidate) === amount);
+    const accountById = new Map(session.ledger.accounts.map(account => [account.accountId, account]));
+    $('transfer-counterparty').append(node('option', 'Choose the matching incoming activity'));
+    $('transfer-counterparty').options[0].value = '';
+    for (const candidate of candidates) {
+      const account = accountById.get(candidate.accountId);
+      const option = node('option', `${account?.displayName || 'Other account'} · ${candidate.effectiveDate || 'Unknown date'} · ${candidate.sourceDescription}`);
+      option.value = candidate.activityId;
+      $('transfer-counterparty').append(option);
+    }
+    $('transfer-link-status').textContent = candidates.length
+      ? `Found ${candidates.length} exact-amount incoming candidate(s) in another account. Review the date and description, then choose the matching activity. No pair is linked automatically.`
+      : 'No exact-amount incoming candidate is currently available. Both activities must be classified as transfers, in different accounts, with the same currency and opposite equal amounts.';
+    transferPanel.hidden = false;
+  }
   $('detail-source').replaceChildren();
   for (const observation of detail.observations) {
     const source = node('article', undefined, 'review-item');
@@ -232,6 +272,11 @@ function showDetail(activityId) {
     entry.append(node('strong', label(event.eventType)), node('p', event.recordedAt, 'review-meta'));
     if (event.eventType === 'classification') entry.append(node('p', `${label(event.priorActivityKind)} → ${label(event.activityKind)}`));
     if (event.eventType === 'category-correction') entry.append(node('p', `${event.priorCategoryId || 'No category'} → ${event.categoryId}`));
+    if (event.eventType === 'transfer-link') {
+      const source = session.ledger.accounts.find(account => account.accountId === detail.activity.accountId)?.displayName || 'Source account';
+      const target = getWorkspaceActivity(session.ledger, event.counterpartyActivityId);
+      entry.append(node('p', `${source} → ${target?.account.displayName || 'Destination account'} · ${money(detail.activity.amountText, detail.activity.currency)}`));
+    }
     const rationale = event.evidence?.rationale || event.evidence?.reason;
     if (typeof rationale === 'string') entry.append(node('p', rationale));
     entry.append(evidenceDetails('Inspect audit record', () => event));
@@ -259,6 +304,9 @@ action('preview-year', 'Preparing the invented year locally. No Google connectio
   if (!confirmReplace()) return;
   session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); announce('Local synthetic preview ready. Open your saved copy to save corrections to Drive.', 'success');
 });
+action('save-preview', 'Saving this exact local preview into a newly selected, empty synthetic Drive folder and independently verifying it. Keep this tab open.', async () => {
+  await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success');
+});
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
   await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success');
 });
@@ -277,6 +325,11 @@ action('recover-stale', 'Checking stale-session recovery.', async () => {
   if (!window.confirm('Confirm every prior tab and device using this synthetic folder has stopped. Recover this stale session?')) { announce('Recovery cancelled. The stopped session has not been recovered.'); return; }
   await session.recover({ stale: true }); announce('Session recovered. Reopen saved records before editing.');
 });
+action('link-transfer', 'Recording and validating this transfer relationship locally.', async () => {
+  session.linkTransfer({ outgoingActivityId: selectedActivity, counterpartyActivityId: $('transfer-counterparty').value, rationale: $('transfer-link-rationale').value });
+  render(); showDetail(selectedActivity);
+  announce('Transfer activities linked with an auditable relationship. Save changes to persist the link.', 'success');
+});
 action('stage-correction', 'Checking your correction locally.', async () => {
   session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value, rationale: $('correction-rationale').value });
   render(); showDetail(selectedActivity);
@@ -291,6 +344,8 @@ $('close-detail').addEventListener('click', () => {
 });
 $('correction-type').addEventListener('change', correctionFields);
 $('correction-rationale').addEventListener('input', refresh);
+$('transfer-counterparty').addEventListener('change', refresh);
+$('transfer-link-rationale').addEventListener('input', refresh);
 for (const id of ['account-filter', 'month-filter', 'review-only']) $(id).addEventListener('change', () => { if (!busy) { page = 0; render(); } });
 $('transaction-search').addEventListener('input', scheduleSearch);
 $('transaction-search').addEventListener('compositionstart', () => { composingSearch = true; cancelSearch(); });
