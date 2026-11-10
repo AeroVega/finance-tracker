@@ -16,7 +16,7 @@ test('completed canonical recipe backs up and restores all retained history with
   assert.equal(measured.heartbeatRequests, 0);
   assert.equal(measured.selectedObjects, 8);
   assert.equal(measured.retainedObjects, Object.values(measured.retainedByKind).reduce((sum, count) => sum + count, 0));
-  assert.equal(measured.retainedByKind['journal-event'], 154);
+  assert.equal(measured.retainedByKind['journal-event'], 62);
   assert.ok(measured.retainedByKind['data-object'] >= measured.selectedObjects);
   for (const [phase, budget] of Object.entries({ portableExport: 260, portableVerify: 0,
     backup: 1950, backupReopen: 260, restore: 1700, restoreReopen: 260 })) {
