@@ -75,7 +75,7 @@ function refresh() {
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false;
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
   $('preview-year').disabled = busy || Boolean(lifecycle);
-  $('save-preview').disabled = busy || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.unverified;
+  $('save-preview').disabled = busy || !configured || navigator.onLine === false || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.unverified;
   $('save-preview').textContent = session.mode === 'preview' ? 'Save this preview to a new folder' : 'Save this preview to a new folder';
   $('save-ledger').disabled = busy || !session.canSave();
   $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
@@ -90,7 +90,7 @@ function refresh() {
   if (reviewQueueButton) reviewQueueButton.disabled = busy;
   $('transactions').setAttribute('aria-busy', String(busy));
   for (const id of ['account-filter', 'month-filter', 'transaction-search', 'review-only']) $(id).disabled = busy || !session.ledger;
-  for (const id of ['correction-type', 'classification', 'category', 'amount', 'correction-rationale']) $(id).disabled = !editable;
+  for (const id of ['correction-type', 'classification', 'category', 'amount', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
   $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim();
   $('previous-page').disabled = busy || !view || view.page === 0;
   $('next-page').disabled = busy || !view || view.page + 1 >= view.pages;
