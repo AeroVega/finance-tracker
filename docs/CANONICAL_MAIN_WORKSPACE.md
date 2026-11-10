@@ -81,7 +81,9 @@ Reproduce with `node tests/benchmark-canonical-workspace-view.mjs --baseline-ref
 
 **Open:** the new main-app flow has not been accepted on physical iPad/iPhone Safari or live Drive. PR30's nine owner-reported iPad passes apply to the PR30 tested commit only, not this change. Partial iPhone testing does not establish complete iPhone coverage.
 
-Before calling the new workflow accepted, deploy the feature branch yourself through **Actions → Deploy static site to GitHub Pages → Run workflow**, select `feature/canonical-main-workspace`, and verify the source SHA shown in the page matches the reviewed branch head. This replaces the repository's single shared Pages deployment. No deployment is performed by this implementation work.
+The owner has already accepted the local synthetic-year exploration, source-evidence/correction workflow, and mobile workspace experience on the PR32 head. Do not repeat those checks unless a later change affects them. The new Drive persistence and transfer-link flows below remain unaccepted.
+
+Before calling the new workflow accepted, review PR #34 and then deploy the follow-up branch yourself through **Actions → Deploy static site to GitHub Pages → Run workflow**, select `feature/synthetic-persistence-transfer-links`, and verify the source SHA shown in the page matches the reviewed branch head. This replaces the repository's single shared Pages deployment. No deployment is performed by this implementation work.
 
 Run these checks with invented data only:
 
@@ -94,5 +96,8 @@ Run these checks with invented data only:
 7. Go offline and reconnect. Confirm records remain readable, edits/saves stay blocked until verified reopen, and local proposals are not silently retried.
 8. Use a disposable copy for interruption/recovery. An uncertain save must remain unverified until recovered and reopened. Preserve any uncertain folder; do not delete or repeatedly retry it.
 9. Release successfully, then open on the next device. Confirm the exact saved corrections. Unverified release must block any success claim.
+10. From a local preview with no edits, save the untouched generated year to a newly created empty synthetic folder. Reopen it and compare the full canonical graph. Repeat from a separate preview after staging corrections; confirm every correction and audit event is present. Confirm an existing or nonempty folder is refused without overwriting or appending, and canceling Picker leaves the preview usable.
+11. Exercise an interrupted fresh-copy save using a disposable synthetic folder. Preserve the uncertain folder, recover if offered, and reopen to establish whether the full graph committed. Confirm a blind retry is blocked until verification resolves the outcome.
+12. Link a clearly matching outgoing/incoming transfer pair. Confirm the same transfer path and rationale appear when inspecting either side, the relationship survives save/reopen, and income/spending/cash totals do not change. Confirm ambiguous equal-amount candidates are never auto-linked and that mismatched amounts, currencies, accounts, classifications, inactive activities, or already-linked activities are rejected.
 
 Automated and local-browser results for the final commit are recorded in the PR handoff separately from these open owner observations. No automated CI result establishes live Google latency, physical Safari behavior, production readiness or deployment.
