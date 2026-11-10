@@ -17,7 +17,7 @@ const text = element => [element.textContent, ...element.children.map(text)].joi
 async function workspacePage({ledger = recipe.ledger} = {}) {
   const state = {connects:[],writes:0,snapshotReads:0,releases:0,recovers:0,connectionError:null,saveGate:null,readbackGate:null,
     loseResponse:false,failSave:false,releaseVerified:true,snapshotError:false,recoveryGate:null};
-  const manifest = {syntheticOnly:true,databaseId:'invented-ui-db',copyId:'invented-ui-copy',revision:1,snapshot:{}};
+  const manifest = {syntheticOnly:true,databaseId:'invented-ui-db',copyId:'invented-ui-copy',revision:1,catalogFinalizationPending:null,snapshot:{}};
   const objects = Object.fromEntries([...serializePackedCanonicalLedger(ledger)].map(([path, value]) => [path,new TextEncoder().encode(value)]));
   for (const path of Object.keys(objects)) manifest.snapshot[path] = 'invented-hash';
   let storage, session, browserNavigator;
@@ -60,8 +60,14 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     async connect(options) {
       state.connects.push(options);
       if (state.connectionError) throw Object.assign(new Error('Private provider detail'), {code:state.connectionError});
-      assert.equal(options.requireExisting, true);
-      assert.equal(options.requireEmpty, undefined);
+      if (options.requireEmpty === true) {
+        assert.equal(options.requireExisting, undefined);
+        for (const path of Object.keys(objects)) delete objects[path];
+        manifest.revision = 0; manifest.snapshot = {};
+      } else {
+        assert.equal(options.requireExisting, true);
+        assert.equal(options.requireEmpty, undefined);
+      }
       this.lifecycle = lifecycle; lifecycle.state = 'ready'; lifecycle.acceptingWrites = true;
       this.options.onStatus({state:'ready'});
     }
@@ -546,4 +552,21 @@ test('unresolved source preview reports full scoped count and refreshes after re
   assert.match(text(h.get('review-queue')), /Showing 10 of 11/);
   assert.equal(h.modelSession.ledger.activities.length, 1);
   assert.equal(h.state.writes, 0);
+});
+
+
+test('main workspace can explicitly save the exact local preview into a fresh synthetic copy', async () => {
+  const h = await workspacePage();
+  await h.click('preview-year');
+  assert.equal(h.modelSession.mode, 'preview');
+  assert.equal(h.get('save-preview').disabled, false);
+  await h.click('save-preview');
+  assert.deepEqual(h.state.connects, [{requireEmpty:true}]);
+  assert.equal(h.state.writes, 1);
+  assert.equal(h.modelSession.mode, 'saved');
+  assert.equal(h.modelSession.dirty, false);
+  assert.equal(h.get('save-preview').disabled, true);
+  assert.match(h.get('action-status').textContent, /exact preview.*independently verified/i);
+  const stored = await h.storedLedger();
+  assert.deepEqual(stored, recipe.ledger);
 });
