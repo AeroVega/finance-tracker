@@ -93,7 +93,7 @@ function validateAndProject(ledger) {
     commands.set(e.commandId,e);
     if (!Number.isFinite(Date.parse(e.recordedAt)) || e.appendOnly!==true) fail('invalid-event-metadata');
     const a=replay.get(e.activityId);
-    validateHistoryEvent(e,a,byId);
+    validateHistoryEvent(e,a,byId,replay,activeActivityIds(ledger));
     replay.append(e);
   }
   const refundTotals=new Map(), refundActivities=new Set();
@@ -126,7 +126,7 @@ function validEventMoney(value) {
   if(!value || Object.keys(value).some(k=>!['amountMinor','amountDecimal','currency'].includes(k)) || !/^[A-Z]{3}$/.test(value.currency) || (value.amountMinor===null)===(value.amountDecimal===null) || exactSignedDecimal(value)===null) fail('invalid-event-money');
   parseMoney(exactSignedDecimal(value),value.currency);
 }
-function validateHistoryEvent(e,a,byId) {
+function validateHistoryEvent(e,a,byId,replay=null,activeIds=null) {
   const findActivity=activityId=>byId.activities.get(activityId)??fail('unknown-activity');
   if(e.eventType==='bank-correction') {
     validEventMoney(e.priorValues); validEventMoney(e.proposedValues);
@@ -145,6 +145,18 @@ function validateHistoryEvent(e,a,byId) {
     if(e.confirmedPostedDate!==null && e.confirmedPostedDate!==undefined && (!isCalendarDate(e.confirmedPostedDate)||(a.postedDate!==null&&a.postedDate!==e.confirmedPostedDate))) fail('invalid-refund-posted-date');
   } else if(e.eventType==='lifecycle-transition') {
     if(a.lifecycleStatus!=='pending'||e.from!=='pending'||e.to!=='posted'||!isCalendarDate(e.effectiveDate)||(e.postedDate!==null&&!isCalendarDate(e.postedDate))||(e.settlementDate!==null&&!isCalendarDate(e.settlementDate))||byId.observations.get(e.sourceObservationId)?.activityId!==e.activityId) fail('invalid-lifecycle-event');
+  } else if(e.eventType==='transfer-link') {
+    const other=findActivity(e.counterpartyActivityId);
+    const counterpart=replay?.get(e.counterpartyActivityId);
+    const amount=exactSignedDecimal(a), otherAmount=counterpart&&exactSignedDecimal(counterpart);
+    if(!replay||!counterpart||!e.evidence||typeof e.evidence.rationale!=='string'||!e.evidence.rationale.trim()||
+      e.transferGroupId!==e.eventId||!uuid.test(e.transferGroupId)||
+      (activeIds&&(!activeIds.has(a.activityId)||!activeIds.has(other.activityId)))||
+      a.activityKind!=='transfer'||counterpart.activityKind!=='transfer'||
+      a.accountId===other.accountId||a.currency!==counterpart.currency||
+      amount===null||otherAmount===null||compare(amount,'0')>=0||compare(otherAmount,'0')<=0||
+      compare(negate(amount),otherAmount)!==0||
+      a.transferGroupId||counterpart.transferGroupId) fail('invalid-transfer-link');
   } else fail('unsupported-persisted-event');
 }
 // Storage records must be JSON, not Date/BigInt/undefined or non-finite values.
@@ -455,6 +467,15 @@ function createActivityReplay(activities) {
         result.lifecycleStatus=event.to;result.effectiveDate=event.effectiveDate;
         result.postedDate=event.postedDate;result.settlementDate=event.settlementDate;
       }
+      if(event.eventType==='transfer-link') {
+        const other=stateFor(event.counterpartyActivityId);
+        result.transferGroupId=event.transferGroupId;
+        result.transferCounterpartyActivityId=other.value.activityId;
+        result.transferRole='outgoing';
+        other.value.transferGroupId=event.transferGroupId;
+        other.value.transferCounterpartyActivityId=result.activityId;
+        other.value.transferRole='incoming';
+      }
     },
   };
 }
@@ -496,7 +517,7 @@ export function applyFinancialEvents(ledger, commands, options={}) {
     if(!event) continue;
     if(context.ids.has(event.eventId)) fail('invalid-or-duplicate-record-id');
     context.ids.add(event.eventId);
-    validateHistoryEvent(event,context.replay.get(event.activityId),context.byId);
+    validateHistoryEvent(event,context.replay.get(event.activityId),context.byId,context.replay,context.activeIds);
     next.events.push(event);context.commands.set(event.commandId,event);
     context.replay.append(event);
     context.refunds.check(event);
@@ -566,6 +587,17 @@ function buildFinancialEvent(next,command,options,{replay,commands,activeIds,ref
     event.originalActivityId=target.activityId;
     event.confirmedPostedDate=command.confirmedPostedDate??null;
     if(event.confirmedPostedDate!==null && (!isCalendarDate(event.confirmedPostedDate)||(a.postedDate!==null&&a.postedDate!==event.confirmedPostedDate))) fail('invalid-refund-posted-date');
+  } else if(type==='transfer-link') {
+    const other=replay.get(command.counterpartyActivityId);
+    if(!command.evidence||typeof command.evidence.rationale!=='string'||!command.evidence.rationale.trim()||
+      !activeIds.has(command.counterpartyActivityId)||a.activityKind!=='transfer'||other.activityKind!=='transfer'||
+      a.accountId===other.accountId||a.currency!==other.currency||
+      exactSignedDecimal(a)===null||exactSignedDecimal(other)===null||
+      compare(exactSignedDecimal(a),'0')>=0||compare(exactSignedDecimal(other),'0')<=0||
+      compare(negate(exactSignedDecimal(a)),exactSignedDecimal(other))!==0||
+      a.transferGroupId||other.transferGroupId) fail('invalid-transfer-link');
+    event.counterpartyActivityId=other.activityId;
+    event.transferGroupId=event.eventId;
   } else fail('unsupported-financial-event');
   return event;
 }
