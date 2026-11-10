@@ -86,6 +86,7 @@ function validateAndProject(ledger) {
     if (o.activityId !== null && findActivity(o.activityId).accountId !== o.accountId) fail('observation-account-conflict');
   }
   const replay=createActivityReplay(ledger.activities);
+  const activeIds=activeActivityIds(ledger);
   const commands=new Map();
   for (const e of ledger.events) {
     findActivity(e.activityId);
@@ -93,7 +94,7 @@ function validateAndProject(ledger) {
     commands.set(e.commandId,e);
     if (!Number.isFinite(Date.parse(e.recordedAt)) || e.appendOnly!==true) fail('invalid-event-metadata');
     const a=replay.get(e.activityId);
-    validateHistoryEvent(e,a,byId,replay,activeActivityIds(ledger));
+    validateHistoryEvent(e,a,byId,replay,activeIds);
     replay.append(e);
   }
   const refundTotals=new Map(), refundActivities=new Set();
