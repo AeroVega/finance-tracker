@@ -1,11 +1,15 @@
 # Project Charter
 
-**Status:** Draft baseline  
-**Last updated:** 2026-11-05  
+**Status:** Product charter; current delivery state is in [project status](PROJECT_STATUS.md)
+**Last reconciled:** 2026-11-10
 **1.0.0 target:** 2027-01-01
 
 ## North Star
 Build a trustworthy personal financial intelligence application that helps one person understand their financial position, understand how they arrived there, anticipate where they may be heading, explore alternatives, and measure progress toward meaningful goals. It should be mobile-first, tablet-friendly, desktop-capable, responsive, explainable, and privacy-first. See the [Second Generation Product Definition](PRODUCT_DEFINITION.md) for the owner-reviewed product direction and [Product Design Open Decisions](PRODUCT_OPEN_DECISIONS.md) for unresolved questions.
+
+## Current delivery focus
+
+Finish the [four-step Alpha foundation](NEXT_STEPS.md): canonical workspace acceptance, financial position and reconciled coverage, monthly history from January 2023, and production controls/authorization. The synthetic workspace is implemented; Alpha and production readiness are not complete.
 
 ## Problem
 The current annual spreadsheet workflow is flexible but requires repeated manual entry and makes duplicate prevention, reconciliation, and timely insights difficult. Automation matters, but data correctness and privacy come first.

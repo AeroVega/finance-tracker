@@ -1,7 +1,7 @@
 # Private Storage Architecture — Google Drive
 
-**Status:** Selected direction; production validation required  
-**Decision date:** 2026-10-17; architecture baseline and original-import retention reaffirmed 2026-10-31  
+**Status:** Selected direction; production validation required
+**Decision date:** 2026-10-17; architecture baseline and original-import retention reaffirmed 2026-10-31
 **Scope:** Architecture and verification plan only. This document does not authorize production implementation or storage of real financial data.
 
 ## Decision
@@ -22,9 +22,11 @@ This is an architectural direction, not a claim that every OAuth, scope, billing
 - **Verified from repository constraints:** GitHub Pages content and this public repository must be treated as public; browser-local storage alone does not synchronize devices.
 - **Hypothesis pending verification:** Google Drive API plus browser OAuth can meet the required production workflow with no recurring cost and acceptable recovery guarantees.
 - **Verified for the prototype (user-confirmed 2026-10-24):** the configured OAuth/Picker flow and selected-folder create/read-back/delete operations worked from the deployed GitHub Pages origin.
-- **Open for validation:** token expiry, reauthorization and revocation behavior; sequential device handoff; best-effort active-session detection and write refusal; implementation and testing of serialized writes, interrupted-write recovery, corruption handling, and verified backup/restore; production publishing/verification requirements; and current production billing/terms.
+- **Open for production/current-path validation:** actual OAuth configuration and authorization behavior, sequential device handoff, recovery/restore, privacy and current billing/terms. Synthetic serialized writes, session detection, interruption recovery and backup/restore already have implementation and bounded [acceptance evidence](SYNTHETIC_STORAGE_ACCEPTANCE.md). Revalidate changed paths and production controls rather than treating the entire foundation as unimplemented.
 
-## Intended data flow (target; not yet implemented)
+## Intended production data flow
+
+**Status reconciled November 10, 2026:** substantial synthetic storage, canonical import and workspace paths are implemented. This section describes the intended production path, which remains gated. Use [project status](PROJECT_STATUS.md) for current capabilities and [PR27](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md) for production gaps.
 
 1. The user selects a supported CSV on their device.
 2. The browser parses and validates the file locally by default.

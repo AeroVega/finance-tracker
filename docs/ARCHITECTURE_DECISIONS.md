@@ -1,17 +1,15 @@
 # Architecture Decisions and Open Questions
 
-**Status:** Baseline with Google Drive selected as the storage direction; implementation details remain subject to validation  
-**Last updated:** 2026-10-31
+**Status:** Baseline with Google Drive selected as the storage direction; implementation details remain subject to validation
+**Status reconciled:** 2026-11-10; accepted decisions retain their original dates
 
 ## Current development status and next milestone
 
-**Current phase:** PR #19's database identity, lifecycle, immutable storage, transaction, migration, and recovery architecture baseline is merged. Workstream 1's synthetic-only Drive feasibility harness is in progress on `feat/drive-feasibility-spike`; no production ledger storage is approved.
+**Verified:** the PR19 architecture baseline, PR20 through PR25 synthetic storage/recovery machinery, PR28 canonical imports and PR32/PR34 main workspace are merged. Strict fixture parsers, canonical reporting and synthetic persistence are implemented. [Project status](PROJECT_STATUS.md) records current evidence and deployment limits.
 
-**Current milestone:** retain Google Drive as the selected storage direction and validate a single-user, single-active-device write model. The live raw REST probe showed that Drive v3 `files.update` accepted a deliberately stale `If-Match` value; that conditional-update path is rejected. Simultaneous use across devices is explicitly unsupported. The app must refuse writes when it detects another active session, while documenting that Drive does not provide a server-enforced mutex through the tested endpoint. Validate immutable writes, serialized operations, interruption recovery, backup/restore, privacy, and $0 terms before production. No real ledger reads/writes are authorized.
+**Open:** complete canonical-workspace acceptance, then financial position/reconciled coverage, January 2023 monthly history and production controls. Follow [the Alpha sequence](NEXT_STEPS.md). PR27 merged its production plan only; production financial-data persistence remains **NO-GO**.
 
-**Parallel MVP1 work:** implement strict Wells Fargo, SoFi, and Fidelity CSV parsers against the merged canonical contract, using invented fixtures. Add parser-to-reconciliation tests and define report-level correction/reversal/transfer and investment semantics.
-
-**Production storage remains a separate gate:** validate token expiry/revocation, account selection, single-active-session behavior, serialized writes, interrupted-write recovery, backup/restore, retention/deletion, privacy/security, and sustainable $0 production terms. Until those gates pass, use synthetic data only and do not enable production Drive ledger writes.
+The accepted single-user/single-active-device model remains. Drive's tested stale-`If-Match` update is not a server-enforced lock. Preserve immutable history, serialized operations, ownership/integrity checks and conservative recovery. Synthetic tests and past live observations do not establish production OAuth/configuration, privacy, cost or new device-path acceptance.
 
 ## ADR-001 — File imports for MVP1
 **Status: Accepted.** MVP1 ingests CSV files downloaded by the project owner. MVP2 may add free, authorized direct integrations only after cost, authorization, sustainability, and security are verified. This keeps delivery independent of an unproven API and makes import correctness a first-class capability.
@@ -72,42 +70,28 @@ The selected target model uses immutable content-addressed data objects and comp
 
 **Rejected mechanism:** the live raw REST probe returned HTTP 200 and read-back confirmed Drive applied a description update despite a deliberately stale `If-Match` value. The Drive file version is output-only and is not an atomic lock. The tested `If-Match` route is not a concurrency control and will not be used. **Accepted operating constraint:** Finance Tracker is single-user and single-active-device. Simultaneous use on two devices is unsupported; the app must detect an already-active session where possible and refuse writes in the second session. Session markers are best-effort detection only, not a server-enforced mutex. The owner agrees to use one device at a time. This operating model narrows the concurrency requirement but does not remove the need for serialized writes, idempotency, immutable objects, and crash recovery.
 
-Merging PR #19 records this design baseline only. It does not approve production persistence. The synthetic-only Drive feasibility spike is now underway.
+Merging PR #19 records this design baseline only. It does not approve production persistence. The synthetic feasibility and storage implementation have since merged; production acceptance remains separate.
 
 ## Open decisions and follow-up work
 
-The database identity and lifecycle baseline is recorded in [DATABASE_IDENTITY_AND_LIFECYCLE.md](DATABASE_IDENTITY_AND_LIFECYCLE.md) and PR #19. The identity/lifecycle baseline is settled. Remaining work is feasibility validation plus separate security, data-model, and release decisions:
+The identity/lifecycle baseline is settled. Do not reopen it because an old task list called its implementation future work. Current gaps are:
 
-1. Implement and test single-active-session detection and write refusal; document that this is best-effort detection rather than a server-enforced lock. Do not use the tested Drive `If-Match` path.
-2. Prove complete-enough folder-child enumeration and safe initialization under drive.file.
-3. Validate immutable content-addressed objects, pre-generated-ID retries, read-after-write behavior, and cross-copy object lookup.
-4. Validate sequential device handoff, same-device tab/session conflict detection, interrupted operations, journal recovery, backup/restore, and promotion. Simultaneous two-device commits are explicitly unsupported.
-5. Verify OAuth expiry/revocation, account selection, current Google terms/quotas, and sustainable $0 production cost.
-6. Complete encryption-at-rest and threat-model decisions, device-loss/account-compromise response, and implementation of the already-approved 540-day original-file retention/deletion lifecycle.
-7. Finish the canonical ledger schema, provider parsers, report definitions, and historical summary treatment.
+1. Dated financial-position evidence, balance/holdings/liability schema and reconciled completeness.
+2. Distinct monthly-history records, one-time conversion and non-double-counting overlap rules.
+3. Production account/database binding and supported owner-file ingestion.
+4. Production release/sign-out clearing and actual browser/network/artifact privacy inspection.
+5. Current OAuth/configuration, quota/billing and $0-cost evidence; routine backup policy after OAuth verification.
+6. Live synthetic acceptance of changed paths, recovery/restore, sequential device handoff and explicit residual-risk/production approval.
 
-These are release gates or implementation tasks. The 540-day original CSV retention duration is settled; its private-storage lifecycle and backup consistency still require implementation and validation. None of these items authorizes production financial-data storage.
+The synthetic session, transaction, retention and backup implementations already exist. Their tests and historical evidence remain in their subject guides. The 540-day original-file policy is settled; production activation and deletion-receipt risk review remain open. [Next steps](NEXT_STEPS.md) supplies completion checks and dependencies.
 
 ## ADR-010 — Original CSV retention duration
 
 **Status: Accepted; reaffirmed 2026-10-31.** Retain each original CSV import in approved private Drive storage for 540 days (18 months) from the time it is successfully retained. After that period, delete the source file and verify deletion. Eligibility for deletion is not proof that deletion succeeded; deletion failures must remain visible and retryable. Backup copies must preserve the original retention timestamp and must not restart the retention clock or reintroduce an expired original. This decision supersedes the earlier 2026-10-21 preference not to retain original CSV files in Drive. The policy duration is settled; implementation, backup behavior, and deletion verification remain release gates.
 
-## MVP1 vertical-slice sequence
-1. Upload one sanitized/synthetic CSV.
-2. Parse and validate rows into the canonical transaction model.
-3. Produce a clear import summary and surface malformed or ambiguous rows.
-4. Calculate defined income, expense, and net-cash-flow totals.
-5. Show a small dashboard and inspectable transaction list.
-6. Prove repeated imports do not double-count.
-7. Add private persistence only behind the reviewed storage boundary.
+## Delivery sequence and schedule
 
-## Nominal schedule
-Planning target: **MVP1 by 2027-01-01**. This is a target, not a promise; privacy, financial correctness, and recovery take precedence over the date.
-
-- **October 2026 — Foundation:** finish sample-schema discovery, import/reconciliation contract, storage/security architecture, and review PRs.
-- **November 2026 — Working vertical slice:** implement tested parsers, normalization, import summary, core calculations, and basic dashboard using synthetic/sanitized test inputs.
-- **December 2026 — Persistence and hardening:** implement the approved private-storage path, cross-device behavior, backups/restore, usability, reconciliation, and release checks.
-- **By 2027-01-01 — MVP1 target:** release only if the exit criteria and privacy/cost gates are satisfied; otherwise reduce scope or move the date rather than weaken safeguards.
+The early MVP1 vertical slice and month-by-month schedule have been superseded by the [Alpha/Beta/v1.0.0 roadmap](ROADMAP.md) and [four-step Alpha plan](NEXT_STEPS.md). January 1, 2027 is the conditional v1.0.0 target, not an Alpha completion promise. Estimates and a dependency-based calendar remain open. Do not lower correctness, privacy or recovery requirements to meet the date.
 
 ## Decision discipline
 Label claims **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. Use primary-source URLs for provider claims and recheck time-sensitive terms. Change this record when decisions change.

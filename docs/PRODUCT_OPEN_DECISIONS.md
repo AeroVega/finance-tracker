@@ -121,12 +121,12 @@ Prepare report-reliability criteria, forecast-accountability and uncertainty pro
 
 ### E4. Acceptance criteria and delivery plan
 
-Turn the settled minimum scope into measurable checks, estimates, dependencies, and a realistic schedule. Preserve the confirmed release boundary and obtain the owner's evidence review and explicit release approval; preparation does not approve release.
+The [four-step Alpha plan](NEXT_STEPS.md) now records dependencies and proposed completion checks against current implementation. Complete estimates, a realistic calendar and later Beta/release checks without treating this documentation as acceptance evidence. Preserve the confirmed release boundary and obtain the owner's evidence review and explicit release approval; preparation does not approve release.
 
 <details>
 <summary>3 remaining detailed entries</summary>
 
-- [ ] **Q6.** What measurable acceptance criteria demonstrate completion of each minimum-scope capability? Reuse the existing import, storage, and recovery contracts rather than asking the owner to redefine them.
+- [ ] **Q6.** What additional measurable acceptance criteria demonstrate completion of the minimum v1.0.0 scope? Alpha checks are now mapped in [next steps](NEXT_STEPS.md); validate them during the relevant engineering review. Beta/integrated-release detail remains open. Reuse existing contracts rather than asking the owner to redefine them.
 - [ ] **Q7.** What dependency-aware schedule and sequencing complete Alpha, Beta, integration, and owner validation toward January 1, 2027? The milestone order and dependency rules are settled, but task estimates, dates, and critical dependencies are not. See [Roadmap sequencing][roadmap-sequencing].
 - [ ] **Q22.** What remaining acceptance criteria demonstrate a useful complete initial cash-balance projection under the confirmed averaging method, recalculation behavior, cash boundary, coverage gate, and three-month horizon? Later projection types need separate prioritization.
 
@@ -224,7 +224,7 @@ The current policy is already usable: canonical financial history defaults to in
 
 ### v1.0.0 scope and release criteria
 
-- [x] ~~What is the minimum coherent release scope and overall release gate?~~ The [owner-confirmed minimum][product-minimum] and [Roadmap][roadmap-minimum] fix the scope. Alpha establishes trustworthy data; Beta validates the scoped experience with synthetic data; integration and real-data acceptance follow only after storage/security authorization. January 1, 2027 is conditional on functional completeness, integrity, security, recovery, and explicit owner acceptance. Move the date if those gates are unmet.
+- [x] ~~What is the minimum coherent release scope and overall release gate?~~ The [owner-confirmed minimum][product-minimum] and [Roadmap][roadmap-minimum] fix the scope. Alpha establishes trustworthy data; Beta validates the scoped experience with synthetic data; integrated synthetic acceptance and production controls remain required. The later PR27 decision removes a separate real-data smoke-test prerequisite; actual real-data use still requires explicit production authorization. January 1, 2027 is conditional on functional completeness, integrity, security, recovery, and explicit owner acceptance. Move the date if those gates are unmet.
 
 - [x] **Q8.** ~~Which residual limitations are acceptable, and which block release?~~ Owner-confirmed 2026-11-05: documented cosmetic issues may be acceptable, but incorrect totals, data loss, and privacy failures block release. The owner reviews evidence before approving. Existing mandatory security, cost, recovery, and production-authorization gates remain in force. This is an acceptance boundary, not release or merge approval. See [Product §11][product-release].
 
@@ -329,9 +329,9 @@ These are documentation or engineering follow-ups, not new owner decisions:
 
 1. **Resolved: Beta planning scope.** The owner confirmed on 2026-11-05 that v1.0.0 planning is limited to basic category budgets and a baseline cash-balance projection. Goals and saved what-if scenarios are deferred. [Product §11's Beta paragraph][product-milestones] and [Roadmap Beta][roadmap-beta] now match that scope. The baseline averaging method and recalculation after changes are now confirmed; remaining calculation edge cases and confidence methodology still need specification.
 2. **Later versions.** The "2.0.0 expanded capabilities" paragraphs may read as reserving all refinements for 2.0.0, while [Product §11][product-minimum] and [Roadmap minimum scope][roadmap-minimum] explicitly allow compatible 1.x additions. Later capabilities are candidates, not automatic commitments to a major version.
-3. **Historical migration.** [Data Model's annual-summary proposal][data-model-history] is stale against the later [monthly migration decision][product-migration]. Preserve monthly summaries from 2023 onward. Workbook refund labels are historical evidence, not approval to count refunds as income in the new tracker. Expense-subcategory migration remains subject to workbook inspection, as §11.1 already states.
+3. **Resolved documentation conflict, November 10.** [Data Model][data-model-history] now matches the [monthly migration decision][product-migration], with monthly summaries from January 2023. Workbook refund labels are historical evidence, not approval to count refunds as income in the new tracker. Expense-subcategory migration remains subject to workbook inspection, as §11.1 already states.
 4. **Liability schema.** The [canonical account-type enum][ledger-account] lists checking, savings, credit card, brokerage, retirement, and other, while [Product §4.9][product-liabilities] names mortgages and auto loans. Engineering must specify a compatible representation; neither list silently cancels the other.
-5. **Stale status.** The [Data Model introduction][data-model-history] still calls the canonical contract proposed, while [Roadmap M1 status][roadmap-m1] records it merged. That Data Model wording remains a documentation follow-up; PR26's README and Product Definition now reflect the merged PR24/PR25 status. Consult the current accepted contracts and [merged PR25 acceptance record][pr25-acceptance]; a merge does not authorize production data.
+5. **Resolved status conflict, November 10.** Data Model and [Roadmap M1 status][roadmap-m1] now distinguish the merged contract and synthetic implementation from remaining Alpha work. [Project status](PROJECT_STATUS.md) owns the dated implementation/CI/deployment snapshot; a merge does not authorize production data.
 
 
 ## Other later opportunities already identified
@@ -393,7 +393,7 @@ Compatible additions may fit a minor release. No feature or date is committed me
 [ledger-review]: CANONICAL_LEDGER_CONTRACT.md#review-decision
 [provider-sources]: DATA_SOURCES.md#fidelity-brokerage
 [provider-fidelity]: PROVIDER-IMPORT-SPECS.md#fidelity-accounts-history-export
-[data-model-history]: DATA_MODEL.md#historical-annual-summaries
+[data-model-history]: DATA_MODEL.md#historical-monthly-summaries
 [pr25-history]: https://github.com/AeroVega/finance-tracker/blob/8e8644e00bbb6c985e20f966020eaaf8a4cadcab/docs/PR25_ACCEPTANCE.md#L67-L77
 [pr25-acceptance]: https://github.com/AeroVega/finance-tracker/blob/8e8644e00bbb6c985e20f966020eaaf8a4cadcab/docs/PR25_ACCEPTANCE.md#release-decision
 

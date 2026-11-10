@@ -1,6 +1,6 @@
 # PR30 integrated performance work
 
-**Implemented, synthetic-only:** this follow-up combines the approved repeated-history-read solution with further canonical computation, import and oversized-record improvements. It remains in the existing draft PR. Production persistence is **NO-GO**. No live Google Drive, real financial records, merge or deployment was used or authorized by these checks.
+**Implemented, synthetic-only:** this follow-up combines the approved repeated-history-read solution with further canonical computation, import and oversized-record improvements. PR30 merged November 9, 2026. This report preserves its measured evidence; [project status](PROJECT_STATUS.md) tracks later changes. Production persistence is **NO-GO**. No live Google Drive, real financial records, merge or deployment was used or authorized by these checks.
 
 ## What changed
 
@@ -10,7 +10,7 @@
 - [Owned ledger sessions](LEDGER_SESSION.md) keep frozen state and private replay indexes for repeated workbench edits and reads. Local generation/revision checks, immutable ownership, atomic failure rollback and boundary invalidation prevent stale cache reuse; actual storage verification remains unchanged. The session binding is diagnostic, not remote authority. Save/export still fully validate.
 - [CSV ingestion](PROVIDER_CSV_CPU.md) caps admitted hash work at 16 and releases consumed row references without changing whole-file quote validation, row order or failure precedence.
 - [Operation-local catalog lookup maps](CATALOG_LOOKUP_PERFORMANCE.md) replace repeated catalog validation inside each traversal. Original and detached bindings are rechecked before backup/copy can continue after callbacks.
-- [Fragmented storage](FRAGMENTED_CANONICAL_STORAGE.md) lets a fresh synthetic copy explicitly choose version 3. It splits oversized logical records and inventories into bounded physical objects while retaining exact financial records and the existing transaction, ownership, history, recovery and backup protocol. Versions 1 and 2 stay unchanged; no automatic migration occurs.
+- [Fragmented storage](FRAGMENTED_CANONICAL_STORAGE.md) lets a fresh synthetic copy explicitly choose version 3. It splits oversized logical records and inventories into bounded physical objects while retaining exact financial records and the existing transaction, ownership, history, recovery and backup protocol. That was PR30's tested compatibility policy. The later [current format policy](FRAGMENTED_CANONICAL_STORAGE.md#current-policy-v3-only-for-grouped-storage-successors) makes v3 the default, keeps v1 readable and rejects standalone v2. Historical measurements below do not restore v2 support.
 
 ## Measured evidence
 

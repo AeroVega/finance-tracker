@@ -1,8 +1,8 @@
 # Data Model and Reconciliation Principles
 
-**Status:** Conceptual baseline with a proposed canonical contract and pure synthetic reference module under PR #11; production schema/storage not implemented
+**Status:** Canonical contract and synthetic implementation are merged. Financial-position and historical-summary models remain Alpha work, as of November 10, 2026. Production persistence remains **NO-GO**.
 
-The canonical contract is documented in [CANONICAL_LEDGER_CONTRACT.md](CANONICAL_LEDGER_CONTRACT.md); its first version is under review in PR #11. The pure reference module is not a provider parser or durable storage implementation. These broader model principles remain requirements for later implementation.
+The [canonical contract](CANONICAL_LEDGER_CONTRACT.md) defines the ledger. [PR28](PR28_CANONICAL_IMPORT.md) implements synthetic provider parsing, reconciliation, reports and durable canonical save/reopen; the [main workspace](CANONICAL_MAIN_WORKSPACE.md) adds ordinary browsing and corrections. The principles below apply to those implementations and their remaining extensions. See [project status](PROJECT_STATUS.md) for evidence and [next steps](NEXT_STEPS.md) for the gaps.
 
 ## Logical concepts
 - **Institution/source:** provider of a file or response.
@@ -12,7 +12,8 @@ The canonical contract is documented in [CANONICAL_LEDGER_CONTRACT.md](CANONICAL
 - **Ledger activity:** normalized transaction/activity used in reporting.
 - **Categorization rule:** inspectable, editable, reversible rule.
 - **Review item:** unresolved or suspicious record needing attention.
-- **Holding snapshot:** point-in-time positions and cash, distinct from transactions.
+- **Balance/holding snapshot:** dated financial-position evidence, distinct from transaction movement. Its full Alpha representation remains open.
+- **Historical monthly summary:** workbook-derived monthly aggregates, separate from the canonical activity ledger. Its persistence/migration contract remains open.
 - **Report definition:** documented formula and scope for a metric.
 
 ## Import requirements
@@ -82,11 +83,21 @@ Prefer a stable provider transaction ID when its semantics are understood. Witho
 - Holdings snapshots are not purchase histories.
 - Missing/unknown/unavailable is not zero.
 
-## Reporting questions to resolve
-Define income, spending, net cash flow, savings rate, balances, net worth, and investment performance before implementation. Explicitly decide transfer/card-payment treatment, savings-rate denominator and investment contribution treatment, trade-date versus settlement-date basis, and pending activity representation.
+## Reporting definitions and remaining contracts
 
-## Historical annual summaries
-Potential migration scope is annual summaries for 2023–2026 only where the archived workbook supports the figures and methodology. Candidate metrics: annual income, expenses, net cash flow, comparable savings rate, supported ending balance/net worth, and methodology notes. Do not edit the archived `Finances.xlsx`; do not migrate transaction history just because it exists; do not fabricate figures or treat unavailable values as zero. Mark unsupported or non-comparable metrics explicitly.
+The [product definition](PRODUCT_DEFINITION.md#44-financial-activity-and-reporting-semantics) settles the main meanings: posted activity for finalized reporting, pending excluded, refunds reduce posting-month spending, internal transfers/card settlements are not new spending, and net worth is assets minus liabilities. Existing canonical reports implement a bounded subset with explicit exclusions.
+
+Step 2 must define dated balance evidence, compatible holdings/liability representation and reconciled completeness. Remaining financial edge cases stay in [the decision register](PRODUCT_OPEN_DECISIONS.md). Cash movement cannot stand in for account balances; missing investment lifecycle/valuation evidence cannot be manufactured from visible source rows.
+
+## Historical monthly summaries
+
+**User-confirmed:** preserve monthly history beginning in January 2023, superseding the early annual-only proposal. Follow [Product Definition §11.1](PRODUCT_DEFINITION.md#111-one-time-migration-of-first-generation-excel-history).
+
+Use a distinct monthly-summary record type for net-worth snapshots, income totals and available source breakdowns, expense totals and available primary-category breakdowns. Retain represented month, source workbook/worksheet, mapping and reconciliation provenance. Do not fabricate transactions or account-level detail. Expense subcategories remain subject to source inspection.
+
+A one-time Python converter must report missing months, formula errors, ambiguous labels and mismatched totals without silently filling or correcting them. Preserve the original `Finances.xlsx` unchanged. Keep real source/output records outside this public repository and do not inspect or import them before the applicable authorization and privacy gates.
+
+When a summary overlaps transaction detail, use the detail only when that month is reconciled complete at the applicable scope. Otherwise retain the summary with its coverage label. Never add both sources for the same activity. Completeness and source-selection evidence belong to step 2; synthetic schema/converter/persistence checks belong to step 3. Neither is implemented merely because the policy is documented.
 
 ## Synthetic test scenarios
 Same file twice; overlapping exports; legitimate same-day duplicate-shaped transactions; pending-to-posted changes; refunds; internal transfers; card purchase/payment; brokerage deposit, trade, dividend, fee, and distribution; 401(k) contribution and employer match; holdings changes without transactions; missing dates; malformed amounts; unsupported rows; valid empty files; and older-period imports after newer transactions already exist.
