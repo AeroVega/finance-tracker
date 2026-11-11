@@ -11,6 +11,8 @@ const messages = {
   verified: 'Exact saved year verified.'
 };
 const failures = {
+  'ownership-unknown': 'Session ownership could not be verified. A session marker may already have been written even when this counter shows zero. Preserve this folder and marker for inspection. Do not delete the marker or blindly retry or reconnect.',
+  'session-operation-cancelled': 'Session verification was cancelled. A dispatched marker write may still finish. Preserve the folder and marker; do not retry creation.',
   'unsupported-derived-projection': 'A linked refund lacks a defined category. Preserve the source copy and add an explicit category correction before making a new copy.',
   'empty-folder-required': 'The selected folder is not empty. No upload was started. Choose a newly created empty synthetic folder.',
   'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. No records were changed. Preserve it and choose a new empty synthetic folder for a canonical version-5 copy.',

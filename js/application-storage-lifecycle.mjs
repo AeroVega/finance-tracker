@@ -90,6 +90,7 @@ export class ApplicationStorageLifecycle {
     this._onPageHide = (event) => {
       this.diagnostic("pagehide", { isTrusted: event?.isTrusted === true, persisted: event?.persisted === true,
         visibility: this.lifecycleTarget?.document?.visibilityState });
+      if (!this.coordinator?.canWrite) this.coordinator?.cancelPending?.();
       void this.release({ reason: "pagehide" }).catch(() => {});
     };
   }
@@ -206,6 +207,7 @@ export class ApplicationStorageLifecycle {
     if (!this.isOnline()) fail("offline", "Connect to the internet before opening the database.");
     this.publish("connecting", "Connecting to private storage…");
     if (!this.coordinator) this.createComponents();
+    this.attachLifecycleListeners();
     let acquired = false;
     try {
       await this.coordinator.start();
@@ -229,7 +231,7 @@ export class ApplicationStorageLifecycle {
         if (this.coordinator?.canWrite) this.startHeartbeat();
         this.attachLifecycleListeners();
       }
-      const state = error?.code === "stale-session" ? "stale-session" :
+      const state = !this.isOnline() ? "offline" : error?.code === "stale-session" ? "stale-session" :
         error?.code === "session-active" ? "session-active" :
         this.coordinator?.canWrite || this.engine?.recoveryRequired ? "recovery-required" :
         acquired ? "ownership-unknown" : "connection-error";
@@ -272,6 +274,7 @@ export class ApplicationStorageLifecycle {
   }
 
   async handleOffline() {
+    this.coordinator?.cancelPending?.();
     this.acceptingWrites = false;
     this.heartbeatStop?.();
     this.heartbeatStop = null;

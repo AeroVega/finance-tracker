@@ -73,6 +73,7 @@ export class SessionCoordinator {
         !Number.isSafeInteger(this.clockSkewMs) || this.clockSkewMs < 0) {
       fail("invalid-timing", "Session timing settings are invalid.");
     }
+    this.operationGeneration = 0;
     this.session = null;
     this.ownership = "unowned";
     this.releasing = false;
@@ -80,6 +81,20 @@ export class SessionCoordinator {
     this.sessionQueue = Promise.resolve();
     this.activeWrites = 0;
     this.releaseFinalizing = false;
+  }
+
+  cancelPending() {
+    this.operationGeneration++;
+    this.ownership = "unknown";
+    this.heartbeatStop?.();
+    this.adapter.cancelPending?.();
+  }
+
+  operationGuard() {
+    const generation = this.operationGeneration;
+    return () => {
+      if (generation !== this.operationGeneration) fail("session-operation-cancelled", "Session acquisition was cancelled. Preserve the folder and marker.");
+    };
   }
 
   get canWrite() {
@@ -146,7 +161,8 @@ export class SessionCoordinator {
   // Session-marker operations must serialize with each other, not with the
   // full transaction queue: a slow upload must not starve its own heartbeat.
   withSessionOperation(operation) {
-    const run = this.sessionQueue.then(operation);
+    const assertCurrent = this.operationGuard();
+    const run = this.sessionQueue.then(() => { assertCurrent(); return operation(); });
     this.sessionQueue = run.catch(() => undefined);
     return run;
   }
@@ -157,9 +173,11 @@ export class SessionCoordinator {
   }
 
   async _start() {
+    const assertCurrent = this.operationGuard();
     if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (this.canWrite) return this.session;
     const current = await this.inspect();
+    assertCurrent();
     if (current.status === "active") fail("session-active", "Another active session is already registered. End that session before switching devices.");
     if (current.status === "stale") fail("stale-session", "A session appears stale. Automatic takeover is disabled; use the explicit stale-session recovery flow.");
     if (current.status === "ambiguous" || current.status === "unknown") {
@@ -175,12 +193,17 @@ export class SessionCoordinator {
     this.session = record;
     this.ownership = "unknown";
     try {
+      assertCurrent();
       await this.adapter.write(record);
-    } catch {
+      assertCurrent();
+    } catch (cause) {
       this.ownership = "unknown";
-      fail("ownership-unknown", "The session claim could not be confirmed. Writes are disabled.");
+      assertCurrent();
+      const detail = typeof cause?.code === "string" && /^[a-z][a-z0-9-]{0,95}$/.test(cause.code) ? " (" + cause.code + ")" : "";
+      fail("ownership-unknown", "The session claim could not be confirmed" + detail + ". Preserve the folder and marker. Do not retry creation or switch devices.");
     }
     await this.verifyWrittenRecord(record, "ownership-unknown");
+    assertCurrent();
     this.session = record;
     this.ownership = "owned";
     return record;
@@ -192,11 +215,13 @@ export class SessionCoordinator {
   }
 
   async _recoverStale(options) {
+    const assertCurrent = this.operationGuard();
     if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (!options || options.confirm !== true) {
       fail("confirmation-required", "Explicit confirmation is required to recover a stale session.");
     }
     const current = await this.inspect();
+    assertCurrent();
     if (current.status !== "stale") {
       this.ownership = "unknown";
       fail("not-stale", "The session is not conclusively stale. Recovery was refused.");
@@ -207,6 +232,7 @@ export class SessionCoordinator {
     let latest;
     try {
       latest = await this.adapter.read();
+      assertCurrent();
     } catch {
       this.ownership = "unknown";
       fail("ownership-unknown", "The stale session could not be rechecked. Recovery was refused.");
@@ -222,12 +248,15 @@ export class SessionCoordinator {
     this.session = record;
     this.ownership = "unknown";
     try {
+      assertCurrent();
       await this.adapter.write(record);
+      assertCurrent();
     } catch {
       this.ownership = "unknown";
       fail("ownership-unknown", "The recovery write could not be confirmed. Writes are disabled.");
     }
     await this.verifyWrittenRecord(record, "ownership-unknown");
+    assertCurrent();
     this.session = record;
     this.ownership = "owned";
     return record;
@@ -239,10 +268,12 @@ export class SessionCoordinator {
   }
 
   async _resume() {
+    const assertCurrent = this.operationGuard();
     if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (!this.session) fail("no-session-context", "This page has no prior session identity to revalidate.");
     const expectedSessionId = this.session.sessionId;
     const current = await this.inspect();
+    assertCurrent();
     if (current.status === "active" && current.record.sessionId === expectedSessionId) {
       this.session = current.record;
       this.ownership = "owned";

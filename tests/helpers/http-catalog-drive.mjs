@@ -126,13 +126,17 @@ export class HttpCatalogDrive {
       return response({ ids: Array.from({ length: count }, () => this.idPrefix + ++this.nextId) });
     }
     if (category === 'list') {
-      assert.equal(target.searchParams.get('q'), `'${this.folderId}' in parents and trashed = false`);
+      const folderQuery = `'${this.folderId}' in parents and trashed = false`;
+      const markerQuery = folderQuery + " and (name = 'finance-tracker-active-session.json' or appProperties has { key='financeTrackerSession' and value='v1' })";
+      const query = target.searchParams.get('q');
+      assert.ok(query === folderQuery || query === markerQuery, 'unexpected listing query');
       const fields = target.searchParams.get('fields')?.match(/files\(([^)]+)\)/)?.[1].split(',');
       assert.ok(fields?.includes('id'), 'folder listings must request file identities');
       let files = [...this.files.values()]
         .filter(file => !file.metadata.trashed && file.metadata.parents.includes(this.folderId))
         .map(file => copy(Object.fromEntries(fields.filter(field => Object.hasOwn(file.metadata, field))
           .map(field => [field, file.metadata[field]]))));
+      if (query === markerQuery) files = files.filter(file => file.name === 'finance-tracker-active-session.json' || file.appProperties?.financeTrackerSession === 'v1');
       if (this.transformListing) files = this.transformListing(files);
       const token = target.searchParams.get('pageToken');
       assert.ok(!token || /^invented-page-\d+$/.test(token), 'unexpected pagination token');

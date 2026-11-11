@@ -16,9 +16,7 @@ const pristine = manifest => manifest.syntheticOnly === true && manifest.role ==
  * be verified; a failed/empty copy requires a new empty destination.
  */
 export class SyntheticYearSeeder {
-  constructor({ createRecipe = createSyntheticFinancialYear, onProgress = () => {}, layout = "partitions-v5" } = {}) {
-    if (!["partitions-v4","partitions-v5","fragments-v3"].includes(layout)) fail("unsupported-canonical-layout");
-    this.layout = layout;
+  constructor({ createRecipe = createSyntheticFinancialYear, onProgress = () => {} } = {}) {
     this.createRecipe = createRecipe;
     this.onProgress = onProgress;
     this.recipe = null;

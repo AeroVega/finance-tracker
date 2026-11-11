@@ -59,13 +59,25 @@ export async function listFolderChildren(options) {
 
   const limits = createDriveResponseLimits(settings.responseLimits);
   const headers = authHeaders(settings.accessToken);
+  const quote = value => "'" + String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+  let query = quote(folderId) + " in parents and trashed = false";
+  // Session ownership needs every candidate marker, not every ledger object.
+  // Match either identifying field so malformed/name-only markers remain visible.
+  if (settings.markerFilter) {
+    const {name, property, value} = settings.markerFilter;
+    if (![name, property, value].every(value => typeof value === "string" && value.length > 0)) {
+      throw new DriveFeasibilityError("invalid-filter", "A complete marker filter is required.");
+    }
+    query += " and (name = " + quote(name) + " or appProperties has { key=" + quote(property) + " and value=" + quote(value) + " })";
+  }
   const files = [];
   const seenTokens = new Set();
   let pageToken = "";
 
   do {
+    settings.signal?.throwIfAborted();
     const params = new URLSearchParams({
-      q: "'" + folderId.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "' in parents and trashed = false",
+      q: query,
       pageSize: String(Math.min(1000, Math.max(1, Number(settings.pageSize) || 1000))),
       fields: "nextPageToken,incompleteSearch,files(id,name,mimeType,parents,size,md5Checksum,version,appProperties)"
     });
@@ -73,7 +85,7 @@ export async function listFolderChildren(options) {
 
     let response;
     try {
-      response = await fetchImpl(DRIVE_FILES_ENDPOINT + "?" + params.toString(), { method: "GET", headers, cache: "no-store" });
+      response = await fetchImpl(DRIVE_FILES_ENDPOINT + "?" + params.toString(), { method: "GET", headers, cache: "no-store", ...(settings.signal ? {signal: settings.signal} : {}) });
     } catch {
       throw new DriveFeasibilityError("network-error", "Could not reach Google Drive while listing the selected folder.");
     }

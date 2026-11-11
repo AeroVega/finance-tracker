@@ -173,7 +173,7 @@ test('year reconnect opts out of original-file retention and deletion even for a
 });
 
 
-test('legacy lifecycle fallback creates fragmented v3 and reconnect preserves it; grouped v2 is rejected', async () => {
+test('legacy lifecycle fallback creates fragmented v3 and reconnect preserves it', async () => {
   const lifecycle = fakeLifecycle(), generated = recipe();
   const seeder = new SyntheticYearSeeder({ createRecipe: () => generated });
   await seeder.admitFreshConnection(lifecycle); await seeder.verifyOrSeed(lifecycle);
@@ -183,6 +183,4 @@ test('legacy lifecycle fallback creates fragmented v3 and reconnect preserves it
   const reopened = new SyntheticYearSeeder({ createRecipe: () => generated });
   assert.equal((await reopened.verifyOrSeed(lifecycle)).alreadySaved, true);
   assert.equal(lifecycle.mutations, writes);
-  assert.throws(() => new SyntheticYearSeeder({ layout: 'unknown' }), { code: 'unsupported-canonical-layout' });
-  assert.throws(() => new SyntheticYearSeeder({ layout: 'chunks-v2' }), { code: 'unsupported-canonical-layout' });
 });

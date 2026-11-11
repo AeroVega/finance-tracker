@@ -1,4 +1,4 @@
-/** Actual app controllers and synthetic HTTP, never a live provider. Run with
+/** Historical filename; defaults now exercise canonical v5. Actual app controllers and synthetic HTTP, never a live provider. Run with
  * node --max-old-space-size=768 tests/benchmark-v4-workspace.mjs.
  * Optional V4_BENCH_REVISIONS adds amount corrections to retained history. */
 import assert from 'node:assert/strict';
@@ -28,7 +28,7 @@ function sourceFingerprint() {
 const initialFingerprint=sourceFingerprint();
 console.log(JSON.stringify({runtime:{node:process.version,v8:process.versions.v8,platform:process.platform,arch:process.arch,execArgv:process.execArgv},
   sourceFingerprint:initialFingerprint,
-  configuration:{layout:legacy?'fragments-v3':'partitions-v4',dense,coldReopen,retainedCorrections:Number(process.env.V4_BENCH_REVISIONS??0),syntheticHttpDelayMs:0,
+  configuration:{layout:legacy?'fragments-v3':'partitions-v5',dense,coldReopen,retainedCorrections:Number(process.env.V4_BENCH_REVISIONS??0),syntheticHttpDelayMs:0,
     physicalByteCacheBytes:(legacy?16:8)*1024*1024,
     physicalBodyFactEntries:legacy?0:512,physicalBodyFactSerializedBytes:legacy?0:1024*1024,
     locatorDecodedNodeEntries:legacy?0:128,locatorDecodedSerializedBytes:legacy?0:2*1024*1024,heartbeat:'real lifecycle timer for both formats'},
@@ -61,7 +61,7 @@ try {
   await phase('initialize',()=>app.start());
   const store=new CanonicalLedgerStore({lifecycle:app});await phase('empty-open',()=>store.load());
   const {ledger}=dense?denseLedgerFixture(1):await createSyntheticFinancialYear();
-  console.log(JSON.stringify({fixture:dense?'dense-one-year':'standard-one-year',layout:legacy?'fragments-v3':'partitions-v4',activities:ledger.activities.length,events:ledger.events.length,jsonBytes:new TextEncoder().encode(JSON.stringify(ledger)).length}));
+  console.log(JSON.stringify({fixture:dense?'dense-one-year':'standard-one-year',layout:legacy?'fragments-v3':'partitions-v5',activities:ledger.activities.length,events:ledger.events.length,jsonBytes:new TextEncoder().encode(JSON.stringify(ledger)).length}));
   await phase('seed-'+ledger.activities.length+'-activities',()=>store.save(ledger));
   console.log(JSON.stringify({storedSnapshotBytes:[...http.files.values()].filter(file=>file.metadata.appProperties?.financeTrackerKind==='snapshot-object').reduce((sum,file)=>sum+file.bytes.length,0)}));
   const session=new CanonicalWorkspaceSession({storage:{lifecycle:app}});
