@@ -1,4 +1,5 @@
 import { createDriveResponseLimits, readBoundedDriveBytes, readBoundedDriveJson, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
+import { copyOwnedBytes } from "./byte-ownership.mjs";
 import {
   canonicalizeJcs,
   createJournalEvent,
@@ -245,7 +246,7 @@ export class GoogleDriveTransactionAdapter {
   }
 
   async createImmutable({ fileId, name, kind, transactionId, content, expectedSha256 }) {
-    const bytes = bytesOf(content);
+    const bytes = copyOwnedBytes(bytesOf(content));
     assertResponseSize(bytes.length, { kind, limits: this.responseLimits });
     const actualHash = await hashBytes(bytes, this.crypto);
     if (actualHash !== expectedSha256) fail("content-hash-mismatch", "The bytes do not match the planned SHA-256.", { name });
@@ -317,7 +318,7 @@ export class GoogleDriveTransactionAdapter {
         metadataAfter.appProperties?.[TAG + "Hash"] !== actualHash) {
       fail("immutable-metadata-mismatch", "The pre-generated Drive ID contains unexpected transaction metadata.", { fileId });
     }
-    const stored = await this.readBytes(fileId, { kind });
+    const stored = copyOwnedBytes(await this.readBytes(fileId, { kind }));
     const storedHash = await hashBytes(stored, this.crypto);
     if (storedHash !== actualHash || stored.length !== bytes.length) {
       fail("immutable-readback-mismatch", "The immutable Drive object failed exact byte verification.", { fileId });

@@ -1,4 +1,5 @@
 import { DriveTransactionEngine, DriveTransactionError } from "./drive-transaction-engine.mjs";
+import { copyOwnedBytes } from "./byte-ownership.mjs";
 import { canonicalizeJcs, createJournalEvent, verifyJournal } from "./transaction-protocol.mjs";
 import { createLocatorCatalog, createCatalogResolver } from "./drive-locator-catalog.mjs";
 import { encode, hashRaw, writeVerified, readVerified, mapImmutableReads, writeCatalog, createCatalogHistoryVerifier, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
@@ -48,6 +49,10 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
   }
 
   async transact({ manifestFileId, expectedBase, objects, commitRecord = {}, transactionId = this.crypto.randomUUID() }) {
+    // The operation may queue behind another save. Own caller byte inputs now,
+    // before either recovery or hashing yields to code that can reuse them.
+    if (Array.isArray(objects)) objects = objects.map(object => object && ({ ...object,
+      content: object.content instanceof Uint8Array ? copyOwnedBytes(object.content) : object.content }));
     return this.enqueue(async () => {
       await this.guard();
       // Folder enumeration catches even a start event created by a prior page

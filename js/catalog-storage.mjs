@@ -1,4 +1,5 @@
 import { canonicalizeJcs, verifyJournal } from "./transaction-protocol.mjs";
+import { copyOwnedBytes } from "./byte-ownership.mjs";
 import { createLocatorCatalog, validateLocatorCatalog, createCatalogResolver, LOCATOR_CATALOG_FORMAT } from "./drive-locator-catalog.mjs";
 
 import { validateCatalogRoot, validateCatalogSegment, SEGMENTED_CATALOG_VERSION,
@@ -18,7 +19,7 @@ export const physicalKind = (kind) => kind === "data-object" ? "snapshot-object"
 
 /** Exact-ID read-back is the only way to resolve an ambiguous create response. */
 export async function writeVerified(adapter, { content, kind, transactionId, name, fileId }, guard, cryptoImpl = globalThis.crypto) {
-  const bytes = typeof content === "string" ? encode(content) : content instanceof Uint8Array ? content : encode(content);
+  const bytes = content instanceof Uint8Array ? copyOwnedBytes(content) : encode(content);
   const sha256 = await hashRaw(bytes, cryptoImpl);
   fileId ||= await adapter.allocateFileId();
   await guard();
@@ -49,6 +50,7 @@ function verifyMetadata(adapter, { fileId, sha256, kind, transactionId }, metada
 
 async function verifyReadback(adapter, reference, { metadata, bytes }, cryptoImpl) {
   verifyMetadata(adapter, reference, metadata);
+  bytes = copyOwnedBytes(bytes);
   if (await hashRaw(bytes, cryptoImpl) !== reference.sha256) throw storageError("immutable-hash-mismatch", "An immutable object failed exact-byte verification.");
   return bytes;
 }
@@ -138,15 +140,15 @@ async function loadCatalog(adapter, manifest, cryptoImpl, cache = null) {
     verifyMetadata(adapter, reference, file);
     if (typeof file?.version !== "string" || !/^[0-9]+$/.test(file.version)) throw storageError("invalid-metadata-batch", "Catalog metadata requires fresh file versions.");
     const canReuse = prior && canonicalizeJcs(prior.reference) === canonicalizeJcs(reference) && prior.version === file.version;
-    const bytes = canReuse ? prior.bytes.slice() : await adapter.readBytes(reference.fileId, { kind: reference.kind });
-    await verifyReadback(adapter, reference, { metadata: file, bytes }, cryptoImpl);
+    const source = canReuse ? prior.bytes : await adapter.readBytes(reference.fileId, { kind: reference.kind });
+    const bytes = await verifyReadback(adapter, reference, { metadata: file, bytes: source }, cryptoImpl);
     const evidence = { reference: { ...reference }, version: file.version };
     // Every reused byte requires the closing bracket, even when the next cache
     // budget cannot retain it. New cache candidates need that bracket too.
     if (canReuse) reused.set(reference.fileId, evidence);
     if (cache.nextCatalog.size < cache.maxEntries && cache.bytes + bytes.byteLength <= cache.maxBytes) {
       candidates.set(reference.fileId, evidence);
-      cache.nextCatalog.set(reference.fileId, { ...evidence, bytes: bytes.slice() });
+      cache.nextCatalog.set(reference.fileId, { ...evidence, bytes: copyOwnedBytes(bytes) });
       cache.bytes += bytes.byteLength;
     }
     return bytes;
@@ -356,8 +358,8 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null, { reta
     const reusable = prior && prior.binding === canonicalizeJcs(entry) &&
       prior.version === metadata.get(entry.fileId).version;
     // Detach returned bytes from private evidence, and hash them on every use.
-    const bytes = reusable ? prior.bytes.slice() : (await adapter.readBytes(entry.fileId, { kind: entry.kind })).slice();
-    await verifyReadback(adapter, entry, { metadata: metadata.get(entry.fileId), bytes }, cryptoImpl);
+    const source = reusable ? prior.bytes : await adapter.readBytes(entry.fileId, { kind: entry.kind });
+    const bytes = await verifyReadback(adapter, entry, { metadata: metadata.get(entry.fileId), bytes: source }, cryptoImpl);
     return !retainDataObjects && entry.kind === "data-object" ? null : bytes;
   });
   if (metadata) {
@@ -432,7 +434,7 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null, { reta
     for (const [key, entry] of entries) {
       const bytes = objects.get(key);
       if (cache.next.size + cache.nextCatalog.size >= cache.maxEntries || cache.bytes + bytes.byteLength > cache.maxBytes) continue;
-      cache.next.set(key, { binding: canonicalizeJcs(entry), version: metadata.get(entry.fileId).version, bytes: bytes.slice() });
+      cache.next.set(key, { binding: canonicalizeJcs(entry), version: metadata.get(entry.fileId).version, bytes: copyOwnedBytes(bytes) });
       cache.bytes += bytes.byteLength;
     }
   }

@@ -1,4 +1,5 @@
 import { canonicalizeJcs, verifyJournal } from "./transaction-protocol.mjs";
+import { copyOwnedBytes } from "./byte-ownership.mjs";
 import { createLocatorCatalog, locatorKey, createCatalogResolver, validateLocatorCatalog } from "./drive-locator-catalog.mjs";
 import { encode, hashRaw, writeVerified, verifyCatalogHistory, validateLogicalCommit, storageError, readVerified, writeCatalog } from "./catalog-storage.mjs";
 import { archiveOriginalImports, iterateArchivedOriginalImports, SyntheticOriginalRetentionStore, restoreOriginalImports, validateArchivedOriginalImports } from "./drive-original-retention.mjs";
@@ -23,8 +24,12 @@ async function copyRetainedObjects(verified, adapter, guard, onProgress) {
       const index = next++;
       const [key, entry] = entries[index];
       try {
-        const content = verified.readObject ? await verified.readObject(key, entry) : verified.objects.get(key);
-        if (!(content instanceof Uint8Array) || await hashRaw(content) !== entry.sha256) {
+        const source = verified.readObject ? await verified.readObject(key, entry) : verified.objects.get(key);
+        if (!(source instanceof Uint8Array)) {
+          throw storageError("copy-source-hash-mismatch", "A retained source object changed before copying.");
+        }
+        const content = copyOwnedBytes(source);
+        if (await hashRaw(content) !== entry.sha256) {
           throw storageError("copy-source-hash-mismatch", "A retained source object changed before copying.");
         }
         const location = await writeVerified(adapter, { content,
@@ -75,9 +80,11 @@ export async function validateRetainedStructure({ manifest, catalog, objects, re
       // application validator still requires a complete graph, never a slice.
       for (const path of Object.keys(resolved)) {
         const key = "data-object:" + record.snapshot[path];
-        snapshotObjects[path] = readObject ? await readObject(key, pinned.entries[key]) : objects.get(key);
+        const bytes = readObject ? await readObject(key, pinned.entries[key]) : objects.get(key);
+        snapshotObjects[path] = bytes instanceof Uint8Array ? copyOwnedBytes(bytes) : bytes;
       }
-      if (await validateStructure({ manifest: { ...manifest, revision: record.revision, commitId: record.commitId }, commitRecord: record, objects: snapshotObjects }) !== true) {
+      if (await validateStructure({ manifest: structuredClone({ ...manifest, revision: record.revision, commitId: record.commitId }),
+        commitRecord: structuredClone(record), objects: snapshotObjects }) !== true) {
         throw storageError("structural-validation-failed", "A retained historical snapshot failed application validation.");
       }
     }
