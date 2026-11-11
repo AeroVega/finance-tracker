@@ -44,7 +44,7 @@ Workspace position changes are staged. Explicit save uses the same verified stor
 
 ## Adversarial review follow-up
 
-The [PR36 review](PR36_ADVERSARIAL_REVIEW.md) records reproduced financial and audit-integrity defects, corrections, editor improvements, scoped CPU measurements and the remaining rendered/device acceptance limits. Position reports reuse a defensive snapshot during search and pagination without changing financial scope or losing unfinished conflict decisions.
+The [PR36 review](archive/PR36_ADVERSARIAL_REVIEW.md) records reproduced financial and audit-integrity defects, corrections, editor improvements, scoped CPU measurements and the remaining rendered/device acceptance limits. Position reports reuse a defensive snapshot during search and pagination without changing financial scope or losing unfinished conflict decisions.
 
 ## Page layout
 
