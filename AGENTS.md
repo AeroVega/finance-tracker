@@ -37,7 +37,19 @@ Use deliberately synthetic test fixtures authored with invented data. Do not cop
 - Separate investment contributions, trades, fees, dividends, and market-value changes from ordinary spending.
 - Unavailable data is not zero. Do not fabricate historical figures.
 
-## Documentation
+## Documentation Governance
+
+Documentation must preserve project knowledge while making current project direction unambiguous. These principles govern all documentation changes:
+
+1. **Preserve project knowledge.** Retain meaningful decisions, rationale, constraints, lessons learned, and historical evidence. Do not discard useful context merely because implementation has moved on.
+2. **Centralize project direction.** Maintain one clear, authoritative place for current project status, priorities, decisions, and next steps. Other documents should link to it rather than independently restating mutable project direction.
+3. **Keep implementation truth close to the code.** Technical contracts, behavioral details, and implementation-specific instructions should live alongside the relevant code or in focused documentation directly referenced by it.
+4. **Separate historical context from current instructions.** Archive completed work, superseded decisions, and historical reports so they remain discoverable without competing with current guidance.
+5. **Distinguish proposed from integrated architecture.** Proposals, prototypes, experiments, and partially implemented designs must never be described as established production architecture. Clearly identify their implementation and verification status.
+6. **Make current state easy to establish.** An agent should be able to determine the project's current state, governing constraints, and immediate priorities quickly, before making changes.
+
+When documentation conflicts, current authoritative project direction and verified implementation take precedence over historical reports, proposals, and exploratory material. Resolve contradictions at their source rather than adding another competing explanation.
+
 Label claims as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. Use primary-source URLs for provider claims and recheck time-sensitive terms. Update decision records when choices change.
 
 ## GitHub Pages and PWA engineering guardrails
