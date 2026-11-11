@@ -1,7 +1,22 @@
 # Project status
 
+## Mobile and tablet design in PR38, November 11, 2026
+
+**Implemented on `feat/apple-pwa-ui`:** Home with recent scoped source activity
+and review status, an expandable filter row, tappable transaction records,
+balances before editors, correction-first detail and a compact tablet rail.
+The [design contract](MOBILE_UI_DESIGN.md) connects the first-party finance-app
+research to the implementation and acceptance checks. The Apple installation
+foundation remains in place. **Verified:** 2,003/2,003 extended tests pass on
+Node 24.22.1 in 350.519 seconds, with no failures, skips or cancellations. The
+76 focused controller/routing tests, eight Chromium layouts, tablet-to-phone
+resize checks, anonymous assets, syntax, documentation and diff checks pass.
+Physical Apple-device behavior remains **Unverified**. Financial calculations and storage
+are unchanged. No merge, deployment or live Drive operation was performed.
+
 ## Apple web app UI, November 11, 2026
 
+Initial foundation at `2198a61`, before the design follow-up above.
 **Implemented on a separate branch from `feat/scalable-storage-foundation`:**
 install metadata and opaque icons, additive safe-area spacing, a sticky mobile
 header, measured tab/draft clearance, touch feedback and enlarged-text wrapping.

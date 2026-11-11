@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracker/';
 (async () => {
  const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH || '/usr/bin/chromium',args:['--no-sandbox']});
- for (const [width,height,large,safe] of [[320,568,false,false],[390,844,false,true],[740,390,false,true],[844,390,false,true],[820,1180,false,false],[1440,900,false,false],[320,700,true,false]]) {
+ for (const [width,height,large,safe] of [[320,568,false,false],[390,844,false,true],[740,390,false,true],[844,390,false,true],[820,1180,false,false],[1024,768,false,false],[1440,900,false,false],[320,700,true,false]]) {
   const page = await browser.newPage({viewport:{width,height},hasTouch:width<1000});
   const errors=[]; page.on('pageerror', e=>errors.push(e.message));
   await page.route('https://**/*',r=>r.abort());
@@ -14,6 +14,21 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
   if (safe) await page.addStyleTag({content:':root {--safe-top:24px;--safe-right:24px;--safe-bottom:34px;--safe-left:24px}'});
   await page.click('#start-preview');
   await page.waitForFunction(()=>document.querySelector('#data-mode').dataset.mode==='preview');
+  assert.equal(await page.evaluate(()=>location.hash), '#overview');
+  await page.locator('#recent-activities button').first().click();
+  await page.click('#close-detail');
+  assert.equal(await page.evaluate(()=>location.hash), '#overview');
+  await page.locator('#workspace-scope > summary').press('Enter');
+  assert.equal(await page.locator('#account-filter').isVisible(), true);
+  await page.selectOption('#account-filter', {label:'Invented checking'});
+  assert((await page.locator('#scope-period-title').innerText()).includes('Invented checking'));
+  await page.locator('#workspace-scope > summary').press('Enter');
+  await page.click('#nav-position');
+  await page.locator('.manage-accounts > summary').click();
+  await page.getByText('Add or correct a dated synthetic balance', {exact:true}).click();
+  await page.fill('#balance-source', 'Invented unfinished balance evidence');
+  await page.click('#nav-overview'); await page.click('#nav-position');
+  assert.equal(await page.inputValue('#balance-source'), 'Invented unfinished balance evidence');
   for (const name of ['overview','transactions','position','review','storage']) {
    await page.click('#nav-'+name);
    await page.waitForFunction(n=>!document.getElementById(n).hidden,name);
@@ -28,12 +43,13 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
    }
   }
   await page.click('#nav-transactions');
-  await page.locator('#transaction-rows button').first().click();
+  await page.locator('#transaction-rows td:nth-child(2)').first().click();
   await page.fill('#correction-rationale','Invented browser check, unfinished draft');
   await page.click('#nav-position'); await page.click('#nav-transactions'); await page.click('#resume-detail');
   assert.equal(await page.inputValue('#correction-rationale'),'Invented browser check, unfinished draft');
   await page.click('#stage-correction');
   await page.waitForSelector('#draft-bar:not([hidden])');
+  await page.fill('#correction-rationale', 'Invented second unfinished correction');
   await page.waitForTimeout(100);
   if (width<=760) {
    const nav=await page.locator('.primary-nav').boundingBox(),draft=await page.locator('#draft-bar').boundingBox();
@@ -46,6 +62,17 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
   const draft=await page.locator('#draft-bar').boundingBox();
   assert(last.y+last.height<draft.y,`footer hidden ${width}/${large}`);
   if (process.env.FINANCE_UI_SCREENSHOTS) await page.screenshot({path:`${process.env.FINANCE_UI_SCREENSHOTS}/finance-${width}${large?'-large':''}.png`});
+  if (width === 820) {
+   await page.setViewportSize({width:390,height:844});
+   await page.waitForTimeout(100);
+   assert.equal(await page.inputValue('#balance-source'), 'Invented unfinished balance evidence');
+   assert.equal(await page.inputValue('#correction-rationale'), 'Invented second unfinished correction');
+   const nav=await page.locator('.primary-nav').boundingBox(), bar=await page.locator('#draft-bar').boundingBox();
+   assert(bar.y+bar.height<=nav.y-6, 'resized draft overlaps phone navigation');
+   await page.setViewportSize({width,height});
+   await page.waitForTimeout(100);
+   assert.equal(await page.inputValue('#balance-source'), 'Invented unfinished balance evidence');
+  }
   assert.deepEqual(errors,[]);
   console.log(`PASS ${width}x${height}, large text=${large}, injected insets=${safe}: routes, overflow, targets, draft continuity and clearance`);
   await page.close();

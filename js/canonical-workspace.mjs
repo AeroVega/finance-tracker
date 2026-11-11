@@ -28,6 +28,7 @@ const monthLabel = month => new Date(month + '-01T00:00:00Z').toLocaleDateString
 let busy = false, configured = false, page = 0, selectedActivity = null, view = null, operationStarted = null;
 let viewLedger = null, viewReader = null, searchTimer = null, composingSearch = false;
 const reviewButtons = new Map();
+const homeButtons = new Map();
 const positionButtons = [];
 let renderedPositionDate = null, positionRender = null, activeFormStatus = null;
 const positionInputs = ['balance-account', 'balance-date', 'balance-amount', 'balance-basis', 'balance-source', 'reconcile-account', 'reconcile-opening', 'reconcile-closing', 'reconcile-source', 'closure-anchor', 'closure-source', 'holdings-account', 'holdings-date', 'holdings-scope', 'holdings-source', 'statement-full-month', 'new-account-name', 'new-account-institution', 'new-account-type', 'new-account-currency'];
@@ -139,6 +140,7 @@ function refresh() {
   $('recover-stale').disabled = busy || navigator.onLine === false || lifecycle?.state !== 'stale-session';
   $('close-detail').disabled = busy;
   for (const button of reviewButtons.values()) button.disabled = busy;
+  for (const button of homeButtons.values()) button.disabled = busy;
   if (reviewQueueButton) reviewQueueButton.disabled = busy;
   $('transactions').setAttribute('aria-busy', String(busy));
   for (const id of ['account-filter', 'month-filter', 'transaction-search', 'review-only']) $(id).disabled = busy || !session.ledger;
@@ -236,20 +238,48 @@ function render({ reset = false } = {}) {
     }
   }
   $('coverage-summary').textContent = `${view.coverage.importCount} import runs. Latest source activity: ${view.coverage.latestActivityDate || 'unavailable'}. Imported dates alone do not prove complete history. Inspect account-month reconciliation on the Review page.`;
+  // Home uses account/month scope, independently of the Activity search,
+  // review filter and page. Reuse the existing reader and exact source values.
+  const recent = viewReader.view({accountId:view.scope.accountId, month:view.scope.month, pageSize:4});
+  homeButtons.clear(); $('recent-activities').replaceChildren();
+  for (const row of recent.rows) {
+    const button = node('button', undefined, 'recent-activity'); button.type = 'button';
+    button.setAttribute('aria-label', `Inspect ${row.sourceDescription} on ${row.reportingDate || 'unknown date'}`);
+    const copy = node('span', undefined, 'recent-copy');
+    copy.append(node('strong', row.sourceDescription), node('small', `${row.accountName} · ${row.reportingDate || 'Unknown date'}`));
+    const amount = node('span', undefined, 'recent-value');
+    amount.append(node('strong', money(row.amountText, row.currency)), node('small', row.needsReview ? 'Needs review' : label(row.activityKind)));
+    button.append(copy, amount); button.addEventListener('click', () => { if (!busy) showDetail(row.activityId); });
+    homeButtons.set(row.activityId, button); $('recent-activities').append(button);
+  }
+  if (!recent.rows.length) $('recent-activities').append(node('p', 'No activity in this account and period.', 'quiet-placeholder'));
+  const reviewCount = view.review.activityCount + view.review.sourceCount;
+  $('attention-count').textContent = String(reviewCount);
   $('transaction-count').textContent = String(view.totalCount);
   $('filter-count').textContent = `${view.filteredCount} matching activities of ${view.totalCount} in this account and period. Search and review filters do not change totals.`;
   reviewButtons.clear();
   $('transaction-rows').replaceChildren();
   for (const row of view.rows) {
-    const tr = node('tr'), description = node('td'); tr.setAttribute('role', 'row');
-    description.append(node('strong', row.sourceDescription), node('small', row.accountName, 'transaction-detail'));
+    const tr = node('tr', undefined, 'transaction-record'), description = node('td'); tr.setAttribute('role', 'row');
+    tr.setAttribute('data-kind', row.activityKind);
+    tr.setAttribute('data-review', String(row.needsReview));
+    const metadata = node('small', row.accountName, 'transaction-detail');
+    const inlineDate = node('span', ` · ${row.reportingDate || 'Unknown date'}`, 'list-date');
+    inlineDate.setAttribute('aria-hidden', 'true'); metadata.append(inlineDate);
+    description.append(node('strong', row.sourceDescription), metadata);
     const classification = node('td');
     classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', row.categoryId || 'No category', 'transaction-detail'));
     if (row.needsReview) classification.append(node('small', 'Needs review: ' + row.reviewReasons.map(reviewReason).join(', '), 'transaction-detail'));
-    const inspect = node('button', 'Review', 'text-button'); inspect.type = 'button'; inspect.setAttribute('aria-label', `Review ${row.sourceDescription} on ${row.reportingDate || 'unknown date'}`);
+    const inspect = node('button', 'Inspect →', 'text-button transaction-open'); inspect.type = 'button'; inspect.setAttribute('aria-label', `Review ${row.sourceDescription} on ${row.reportingDate || 'unknown date'}`);
     reviewButtons.set(row.activityId, inspect);
     inspect.setAttribute('aria-controls', 'activity-detail');
     inspect.addEventListener('click', () => { if (!busy) showDetail(row.activityId); });
+    tr.addEventListener('click', event => {
+      // Keep descriptions selectable. The explicit button is also the keyboard
+      // action; a bubbled button click must not open the detail twice.
+      if (event.target === inspect || event.target?.closest?.('button')) return;
+      if (!busy && !window.getSelection?.()?.toString()) showDetail(row.activityId);
+    });
     const actionCell = node('td'); actionCell.append(inspect);
     tr.append(node('td', row.reportingDate || 'Unknown date'), description, classification, node('td', money(row.amountText, row.currency)), actionCell);
     for (const cell of tr.children) cell.setAttribute('role', 'cell');
@@ -259,7 +289,7 @@ function render({ reset = false } = {}) {
   if (!view.filteredCount) $('empty-state').textContent = 'No activities match this selection. Change the account, month or search to see other records.';
   $('transaction-table-wrap').hidden = !view.filteredCount;
   $('page-status').textContent = `Page ${view.page + 1} of ${view.pages}`;
-  $('overview-review-title').textContent = `${view.review.activityCount + view.review.sourceCount} records need a second look`;
+  $('overview-review-title').textContent = reviewCount ? `${reviewCount} records need a second look` : 'No unresolved records in this account and period. Coverage still needs separate reconciliation.';
   $('review-summary').textContent = `${view.review.activityCount} activities need review in this account and period. ${view.review.sourceCount} source observations await a decision. Unknown investment activity remains excluded from known totals.`;
   reviewQueueButton = null;
   $('review-queue').replaceChildren();
@@ -280,7 +310,16 @@ function render({ reset = false } = {}) {
     $('review-queue').append(item);
   }
   if (view.review.sourceCount) $('review-queue').append(node('p', 'Source matching, rejection and reversal are available in the advanced import workbench. Save and release this session before opening that tool.'));
+  if (!reviewCount) {
+    const empty = node('article', undefined, 'review-empty');
+    const link = node('a', 'Check account-month coverage →', 'inline-action'); link.href = '#reconciliation';
+    empty.append(node('h3', 'No decisions waiting'), node('p', 'No unresolved records in this account and period. Check reconciliation to assess missing history.'), link);
+    $('review-queue').append(empty);
+  }
   renderPosition();
+  const accountTitle = view.scope.accountId ? view.accounts.find(account => account.accountId === view.scope.accountId)?.displayName : 'All accounts';
+  $('scope-period-title').textContent = `${accountTitle} · ${view.scope.month ? monthLabel(view.scope.month) : 'Full saved period'}`;
+  $('scope-position-title').textContent = `${accountTitle} · As of ${$('position-date').value}`;
   refresh();
 }
 function addEditorRow(kind) {
@@ -378,7 +417,7 @@ function renderPosition() {
   $('position-accounts').replaceChildren(); $('holdings-accounts').replaceChildren(); positionButtons.length = 0;
   for (const account of position.accounts) {
     const card = node('article', undefined, 'review-item');
-    card.append(node('h3', account.displayName), node('p', `${label(account.role)} · ${money(account.balance, account.currency)} · ${label(account.status)}`), node('p', `Balance date: ${account.balanceDate || 'unavailable'} · Basis: ${account.basis || 'unavailable'} · Source: ${account.source?.reference || 'unavailable'}`), node('p', `${account.stale ? 'Stale evidence. ' : ''}${account.reasons.map(label).join('; ')}`));
+    card.append(node('h3', account.displayName), node('p', money(account.balance, account.currency), 'account-balance'), node('p', `${label(account.role)} · ${label(account.accountType)} · ${label(account.status)}`, 'account-meta'), node('p', `Balance date: ${account.balanceDate || 'unavailable'} · Basis: ${account.basis || 'unavailable'}`), node('p', `${account.stale ? 'Stale evidence. ' : ''}${account.reasons.map(label).join('; ')}`));
     card.append(evidenceDetails('Inspect balance evidence and selection history', () => (session.ledger.positionEvents || []).filter(event => event.accountId === account.accountId)));
     if (account.status === 'conflict') {
       card.append(node('p', 'Conflicting balances are excluded. Inspect all candidates and record why one is supported.'));
@@ -536,15 +575,17 @@ function correctionFields() {
   $('posting-date').required = postingDate;
   refresh();
 }
-action('preview-position', 'Preparing invented balances and reconciliation evidence locally.', async () => {
+async function previewPosition(destination) {
   if (!confirmReplace()) return;
   const navigationRevision = pages.revision;
   const fixture = await createSyntheticFinancialPosition();
   session.preview(fixture.ledger); $('position-date').value = fixture.asOf; render({reset:true});
   $('month-filter').value = fixture.month; render();
-  if (pages.revision === navigationRevision) pages.go('position');
-  announce('Invented financial-position preview ready. No Drive connection or write.', 'success');
-});
+  if (pages.revision === navigationRevision) pages.go(destination);
+  announce(destination === 'overview' ? 'Synthetic preview ready. No Google connection or save.' : 'Invented financial-position preview ready. No Drive connection or write.', 'success');
+}
+action('preview-position', 'Preparing invented balances and reconciliation evidence locally.', () => previewPosition('position'));
+action('start-preview', 'Preparing your invented workspace locally.', () => previewPosition('overview'));
 action('stage-balance', 'Validating dated balance evidence locally.', async () => {
   const basis = $('balance-basis').value;
   session.recordPosition({type:'balance-snapshot', accountId:$('balance-account').value, effectiveDate:$('balance-date').value, amountText:$('balance-amount').value.trim(), basis, source:{kind:basis === 'statement' ? 'statement' : 'manual', reference:$('balance-source').value.trim()}});
@@ -675,12 +716,12 @@ action('stage-correction', 'Checking your correction locally.', async () => {
   render(); showDetail(selectedActivity);
   announce(session.mode === 'preview' ? 'Correction added to this local preview only. Source evidence is unchanged.' : 'Correction staged locally. Source evidence is unchanged. Choose Save changes to persist it.', 'success');
 });
-$('start-preview').addEventListener('click', () => { if (!$('start-preview').disabled) return $('preview-position').click(); });
 $('correction-form').addEventListener('submit', event => event.preventDefault());
 $('close-detail').addEventListener('click', () => {
   if (busy) return;
   pages.closeDetail();
   if (pages.current === 'transactions') (reviewButtons.get(selectedActivity) || $('transaction-search')).focus();
+  else if (pages.current === 'overview') (homeButtons.get(selectedActivity) || $('page-title')).focus();
   else $('page-title').focus();
   selectedActivity = null; refresh();
 });

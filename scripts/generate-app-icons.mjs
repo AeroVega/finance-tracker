@@ -6,6 +6,6 @@ const require = createRequire(import.meta.url);
 const sharp = require('sharp');
 const source = new URL('../assets/icons/finance-tracker.svg', import.meta.url);
 for (const [size, name] of [[180, 'apple-touch-icon'], [192, 'icon-192'], [512, 'icon-512']]) {
-  await sharp(source.pathname).resize(size, size).flatten({background:'#09090b'})
+  await sharp(source.pathname).resize(size, size).flatten({background:'#0b1116'})
     .removeAlpha().png().toFile(new URL(`../assets/icons/${name}.png`, import.meta.url).pathname);
 }

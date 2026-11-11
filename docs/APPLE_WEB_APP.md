@@ -2,8 +2,9 @@
 
 The main workspace follows the relevant recipes in Joe Bell's
 [apple-web-app skill](https://github.com/joe-bell/skills/tree/main/skills/apple-web-app).
-The charcoal/cyan design, document scroll root, mounted editors and explicit-save
-workflow stay in place.
+The [mobile and tablet redesign](MOBILE_UI_DESIGN.md) builds on this foundation
+with graphite/mint styling. The document scroll root, mounted editors and
+explicit-save workflow stay in place.
 
 ## Implementation
 
@@ -49,7 +50,11 @@ overrides `/usr/bin/chromium`. `FINANCE_UI_SCREENSHOTS` optionally names an
 existing output directory. The check blocks external HTTPS and uses only the
 local invented preview. It never connects to Google or writes financial storage.
 
-## Evidence, November 11, 2026
+## Foundation evidence at 2198a61, November 11, 2026
+
+These results describe the initial foundation before the redesign. See
+[project status](PROJECT_STATUS.md) for current validation. Current generated
+icons use the redesigned page background, `#0b1116`.
 
 **Verified, Node 24.22.1:** the complete extended suite passed 1,999/1,999 tests,
 with no failures, skips or cancellations, in 335.845 seconds. Syntax checks,

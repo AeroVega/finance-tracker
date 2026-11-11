@@ -72,8 +72,8 @@ function assertPage(f, page, group = page) {
 }
 
 for (const [page, group, title, mode] of [
-  ['overview','overview','Overview','period'], ['transactions','transactions','Activity','period'],
-  ['position','position','Financial position','date'], ['holdings','position','Holdings','date'],
+  ['overview','overview','Home','period'], ['transactions','transactions','Activity','period'],
+  ['position','position','Accounts','date'], ['holdings','position','Holdings','date'],
   ['review','review','Review','period'], ['reconciliation','review','Reconciliation','period'],
   ['storage','storage','Storage',null]
 ]) {
@@ -173,7 +173,7 @@ test('navigation preserves mounted editor identity, unsaved values, and conditio
 });
 
 test('detail opens in the activity group, resumes across pages, and closes to its origin', () => {
-  for (const origin of ['transactions', 'review']) {
+  for (const origin of ['overview', 'transactions', 'review']) {
     const f = fixture('#' + origin);
     f.router.openDetail();
     assertPage(f, 'activity-detail', 'transactions');

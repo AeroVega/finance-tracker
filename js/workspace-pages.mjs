@@ -1,9 +1,9 @@
 /* Page navigation keeps the ledger and every editor mounted. It never reads or
    writes financial storage. Hashes contain page names only, never record IDs. */
 const pages = {
-  overview: {title:'Overview', description:'Your known cash flow, with the evidence in reach.', group:'overview', period:true},
+  overview: {title:'Home', description:'Your known cash flow, with the evidence in reach.', group:'overview', period:true},
   transactions: {title:'Activity', description:'Follow a transaction from its source to its correction history.', group:'transactions', period:true},
-  position: {title:'Financial position', description:'Dated balances. Clear evidence. Missing values stay unknown.', group:'position', date:true},
+  position: {title:'Accounts', description:'Dated balances. Clear evidence. Missing values stay unknown.', group:'position', date:true},
   holdings: {title:'Holdings', description:'What your investment statements actually support.', group:'position', date:true},
   review: {title:'Review', description:'Give uncertain records a deliberate second look.', group:'review', period:true},
   reconciliation: {title:'Reconciliation', description:'Check a month against its opening and closing evidence.', group:'review', period:true},
@@ -48,6 +48,8 @@ export function createWorkspacePages({document, window}) {
     syncScope();
     $('month-scope').hidden = !info.period;
     $('position-date-scope').hidden = !info.date;
+    $('scope-period-title').hidden = Boolean(info.date);
+    $('scope-position-title').hidden = !info.date;
     $('scope-help').textContent = info.date
       ? 'Account and date apply to balances and holdings. The activity period is separate.'
       : 'Account and period apply across Overview, Activity and Review. Search changes activity rows only.';
@@ -70,7 +72,7 @@ export function createWorkspacePages({document, window}) {
     get revision() { return revision; },
     openDetail({navigate = true} = {}) {
       detailAvailable = true; $('resume-detail').hidden = false;
-      if (navigate) { if (current !== 'activity-detail') detailReturn = current === 'review' ? 'review' : 'transactions'; go('activity-detail'); }
+      if (navigate) { if (current !== 'activity-detail') detailReturn = ['overview', 'review'].includes(current) ? current : 'transactions'; go('activity-detail'); }
     },
     closeDetail() { detailAvailable = false; $('resume-detail').hidden = true; go(detailReturn, {replace:true}); },
     clearDetail() {

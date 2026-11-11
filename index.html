@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#09090b">
+  <meta name="theme-color" content="#0b1116">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Finance Tracker">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,18 +24,17 @@
   <a class="skip-link" href="#main-content">Skip to page content</a>
   <div class="workspace">
     <aside class="sidebar" aria-label="Workspace navigation">
-      <a class="brand" href="#overview">
+      <a class="brand" href="#overview" aria-label="Finance Tracker home">
         <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17.5 9 12l3.2 3.2L20 6.5M14.5 6.5H20v5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span>FINANCE TRACKER<small>SYNTHETIC WORKSPACE</small></span>
+        <span>Finance Tracker<small>SYNTHETIC WORKSPACE</small></span>
       </a>
-      <a class="mode-pill" id="data-mode" href="#storage">Synthetic workspace</a>
       <p class="nav-label">Workspace</p>
       <nav class="primary-nav" aria-label="Primary navigation">
-        <a id="nav-overview" href="#overview"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.5"/></svg>Overview</a>
-        <a id="nav-transactions" href="#transactions"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg>Activity</a>
-        <a id="nav-position" href="#position"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16M6 17V9h4v8m4 0V4h4v13"/></svg>Position</a>
-        <a id="nav-review" href="#review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 12 3.2 3.2L17 8.5"/><rect x="3.5" y="3.5" width="17" height="17" rx="5"/></svg>Review</a>
-        <a id="nav-storage" href="#storage"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5v9c0 2.2 16 2.2 16 0v-9M4 12c0 2.2 16 2.2 16 0"/><ellipse cx="12" cy="7.5" rx="8" ry="3"/></svg>Storage</a>
+        <a id="nav-overview" href="#overview"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.5"/></svg><span class="nav-title">Home</span></a>
+        <a id="nav-transactions" href="#transactions"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg><span class="nav-title">Activity</span></a>
+        <a id="nav-position" href="#position"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16M6 17V9h4v8m4 0V4h4v13"/></svg><span class="nav-title">Accounts</span></a>
+        <a id="nav-review" href="#review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 12 3.2 3.2L17 8.5"/><rect x="3.5" y="3.5" width="17" height="17" rx="5"/></svg><span class="nav-title">Review</span></a>
+        <a id="nav-storage" href="#storage"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5v9c0 2.2 16 2.2 16 0v-9M4 12c0 2.2 16 2.2 16 0"/><ellipse cx="12" cy="7.5" rx="8" ry="3"/></svg><span class="nav-title">Storage</span></a>
       </nav>
       <div class="sidebar-tools">
         <p class="nav-label">Development</p>
@@ -48,18 +47,19 @@
 
     <main class="app-shell" id="main-content" tabindex="-1">
       <header class="topbar">
-        <div><p class="eyebrow" id="page-eyebrow">YOUR WORKSPACE</p><h1 id="page-title" tabindex="-1">Overview</h1><p class="intro" id="page-description">Your known cash flow, with the evidence in reach.</p></div>
+        <div><p class="eyebrow" id="page-eyebrow">YOUR WORKSPACE</p><h1 id="page-title" tabindex="-1">Home</h1><p class="intro" id="page-description">Your known cash flow, with the evidence in reach.</p></div>
+        <a class="mode-pill" id="data-mode" href="#storage">Synthetic workspace</a>
       </header>
 
 
       <p id="action-status" class="status-message action-status" role="status" aria-live="polite" aria-atomic="true">Choose a saved synthetic year or try the local preview.</p>
 
-        <div class="scope-controls" id="workspace-scope" aria-describedby="scope-help">
+        <details class="scope-panel" id="workspace-scope"><summary><span id="scope-period-title">All accounts · Full saved period</span><span id="scope-position-title" hidden>All accounts · Dated balances</span><span class="scope-edit">Filters <span aria-hidden="true">⌄</span></span></summary><div class="scope-controls" aria-describedby="scope-help">
           <label for="account-filter">Account<select id="account-filter" disabled><option value="all">All accounts</option></select></label>
           <label id="month-scope" for="month-filter">Period<select id="month-filter" disabled><option value="all">Full year</option></select></label>
           <label id="position-date-scope" hidden for="position-date">Position as of<input id="position-date" type="date" disabled></label>
           <p id="scope-help">Account and period apply across Overview, Activity and Review. Search changes activity rows only.</p>
-        </div>
+        </div></details>
 
       <p id="no-ledger-notice" class="quiet-placeholder" hidden>No ledger is open. <a href="#storage">Open a saved year or explore a local preview</a>.</p>
 
@@ -67,9 +67,9 @@
       <nav id="review-navigation" class="page-switcher" aria-label="Review pages" hidden><a id="sub-review" href="#review">Decisions</a><a id="sub-reconciliation" href="#reconciliation">Reconciliation</a></nav>
 
       <section id="overview" class="summary-section workspace-page" aria-labelledby="page-title">
-        <div id="welcome-panel" class="welcome-panel"><p class="eyebrow">A SAFE PLACE TO EXPLORE</p><h2>Your finances, one question at a time.</h2><p>Start with invented balances and transactions. Nothing connects to Google or saves automatically.</p><div class="welcome-actions"><button id="start-preview" type="button" class="primary-button">Explore a synthetic preview <span aria-hidden="true">→</span></button><a href="#storage" class="secondary-button">Open a saved year</a></div></div>
+        <div id="welcome-panel" class="welcome-panel"><p class="eyebrow">WELCOME TO YOUR WORKSPACE</p><h2>See your money.<br>Know what needs attention.</h2><p>Cash flow, account balances and a place to review the details. Try it with invented data before opening a saved year.</p><div class="welcome-features"><span>Income &amp; spending</span><span>Dated balances</span><span>Source-backed review</span></div><div class="welcome-actions"><button id="start-preview" type="button" class="primary-button">Explore a synthetic preview <span aria-hidden="true">→</span></button><a href="#storage" class="secondary-button">Open a saved year</a></div></div>
         <div id="overview-loaded" hidden>
-        <div class="section-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="summary-heading">Known income &amp; spending</h2></div><p id="summary-scope">No ledger loaded</p></div>
+        <div class="section-heading"><div><p class="eyebrow">YOUR SELECTED PERIOD</p><h2 id="summary-heading">Cash flow at a glance</h2></div><p id="summary-scope">No ledger loaded</p></div>
 
         <div id="summary-cards" class="metric-grid">
           <article class="metric-card"><p class="metric-label">Known income <span class="metric-symbol positive" aria-hidden="true">+</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
@@ -77,11 +77,20 @@
           <article class="metric-card metric-card-emphasis"><p class="metric-label">Known cash movement <span class="metric-symbol" aria-hidden="true">⇄</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only. Not a balance.</p></article>
         </div>
         <div class="summary-context"><div><p>Known subtotals only. Transfers and card payments do not count as income or spending.</p><details class="summary-explainer"><summary>How these totals are calculated</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p></details></div><p id="coverage-summary">Coverage has not been loaded. Missing data is unavailable, not zero.</p></div>
-        <nav class="overview-destinations" aria-label="Explore this ledger">
-          <a href="#transactions"><span class="destination-icon" aria-hidden="true">↔</span><span><strong>Follow the activity</strong><small>Search records and inspect their sources</small></span><span aria-hidden="true">→</span></a>
-          <a href="#position"><span class="destination-icon" aria-hidden="true">◎</span><span><strong>Understand your position</strong><small>Dated balances, liabilities and holdings</small></span><span aria-hidden="true">→</span></a>
-          <a href="#review"><span class="destination-icon" aria-hidden="true">✓</span><span><strong id="overview-review-title">Check what needs attention</strong><small>Decisions and account-month reconciliation</small></span><span aria-hidden="true">→</span></a>
-        </nav></div>
+        <div class="home-grid">
+          <section class="home-card recent-card" aria-labelledby="recent-heading">
+            <div class="card-heading"><div><p class="eyebrow">IN YOUR SELECTED PERIOD</p><h2 id="recent-heading">Recent activity</h2></div><a href="#transactions" class="inline-action">View all <span aria-hidden="true">→</span></a></div>
+            <p class="card-hint">Latest source records, including items excluded from totals.</p>
+            <div id="recent-activities" class="recent-activities"></div>
+          </section>
+          <section class="home-card attention-card" aria-labelledby="attention-heading">
+            <p class="eyebrow">NEXT UP</p><h2 id="attention-heading">Review status</h2>
+            <p id="attention-count" class="attention-count">Unavailable</p>
+            <p id="overview-review-title">Open a ledger to see what needs review.</p>
+            <a href="#review" class="secondary-button">Open review <span aria-hidden="true">→</span></a>
+            <a href="#position" class="account-shortcut"><span class="destination-icon" aria-hidden="true">◎</span><span><strong>Accounts &amp; balances</strong><small>See what your dated evidence supports</small></span><span aria-hidden="true">→</span></a>
+          </section>
+        </div></div>
       </section>
 
       <section class="panel position-panel workspace-page" id="position" hidden aria-labelledby="position-heading">
@@ -89,6 +98,10 @@
         <p id="position-scope">Choose a ledger. The position date is independent of the activity month.</p>
         <p id="position-warning" role="status" aria-live="polite">Missing balances are unavailable, not zero.</p>
         <div id="position-totals" class="metric-grid"></div>
+        <div class="section-heading account-section-heading"><h2>Your accounts</h2><a href="#holdings" class="inline-action">Holdings <span aria-hidden="true">→</span></a></div>
+        <div id="position-accounts" class="position-accounts"></div>
+        <details class="manage-accounts"><summary>Add or update account evidence</summary>
+        <p class="panel-copy">Make a deliberate change. Entries stay in your draft until you save.</p>
         <details><summary>Add a synthetic account</summary>
           <form id="account-form" class="position-form">
             <p>Invented account names only. Do not enter account numbers or real financial information. This stages an account without connecting to an institution.</p>
@@ -122,7 +135,7 @@
           </form>
         </details>
 
-        <div id="position-accounts" class="position-accounts"></div>
+        </details>
       </section>
 
       <section class="panel position-panel workspace-page" id="holdings" aria-labelledby="holdings-heading" hidden>
@@ -171,9 +184,9 @@
       </section>
 
       <section class="panel transactions-panel workspace-page" id="transactions" hidden aria-labelledby="transactions-heading">
-        <div class="panel-heading"><div><p class="eyebrow">THE RECORDS BEHIND THE TOTALS</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><span class="tag">Canonical ledger</span></div>
+        <div class="panel-heading"><div><p class="eyebrow">YOUR TRANSACTION HISTORY</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><span class="tag">Canonical ledger</span></div>
         <a id="resume-detail" class="resume-detail" href="#activity-detail" hidden>Continue inspecting your selected transaction <span aria-hidden="true">→</span></a>
-        <div class="transaction-filters"><label class="search-field" for="transaction-search">Find a transaction<input id="transaction-search" type="search" placeholder="Search descriptions, dates or accounts" autocomplete="off" aria-describedby="search-help" disabled></label><label class="checkbox-field" for="review-only"><input id="review-only" type="checkbox" disabled><span>Needs review only</span></label></div>
+        <div class="transaction-filters"><label class="search-field" for="transaction-search">Find a transaction<input id="transaction-search" type="search" placeholder="Search activity" autocomplete="off" aria-describedby="search-help" disabled></label><label class="checkbox-field" for="review-only"><input id="review-only" type="checkbox" disabled><span>Needs review</span></label></div>
         <div class="filter-meta"><p id="search-help">Search and review filters change rows only. Overview totals keep the selected account and period.</p><p id="filter-count" role="status" aria-live="polite" aria-atomic="true">No transactions loaded.</p></div>
         <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 3.5h8A2.5 2.5 0 0 1 18.5 6v14l-3.3-2-3.2 2-3.2-2-3.3 2V6A2.5 2.5 0 0 1 8 3.5ZM9 8h6m-6 4h6"/></svg></div><h3>Your year, transaction by transaction</h3><p>Open a saved ledger or try the local preview. Select any transaction to inspect its source and correction history.</p><a href="#storage">Choose a ledger <span aria-hidden="true">↑</span></a></div>
         <div class="table-wrap" id="transaction-table-wrap" tabindex="0" aria-label="Transactions in the selected scope" hidden><p class="table-scroll-hint">Scroll sideways for exact amounts and review controls <span aria-hidden="true">↔</span></p><table role="table"><caption class="visually-hidden">Canonical transactions in the selected account and period. Amounts preserve their exact decimal values. Search filters rows only.</caption><thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Description / account</th><th role="columnheader" scope="col">Classification / category</th><th role="columnheader" scope="col" class="amount-heading">Exact amount</th><th role="columnheader" scope="col"><span class="visually-hidden">Review transaction</span></th></tr></thead><tbody role="rowgroup" id="transaction-rows"></tbody></table></div>
@@ -181,12 +194,12 @@
       </section>
 
       <section id="activity-detail" class="panel activity-detail workspace-page" aria-labelledby="detail-title" hidden>
-        <div class="panel-heading"><div><p class="eyebrow">TRANSACTION DETAIL</p><h2 id="detail-title" tabindex="-1">Inspect transaction</h2></div><button id="close-detail" class="text-button" type="button">Close detail <span aria-hidden="true">×</span></button></div>
+        <div class="panel-heading"><div><p class="eyebrow">TRANSACTION DETAIL</p><h2 id="detail-title" tabindex="-1">Inspect transaction</h2></div><button id="close-detail" class="text-button" type="button"><span aria-hidden="true">←</span> Back</button></div>
         <div class="detail-overview"><p id="detail-description"></p><p id="detail-amount" class="detail-amount"></p></div>
         <div class="detail-grid">
-          <div class="detail-evidence"><section aria-labelledby="source-heading"><h3 id="source-heading">Original source</h3><div id="detail-source" class="detail-source"></div></section><section aria-labelledby="history-heading"><h3 id="history-heading">Correction history</h3><div id="detail-history" class="detail-history"></div></section><section id="transfer-link-panel" aria-labelledby="transfer-link-heading" hidden><h3 id="transfer-link-heading">Transfer path</h3><p id="transfer-link-status" class="field-help">Link the outgoing and incoming sides of the same transfer.</p><label for="transfer-counterparty">Matching incoming activity<select id="transfer-counterparty"></select></label><label for="transfer-link-rationale">Why are these the same transfer?<input id="transfer-link-rationale" type="text" maxlength="300" placeholder="e.g. Matching bank transfer reference"></label><button id="link-transfer" class="secondary-button" type="button" disabled>Link transfer activities</button></section></div>
+
           <form id="correction-form" class="correction-form" aria-labelledby="correction-heading" aria-describedby="correction-help">
-            <div><p class="eyebrow">MAKE A DELIBERATE CHANGE</p><h3 id="correction-heading">Correct this transaction</h3><p id="correction-help">Corrections preserve the original source. Stage a change here, then save when you are ready.</p></div>
+            <div><p class="eyebrow">MAKE A DELIBERATE CHANGE</p><h3 id="correction-heading">Correct this transaction</h3><p id="correction-help">Keep the source. Explain the change. Stage it here, then save your draft when ready.</p></div>
             <label for="correction-type">What needs changing?<select id="correction-type"><option value="classification">Classification</option><option value="category-correction">Category</option><option value="bank-correction">Amount</option><option value="posting-status-correction">Posting status</option></select></label>
             <label id="classification-field" for="classification">Classification<select id="classification"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="unclassified">Unclassified</option></select><span class="field-help">Card payments are transfers. Refund linking stays in the advanced workbench.</span></label>
             <label id="category-field" for="category" hidden>Category<input id="category" type="text" autocomplete="off" placeholder="e.g. groceries" maxlength="200"><span class="field-help">Also remembers this category for later matching imports in the same account and currency. Linked refunds follow the purchase category unless separately categorized.</span></label>
@@ -197,6 +210,7 @@
             <button id="stage-correction" class="primary-button" type="button" disabled>Stage correction <span aria-hidden="true">→</span></button>
             <p class="field-help correction-note">Staging does not save to Drive. Local-preview changes stay in this tab.</p>
           </form>
+          <div class="detail-evidence"><section aria-labelledby="source-heading"><h3 id="source-heading">Original source</h3><div id="detail-source" class="detail-source"></div></section><section aria-labelledby="history-heading"><h3 id="history-heading">Correction history</h3><div id="detail-history" class="detail-history"></div></section><section id="transfer-link-panel" aria-labelledby="transfer-link-heading" hidden><h3 id="transfer-link-heading">Transfer path</h3><p id="transfer-link-status" class="field-help">Link the outgoing and incoming sides of the same transfer.</p><label for="transfer-counterparty">Matching incoming activity<select id="transfer-counterparty"></select></label><label for="transfer-link-rationale">Why are these the same transfer?<input id="transfer-link-rationale" type="text" maxlength="300" placeholder="e.g. Matching bank transfer reference"></label><button id="link-transfer" class="secondary-button" type="button" disabled>Link transfer activities</button></section></div>
         </div>
       </section>
 
