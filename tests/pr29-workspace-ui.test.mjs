@@ -142,10 +142,11 @@ test('shared static theme covers every retained tool and guarded navigation targ
     assert.match(html, name === 'local-preview.html' ? /primary-nav/ : /tool-navigation/, name);
   }
   const hub = readFileSync(new URL('../prototype/index.html', import.meta.url), 'utf8');
-  assert.match(hub, /pr25-acceptance.html\?guide=pr28/);
+  assert.match(hub, /pr25-acceptance.html\?guide=v4/);
   assert.match(hub, /acceptance.html/);
   assert.match(hub, /<details/);
   const acceptance = readFileSync(new URL('../prototype/pr25-acceptance.html', import.meta.url), 'utf8');
+  assert.match(acceptance, /href="pr25-acceptance.html\?guide=pr28">legacy copy guide<\/a>/);
   const acceptanceNavigation = acceptance.match(/<nav class="tool-navigation"[\s\S]*?<\/nav>/)[0];
   assert.match(acceptanceNavigation, /id="prototype-tools"/, 'keep the copy guide navigation guard hook');
   assert.doesNotMatch(acceptanceNavigation, /href="\.\.\/index.html"/, 'do not add an unguarded exit beside the copy guide');

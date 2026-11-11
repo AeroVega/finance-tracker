@@ -1,5 +1,9 @@
 # Segmented locator catalogs
 
+The segmented version-2 path below remains distinct from the
+[catalog-3 application companion](#catalog-3-application-companion). Neither
+version number changes the canonical ledger schema version.
+
 ## Scope and compatibility
 
 **User-confirmed, November 11, 2026:** stop rewriting retained catalogs on every
@@ -139,3 +143,49 @@ ancestry checks. It does not cap catalog/commit/journal memory or the applicatio
 validator's largest complete snapshot. Portable JSON/base64 export still needs a
 separate streamed format. These limits remain work, not a claimed scalable
 production database.
+
+
+## Catalog-3 application companion
+
+**Verified in synthetic application/HTTP tests:**
+`js/paged-physical-locators.mjs` implements the copy-specific catalog-3 tree used
+by the protocol-4 canonical application path. It does not replace the segmented
+catalog-2 reader described above. The catalog root uses
+`finance-tracker-locator-catalog` version 3; its bounded pages use
+`finance-tracker-physical-locator-page` version 1.
+
+Three ordered indexes bind typed content hashes to exact physical descriptors,
+typed identities to content keys, and physical file IDs to content keys. Full
+verification checks all three indexes, cardinality, ordering, uniqueness, page
+summaries, parent/child consistency and every retained body's exact metadata and
+hash. A targeted lookup alone is not a full-catalog or semantic verification.
+Root and page bytes bind database/copy identity. Fresh metadata must also bind
+the selected folder, exact file ID, expected kind and transaction, explicit
+non-trash state, size and version. Changed versions require fresh validation;
+invalid metadata or bytes are refused rather than accepted from stale evidence.
+
+Bulk construction and merged updates write new immutable bounded pages, never
+overwrite existing bodies or change an existing binding. Roots are bounded to
+16 KiB and pages/bodies to 64 KiB; page entry/child budgets remain explicit.
+There is no aggregate object-count or database-size ceiling. Full verification
+and application materialization still scale with retained history.
+
+Catalog pointers are copy-local. A fresh-copy or archive restore must preserve
+portable logical bytes while rebuilding destination file bindings and a new
+copy-specific catalog; copying source file IDs is not a restore. Source physical
+evidence is retained and verified through the separate provenance path. Old
+readers must refuse unsupported versions rather than reinterpret catalog-3
+bytes as a legacy map or segmented root. No silent migration or old-generation
+pointer rollback is implied by this companion section.
+
+
+The locator-only decoded-node experiment has a separate private 128-entry,
+2-MiB **serialized-node-byte** budget, not a measured heap-memory bound. Every
+required read still obtains bounded bytes, checks their hash and fresh physical
+binding, and checks the current parent summary. Reuse covers only canonical
+JSON decoding and strict root/page shape validation for the exact schema,
+copy/index and configured limits. Returned nodes are owned copies. Errors,
+session invalidation and late asynchronous completion cannot retain decoding
+results. Eviction falls back to normal decoding; standalone readers use the
+ordinary validator. This does not cache canonical financial objects or semantic
+validity, and performance benefit remains subject to measurement.

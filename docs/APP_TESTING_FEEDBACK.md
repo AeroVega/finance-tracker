@@ -1,5 +1,10 @@
 # App testing feedback follow-up
 
+This records the published v3 follow-up at `5632725`. The later
+[v4 app integration](PARTITIONED_CANONICAL_STORAGE.md) supersedes its format
+labels and new-copy default, not its posting-status behavior or measured result.
+See [project status](PROJECT_STATUS.md) for current validation.
+
 ## Scope
 
 **User-confirmed:** the owner deployed PR37 at

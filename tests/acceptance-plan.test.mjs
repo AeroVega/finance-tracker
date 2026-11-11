@@ -49,7 +49,7 @@ test('phase order has valid earlier prerequisites and no automatic pass', () => 
 });
 test('all tool links resolve to existing local files', async () => {
   for (const phase of PHASES) {
-    assert.match(phase.href, /^[a-z0-9-]+\.html(?:\?guide=pr28)?$/);
+    assert.match(phase.href, /^[a-z0-9-]+\.html(?:\?guide=(?:pr28|v4))?$/);
     await access(new URL(`../prototype/${phase.href.split('?')[0]}`, import.meta.url));
   }
 });
@@ -63,7 +63,7 @@ test('center has no Drive imports, external scripts, embedded engines or free-te
   assert.match(html, /limited app access cannot prove it/);
   const plan = JSON.stringify(PHASES);
   for (const phrase of ['new empty', 'never take over a live session', 'not a large-device capacity claim', 'saved file', 'separate physical copy locators', 'Do not press Upload', 'Production remains NO-GO']) assert.ok((plan + html).includes(phrase), phrase);
-  assert.equal(PLAN_VERSION, 'owner-acceptance-v1');
+  assert.equal(PLAN_VERSION, 'owner-acceptance-v2-paged4');
 });
 
 test('blocked independent checks do not erase other observations; source-dependent checks reset', () => {
@@ -71,7 +71,7 @@ test('blocked independent checks do not erase other observations; source-depende
   const cancelled = recordObservation(state, 'oauth', 'blocked');
   assert.equal(cancelled.manual.oauth, 'blocked');
   for (const phase of PHASES.filter(p => p.id !== 'oauth')) assert.equal(cancelled.manual[phase.id], 'pass');
-  const changedSource = recordObservation(cancelled, 'year-v3', 'fail');
+  const changedSource = recordObservation(cancelled, 'year-v4', 'fail');
   assert.equal(changedSource.manual.copies, 'not-run');
   assert.equal(changedSource.manual.interruption, 'pass');
   assert.equal(changedSource.manual.handoff, 'pass');
@@ -98,9 +98,18 @@ test('calendar checks require a preview connection; idle offline testing never r
   assert.match(offline.steps.join(' '), /mark Blocked/);
 });
 
-test('new-format live copy acceptance uses the completed fragmented year', () => {
+test('new-format live copy acceptance uses the completed canonical v4 year', () => {
   const copies = PHASES.find(p => p.id === 'copies');
-  assert.deepEqual(copies.requires, ['year-v3']);
-  assert.match(copies.folder, /YEAR-V3/);
-  assert.match(copies.expected, /fragmented year/);
+  assert.deepEqual(copies.requires, ['year-v4']);
+  assert.match(copies.folder, /YEAR-V4/);
+  assert.match(copies.expected, /canonical v4 year/);
+});
+
+test('paged manual plan resets old passes and gives explicit migration controls',()=>{
+ const restored=restoreState({plan:'owner-acceptance-v1',source:sha,sourceConfirmed:true,browser:BROWSERS[1],manual:{copies:'pass','year-v3':'pass'}},sha);
+ assert.equal(restored.manual.copies,'not-run');assert.equal(restored.sourceConfirmed,false);
+ assert.ok(!PHASES.some(p=>['year-v2','year-v3'].includes(p.id)));
+ const migration=PHASES.find(p=>p.id==='migration');assert.equal(migration.href,'pr25-acceptance.html?guide=v4');
+ assert.match(migration.steps.join(' '),/explicitly choose Migrate/);
+ assert.match(PHASES.find(p=>p.id==='copies').steps.join(' '),/without reconnecting the source/);
 });

@@ -1,3 +1,6 @@
+import {PagedCanonicalLedgerStore} from './canonical-paged-storage.mjs';
+import {CANONICAL_COLLECTIONS} from './canonical-history.mjs';
+export {CANONICAL_COLLECTIONS} from './canonical-history.mjs';
 import {createCanonicalMonthIndex, isCanonicalMonthIndexFor, serializeCanonicalMonthIndex, readCanonicalMonthIndex} from './canonical-month-index.mjs';
 import { fragmentCanonicalObjects, reassembleCanonicalObjects, fragmentInventory, FRAGMENT_OBJECT_BYTES } from "./canonical-fragments.mjs";
 import { canonicalizeJcs } from "./transaction-protocol.mjs";
@@ -7,10 +10,7 @@ import { validateLedger } from "./canonical-import.mjs";
 // This is a payload adapter, not another storage or recovery implementation.
 export const CANONICAL_PREFIX = "synthetic/canonical-v1/";
 export const CANONICAL_INDEX = CANONICAL_PREFIX + "index.json";
-export const CANONICAL_COLLECTIONS = Object.freeze({
-  accounts: "accountId", imports: "importRunId", observations: "observationId",
-  activities: "activityId", events: "eventId", reviewDecisions: "reviewDecisionId", positionEvents: "eventId"
-});
+
 
 // Position history is optional so historical six-collection ledgers retain
 // their exact representation. If present it must be indexed, never metadata.
@@ -249,6 +249,7 @@ function validateSnapshotObjects(objects, fragmented) {
 
 export class CanonicalLedgerStore {
   constructor({ lifecycle, cryptoImpl = globalThis.crypto, layout = "fragments-v3" }) {
+    if (lifecycle?.pagedCanonical) return new PagedCanonicalLedgerStore({lifecycle,cryptoImpl});
     if (!lifecycle || typeof lifecycle.readManifest !== "function" ||
         typeof lifecycle.readObject !== "function" || typeof lifecycle.transact !== "function") {
       fail("invalid-config", "An existing verified synthetic storage lifecycle is required.");

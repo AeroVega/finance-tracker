@@ -77,9 +77,10 @@ export class GoogleDriveTransactionAdapter {
     this.fileIdRefill = null;
   }
 
-  async request(url, options = {}, { allowStatuses = [] } = {}) {
+  async request(url, options = {}, { allowStatuses = [], beforeMutation } = {}) {
     const token = await this.accessToken();
     if (!token) fail("authorization-required", "Google Drive authorization is unavailable.");
+    await beforeMutation?.();
     let response;
     try {
       response = await this.fetch(url, {
@@ -125,15 +126,14 @@ export class GoogleDriveTransactionAdapter {
     return this.generatedFileIds.shift();
   }
 
-  async listChildren() {
-    const all = [];
+  async *iterateChildren() {
     const seen = new Set();
     let pageToken = null;
     do {
       const query = new URLSearchParams({
         q: `'${this.folderId}' in parents and trashed = false`,
         pageSize: "1000",
-        fields: "nextPageToken,incompleteSearch,files(id,name,mimeType,parents,appProperties,version,trashed)"
+        fields: "nextPageToken,incompleteSearch,files(id,name,mimeType,parents,appProperties,size,version,trashed)"
       });
       if (pageToken) query.set("pageToken", pageToken);
       const response = await this.request(`${API}/files?${query}`);
@@ -142,13 +142,14 @@ export class GoogleDriveTransactionAdapter {
           (page.nextPageToken != null && typeof page.nextPageToken !== "string")) {
         fail("incomplete-folder-enumeration", "Drive did not confirm complete folder enumeration.");
       }
-      all.push(...page.files);
+      for (const file of page.files) yield file;
       pageToken = page.nextPageToken || null;
       if (pageToken && seen.has(pageToken)) fail("pagination-loop", "Drive repeated a folder pagination token.");
       if (pageToken) seen.add(pageToken);
     } while (pageToken);
-    return all;
   }
+
+  async listChildren() { const all=[]; for await (const file of this.iterateChildren()) all.push(file); return all; }
 
   /** Fresh complete enumeration; never retain or reuse this metadata snapshot. */
   async readMetadataSnapshot() {
@@ -186,19 +187,19 @@ export class GoogleDriveTransactionAdapter {
     return metadata;
   }
 
-  async readMetadata(fileId) {
+  async readMetadata(fileId, { maxBytes, signal } = {}) {
     const query = new URLSearchParams({ fields: "id,name,mimeType,parents,appProperties,size,version,trashed" });
-    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?${query}`);
-    const metadata = await readBoundedDriveJson(response, { kind: "metadata", limits: this.responseLimits });
+    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?${query}`, { signal });
+    const metadata = await readBoundedDriveJson(response, { kind: "metadata", limits: this.responseLimits, maxBytes });
     if (!metadata || metadata.id !== fileId || metadata.trashed || !Array.isArray(metadata.parents) || !metadata.parents.includes(this.folderId)) {
       fail("object-location-mismatch", "A transaction file is missing, trashed, or outside the selected database folder.", { fileId });
     }
     return metadata;
   }
 
-  async readBytes(fileId, { kind = "stored-object" } = {}) {
-    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?alt=media`);
-    return readBoundedDriveBytes(response, { kind, limits: this.responseLimits });
+  async readBytes(fileId, { kind = "stored-object", maxBytes, signal } = {}) {
+    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?alt=media`, { signal });
+    return readBoundedDriveBytes(response, { kind, limits: this.responseLimits, maxBytes });
   }
 
   async readJson(fileId, options = {}) {
@@ -249,9 +250,10 @@ export class GoogleDriveTransactionAdapter {
     assertResponseSize(bytesOf(content).length, { kind, limits: this.responseLimits });
   }
 
-  async createImmutable({ fileId, name, kind, transactionId, content, expectedSha256 }) {
+  async createImmutable({ fileId, name, kind, transactionId, content, expectedSha256, maxBytes, beforeMutation, signal }) {
     const bytes = copyOwnedBytes(bytesOf(content));
     assertResponseSize(bytes.length, { kind, limits: this.responseLimits });
+    if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || bytes.length > maxBytes)) fail("byte-limit", "Object exceeds its explicit byte budget.");
     const actualHash = await hashBytes(bytes, this.crypto);
     if (actualHash !== expectedSha256) fail("content-hash-mismatch", "The bytes do not match the planned SHA-256.", { name });
     const boundary = `ft-${fileId.replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -268,12 +270,14 @@ export class GoogleDriveTransactionAdapter {
     const url = `${UPLOAD}/files?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`;
     let ambiguousCreateFailure = null;
     let createResponseSummary = null;
+    let mutationStarted=false;
     try {
       const createResponse = await this.request(url, {
+        signal,
         method: "POST",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
         body
-      }, { allowStatuses: [409] });
+      }, { allowStatuses: [409], beforeMutation:async()=>{await beforeMutation?.();mutationStarted=true;} });
       createResponseSummary = { status: createResponse.status };
       if (createResponse.ok) {
         const returnedMetadata = await readBoundedDriveJson(createResponse, { kind: "metadata", limits: this.responseLimits });
@@ -282,6 +286,7 @@ export class GoogleDriveTransactionAdapter {
         await discardDriveResponse(createResponse);
       }
     } catch (error) {
+      if(!mutationStarted)throw error;
       // A network failure or server-side 5xx may have happened after Drive committed
       // the create. Resolve those ambiguous outcomes using the same pre-generated ID.
       // Definitive client errors (including 400/404) prove the request was rejected;
@@ -322,7 +327,7 @@ export class GoogleDriveTransactionAdapter {
         metadataAfter.appProperties?.[TAG + "Hash"] !== actualHash) {
       fail("immutable-metadata-mismatch", "The pre-generated Drive ID contains unexpected transaction metadata.", { fileId });
     }
-    const stored = copyOwnedBytes(await this.readBytes(fileId, { kind }));
+    const stored = copyOwnedBytes(await this.readBytes(fileId, { kind, maxBytes, signal }));
     const storedHash = await hashBytes(stored, this.crypto);
     if (storedHash !== actualHash || stored.length !== bytes.length) {
       fail("immutable-readback-mismatch", "The immutable Drive object failed exact byte verification.", { fileId });
@@ -349,7 +354,6 @@ export class GoogleDriveTransactionAdapter {
     const bytes = new TextEncoder().encode(content);
     assertResponseSize(bytes.length, { kind: "manifest", limits: this.responseLimits });
     await this.readMetadata(manifestFileId);
-    await beforeMutation?.();
     const boundary = `ft-manifest-${manifest.revision}`;
     const metadata = { mimeType: MIME_JSON };
     const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${MIME_JSON}\r\n\r\n`);
@@ -358,7 +362,7 @@ export class GoogleDriveTransactionAdapter {
       method: "PATCH",
       headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
       body: joinBytes([head, bytes, tail])
-    });
+    }, {beforeMutation});
     await discardDriveResponse(published);
     const visible = await this.readBytes(manifestFileId, { kind: "manifest" });
     if (new TextDecoder().decode(visible) !== content) {

@@ -14,6 +14,29 @@
 </head>
 <body><a class="skip-link" href="#tool-main">Skip to main content</a><main id="tool-main" tabindex="-1">
 <nav class="tool-navigation" aria-label="Development navigation"><a id="prototype-tools" href="./acceptance.html">← Acceptance tests</a><span>Synthetic data only</span></nav>
+<div id="v4-copy-tools" hidden>
+  <p class="eyebrow">Canonical v4 · Synthetic data only</p>
+  <h1>Back up, restore or migrate a synthetic copy</h1>
+  <p>Release other tabs before choosing a source. A destination must be a new empty synthetic folder. Interrupted destinations remain untouched; choose a different empty folder rather than retrying there.</p>
+  <p>Direct backup and framed file restore stream bounded objects. Full financial verification and legacy migration still materialize ledgers. Browser download fallback holds the file in memory; it is not a large-device capacity guarantee.</p>
+  <section><h2>Existing source</h2>
+    <button id="v4-connect" disabled>Choose existing synthetic source</button>
+    <button id="v4-release" disabled>Release source</button>
+    <button id="v4-backup" disabled>Back up v4 to a fresh folder</button>
+    <button id="v4-export" disabled>Export v4 framed file</button>
+    <button id="v4-migrate" disabled>Migrate legacy v1/v3 to a fresh v4 copy</button>
+    <p>Migration preserves the exact legacy archive and source manifest as verified history evidence. The new v4 lineage starts at revision zero; the original folder is never converted or overwritten.</p>
+  </section>
+  <section><h2>Restore without the source</h2>
+    <button id="v4-restore-backup" disabled>Restore a direct backup to a fresh primary copy</button>
+    <p>Select the existing backup folder, then a different empty destination. The backup remains read-only and the original source is not needed.</p>
+    <label for="v4-archive">Choose a saved v4 framed archive</label>
+    <input id="v4-archive" type="file" accept=".ftbs,application/octet-stream">
+    <button id="v4-restore" disabled>Restore file to a fresh synthetic folder</button>
+    <p>A source connection is not required. Restore verifies the complete saved file and retained history before creating a selectable copy. Legacy JSON archive2 remains available in the <a href="pr25-acceptance.html?guide=pr28">legacy copy guide</a>.</p>
+  </section>
+  <p id="v4-result" role="status" aria-live="polite">Loading Google services. No storage operation has started.</p>
+</div>
 <div id="copy-guide" hidden>
   <p class="eyebrow">Finance Tracker · PR #28 · Synthetic tests only</p>
   <h1>Backup and restore, step by step</h1>

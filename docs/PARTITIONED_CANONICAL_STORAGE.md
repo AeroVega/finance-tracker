@@ -2,16 +2,17 @@
 
 ## Scope and status
 
-**User-confirmed, November 11, 2026:** continue the synthetic storage plan, with
-schema changes when needed. **Implemented:** an isolated version-4 canonical
-format, reference encoder, paged reader and bounded-fixture audit. Only invented
-fixtures were used. No real records, workbook assumptions, live Drive actions,
-production activation, merge or deployment are part of this milestone.
+**User-confirmed, November 11, 2026:** integrate canonical v4 into the synthetic
+application, allowing explicit schema changes. The application adapter,
+workspace, seeder, root publication, backup and migration paths now use this
+format. Automated synthetic checks are recorded in [project status](PROJECT_STATUS.md).
+Live Drive/device and performance acceptance remain open. No real records, owner
+Drive actions, merge, deployment or production activation are authorized.
 
-The app still reads and writes its existing per-record v1 and fragmented v3
-formats. None of its workspace, manifest, commit, transaction, recovery or backup
-paths imports the new reader. This is not app-level partial loading and does not
-make an incomplete ledger acceptable to the existing validator.
+The first integration still materializes the complete ledger for financial
+validation and app editing. It does not establish bounded whole-ledger memory
+or selective cold opening. Per-record v1 and fragmented v3 copies keep their
+existing interpretation and are never silently migrated. Grouped v2 is refused.
 
 Related boundaries are in [the storage foundation](SCALABLE_STORAGE_FOUNDATION.md),
 [monthly index contract](CANONICAL_MONTH_INDEX.md),
@@ -27,7 +28,7 @@ Writers check the returned hash and exact readback. Adapters must enforce the
 response byte profile before allocating a complete response. A post-read check
 cannot undo an oversized transport allocation.
 
-The top root is canonical JSON with exactly five fields:
+The original v4 root is canonical JSON with exactly five fields:
 
 ```json
 {
@@ -39,7 +40,23 @@ The top root is canonical JSON with exactly five fields:
 }
 ```
 
-It has no per-record, partition or object inventory. The measured root is 236
+The application writes an explicit v4 extension with the additional field
+`"valueCodec": "compact-json-v1"`. This tag requires source and derived version 2.
+An untagged root requires source and derived version 1. Unknown tags, mixed
+codec versions, extra root fields and canonical root versions 5/6/7 are refused.
+Original five-field v4 hashes and semantics remain unchanged. Original v4 readers
+reject the extra root field before reading the new codec. The old app's connection
+and bootstrap guards refuse visible nonempty v4 folders before creating a legacy
+manifest. This tested refusal does not prove visibility beyond the provider's
+listing permissions. This is not an app label for a version-6/7 envelope.
+
+Codec 2 may store an exact JSON value inline when it fits 4,096 UTF-8 bytes and
+24 nesting levels. Larger values retain paged fallback. Source fields and absent
+properties remain exact. Inline handles are deeply frozen, and cursors bind the
+specific value. The application uses locator catalog 3, physical root protocol 4
+and framed archive 3 with the explicit `canonical4-physical4` profile.
+
+It has no per-record, partition or object inventory. The original measured root is 236
 bytes regardless of fixture size. The source root contains a metadata value
 descriptor, a collections-tree hash, and exact decimal-string event and position
 event frontiers. Each collections-tree entry contains its identity-field name,
@@ -82,7 +99,7 @@ property definitions, never prototype-changing assignment. Strings split into
 at most 1,024 UTF-16 code units per chunk without splitting a surrogate pair.
 Malformed Unicode is rejected.
 
-Every array uses paged membership, including import `observationIds` and
+In the original value codec, every array uses paged membership, including import `observationIds` and
 `retryAttempts`, review `existingEventIds`, category-rule `existingActivityIds`,
 holdings, conflict candidates and reconciliation components. Empty arrays stay
 distinct from absent properties. The implementation does not hide one unbounded
@@ -95,6 +112,8 @@ converter accepts JSON nesting through 128 levels and rejects cycles, accessors,
 sparse arrays, extra array properties, hidden properties, symbols, non-JSON
 objects and non-finite numbers before asynchronous writes. It takes an owned
 snapshot so caller mutation during a write cannot change later source fields.
+
+The compact extension may inline these arrays only within its stated byte/depth limits.
 
 There is no promise that JavaScript can assemble a string, record or ledger of
 arbitrary size. `pageValue` exposes string chunks and membership directly.
@@ -160,9 +179,9 @@ Query results include the pinned root and verification states:
 - `derived: "invalid"` means the reconstructed source passed but derived content
   differed. Queries keep that warning. An audit does not repair remote bytes.
 
-The reader exposes unverified results for inspecting this format. Any eventual
-application integration must gate trusted financial presentation on the required
-semantic and storage verification. Hash/shape verification alone is insufficient.
+The reader exposes unverified results for inspecting this format. The application
+gates financial presentation on complete semantic and storage verification.
+Hash/shape verification alone is insufficient.
 
 `fullAudit` is a reference audit for bounded fixtures. It retains the entire
 reconstructed ledger, calls the existing full-ledger validator and retains a
@@ -193,7 +212,7 @@ rules rather than quietly substituting monthly spending for financial position.
 
 ## Cost and remaining integration work
 
-The value representation is intentionally simple and costly in object count.
+The original source-1/derived-1 representation is costly in object count.
 Small object/array fields create many tiny content-addressed pages. Identical
 pages reuse hashes, but this is not a claim of acceptable Drive request cost.
 Record expansion currently verifies each tree and then traverses it again.
@@ -223,17 +242,30 @@ fixture exercises 150 retry attempts and holdings, 160 observation and category
 rule members, 161 review event members and 131 conflict candidates. They are
 small synthetic demonstrations of object bounds, not mobile capacity targets.
 
-**Open:** v3 application load/save still materializes whole ledgers. Version-2
-manifest and commit snapshot maps, locator materialization, retained journal and
-commit ancestry, recovery scans and all-history application validation still grow
-with database/history size. This module replaces none of those paths. Integrating
-only the v4 payload would not resolve them.
+**Historical baseline:** the original v4 module did not replace v3 application
+loads, version-2 snapshot maps, locator materialization or retained-history
+validation. The present integration replaces the active new-copy format and
+physical binding. Complete app ledgers, preparation descriptors, metadata
+witnesses and semantic history audits still materialize and grow with history.
+It is not the completed bounded-memory/selective-loading plan.
 
-Full audit remains the required default for eventual integration. A bounded
-streaming semantic audit and a privately owned verified session with incremental
-reading/editing must come before considering any separate cold-checkpoint trust
-decision. This milestone introduces no checkpoint trust exception, no implicit
-migration, no automatic repair save and no history pruning.
+Full semantic audit remains required. Exact root/commit/verifier results may be
+reused only within one owned verification scope. Opaque scope owners prevent late
+results entering a successor, and errors invalidate the scope.
+
+Separately, the physical adapter retains at most 512 private verified-body facts
+within a session, using at most 1 MiB of key/metadata storage. Facts are promoted
+only after fresh metadata and ownership closure. Each later operation opens a
+complete fresh metadata snapshot; reuse requires the exact file, folder, kind,
+transaction, size, version and hash binding, and records a new closing witness.
+Fact overflow reads actual bytes. Tree traversal and consumers needing bytes
+still read them; these facts never substitute for semantic validation, ownership
+or pointer-publication guards. Invalidation, release, reconnect or any failed
+verification clears reuse. Byte reuse has a separate finite 8 MiB cache.
+
+Every physical body and mapping remains checked, and fresh metadata closure
+precedes authority. Neither cache is persisted or caller-mintable. No automatic
+repair save, implicit migration or history pruning is introduced.
 
 ## Verification
 
@@ -248,7 +280,53 @@ and missing source bytes, unsupported versions/collections, materialization
 budgets and defensive ownership. The prior app/default-path suites remain part
 of the aggregate regression run.
 
-**Verified:** local synthetic format tests and independent full-ledger comparisons
-are evidence for this isolated module. **Open:** bounded semantic cold open,
-incremental mutation validation, complete protocol/history integration, live
-Drive acceptance, physical iPhone/iPad capacity and production review.
+**Verified:** the original local format tests and independent full-ledger
+comparisons establish format behavior. The present integration adds app/controller,
+physical interruption and copy/migration tests; its exact-source aggregate and
+performance gate remain required. **Open:** bounded semantic cold open,
+incremental mutation validation, live Drive acceptance, physical iPhone/iPad
+capacity and production review.
+
+## Application compatibility and failure behavior
+
+The workspace and seeder request `partitions-v4` for new copies. Existing v1/v3
+copies use their original path. An explicit backup-guide migration creates a
+fresh destination, preserves exact old portable history as chunked evidence,
+and verifies the new current ledger equals the latest old ledger. Legacy archive
+validation remains materializing. Existing source folders are unchanged.
+
+Every retained v4 commit validates its ledger and immutable transition. Original
+source rows, financial activities and prior events cannot be rewritten. Monthly
+summaries must match an independent exact rebuild from the complete source.
+Missing/corrupt pages or self-consistently forged derived totals prevent admission.
+The app does not repair these by bypassing history checks or replacing immutable
+bytes. Preserve the damaged copy and use an independently verified backup;
+a source-only repair workflow is not provided.
+
+One legacy-valid projection is explicitly unsupported: a linked refund whose
+original category is absent can produce an own `undefined` field. The v4 builder
+refuses this before publishing. It does not coerce the value to null or alter
+source evidence. Preserve the old copy, append an explicit category correction
+to the original activity, save, and retry the fresh-copy migration.
+
+Portable file export uses a writable stream when available. A browser without
+that API uses a labeled memory-backed Blob download. This fallback is not a
+bounded-memory export. Retained raw original files are not silently omitted:
+unsupported out-of-catalog originals block v4 export/migration, preserving the
+source and its retention policy.
+
+
+V4 exports also retain a separately typed `finance-tracker-source-physical-evidence`
+version-1 root. Its immutable index binds exact foreign file IDs and metadata to
+content hashes, including the selected manifest version, receipt/plan chains and
+locator closure. The source is pinned through copy publication. Offline audit
+resolves these old IDs only within the retained evidence, with no provider
+fallback or authority over the new copy. Duplicate data bodies reuse hashes;
+subsequent generations retain prior evidence roots, not recursively embedded
+archives. The restored live receipt chain starts fresh. Missing, corrupt or
+unreferenced provenance mappings and ancestor-copy-ID reuse are rejected.
+
+The guided import rehearsal verifies framed v4 exports by restoring to a private
+in-memory adapter. This reads no source after export and creates no Drive files,
+but is deliberately materializing. It is distinct from a saved-file restore to
+a fresh physical copy and does not prove that a browser download reached disk.

@@ -1,5 +1,10 @@
 # Root transaction and recovery prototype
 
+The sections below describe the unchanged isolated protocol-3 module. The
+[protocol-4 application companion](#protocol-4-application-companion) describes
+the separate integrated path; its versions and guarantees must not be inferred
+from the prototype.
+
 ## Scope and status
 
 **Implemented, synthetic-only:** `js/root-transaction-protocol.mjs` provides an
@@ -257,3 +262,51 @@ split into six pages, without growing the clean manifest into a snapshot map.
 
 Aggregate repository tests, independent review, browser tests, live services,
 mobile measurements, publication and deployment must be reported separately.
+
+
+## Protocol-4 application companion
+
+**Verified in synthetic application/HTTP tests:** `js/physical-root-binding.mjs`,
+`js/paged-application-storage.mjs` and `js/physical-drive-adapter.mjs` implement the
+explicit canonical-v4 application path. This is separate from
+`root-transaction-protocol.mjs`; protocol 3 remains unchanged. Physical manifests,
+portable logical commits, copy-local intents, plans and receipts use protocol 4:
+`finance-tracker-physical-root-manifest`, `finance-tracker-portable-root-commit`,
+`finance-tracker-copy-root-intent`, `finance-tracker-copy-object-plan` and
+`finance-tracker-copy-root-receipt`.
+The selected physical manifest binds one copy/folder and catalog 3. Existing
+legacy copies keep their legacy path; opening a copy does not silently migrate it.
+
+Publication follows exact clean → admitted → ready → published → clean states.
+Bounded plan pages admit fixed physical IDs before publication. All planned
+bodies are staged durably before admission, including deterministic logical
+commit and retained base-manifest evidence. Recovery reconstructs the binding
+from stored evidence without the original in-memory preparation. Missing ready
+or completed evidence is refused, not rewritten. Interrupted pre-admission
+staging can leave unreachable objects; evidence is not deleted and uncertain IDs
+are not automatically replaced. Recovery accepts only the exact old or new
+logical result after full verification.
+
+Immutable creates require fresh ownership at the adapter's final pre-mutation
+boundary. Every authoritative pointer update additionally checks the exact
+selected manifest. Manifest reads validate pinned ID, folder, name, kind,
+explicit non-trash state, size and version. Fresh complete metadata brackets
+check every visited immutable binding before accepting verification or publishing.
+These guards are not provider compare-and-swap and do not eliminate races after
+the final provider check.
+
+Private byte reuse is limited to 8 MiB. Physical body facts have independent
+512-entry/1-MiB budgets and become reusable only after successful fresh closure.
+Every new operation opens fresh metadata; a fact hit must match the exact
+file/folder/type/transaction/size/version/hash binding and register a new closing
+witness. Failure, cancellation or session invalidation clears facts. Overflow
+falls back to real bounded reads. Facts cannot provide bytes, semantic validity,
+ownership or publication authority. Generated evidence and semantic consumers
+still read actual bytes. These are cache budgets, not database-size ceilings.
+
+**Remaining limits:** complete catalog/history checks, canonical source and
+derived audits, full-ledger materialization and metadata maps remain. Immutable
+bodies are bounded to 64 KiB, manifests to 16 KiB and plan pages to 32 entries;
+no aggregate database ceiling is imposed. Synthetic recovery tests do not prove
+live-provider behavior, mobile capacity or production readiness. Publication,
+deployment and production approval remain separate gates.

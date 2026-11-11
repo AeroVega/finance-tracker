@@ -54,6 +54,7 @@ const storage = new DashboardSyntheticStorage({
 });
 const session = new CanonicalWorkspaceSession({ storage });
 const messages = {
+  'unsupported-derived-projection': 'This ledger contains a linked refund without a defined category. Keep the original copy. Add an explicit category correction to the original activity, save it, then retry the v4 copy.',
   'canonical-ledger-required': 'This copy has no saved canonical ledger. Release it, seed a synthetic year in a new empty folder, then open that saved copy here.',
   'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. It was not initialized or modified. Preserve it and create a new synthetic copy using fragmented version 3.',
   'existing-copy-required': 'Choose the folder where you already saved the synthetic year. This workspace does not initialize empty folders.',
@@ -167,10 +168,10 @@ function refresh() {
   $('data-mode').dataset.mode = session.mode;
   $('data-mode').textContent = session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
   $('storage-format').textContent = session.mode === 'preview'
-    ? 'Local preview, no saved format yet. Saving to a new folder will use fragmented v3.'
+    ? 'Local preview, no saved format yet. Saving to a new folder will use canonical v4.'
     : session.ledger && session.store?.base
-      ? `Last verified saved format: ${session.store.layout === 'fragments-v3' ? 'fragmented v3' : 'per-record v1'}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
-      : 'No saved format currently verified. New synthetic copies use fragmented v3.';
+      ? `Last verified saved format: ${session.store.layout === 'partitions-v4' ? `canonical v4, ${session.store.valueCodec || 'original source/derived codec 1'}` : session.store.layout === 'fragments-v3' ? 'fragmented v3' : 'per-record v1'}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
+      : 'No saved format currently verified. New synthetic copies use canonical v4.';
 }
 async function run(message, operation, formStatus = null) {
   if (busy) return;

@@ -196,7 +196,9 @@ test('default human checklist contains no duplicated deterministic import recipe
   assert.match(html, /id="run-live-checks" disabled/); assert.match(html, /id="stop-live-checks" disabled/);
   assert.match(html, /id="prepare-interruption" disabled/);
   assert.match(script, /await liveRunner.run\(\)/); assert.match(script, /await liveRunner.verifyReconnect\(\)/);
-  assert.match(workbench, /store.base\?\.revision !== 0/); assert.match(workbench, /Object.keys\(store.base\?\.snapshot/);
+  assert.match(workbench, /value\.revision===0/);
+  assert.match(workbench, /value\.version===4.*value\.revision==='0'.*value\.pending===null/);
+  assert.match(workbench, /await store\.load\(\)!==null\|\|!fresh\(store\.base\)/);
 });
 
 test('safe report serializes only fixed metric fields and phases, never caller payloads or coerced values', async () => {
@@ -424,7 +426,11 @@ test('selected interruption step exposes contextual preparation, pause and verif
   h.get('step-choice').value = '3'; h.get('step-choice').change();
   assert.equal(h.get('step-interruption').hidden, true); assert.equal(h.get('step-copy-controls').hidden, false);
   assert.match(h.get('step-folder-role').textContent, /intended saved corrections/);
-  assert.match(html, /pr25-acceptance.html\?guide=pr28/);
+  for (const id of ['step-copy-guide', 'extended-copy-guide']) {
+    const link = html.match(new RegExp('<a\\b(?=[^>]*\\bid="' + id + '")[^>]*\\bhref="([^"]+)"'));
+    assert.ok(link, id + ' remains available');
+    assert.equal(link[1], './pr25-acceptance.html?guide=v4', id + ' opens the v4 source copy guide');
+  }
 });
 
 test('actual interruption handlers require explicit starts, serialize repeated clicks and never change human results', async () => {

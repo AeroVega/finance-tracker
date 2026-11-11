@@ -5,6 +5,9 @@ import vm from 'node:vm';
 import * as canonical from '../js/canonical-import.mjs';
 import { canonicalizeJcs } from '../js/transaction-protocol.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
+import {CanonicalLedgerStore as ActualCanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
+import {EMPTY_CANONICAL_BYTES,emptyCanonicalRootHash} from '../js/paged-canonical-format.mjs';
+import {verifyPartitionedCanonicalCommit} from '../js/canonical-paged-storage.mjs';
 
 const moduleUrl = new URL('../prototype/pr28-import.mjs', import.meta.url);
 const source = await readFile(moduleUrl, 'utf8');
@@ -18,7 +21,9 @@ function deferred() {
 
 // Execute the real page handlers and financial functions with a small DOM and
 // controlled storage responses. Persistence protocol tests use the real engine.
-async function controller({ guided = false } = {}) {
+async function controller({ guided = false, actualPaged = false } = {}) {
+  const empty=actualPaged?await emptyCanonicalRootHash():null,objects=new Map(actualPaged?[[empty,EMPTY_CANONICAL_BYTES.slice()]]:[]);
+  let manifest={version:4,syntheticOnly:true,role:'primary',revision:'0',pending:null,root:empty,databaseId:'invented-db',copyId:'invented-copy'};
   const nodes = new Map(), allNodes = [], listeners = new Map(), prompts = [];
   let focused, storage;
   const state = { saved: null, answer: true, onSave: null, onLoad: null, onConnect: null, cacheFailure: false, preserveBaseOnSaveError: false };
@@ -50,16 +55,28 @@ async function controller({ guided = false } = {}) {
   class Storage {
     constructor(options) { this.options = options; this.lifecycle = null; storage = this; }
     async prepare() {}
-    async connect() {
+    async connect(options) {
+      if(actualPaged)assert.equal(options.canonicalLayout,'partitions-v4');
       calls.connects++; await state.onConnect?.();
       this.lifecycle = { state: 'ready', acceptingWrites: true, started: true, coordinator: { canWrite: true },
         async recover() { calls.recoveries++; this.state = 'ready'; this.acceptingWrites = true; }
       };
+      if(actualPaged)Object.assign(this.lifecycle,{pagedCanonical:true,folderId:'invented-folder',
+        readManifest:async()=>structuredClone(manifest),
+        assertCurrentManifest:async expected=>assert.deepEqual(expected,manifest),
+        readPartitionedSnapshot:async()=>({manifest:structuredClone(manifest),rootHash:manifest.root,store:{read:async hash=>{if(!objects.has(hash))throw new Error('missing bytes');return objects.get(hash).slice();}}}),
+        async savePartitionedRoot({expectedBase,rootHash,objects:descriptors,preparationStore,semanticVersion}){
+          assert.deepEqual(expectedBase,manifest);calls.saves++;await state.onSave?.();
+          for(const d of descriptors)objects.set(d.sha256,await preparationStore.read(d.sha256));
+          const next={...manifest,root:rootHash,revision:String(BigInt(manifest.revision)+1n)};
+          await verifyPartitionedCanonicalCommit({manifest:next,commit:{root:rootHash,previousRoot:manifest.root,revision:next.revision,semanticVersion,operation:'synthetic-canonical-import',changeEvidenceRoot:null},readObject:async q=>objects.get(q.sha256)});manifest=next;
+        }});
     }
     async recoverStaleSession() { await this.lifecycle.recover(); }
     async release() { calls.releases++; this.lifecycle = null; }
   }
   class Store {
+    constructor(options){if(actualPaged)return new ActualCanonicalLedgerStore(options);}
     async load() { this.base = null; calls.loads++; await state.onLoad?.(); this.base = { databaseId: 'invented-database', copyId: 'invented-copy', revision: calls.saves }; return structuredClone(state.saved); }
     async save(next) {
       const priorBase = this.base; this.base = null; calls.saves++;
@@ -473,4 +490,17 @@ test('failed-save fence survives retained base, recovery with declined reopen an
   assert.throws(() => old.snapshot(), /ledger-session-closed/);
   h.state.answer = true; h.state.onSave = null; await h.click('save');
   assert.equal(h.page.inspect().saveState, 'idle'); assert.ok(h.page.inspect().ledgerSession);
+});
+
+
+test('guided import actual v4 genesis, explicit save and reconnect use the real paged canonical store',async()=>{
+  const h=await controller({guided:true,actualPaged:true});await h.click('connect');
+  assert.equal(h.page.inspect().store.layout,'partitions-v4');
+  await h.page.withAcceptanceWorkbench(driver=>driver.requireFresh());
+  await h.stage();const proposed=structuredClone(h.page.inspect().ledger);assert.equal(h.calls.saves,0);
+  await h.click('save');assert.equal(h.calls.saves,1);assert.equal(h.page.inspect().dirty,false);
+  const root=h.page.inspect().store.base.root;assert.equal(typeof root,'string');
+  await h.click('connect');assert.deepEqual(h.page.inspect().ledger,proposed);assert.equal(h.page.inspect().store.base.root,root);
+  await assert.rejects(h.page.withAcceptanceWorkbench(driver=>driver.requireFresh()),e=>e.code==='fresh-empty-copy-required');
+  assert.equal(h.calls.saves,1);
 });

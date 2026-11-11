@@ -15,16 +15,18 @@ PR37 exploration. New user-facing behavior must work through the application;
 isolated storage experiments are not evidence that the app uses a new format.
 The main workspace now supports auditable posting-status corrections, reduces
 save requests through fresh version-checked byte reuse, and explains the active
-v3 format and unfinished selective-loading work. This does not change production
+copy format and unfinished selective-loading work. This does not change production
 NO-GO.
 
 **Storage draft, November 11, 2026:** the owner-authorized
 [incremental storage foundation](docs/SCALABLE_STORAGE_FOUNDATION.md) adds segmented
 catalogs, verified/rebuildable monthly reports, bounded Drive responses and direct
 backup improvements. It does not complete bounded full-database loading or lift
-production NO-GO. The follow-up [paged storage milestone](docs/PAGED_STORAGE_MILESTONE.md)
-adds isolated format and recovery modules, without switching the application to
-them. Main remains `04aacf31b8aaae31fa73b10408fa22d417c0d943` at this
+production NO-GO. The subsequent [canonical v4 integration](docs/PARTITIONED_CANONICAL_STORAGE.md)
+wires new synthetic stores, workspace saves, recovery, backup/restore and explicit
+fresh-copy migration into the application. Full ledger/history loading and
+validation remain. See [project status](docs/PROJECT_STATUS.md) for current checks
+and limitations; this does not establish live Drive/device acceptance. Main remains `04aacf31b8aaae31fa73b10408fa22d417c0d943` at this
 review. PR37 is unmerged. A temporary branch preview was deployed to the shared
 Pages site at `5e9c8966`; this is not a main-branch or production release. The
 earlier status below is a dated record.
@@ -37,7 +39,7 @@ Main's [Node tests passed](https://github.com/AeroVega/finance-tracker/actions/r
 
 Production financial-data persistence remains **NO-GO**. [PR27](docs/PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md) merged the plan only. Implementation, actual OAuth/configuration/privacy/cost review, live synthetic acceptance and explicit owner production authorization remain required. The owner does not require a separate real-data smoke test. Do not use real records in GitHub, CI or routine acceptance.
 
-Google Drive remains the selected private-storage direction, with a single active device and best-effort session coordination. Earlier [storage acceptance](docs/SYNTHETIC_STORAGE_ACCEPTANCE.md) and [PR28 acceptance](docs/PR28_CANONICAL_IMPORT.md) remain useful bounded evidence, not approval of every later path. Current canonical format policy is fragmented v3 for new stores, readable per-record v1, and rejection of standalone grouped v2.
+Google Drive remains the selected private-storage direction, with a single active device and best-effort session coordination. Earlier [storage acceptance](docs/SYNTHETIC_STORAGE_ACCEPTANCE.md) and [PR28 acceptance](docs/PR28_CANONICAL_IMPORT.md) remain useful bounded evidence, not approval of every later path. Current canonical format policy is v4 for new synthetic stores, compatible per-record v1 and fragmented v3, and rejection of standalone grouped v2. Existing copies are never silently migrated.
 
 ## Focused mobile pages
 
@@ -76,7 +78,7 @@ The [financial-position milestone](docs/FINANCIAL_POSITION.md) was implemented a
 
 The [Drive history verification follow-up](docs/DRIVE_HISTORY_VERIFICATION.md) reduces repeated downloads during saves by checking private, bounded session evidence against fresh Drive file versions. Full reconnect and backup integrity checks remain. This is a synthetic implementation, not production or live-Google acceptance.
 
-The [archived PR30 integrated performance report](docs/archive/PR30_PERFORMANCE_INTEGRATION.md) collects the reviewed CPU, session, CSV and storage changes, final combined checks, and remaining limits. Fragmented v3 is the default for new canonical stores and fresh synthetic copies. Existing per-record v1 copies remain readable; standalone grouped-v2 copies are rejected. Existing folders are not silently migrated, and this does not establish mobile capacity.
+The [archived PR30 integrated performance report](docs/archive/PR30_PERFORMANCE_INTEGRATION.md) collects the reviewed CPU, session, CSV and storage changes, final combined checks, and remaining limits. Those PR30 measurements describe the earlier v3 path. New copies now use [canonical v4](docs/PARTITIONED_CANONICAL_STORAGE.md); v1 and fragmented v3 remain compatible. Explicit migration creates a fresh copy and preserves the source. No format establishes mobile capacity by itself.
 
 ## PR28 canonical import foundation
 
@@ -84,9 +86,9 @@ The [approved PR28 scope](docs/PR28_IMPLEMENTATION_SCOPE.md) implements a synthe
 
 The current synthetic workbench preserves unsaved changes in the tab after session release; release does not save or erase that draft. The approved future production policy clears working financial data and the token on sign-out or normal orderly release. That production behavior still needs implementation and validation. This planning reconciliation changes no application behavior. See [the release-clearing gap](docs/PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#current-pr28-release-behavior-and-production-gap).
 
-Start with the [current owner acceptance guide](docs/OWNER_ACCEPTANCE.md). The [acceptance suite](prototype/acceptance.html) still contains obsolete grouped-v2 instructions; mark those phases blocked until its plan is corrected. Its [guided import runner](prototype/pr28-testing.html) retains the tested PR28 workflow. Connect a fresh empty synthetic folder and press **Run live checks**. It supplies the invented mappings and decisions, checks three saved checkpoints through the existing workbench/storage APIs, verifies a portable export in memory, and releases the session. Reconnect to the same folder and press **Verify saved run after reconnect** for the last assertion. Human device/OAuth, whole-tab interruption and new-folder backup/restore checks remain separate. The safe report contains fixed statuses and aggregate request metrics, never financial records or Drive identifiers. No run starts on page load. See [storage performance evidence and safety boundaries](docs/PR28_STORAGE_PERFORMANCE.md).
+Start with the [current owner acceptance guide](docs/OWNER_ACCEPTANCE.md). The [acceptance suite](prototype/acceptance.html) now covers v4 seeding, explicit legacy migration and source-offline file restore. Results must name the tested source and device. Its [guided import runner](prototype/pr28-testing.html) retains the tested PR28 workflow. Connect a fresh empty synthetic folder and press **Run live checks**. It supplies the invented mappings and decisions, checks three saved checkpoints through the existing workbench/storage APIs, verifies a portable export in memory, and releases the session. Reconnect to the same folder and press **Verify saved run after reconnect** for the last assertion. Human device/OAuth, whole-tab interruption and new-folder backup/restore checks remain separate. The safe report contains fixed statuses and aggregate request metrics, never financial records or Drive identifiers. No run starts on page load. See [storage performance evidence and safety boundaries](docs/PR28_STORAGE_PERFORMANCE.md).
 
-The manual steps now have adjacent controls, progress and timing. The interruption helper prepares its disposable fixture and verifies the exact recovered graph before any single retry. The [guided backup and restore flow](prototype/pr25-acceptance.html?guide=pr28) reuses the completed source, compares independent copy reopens automatically, and distinguishes the actual saved-file roundtrip from an in-memory export. You still choose folders/files, approve Google access, close the paused tab and confirm stopped sessions when required. The owner completed bounded live retests of these changed paths on `626ec025`; the earlier device checks remain tied to `70728162`. See [the latest results and remaining checks](docs/PR28_CANONICAL_IMPORT.md#owner-guide-retests-on-626ec025-november-8-2026).
+The interruption helper prepares its disposable fixture and verifies the exact recovered graph before any single retry. New v4 import sources use the [v4 backup and restore guide](prototype/pr25-acceptance.html?guide=v4), including actual saved-file restore without the source. You still choose folders/files, approve Google access, close the paused tab and confirm stopped sessions when required. The [legacy PR28 copy guide](prototype/pr25-acceptance.html?guide=pr28) remains for older copies only. The owner's bounded retests on `626ec025` and device checks on `70728162` cover that earlier path, not v4. See [the historical results and remaining checks](docs/PR28_CANONICAL_IMPORT.md#owner-guide-retests-on-626ec025-november-8-2026).
 
 ## Temporary prototype navigation
 

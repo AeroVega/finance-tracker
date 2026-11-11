@@ -5,8 +5,11 @@
 **Implemented, synthetic-only:** `js/framed-backup-stream.mjs` supplies a separate
 version-3 binary transport for bounded immutable objects and fixed root metadata.
 It does not replace or change either existing portable archive reader. Version-2
-JSON/base64 archives remain readable through their existing APIs. No application
-button, Drive adapter, migration or default storage path uses this module.
+JSON/base64 archives remain readable through their existing APIs. The synthetic
+v4 app backup guide uses `js/paged-canonical-backup.mjs` for direct copies,
+streamed file export/restore and explicit legacy-to-v4 fresh-copy migration.
+The generic transport and the application verification/publication layer remain
+separate.
 
 This is part of the [approved storage work](SCALABLE_STORAGE_FOUNDATION.md), not
 completion of bounded application backup or recovery. Production remains
@@ -14,14 +17,16 @@ completion of bounded application backup or recovery. Production remains
 
 **Verified:** independent encoding/hash tests, interrupted-write tests, stream
 cancellation, a real immutable-tree roundtrip and disk-backed growth fixtures.
-**Open:** bounded financial/history semantic verification, production destination
-adapters, source/session integration and physical Safari capacity measurements.
+**Open:** bounded financial/history semantic verification, production approval
+and physical Safari capacity measurements. Source/session integration is
+implemented for the synthetic app path, not verified against live owner data.
 
 ## API and memory contract
 
 - `encodeFramedBackup({ root, objects, limits, signal, beforeSeal })` returns an
   async iterator of byte chunks. `objects` is an iterable or `ReadableStream` of
-  `{ hash, bytes }`. `hash` must equal the lowercase SHA-256 of the exact bytes.
+  `{ hash, bytes }` for the original profile, or `{ hash, bytes, descriptor }`
+  for the physical profile below. `hash` is the exact bytes' lowercase SHA-256.
 - `createFramedBackupReadableStream(options)` returns those chunks as a
   `ReadableStream` with no queued read-ahead chunks.
 - `writeFramedBackup({ sink, ...options })` awaits each write to a
@@ -70,7 +75,7 @@ inserting an otherwise valid duplicate.
 
 ## Fixed root metadata
 
-Exactly these six fields are permitted:
+The original profile permits exactly these six fields, with no `profile` field:
 
 ```js
 {
@@ -89,6 +94,32 @@ database restore to omit roots its application requires. The required verifier
 must enforce that profile and the identity/version bindings inside each root.
 All non-null roots must be present in the new staging namespace with matching
 bytes before that verifier runs. Metadata is snapshotted and frozen.
+
+### Explicit canonical4-physical4 profile
+
+The physical profile adds exactly `profile: "canonical4-physical4"` and
+`sourceEvidence: { version: 1, sha256: "<64 lowercase hex characters>" }` to the
+six-field shape. It requires canonical version 4 and protocol version 4 roots,
+and `catalog: null`: destination locators are rebuilt, not adopted from the source.
+The protocol root identifies the portable logical head commit. The original
+profile still means protocol version 3; neither profile admits canonical 6/7.
+Old strict readers reject the added fields rather than reinterpret the archive.
+Unknown profiles, fields or versions fail closed. Version-2 archive support is
+unchanged and remains a separate reader.
+
+The transport accepts an explicit `sourceEvidence: null`, but the application
+verifier permits it only for the initial legacy migration stream whose source
+copy ID matches the independently verified legacy evidence. Exporting an already
+migrated v4 copy requires physical evidence even at revision zero.
+
+Physical evidence is an immutable, separately typed root containing the exact
+selected source manifest bytes/hash and a paged foreign-file-ID mapping of
+metadata/version witnesses to body hashes. It retains the complete original
+receipt, plan and locator closure alongside portable logical history. Offline
+verification resolves only recorded dependencies, checks exact closure and all
+ancestor identities, and rejects missing or unreferenced mappings. Prior evidence
+roots remain ordinary immutable objects with shared body hashes, not recursively
+embedded whole archives. Foreign IDs never become destination authority.
 
 No descriptor contains a growing object, partition or history inventory. A root
 must instead point to an immutable bounded object whose dependencies can be
@@ -109,7 +140,12 @@ raw bytes, never decoded as text or base64.
 
 1. Type `01`: the fixed root metadata header, with no body. Exactly one, first.
 2. Type `02`: header `{ "byteLength": <integer>, "hash": "<sha256>" }`, followed
-   by exactly `byteLength` raw bytes. Zero-length objects are allowed.
+   by exactly `byteLength` raw bytes. Zero-length objects are allowed. For the
+   physical profile this header additionally requires `descriptor: { kind,
+   identity }`; journal-event descriptors also require `transactionId` and a
+   nonnegative safe-integer `sequence`. Kinds are `data-object`, `commit-record`,
+   `journal-event`, `migration-record` and `protocol-object`. Data and commit
+   identities equal the body hash. Extra descriptor fields are rejected.
 3. Type `ff`: header `{ "objectCount": "<decimal>", "totalObjectBytes":
    "<decimal>" }`, followed by a 32-byte commitment. Exactly one, last.
 
@@ -147,7 +183,7 @@ The caller supplies an exclusively owned **new** staging namespace:
 ```js
 {
   async begin({ state, formatVersion, root, signal }) { /* persist incomplete marker */ },
-  async write(bytes, { signal }) { /* return exact lowercase content hash */ },
+  async write(bytes, { signal, descriptor }) { /* return exact lowercase content hash */ },
   async read(hash, { signal, maxBytes }) { /* return bounded immutable bytes */ }
 }
 ```
@@ -156,8 +192,8 @@ The caller supplies an exclusively owned **new** staging namespace:
 nonempty destination. It must not adopt leftovers from an earlier attempt. An
 adapter must preserve immutable bytes, make identical writes idempotent and
 exclude objects outside this restore namespace. These are real adapter duties,
-not guarantees supplied by a Boolean `quarantined` flag. There is no production
-adapter in this milestone.
+not guarantees supplied by a Boolean `quarantined` flag. The synthetic app
+adapter implements this boundary; production use remains unapproved.
 
 The module writes one object at a time, checks the returned content ID, then
 independently reads and hashes the stored bytes. If a write persisted bytes but
@@ -197,7 +233,22 @@ It is not a bounded semantic verifier for a growing production archive. The real
 tree test validates all semantics of its small invented catalog schema and exact
 ordered entries; it does not substitute for future finance/history verification.
 
-## Cancellation and future integration
+The application layer additionally verifies canonical state, retained logical
+history and inert physical evidence, rebuilds destination locators, and publishes
+one fresh manifest only after source/target ownership and version rechecks.
+Incomplete targets remain evidence and are not silently adopted. A direct backup
+can be restored to a fresh primary copy without the original source.
+
+These app operations are not end-to-end constant-memory: descriptor inventories,
+metadata witnesses and the current financial audit materialize; legacy migration
+also materializes archive2 for its independent validation. The browser's fallback
+Blob download buffers the archive when a streaming file sink is unavailable.
+The private evidence descriptor cache is bounded to 128 entries and 1 MiB of
+encoded records per evidence audit, with ordinary uncached fallback; it changes
+neither proof scope nor the full closure checks. No total database-size ceiling
+substitutes for these disclosed limits.
+
+## Cancellation and application integration
 
 `AbortSignal` checks run between chunks, frames, digest completions, writes and
 verification steps. Consumer early return closes the object source. Cancellation

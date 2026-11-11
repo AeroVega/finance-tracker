@@ -499,3 +499,23 @@ test("real immutable tree walk restores into a read-only structural verifier", a
   assert.equal(target.state.status, "incomplete");
   for (const [id, data] of records) assert.deepEqual(target.records.get(id), data);
 });
+
+test('physical4 is an explicit archive3 profile with authenticated typed object headers',async()=>{
+  const item={...top,descriptor:{kind:'data-object',identity:top.hash}};
+  const root={...rootFor(),profile:'canonical4-physical4',sourceEvidence:{version:1,sha256:top.hash},protocol:{version:4,sha256:top.hash}};
+  const data=await collect(encodeFramedBackup({root,objects:[item]}));
+  let observed;
+  const target=stage(),write=target.write.bind(target);
+  target.write=async(raw,options)=>{observed=options.descriptor;return write(raw);};
+  await restore(chunks(data),target);
+  assert.deepEqual(observed,item.descriptor);
+  // The old exact six-field root reader refuses this additional field before
+  // interpreting protocol4 as protocol3. Old descriptors are still unchanged.
+  const rootHeader=JSON.parse(new TextDecoder().decode(data.subarray(13,13+data.readUInt32BE(9))));
+  assert.ok(!['databaseId','sourceCopyId','revision','canonical','catalog','protocol'].includes(Object.keys(rootHeader).find(k=>k==='profile')));
+  await assert.rejects(collect(encodeFramedBackup({root:{...root,profile:'unknown'},objects:[item]})),{code:'unsupported-root-profile'});
+  await assert.rejects(collect(encodeFramedBackup({root:{...root,protocol:{version:3,sha256:top.hash}},objects:[item]})),{code:'unsupported-root-version'});
+  const {profile,sourceEvidence,...old}=root;
+  await assert.rejects(collect(encodeFramedBackup({root:old,objects:[top]})),{code:'unsupported-root-version'});
+  await assert.rejects(collect(encodeFramedBackup({root,objects:[{...item,descriptor:{kind:'data-object',identity:'invented-not-hash'}}]})),{code:'invalid-descriptor'});
+});

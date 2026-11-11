@@ -72,8 +72,9 @@ export async function discardDriveResponse(response) {
   try { await response?.body?.cancel(); } catch { /* Keep the original outcome. */ }
 }
 
-export async function readBoundedDriveBytes(response, { kind = 'stored-object', limits = DEFAULT_DRIVE_RESPONSE_LIMITS } = {}) {
-  const maxBytes = responseByteLimit(kind, limits);
+export async function readBoundedDriveBytes(response, { kind = 'stored-object', limits = DEFAULT_DRIVE_RESPONSE_LIMITS, maxBytes: requestedMax } = {}) {
+  const maxBytes = requestedMax === undefined ? responseByteLimit(kind, limits) : Math.min(responseByteLimit(kind, limits), requestedMax);
+  limits = { ...limits, [responseKind(kind, limits)]: maxBytes };
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
     await discardDriveResponse(response);
     throw new DriveResponseError('invalid-response-limits', 'A finite Drive response byte limit is required.');

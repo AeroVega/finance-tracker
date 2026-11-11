@@ -3,6 +3,9 @@ import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
 import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
 import { validateSyntheticApplicationSnapshot } from '../js/synthetic-application-structure.mjs';
+import { exportPagedCanonicalArchive, verifyCanonicalMigrationEvidence } from '../js/paged-canonical-backup.mjs';
+import { canonicalPartitionVerificationPlans } from '../js/canonical-paged-storage.mjs';
+import { verifyPagedArchiveInMemory } from '../js/paged-archive-rehearsal.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { createLedger, registerAccount, prepareCanonicalImport, applyReviewDecision, applyFinancialEvent, reverseReviewDecision, getEffectiveActivities, summarizeLedger, createLedgerSessionOwner } from '../js/canonical-import.mjs';
 
@@ -267,7 +270,7 @@ async function saveLedger(next = ledger) {
     saveState = 'unverified'; refresh(); throw error;
   }
 }
-action('connect', async () => { if (dirty && !confirm('Discard unsaved local changes and connect?')) return; invalidateLedgerSession(true); store=null; await storage.connect(); if (storage.lifecycle?.state === 'ready') await loadLedger(); });
+action('connect', async () => { if (dirty && !confirm('Discard unsaved local changes and connect?')) return; invalidateLedgerSession(true); store=null; await storage.connect({canonicalLayout:'partitions-v4'}); if (storage.lifecycle?.state === 'ready') await loadLedger(); });
 action('stale', async () => { if (confirm('Confirm all prior tabs and devices using this synthetic folder have stopped.')) { invalidateLedgerSession(true); await storage.recoverStaleSession(); if (!dirty || confirm('Session recovered. Discard unsaved local changes and reopen?')) await loadLedger(); } });
 action('recover', async () => { invalidateLedgerSession(true); await storage.lifecycle.recover(); if (!dirty || confirm('Recovery completed. Discard unsaved local changes and reopen?')) await loadLedger(); });
 action('release', async () => { if (dirty && !confirm('Release without saving local changes? They remain in this tab only.')) return; invalidateLedgerSession(true); await storage.release(); store=null; });
@@ -503,9 +506,12 @@ export async function withAcceptanceWorkbench(operation) {
       async requireFresh() {
         ready();
         const manifest = await lifecycle.readManifest();
-        if (manifest.syntheticOnly !== true || manifest.revision !== 0 || Object.keys(manifest.snapshot || {}).length || manifest.catalogFinalizationPending !== null) inputError('fresh-empty-copy-required');
+        const fresh=value=>value?.syntheticOnly===true&&(lifecycle.pagedCanonical
+          ? value.version===4&&value.role==='primary'&&value.revision==='0'&&value.pending===null
+          : value.revision===0&&!Object.keys(value.snapshot||{}).length&&value.catalogFinalizationPending===null);
+        if(!fresh(manifest))inputError('fresh-empty-copy-required');
         invalidateLedgerSession();
-        if (await store.load() !== null || store.base?.revision !== 0 || Object.keys(store.base?.snapshot || {}).length || store.base?.syntheticOnly !== true || store.base?.catalogFinalizationPending !== null) inputError('fresh-empty-copy-required');
+        if(await store.load()!==null||!fresh(store.base))inputError('fresh-empty-copy-required');
         // The store uses this verified base and will refuse any competing change.
       },
       async identity() { ready(); const manifest = await lifecycle.readManifest(); return { databaseId: manifest.databaseId, copyId: manifest.copyId, folderId: lifecycle.folderId }; },
@@ -514,6 +520,14 @@ export async function withAcceptanceWorkbench(operation) {
       reopen,
       async verifyPortable() {
         ready();
+        if(lifecycle.pagedCanonical) {
+          const chunks=[],plans=()=>canonicalPartitionVerificationPlans({verifyMigrationEvidence:verifyCanonicalMigrationEvidence});
+          await exportPagedCanonicalArchive({sourceAdapter:lifecycle.transactionAdapter,sourceManifestFileId:lifecycle.manifestFileId,
+            withSourceLock:operation=>lifecycle.coordinator.withWrite(operation),assertSourceWritable:async()=>{await lifecycle.coordinator.assertCanWrite({online:navigator.onLine!==false});},
+            verificationPlans:plans(),sink:{write:async chunk=>chunks.push(chunk)}});
+          await verifyPagedArchiveInMemory(chunks,{verificationPlans:plans()});
+          return;
+        }
         const archive = await exportCatalogArchive({ adapter: lifecycle.transactionAdapter, manifestFileId: lifecycle.manifestFileId,
           withSourceLock: operation => lifecycle.coordinator.withWrite(operation), validateStructure: validateSyntheticApplicationSnapshot });
         await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });

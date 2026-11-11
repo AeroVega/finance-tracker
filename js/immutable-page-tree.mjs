@@ -1,3 +1,4 @@
+import {utf8ByteLength} from './utf8-length.mjs';
 /** Immutable, content-addressed ordered pages. This verifies structure, not the
  * completeness of a derived index against its source. No caller can confer trust.
  */
@@ -44,11 +45,11 @@ function decimal(value) {
 /** Strict deterministic JSON, with a finite byte budget and nesting bound. It
  * snapshots caller values before the first await. Accessors are never invoked.
  */
-function json(value, byteLimit) {
+function json(value, byteLimit, initialDepth = 0) {
   const pieces = [], active = new Set();
   let bytes = 0;
   function emit(piece) {
-    bytes += encoder.encode(piece).byteLength;
+    bytes += utf8ByteLength(piece);
     if (bytes > byteLimit) fail('node-byte-limit', 'JSON exceeds the per-page byte budget.');
     pieces.push(piece);
   }
@@ -97,7 +98,7 @@ function json(value, byteLimit) {
     }
     active.delete(x);
   }
-  visit(value, 0);
+  visit(value, initialDepth);
   return pieces.join('');
 }
 async function hashBytes(bytes) {
@@ -131,7 +132,7 @@ export function createImmutablePageTree(store, options = {}) {
   const copy = value => JSON.parse(json(value, maxNodeBytes));
   function key(value) {
     if (typeof value !== 'string' || !unicode(value)) fail('invalid-key', 'Keys must be well-formed Unicode strings.');
-    if (value.length > maxKeyBytes || encoder.encode(JSON.stringify(value)).length > maxKeyBytes) fail('key-byte-limit', 'Key exceeds the per-key byte budget.');
+    if (value.length > maxKeyBytes || utf8ByteLength(JSON.stringify(value)) > maxKeyBytes) fail('key-byte-limit', 'Key exceeds the per-key byte budget.');
     return value;
   }
   function reference(ref) {
@@ -217,9 +218,26 @@ export function createImmutablePageTree(store, options = {}) {
     if (!sameBytes(bytes, saved)) fail('write-readback-mismatch', 'Written content failed exact read-back.');
     return refFor(hash, node);
   }
+  // These keys are private owned entry/reference objects, never caller values
+  // or read authority. Only exact serialized lengths are retained weakly.
+  const itemLengths=new WeakMap();
   function fits(kind, items) {
     if (items.length > (kind === 'leaf' ? maxEntries : maxChildren)) return false;
-    try { encode(nodeFor(kind, items)); return true; }
+    try {
+      const node=nodeFor(kind,items);node[kind==='leaf'?'entries':'children']=[];
+      let size=utf8ByteLength(json(node,maxNodeBytes))+Math.max(0,items.length-1);
+      for(const item of items) {
+        let length=itemLengths.get(item);
+        if(length===undefined) {
+          // In a page an item starts two levels below the root. Preserve the
+          // original depth limit as well as its exact JSON/UTF-8 byte length.
+          length=utf8ByteLength(json(item,maxNodeBytes,2));itemLengths.set(item,length);
+        }
+        size+=length;
+        if(size>maxNodeBytes)return false;
+      }
+      return size<=maxNodeBytes;
+    }
     catch (error) { if (error.code === 'node-byte-limit') return false; throw error; }
   }
   async function pack(kind, items, signal) {

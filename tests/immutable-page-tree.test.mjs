@@ -380,3 +380,16 @@ test('resizable store buffers cannot resize the private copy during digest', asy
   const tree = createImmutablePageTree({read:async () => view});
   assert.deepEqual(await tree.get(root, 'a'), {synthetic:'resizable'});
 });
+
+// Pinned outputs from pre-optimization commit40049ad. Length bookkeeping must
+// not alter packing, canonical bytes, mutation roots or exact boundary behavior.
+for(const [maxNodeBytes,expected] of [
+  [4096,['ea5508a7b6f6cfbb93371949dcc9d6fbc4864e236eae5743b22f9c54822faad9','7c1edab7e0f4cb3db4890c837d29ce2d0534add7432b0178794767c47299f63c','185689e3a0bc26e67559f27d530a5ea7e33d8237dfec5b0ab79348c933ad8296']],
+  [8192,['406470b8f38b156342ea310a1411a3aa699adc5da110a726649268782e1795e8','d108ea2de961c198fdd31e542054c4200ed517e386da8d0fcb8d55509c5b0a1e','fac4e240ab29118bf5fc79cce6d6d81a4f0a2fae356b4e27ff9eeb5c6831b240']],
+  [65536,['f1ae9b45ea3cdb03eff69fbfe5917d9d655e42c8b4dfabab12e31c8d8ebd146c','f9e287b7e6c133ffbb378185363a5edac01584067853aa54a7a826c21a836078','d76f19cb5d0b6bdda6c86b6763e09667278be58cf03025d70503fd5a4c8469c9']]
+])test(`exact owned item lengths preserve original build/set/delete hashes at ${maxNodeBytes}bytes`,async()=>{
+  const store=new MemoryStore(),tree=createImmutablePageTree(store,{maxNodeBytes,maxEntries:128,maxChildren:128});
+  const entries=Array.from({length:181},(_,i)=>[String(i).padStart(4,'0'),{message:'Invented 雪😀 '+String(i)+'x'.repeat(i%53),items:[i,null,true]}]);
+  const root=await tree.build(entries),changed=await tree.set(root,'0090',{message:'Invented é revised',items:[90,false]}),deleted=await tree.delete(changed,'0001');
+  assert.deepEqual([root,changed,deleted],expected);await tree.verify(deleted);
+});

@@ -1,3 +1,6 @@
+import { verifyCanonicalMigrationEvidence, withSourceEvidenceVerification } from "./paged-canonical-backup.mjs";
+import { inspectPagedCanonicalCopy, initializePagedCanonicalCopy } from "./paged-application-storage.mjs";
+import { canonicalPartitionVerificationPlans } from "./canonical-paged-storage.mjs";
 import { ApplicationStorageLifecycle } from "./application-storage-lifecycle.mjs";
 import { GoogleDriveTransactionAdapter } from "./drive-transaction-engine.mjs";
 import { validateGoogleConfig } from "./google-config-validation.mjs";
@@ -242,7 +245,7 @@ export class DashboardSyntheticStorage {
     return this.accessToken;
   }
 
-  async connect({ requireEmpty = false, requireExisting = false } = {}) {
+  async connect({ requireEmpty = false, requireExisting = false, canonicalLayout = null } = {}) {
     if (this.busy) throw new Error("A storage operation is already in progress.");
     this.busy = true;
     try {
@@ -305,7 +308,9 @@ export class DashboardSyntheticStorage {
         accessToken: () => this.token()
       });
       if (requireEmpty) await requireEmptySyntheticFolder(preflightAdapter);
-      const inspected = await inspectPr25Folder(preflightAdapter);
+      const paged = await inspectPagedCanonicalCopy(preflightAdapter);
+      const inspected = paged || await inspectPr25Folder(preflightAdapter);
+      const pagedCanonical = Boolean(paged || (!inspected.manifestFileId && canonicalLayout === "partitions-v4"));
       if (requireExisting && !inspected.manifestFileId) {
         throw storageError("existing-copy-required", "No existing synthetic copy was found. Reconnect does not initialize a new folder.");
       }
@@ -324,7 +329,9 @@ export class DashboardSyntheticStorage {
           afterMutation: this.afterMutation,
           folderName: this.folderName,
           folderId: this.folderId,
-          initializeManifest: ({ adapter, guard }) => findOrCreateManifest(adapter, guard),
+          pagedCanonical,
+          verificationPlans: pagedCanonical ? withSourceEvidenceVerification(canonicalPartitionVerificationPlans({verifyMigrationEvidence:verifyCanonicalMigrationEvidence})) : undefined,
+          initializeManifest: ({ adapter, guard }) => pagedCanonical ? initializePagedCanonicalCopy({adapter,guard}) : findOrCreateManifest(adapter, guard),
           // Session adapter folder enumeration consumes the token synchronously.
           // Keep this provider synchronous; an async wrapper becomes Bearer [object Promise].
           accessToken: () => this.token(),
@@ -380,6 +387,7 @@ export class DashboardSyntheticStorage {
 
   async readSnapshot() {
     if (!this.lifecycle || this.lifecycle.state !== "ready") throw new Error("Synthetic storage is not ready.");
+    if (this.lifecycle.pagedCanonical) return [];
     const manifest = await this.lifecycle.readManifest();
     const reference = manifest.snapshot?.[SNAPSHOT_PATH];
     if (!reference) return [];
@@ -390,6 +398,7 @@ export class DashboardSyntheticStorage {
   }
 
   async saveSyntheticSnapshot(transactions) {
+    if (this.lifecycle?.pagedCanonical) throw storageError("canonical-workspace-required", "Use the canonical workspace to save this v4 copy.");
     if (!this.lifecycle || this.lifecycle.state !== "ready") throw new Error("Synthetic storage is not ready.");
     if (!transactions.every((row) => row?.syntheticOnly === true)) {
       throw Object.assign(new Error("CSV-imported or other non-synthetic rows are never written to Drive in PR #24."), { code: "synthetic-data-required" });

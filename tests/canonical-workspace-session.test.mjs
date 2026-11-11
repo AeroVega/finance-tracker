@@ -146,7 +146,7 @@ for (const corrected of [false, true]) test(`local preview saves ${corrected ? '
   if (corrected) h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger);
   await h.session.savePreviewToNewCopy();
-  assert.deepEqual(h.calls.connects, [{ requireEmpty: true }]);
+  assert.deepEqual(h.calls.connects, [{ requireEmpty: true, canonicalLayout: 'partitions-v4' }]);
   assert.equal(h.calls.writes, 1);
   assert.equal(h.session.mode, 'saved');
   assert.equal(h.session.dirty, false);
@@ -268,7 +268,7 @@ test('preview persistence refuses an existing canonical copy without writing to 
   const h = setup('fragments-v3', false);
   h.session.preview(recipe.ledger);
   await assert.rejects(h.session.savePreviewToNewCopy(), { message: 'new-empty-folder-required' });
-  assert.deepEqual(h.calls.connects, [{ requireEmpty: true }]);
+  assert.deepEqual(h.calls.connects, [{ requireEmpty: true, canonicalLayout: 'partitions-v4' }]);
   assert.equal(h.calls.writes, 0);
   assert.equal(h.session.mode, 'preview');
   assert.equal(h.session.unverified, false);

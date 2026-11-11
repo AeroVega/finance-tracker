@@ -6,11 +6,11 @@ Alpha must let the owner import and review financial history, correct it, reconc
 
 ## Immediate next actions
 
-1. **Address measured storage growth.** Continue the owner-authorized [incremental storage plan](SCALABLE_STORAGE_FOUNDATION.md). The first draft adds segmented catalogs, source-bound monthly reports, bounded transport and direct backup improvements. The isolated [paged storage milestone](PAGED_STORAGE_MILESTONE.md) prepares the next format; it is not enabled in the app. Next complete bounded semantic/history auditing, physical locator integration, incremental edit validation and workspace adoption. Preserve full cold verification unless a different trust model is explicitly reviewed. Schema version changes are authorized; preserve old reads or make migration and old-reader refusal explicit.
+1. **Validate integrated v4 and continue measured storage work.** Complete the exact-source aggregate and owner acceptance for the [v4 app path](PARTITIONED_CANONICAL_STORAGE.md), including recovery and fresh-copy migration. Compare save/reopen and retained-history costs against the published v3 baseline and retain regressions alongside improvements. Next complete bounded semantic/history auditing, selective loading and incremental canonical validation. Preserve full cold verification unless a different trust model is explicitly reviewed. Schema evolution is authorized, with explicit compatibility and migration handling.
 2. **Build the remaining production controls with invented data.** Implement designated account/database binding, full working-state cleanup and a production-capable path, then validate its privacy, authorization and recovery boundaries. Preserve NO-GO until the non-test gates and explicit owner activation decision pass.
 3. **Prepare monthly migration from the synthetic workbook.** The owner is preparing an invented 2023–2026 workbook. Use it to define monthly-summary mapping and exact reconciliation without accessing the private workbook or turning monthly totals into fabricated transactions.
 4. **Carry forward scoped acceptance evidence.** PR36 is merged and its description reports completed owner synthetic/device acceptance. Preserve that evidence rather than repeating unchanged checks. Historical acceptance gaps below should be checked against the exact paths and source accepted by the owner.
-5. **Revisit deployment and checklist cleanup near Alpha.** Repair obsolete grouped-v2 acceptance instructions, then inspect Pages configuration and verify the served SHA when release work resumes. No deployment, settings change or real-data use is authorized by this queue.
+5. **Revisit deployment near Alpha.** The checklist now targets v4; verify its changed paths on the intended source. Inspect Pages configuration and verify the served SHA when release work resumes. No deployment, settings change or real-data use is authorized by this queue.
 
 These are dependencies and review actions, not automatic permission to merge, deploy, change Google configuration or use real data.
 
@@ -92,7 +92,7 @@ Record implemented capability, automated evidence, owner/device evidence, deploy
 Read `AGENTS.md` and the relevant engineering workflow. Use a focused branch; no direct main pushes, force-pushes, merges or deployments without authorization. For application changes, run the repository's serial full suite and the relevant browser/device checks:
 
 ```sh
-node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs
+FINANCE_EXTENDED_STORAGE_TESTS=1 node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs
 ```
 
 For documentation changes, verify relative paths/anchors, current PR facts, source-supported status and `git diff --check`. Never present not-run or blocked checks as passes. Update [project status](PROJECT_STATUS.md) and this queue with each material result.

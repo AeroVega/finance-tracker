@@ -1,5 +1,31 @@
 # Project status
 
+## Canonical v4 app integration, November 11, 2026
+
+**Implemented locally in PR37 work:** new synthetic copies use canonical v4
+through seeding, preview/import saves, workspace corrections/reopen, interrupted
+recovery, backup, framed export/restore and explicit fresh-copy v1/v3 migration.
+The [format contract](PARTITIONED_CANONICAL_STORAGE.md) defines the compact value
+tag and the distinct physical catalog/protocol versions. Existing copies are
+not silently converted, and historical source evidence is preserved.
+
+**Verified locally:** the required extended suite passed **1,733/1,733** tests
+on Node 24.22.1, with no failures, skips or cancellations and unchanged tracked
+files during the run. Independent reviews and synthetic HTTP/controller checks
+cover the changed paths. The initial aggregate exposed a stale seeder test;
+real v4 upload/reconnect coverage replaced that gap before the passing rerun.
+Publication and CI results belong to the exact PR revision. No v4 deployment,
+live Drive or physical-device acceptance is claimed. The [owner guide](OWNER_ACCEPTANCE.md)
+and runtime checklist now describe the integrated format.
+
+**Open:** full ledger/history materialization and deterministic tree rebuilding
+remain. V4 save/reopen costs exceed the published v3 path in some measured
+workloads despite improvements within v4. Synthetic timing guides iteration;
+the owner's live Drive/device experience determines practical effectiveness.
+Selective cold loading, bounded complete semantic auditing, incremental edit
+validation, source-only index repair and production controls remain unfinished.
+Production remains **NO-GO**. The sections below retain earlier milestone evidence.
+
 ## App testing follow-up, November 11, 2026
 
 **Implemented and locally verified:** the [app feedback fixes](APP_TESTING_FEEDBACK.md)
@@ -25,9 +51,10 @@ token-cleanup changes, and remaining production gates. The owner subsequently au
 [incremental storage foundation](SCALABLE_STORAGE_FOUNDATION.md) implements
 segmented catalogs, source-bound monthly reports, response bounds and lower-memory
 Drive backup. Full bounded loading and production controls remain unfinished.
-The follow-up [paged storage milestone](PAGED_STORAGE_MILESTONE.md) adds isolated
-immutable trees, a canonical v4 reference reader, framed archives and a root
-transaction prototype. These are not the active application storage path.
+At that earlier checkpoint, the [paged storage milestone](PAGED_STORAGE_MILESTONE.md)
+added isolated immutable trees, a canonical v4 reference reader, framed archives
+and a root transaction prototype. The integration update above supersedes that
+checkpoint's runtime status.
 PR37 is not merged. A temporary branch preview was published to the shared Pages site at `5e9c8966`; this is not a main-branch or production release. Deployment/owner acceptance remains a separate gate.
 Historical monthly migration, supported owner-file ingestion and production
 controls remain. **Alpha is incomplete and production remains NO-GO.**
@@ -92,7 +119,7 @@ Code evidence: [workspace model](../js/canonical-workspace-model.mjs), [workspac
 - **User-confirmed, recorded in the workspace guide:** the owner accepted PR32 local synthetic-year exploration, evidence/corrections and mobile workspace experience. Preserve that observation; do not repeat unaffected checks merely because the PR merged.
 - **Open:** the newer preview-to-Drive save, transfer-link persistence and interruption checks. The guide does not provide a new acceptance pass for these paths. Record the full tested SHA with the next result.
 - **User-confirmed, historical:** PR25, PR28 and PR30 records contain bounded live synthetic/device results. They do not validate every later screen or every interruption boundary.
-- **Verified documentation/runtime mismatch:** the [acceptance plan](../prototype/acceptance-plan.mjs) still requests grouped-v2 seeding and a v2/v3 selector. The [current year page](../prototype/synthetic-year.html) offers v3 only. Mark those obsolete steps blocked; use [the corrected owner guide](OWNER_ACCEPTANCE.md). Fixing the runtime checklist is a separate scoped code change.
+- **Implemented checklist correction:** the [acceptance plan](../prototype/acceptance-plan.mjs) now requests canonical v4 seeding, explicit v1/v3 migration and v4 backup/restore. This removes the obsolete grouped-v2 steps; it does not establish owner acceptance. Use [the current owner guide](OWNER_ACCEPTANCE.md).
 
 ## Safety and release boundary
 

@@ -1,3 +1,4 @@
+import { PagedApplicationStorage } from "./paged-application-storage.mjs";
 import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "./drive-transaction-engine.mjs";
 import { createDriveSessionAdapter } from "./drive-session-adapter.mjs";
 import { SessionCoordinator } from "./session-coordination.mjs";
@@ -40,7 +41,7 @@ export class ApplicationStorageLifecycle {
       cryptoImpl = globalThis.crypto, isOnline = () => globalThis.navigator?.onLine !== false,
       onStatus = () => {}, onDiagnostic = () => {}, lifecycleTarget = globalThis,
       setIntervalImpl = globalThis.setInterval, clearIntervalImpl = globalThis.clearInterval,
-      factories = {}, catalogProtocol = false, afterMutation = null
+      factories = {}, catalogProtocol = false, pagedCanonical = false, verificationPlans, adapterOptions = {}, afterMutation = null
     } = options;
 
     if (syntheticOnly !== true || !/synthetic/i.test(folderName)) {
@@ -71,6 +72,9 @@ export class ApplicationStorageLifecycle {
     this.clearIntervalImpl = clearIntervalImpl;
     this.factories = factories;
     this.catalogProtocol = catalogProtocol;
+    this.pagedCanonical = pagedCanonical;
+    this.verificationPlans = verificationPlans;
+    this.adapterOptions = adapterOptions;
     this.afterMutation = afterMutation;
     this.state = "disconnected";
     this.sessionAdapter = null;
@@ -112,14 +116,17 @@ export class ApplicationStorageLifecycle {
     });
     this.coordinator = (this.factories.createCoordinator || ((options) => new SessionCoordinator(options)))({ adapter: this.sessionAdapter });
     this.transactionAdapter = (this.factories.createTransactionAdapter || ((options) => new GoogleDriveTransactionAdapter(options)))({
+      ...this.adapterOptions,
       accessToken: this.accessToken,
       folderId: this.folderId,
       fetchImpl: this.fetchImpl,
       afterMutation: this.afterMutation,
       cryptoImpl: this.crypto
     });
-    this.engine = (this.factories.createEngine || ((options) => new (this.catalogProtocol ? CatalogTransactionEngine : DriveTransactionEngine)(options)))({
+    this.engine = (this.factories.createEngine || ((options) => new (this.pagedCanonical ? PagedApplicationStorage : this.catalogProtocol ? CatalogTransactionEngine : DriveTransactionEngine)(options)))({
       adapter: this.transactionAdapter,
+      verificationPlans: this.verificationPlans,
+      onReadFailure: error => this.pauseAfterReadFailure(error),
       cryptoImpl: this.crypto,
       isOnline: this.isOnline,
       assertWritable: () => this.coordinator.assertCanWrite({ online: this.isOnline() })
@@ -283,11 +290,24 @@ export class ApplicationStorageLifecycle {
       : verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto);
   }
 
+  async readPartitionedSnapshot() {
+    try { await this.requireReady(); if (!this.pagedCanonical) fail("paged-required", "This copy does not use canonical v4.");
+      return await this.engine.readSnapshot();
+    } catch (error) { this.pauseAfterReadFailure(error); throw error; }
+  }
+
+  async savePartitionedRoot(input) {
+    if (!this.pagedCanonical) fail("paged-required", "This copy does not use canonical v4.");
+    return this.transact(input);
+  }
+
   async readManifest() {
     try {
       await this.requireReady();
-      const manifest = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
-      if (this.catalogProtocol) {
+      const manifest = this.pagedCanonical ? JSON.parse(new TextDecoder().decode(await this.engine.physical.readManifest())) : await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
+      if (this.pagedCanonical) {
+        if (manifest.pending !== null) fail("recovery-required", "Finish root publication before reading.");
+      } else if (this.catalogProtocol) {
         if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Catalog finalization must complete before reading application state.");
         await this.verifyHistory(manifest);
       }
@@ -300,7 +320,12 @@ export class ApplicationStorageLifecycle {
   async assertCurrentManifest(expectedManifest) {
     try {
       await this.requireReady();
-      const current = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
+      const current = this.pagedCanonical ? JSON.parse(new TextDecoder().decode(await this.engine.physical.readManifest())) : await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
+      if (this.pagedCanonical) {
+        await this.engine.finishSnapshot();
+        const after = JSON.parse(new TextDecoder().decode(await this.engine.physical.readManifest()));
+        if (canonicalizeJcs(after) !== canonicalizeJcs(current)) fail("base-conflict", "Root changed while physical evidence was being checked.");
+      }
       if (canonicalizeJcs(current) !== canonicalizeJcs(expectedManifest)) fail("base-conflict", "Storage changed. Reopen before continuing.");
       await this.requireReady();
       return current;

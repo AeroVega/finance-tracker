@@ -183,15 +183,16 @@ export class CanonicalWorkspaceSession {
     return this.operation(async () => {
       let store = null, writeStarted = false, writeVerified = false;
       try {
-        await this.storage.connect({ requireEmpty: true });
+        await this.storage.connect({ requireEmpty: true, canonicalLayout: 'partitions-v4' });
         const lifecycle = this.storage.lifecycle;
         if (!this.ready() || !lifecycle) fail('reconnect-required');
         const genesis = await lifecycle.readManifest();
-        if (genesis.syntheticOnly !== true || genesis.revision !== 0 ||
-            genesis.catalogFinalizationPending !== null || Object.keys(genesis.snapshot || {}).length !== 0) {
+        if (genesis.syntheticOnly !== true || (lifecycle.pagedCanonical
+          ? genesis.revision !== '0' || genesis.pending !== null || genesis.role !== 'primary'
+          : genesis.revision !== 0 || genesis.catalogFinalizationPending !== null || Object.keys(genesis.snapshot || {}).length !== 0)) {
           fail('new-empty-folder-required');
         }
-        store = new CanonicalLedgerStore({ lifecycle, layout: 'fragments-v3' });
+        store = new CanonicalLedgerStore({ lifecycle, layout: lifecycle.pagedCanonical ? 'partitions-v4' : 'fragments-v3' });
         const existing = await store.load();
         if (existing !== null || !store.base || canonicalizeJcs(store.base) !== canonicalizeJcs(genesis)) {
           fail('new-empty-folder-required');

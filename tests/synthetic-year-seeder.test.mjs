@@ -111,7 +111,7 @@ test('uncertain committed outcome verifies without another write and aborted out
   }
 });
 
-test('the complete year saves and reopens through the real adapter and catalog/session engine with synthetic HTTP only', async () => {
+test('the complete year saves and reopens through the legacy fragmented-v3 adapter and catalog/session engine with synthetic HTTP only', async () => {
   const setup = await setupHttpCanonicalWorkbench();
   const seeder = new SyntheticYearSeeder();
   await seeder.admitFreshConnection(setup.lifecycle);
@@ -135,15 +135,15 @@ test('year UI is opt-in, has recovery and release, and cannot ingest user CSVs',
   assert.match(html, /drive.file access cannot prove/);
   assert.doesNotMatch(html, /type="file"/);
   assert.doesNotMatch(html, /storage-layout|chunks-v2/);
-  assert.match(html, /fragmented version 3/i);
-  assert.match(html, /paged v4 format is an experimental module, not an app storage option yet/);
-  assert.match(html, /opening a copy still verifies and loads the complete canonical ledger/);
+  assert.match(html, /canonical version 4/i);
+  assert.match(html, /compact-json-v1 values and paged fallback/);
+  assert.match(html, /Opening a copy still verifies and loads the complete ledger/);
   assert.match(html, /href="\.\.\/index.html#storage">main workspace/);
   assert.doesNotMatch(html, /four-row preview|into 15 payload objects/);
   assert.doesNotMatch(js, /storage-layout|chunks-v2|serializePackedCanonicalLedger/);
   for (const id of ['upload','reconnect','verify','recover','stale','release']) assert.match(html, new RegExp('id="' + id + '"[^>]*disabled'));
   assert.match(js, /if \(busy\) return/);
-  assert.match(js, /connect\(\{ requireEmpty: true \}\)/);
+  assert.match(js, /connect\(\{ requireEmpty: true, canonicalLayout: 'partitions-v4' \}\)/);
   assert.match(js, /connect\(\{ requireExisting: true \}\)/);
   assert.match(js, /beforeunload/);
   assert.doesNotMatch(js, /localStorage|sessionStorage|console\./);
@@ -166,7 +166,7 @@ test('year reconnect opts out of original-file retention and deletion even for a
 });
 
 
-test('default seeder creates fragmented v3 and reconnect preserves it; grouped v2 is rejected', async () => {
+test('legacy lifecycle fallback creates fragmented v3 and reconnect preserves it; grouped v2 is rejected', async () => {
   const lifecycle = fakeLifecycle(), generated = recipe();
   const seeder = new SyntheticYearSeeder({ createRecipe: () => generated });
   await seeder.admitFreshConnection(lifecycle); await seeder.verifyOrSeed(lifecycle);

@@ -4,10 +4,10 @@ import { setImmediate, setTimeout } from 'node:timers/promises';
 export const HTTP_CATEGORIES = Object.freeze(['list', 'generate-id', 'metadata', 'media', 'create', 'update']);
 
 const copy = value => structuredClone(value);
-const response = (value, status = 200) => new Response(
-  value instanceof Uint8Array ? value.slice() : JSON.stringify(value),
-  { status, headers: { 'Content-Type': 'application/json' } }
-);
+const response = (value, status = 200) => {
+  const bytes = value instanceof Uint8Array ? value.slice() : new TextEncoder().encode(JSON.stringify(value));
+  return new Response(bytes,{status,headers:{'Content-Type':'application/json','Content-Length':String(bytes.length)}});
+};
 const fileKind = metadata => metadata?.appProperties?.financeTrackerKind ||
   (metadata?.appProperties?.financeTrackerSession ? 'session-marker' : 'unknown');
 
@@ -57,6 +57,8 @@ export class HttpCatalogDrive {
     const rows = this.requests.filter(row => !phase || row.phase === phase);
     return {
       requests: rows.length,
+      requestBytes: rows.reduce((sum,row)=>sum+(row.requestBytes||0),0),
+      responseBytes: rows.reduce((sum,row)=>sum+(row.responseBytes||0),0),
       peakConcurrency: Math.max(0, ...rows.map(row => row.concurrency)),
       peakMutations: Math.max(0, ...rows.map(row => row.concurrentMutations)),
       categories: Object.fromEntries(HTTP_CATEGORIES.map(category => [category, rows.filter(row => row.category === category).length])),
@@ -93,7 +95,8 @@ export class HttpCatalogDrive {
     else if (method === 'PATCH' && target.pathname.startsWith('/upload/drive/v3/files/')) category = 'update';
     else assert.fail('Unmodeled Drive operation: ' + method + ' ' + target.pathname);
     const mutation = category === 'create' || category === 'update';
-    const row = { phase: this.phase, category, method, kind: fileKind(this.files.get(id)?.metadata), status: null };
+    const row = { phase: this.phase, fileId:id, category, method, kind: fileKind(this.files.get(id)?.metadata), status: null };
+    row.requestBytes = typeof options.body === "string" ? new TextEncoder().encode(options.body).length : options.body?.byteLength || options.body?.size || 0;
     this.requests.push(row);
     this.peakConcurrency = Math.max(this.peakConcurrency, ++this.active);
     if (mutation) this.peakMutations = Math.max(this.peakMutations, ++this.activeMutations);
@@ -107,6 +110,7 @@ export class HttpCatalogDrive {
       await this.beforeResponse?.({ category, method, fileId: id, row });
       const result = await this.respond(target, options, category, id, row);
       row.status = result.status;
+      row.responseBytes = Number(result.headers.get("Content-Length")) || 0;
       return result;
     } finally {
       this.active--;
@@ -146,7 +150,7 @@ export class HttpCatalogDrive {
     if (category === 'create') {
       assert.equal(target.searchParams.get('uploadType'), 'multipart');
       const { metadata, bytes } = await this.multipart(options);
-      row.kind = fileKind(metadata);
+      row.kind = fileKind(metadata); row.fileId=metadata.id;
       assert.ok(metadata.id?.startsWith(this.idPrefix));
       assert.deepEqual(metadata.parents, [this.folderId]);
       if (this.files.has(metadata.id)) return response({}, 409);
@@ -159,7 +163,7 @@ export class HttpCatalogDrive {
     if (!file) return response({}, 404);
     if (target.searchParams.get('uploadType') === 'multipart') {
       const { metadata, bytes } = await this.multipart(options);
-      assert.ok(['dashboard-synthetic-manifest', 'copy-preparation'].includes(fileKind(file.metadata)), 'only the manifest or copy preparation may be replaced');
+      assert.ok(['dashboard-synthetic-manifest', 'paged-canonical-manifest', 'copy-preparation'].includes(fileKind(file.metadata)), 'only the manifest or copy preparation may be replaced');
       Object.assign(file.metadata, metadata);
       file.bytes = bytes;
     } else {
