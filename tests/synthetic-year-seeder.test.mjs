@@ -135,9 +135,16 @@ test('year UI is opt-in, has recovery and release, and cannot ingest user CSVs',
   assert.match(html, /drive.file access cannot prove/);
   assert.doesNotMatch(html, /type="file"/);
   assert.doesNotMatch(html, /storage-layout|chunks-v2/);
-  assert.match(html, /canonical version 4/i);
+  const formatNote = html.match(/<p class="metric-note"><strong>New-copy storage format:<\/strong>(.*?)<\/p>/)?.[1];
+  assert.ok(formatNote, 'The seeder describes the new-copy format, not an inspected saved copy');
+  assert.match(formatNote, /canonical version 5/);
+  assert.match(formatNote, /physical root protocol 4/);
+  assert.match(formatNote, /Existing per-record v1, fragmented v3 and canonical v4 copies remain compatible/);
+  assert.doesNotMatch(html, /Active app storage format:<\/strong> canonical version 4/);
   assert.match(html, /compact-json-v1 values and paged fallback/);
   assert.match(html, /Opening a copy still verifies and loads the complete ledger/);
+  assert.match(html, /explicitly migrate v1\/v3 into a fresh v5 copy/);
+  assert.match(html, /V4-to-v5 migration is not implemented/);
   assert.match(html, /href="\.\.\/index.html#storage">main workspace/);
   assert.doesNotMatch(html, /four-row preview|into 15 payload objects/);
   assert.doesNotMatch(js, /storage-layout|chunks-v2|serializePackedCanonicalLedger/);
