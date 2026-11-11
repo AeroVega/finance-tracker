@@ -1,5 +1,20 @@
 # Project status
 
+## Apple web app UI, November 11, 2026
+
+**Implemented on a separate branch from `feat/scalable-storage-foundation`:**
+install metadata and opaque icons, additive safe-area spacing, a sticky mobile
+header, measured tab/draft clearance, touch feedback and enlarged-text wrapping.
+Financial logic and persistence are unchanged. The focused
+[UI contract and browser evidence](APPLE_WEB_APP.md) records seven passing Chromium
+layout scenarios and local anonymous asset checks. **Verified:** the required
+extended suite passed 1,999/1,999 tests on Node 24.22.1 in 335.845 seconds, with
+no failures, skips or cancellations. Syntax, documentation and diff checks pass.
+The complete run used the outer executor after sandboxed child-process tests
+reported `EPERM`. Physical Apple-device
+appearance, keyboard and Home Screen behavior remain **Unverified**. This work
+does not deploy or merge the storage branch, or expand production authorization.
+
 ## Initial-copy readback incident, November 11, 2026
 
 **User-confirmed:** deployed `56cafc2` reached four verified initialization writes
