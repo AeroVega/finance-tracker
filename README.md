@@ -20,6 +20,14 @@ Production financial-data persistence remains **NO-GO**. [PR27](docs/PR27_PRODUC
 
 Google Drive remains the selected private-storage direction, with a single active device and best-effort session coordination. Earlier [storage acceptance](docs/SYNTHETIC_STORAGE_ACCEPTANCE.md) and [PR28 acceptance](docs/PR28_CANONICAL_IMPORT.md) remain useful bounded evidence, not approval of every later path. Current canonical format policy is fragmented v3 for new stores, readable per-record v1, and rejection of standalone grouped v2.
 
+## Focused mobile pages
+
+The [mobile workspace redesign](docs/MOBILE_WORKSPACE_PAGES.md) separates Overview, Activity, Position, Review and Storage. Holdings and reconciliation have dedicated subpages. Page changes keep the synthetic ledger and unfinished editors in memory. The compact draft bar appears only when changes or an operation need attention. Rendered/device acceptance remains outstanding.
+
+## Financial position and reconciled coverage
+
+The authorized synthetic [financial-position milestone](docs/FINANCIAL_POSITION.md) adds dated balances, source-backed conflict decisions, holdings evidence, debt balances and per-account/month reconciliation to the canonical workspace. Its separate invented position scenario demonstrates exact assets minus liabilities without treating transaction sums as balances. It retains explicit save/reopen and recovery boundaries. Review and owner/device acceptance remain outstanding; production persistence remains **NO-GO**.
+
 ## Start here
 
 - [Documentation guide](docs/README.md)

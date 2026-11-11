@@ -1,5 +1,6 @@
 import {getEffectiveActivities, summarizeLedgerPeriods} from './canonical-import.mjs';
 import {exactSignedDecimal, isCalendarDate} from './import-reconciliation.mjs';
+import {buildFinancialPosition, buildAccountMonthCoverage} from './financial-position.mjs';
 
 const knownKinds = new Set(['income', 'spending', 'transfer', 'refund']);
 const fail = message => { throw new TypeError(message); };
@@ -75,6 +76,11 @@ function buildWorkspaceScope(ledger, effective, {accountId, month}) {
   const {start, end} = month ? monthBounds(month) : {start:dates[0] ?? null, end:dates.at(-1) ?? null};
   const inPeriod = date => !month || !isCalendarDate(date) || (date >= start && date <= end);
   const months = new Set();
+  for (const event of ledger.positionEvents || []) {
+    if (!selected.has(event.accountId)) continue;
+    if (event.effectiveDate) months.add(event.effectiveDate.slice(0, 7));
+    if (event.month) months.add(event.month);
+  }
   for (const run of selectedImports) addMonths(months, run.declaredCoverage.start, run.declaredCoverage.end);
   for (const activity of scopedActivities) {
     const date = reportingDate(activity);
@@ -119,10 +125,10 @@ function buildWorkspaceScope(ledger, effective, {accountId, month}) {
     'Known income and spending are partial totals, not a claim of complete history.',
     'Transfers and card payments do not count as income or spending. Unsupported investment activity stays excluded.',
     'The cash subtotal excludes transfers and card activity. It is not an account balance or total bank movement.',
-    'Balances, net worth and investment performance are unavailable.',
+    'Dated balances and qualified net worth appear separately below. Investment performance is unavailable.',
     'Search and review filters change displayed rows only. Account and month selections change the totals.',
     'Refunds belong to their posted month. Refunds without a posting date remain visible and excluded from totals.',
-    'Declared coverage is not reconciled. This workspace does not upload or maintain original source files; row evidence is preserved.',
+    'Declared coverage alone is not reconciliation evidence. This workspace does not upload or maintain original source files; row evidence is preserved.',
   ];
   if (!summary.length) qualifications.unshift('No dated coverage is available, so financial totals are unavailable.');
   return {accounts:ledger.accounts, months:[...months].sort().reverse(),
@@ -161,6 +167,13 @@ export function createWorkspaceViewReader(ledger) {
   const effective = getEffectiveActivities(snapshot); // validate before any cache can be used
   let cached = null;
   let searchTexts = null;
+  let positionCache = null;
+  let coverageCache = null;
+  const accountScope = accountId => {
+    if (typeof accountId !== 'string') fail('invalid-workspace-options');
+    if (accountId && !snapshot.accounts.some(account => account.accountId === accountId)) fail('unknown-account');
+    return accountId ? [accountId] : undefined;
+  };
   return Object.freeze({view(options) {
     const selection = workspaceOptions(options);
     const {accountId, month, query, reviewOnly, pageSize} = selection;
@@ -169,6 +182,20 @@ export function createWorkspaceViewReader(ledger) {
       searchTexts = cached.rows.map(searchableText);
     }
     return selectWorkspaceRows(cached, searchTexts, selection);
+  }, position({asOf, accountId = ''} = {}) {
+    const accountIds = accountScope(accountId);
+    if (!isCalendarDate(asOf)) fail('invalid-position-as-of');
+    if (!positionCache || positionCache.asOf !== asOf || positionCache.accountId !== accountId) {
+      positionCache = {asOf, accountId, report:buildFinancialPosition(snapshot, {asOf, accountIds})};
+    }
+    return structuredClone(positionCache.report);
+  }, coverage({month, accountId = ''} = {}) {
+    const accountIds = accountScope(accountId);
+    monthBounds(month);
+    if (!coverageCache || coverageCache.month !== month || coverageCache.accountId !== accountId) {
+      coverageCache = {month, accountId, report:buildAccountMonthCoverage(snapshot, {month, accountIds})};
+    }
+    return structuredClone(coverageCache.report);
   }});
 }
 

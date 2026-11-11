@@ -9,7 +9,7 @@ Alpha must let the owner import and review financial history, correct it, reconc
 1. **Resolve the deployment evidence gap.** Inspect the failed `Configure GitHub Pages` step and actual Pages settings, then obtain a successful authorized deployment and confirm its full SHA in the served app. The failed main run is linked in [project status](PROJECT_STATUS.md). No deployment or settings change is authorized by this document.
 2. **Repair the acceptance checklist in a bounded code change.** Remove obsolete grouped-v2 seeding/selector steps from `prototype/acceptance-plan.mjs` and align its tests and displayed instructions with current v3 policy. Preserve unique recovery and device checks. Until then, use [the owner guide](OWNER_ACCEPTANCE.md) and mark obsolete phases blocked, not passed.
 3. **Close step 1's remaining acceptance.** Reuse the owner's accepted local browsing/correction/mobile evidence. Test the newer preview persistence and transfer-link save/reopen paths on the reviewed deployed SHA with invented data only. Record failures and exact coverage rather than repeating every historical check.
-4. **Prepare step 2's contract and implementation scope.** Define balance snapshots and reconciliation completeness before adding financial-position totals. Carry forward the settled product semantics and present only unresolved choices for owner review.
+4. **Review step 2's authorized implementation.** The [financial-position contract](FINANCIAL_POSITION.md) records the dated-balance, conflict, holdings, debt and evidence-based coverage rules. Review the [adversarial follow-up](PR36_ADVERSARIAL_REVIEW.md) and automated results, then complete owner-run synthetic save/reopen/restore and device acceptance on the reviewed source. Do not treat implementation as release or production approval.
 
 These are dependencies and review actions, not automatic permission to merge, deploy, change Google configuration or use real data.
 
@@ -32,9 +32,9 @@ Use [the workspace acceptance procedure](CANONICAL_MAIN_WORKSPACE.md#validation-
 
 ### Step 2: financial position and reconciled coverage
 
-**Open. Depends on the canonical model and storage, not a new storage rewrite.**
+**Synthetic implementation under review.** The owner approved the financial-position plan on November 10, 2026. The [implementation contract](FINANCIAL_POSITION.md) adds optional append-only position events through the existing canonical model and storage. Live synthetic and device acceptance remain separate.
 
-Prepare a compatible contract for dated account balances, investment holdings/values and liability balances. State source, effective date, currency, freshness and missingness. Define the evidence required to reconcile each account and month; declared import coverage alone is insufficient. Resolve relevant financial questions in [O1/O3 and E2/E3](PRODUCT_OPEN_DECISIONS.md), including mortgage/auto-loan representation, without reopening settled transfer/refund/pending rules.
+The contract covers dated account balances, investment holdings/values and liability balances with source, effective date, currency, freshness and missingness. Account/month reconciliation requires evidence beyond declared coverage. The scoped choices in [O1/O3 and E2/E3](PRODUCT_OPEN_DECISIONS.md) are recorded without reopening settled transfer/refund/pending rules. Remaining broader investment, reporting and debt questions stay open.
 
 **Proposed engineering acceptance criteria** for the scoped implementation, to verify in its review:
 - [ ] Invented checking, savings, credit-card, investment and liability examples produce exact assets minus liabilities. Purchases/card payments and transfer pairs do not double-count.

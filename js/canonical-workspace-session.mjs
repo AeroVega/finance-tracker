@@ -1,6 +1,7 @@
 import { CanonicalLedgerStore } from './canonical-ledger-storage.mjs';
-import { applyFinancialEvent, validateLedger } from './canonical-import.mjs';
+import { applyFinancialEvent, registerAccount, validateLedger } from './canonical-import.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
+import { applyPositionEvent } from './financial-position.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
@@ -101,7 +102,7 @@ export class CanonicalWorkspaceSession {
     if (type === 'category-correction') command.categoryId = typeof categoryId === 'string' ? categoryId.trim() : categoryId;
     if (type === 'bank-correction') command.amountText = typeof amountText === 'string' ? amountText.trim() : amountText;
     const next = applyFinancialEvent(this.ledger, command);
-    this.stagedHistory.push(this.ledger.events.length);
+    this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();
     return this.ledger;
@@ -117,7 +118,30 @@ export class CanonicalWorkspaceSession {
       commandId: crypto.randomUUID(),
       evidence: { rationale: rationale.trim() }
     });
-    this.stagedHistory.push(this.ledger.events.length);
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return this.ledger;
+  }
+
+  stageCheckpoint() {
+    this.stagedHistory.push({ accounts: this.ledger.accounts.length, events: this.ledger.events.length,
+      positionEvents: Object.hasOwn(this.ledger, 'positionEvents') ? this.ledger.positionEvents.length : null });
+  }
+
+  addAccount({ institutionId, accountType, displayName, currency }) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    const next = registerAccount(this.ledger, { institutionId, accountType, displayName, currency });
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return this.ledger;
+  }
+
+  recordPosition(command) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    const next = applyPositionEvent(this.ledger, { ...command, commandId: crypto.randomUUID() });
+    this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();
     return this.ledger;
@@ -126,10 +150,14 @@ export class CanonicalWorkspaceSession {
   undoLastStagedChange() {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (!this.stagedHistory.length) fail('no-staged-changes');
-    const previousEventCount = this.stagedHistory.pop();
+    const previous = this.stagedHistory.at(-1);
     const next = structuredClone(this.ledger);
-    next.events = next.events.slice(0, previousEventCount);
+    next.accounts = next.accounts.slice(0, previous.accounts);
+    next.events = next.events.slice(0, previous.events);
+    if (previous.positionEvents === null) delete next.positionEvents;
+    else next.positionEvents = next.positionEvents.slice(0, previous.positionEvents);
     validateLedger(next);
+    this.stagedHistory.pop();
     this.ledger = next;
     this.updateDirty();
     return this.ledger;

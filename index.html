@@ -11,23 +11,24 @@
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
   <script src="js/build-info.js" defer></script>
-  <script src="js/workspace-navigation.js" defer></script>
   <script type="module" src="js/canonical-workspace.mjs"></script>
 </head>
 <body class="canonical-workspace">
-  <a class="skip-link" href="#overview">Skip to overview</a>
+  <a class="skip-link" href="#main-content">Skip to page content</a>
   <div class="workspace">
     <aside class="sidebar" aria-label="Workspace navigation">
       <a class="brand" href="#overview">
         <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17.5 9 12l3.2 3.2L20 6.5M14.5 6.5H20v5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span>FINANCE TRACKER<small>YOUR FINANCIAL WORKSPACE</small></span>
+        <span>FINANCE TRACKER<small>SYNTHETIC WORKSPACE</small></span>
       </a>
+      <a class="mode-pill" id="data-mode" href="#storage">Synthetic workspace</a>
       <p class="nav-label">Workspace</p>
       <nav class="primary-nav" aria-label="Primary navigation">
-        <a href="#overview"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.5"/></svg>Overview</a>
-        <a href="#transactions"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg>Transactions</a>
-        <a href="#review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 12 3.2 3.2L17 8.5"/><rect x="3.5" y="3.5" width="17" height="17" rx="5"/></svg>Review</a>
-        <a href="#storage"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5v9c0 2.2 16 2.2 16 0v-9M4 12c0 2.2 16 2.2 16 0"/><ellipse cx="12" cy="7.5" rx="8" ry="3"/></svg>Storage</a>
+        <a id="nav-overview" href="#overview"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.5"/></svg>Overview</a>
+        <a id="nav-transactions" href="#transactions"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg>Activity</a>
+        <a id="nav-position" href="#position"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16M6 17V9h4v8m4 0V4h4v13"/></svg>Position</a>
+        <a id="nav-review" href="#review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 12 3.2 3.2L17 8.5"/><rect x="3.5" y="3.5" width="17" height="17" rx="5"/></svg>Review</a>
+        <a id="nav-storage" href="#storage"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5v9c0 2.2 16 2.2 16 0v-9M4 12c0 2.2 16 2.2 16 0"/><ellipse cx="12" cy="7.5" rx="8" ry="3"/></svg>Storage</a>
       </nav>
       <div class="sidebar-tools">
         <p class="nav-label">Development</p>
@@ -38,44 +39,141 @@
       <div class="workspace-note"><span class="status-dot" aria-hidden="true"></span><strong>Synthetic data only</strong><p>Explore invented records. Production financial storage remains disabled.</p></div>
     </aside>
 
-    <main class="app-shell" id="overview" tabindex="-1">
+    <main class="app-shell" id="main-content" tabindex="-1">
       <header class="topbar">
-        <div><p class="eyebrow">PERSONAL FINANCE / WORKSPACE</p><h1>A clearer view<span class="accent-dot">.</span></h1><p class="intro">Follow the numbers, inspect their sources, and review what needs attention.</p></div>
-        <span class="mode-pill" id="data-mode">No ledger open</span>
+        <div><p class="eyebrow" id="page-eyebrow">YOUR WORKSPACE</p><h1 id="page-title" tabindex="-1">Overview</h1><p class="intro" id="page-description">Your known cash flow, with the evidence in reach.</p></div>
       </header>
 
-      <section class="ledger-entry" aria-labelledby="entry-heading">
-        <div class="entry-copy"><span class="entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5zM3 10h18"/></svg></span><div><p class="eyebrow">START WITH YOUR SAVED YEAR</p><h2 id="entry-heading">One ledger. Every source in reach.</h2><p>Open an existing synthetic folder in Google Drive, or explore an invented year locally.</p></div></div>
-        <div class="entry-actions"><button id="open-ledger" class="primary-button" type="button">Open saved synthetic year <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></button><button id="preview-year" class="secondary-button" type="button">Try a local preview</button><button id="save-preview" class="secondary-button" type="button" disabled>Save this preview to a new folder</button></div>
-        <div class="entry-footnote"><p>Local preview stays in this tab until you explicitly save it to a newly created, empty synthetic Drive folder.</p><a href="prototype/synthetic-year.html">Need a saved year? Seed one <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></div>
-      </section>
+
       <p id="action-status" class="status-message action-status" role="status" aria-live="polite" aria-atomic="true">Choose a saved synthetic year or try the local preview.</p>
 
-      <section class="summary-section" aria-labelledby="summary-heading">
-        <div class="section-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="summary-heading">Known income &amp; spending</h2></div><p id="summary-scope">No ledger loaded</p></div>
-        <div class="scope-controls" aria-describedby="scope-help">
+        <div class="scope-controls" id="workspace-scope" aria-describedby="scope-help">
           <label for="account-filter">Account<select id="account-filter" disabled><option value="all">All accounts</option></select></label>
-          <label for="month-filter">Period<select id="month-filter" disabled><option value="all">Full year</option></select></label>
-          <p id="scope-help">Account and period change these totals and the transactions below. Search only changes the rows you see.</p>
+          <label id="month-scope" for="month-filter">Period<select id="month-filter" disabled><option value="all">Full year</option></select></label>
+          <label id="position-date-scope" hidden for="position-date">Position as of<input id="position-date" type="date" disabled></label>
+          <p id="scope-help">Account and period apply across Overview, Activity and Review. Search changes activity rows only.</p>
         </div>
+
+      <p id="no-ledger-notice" class="quiet-placeholder" hidden>No ledger is open. <a href="#storage">Open a saved year or explore a local preview</a>.</p>
+
+      <nav id="position-navigation" class="page-switcher" aria-label="Position pages" hidden><a id="sub-position" href="#position">Balances</a><a id="sub-holdings" href="#holdings">Holdings</a></nav>
+      <nav id="review-navigation" class="page-switcher" aria-label="Review pages" hidden><a id="sub-review" href="#review">Decisions</a><a id="sub-reconciliation" href="#reconciliation">Reconciliation</a></nav>
+
+      <section id="overview" class="summary-section workspace-page" aria-labelledby="page-title">
+        <div id="welcome-panel" class="welcome-panel"><p class="eyebrow">A SAFE PLACE TO EXPLORE</p><h2>Your finances, one question at a time.</h2><p>Start with invented balances and transactions. Nothing connects to Google or saves automatically.</p><div class="welcome-actions"><button id="start-preview" type="button" class="primary-button">Explore a synthetic preview <span aria-hidden="true">→</span></button><a href="#storage" class="secondary-button">Open a saved year</a></div></div>
+        <div id="overview-loaded" hidden>
+        <div class="section-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="summary-heading">Known income &amp; spending</h2></div><p id="summary-scope">No ledger loaded</p></div>
+
         <div id="summary-cards" class="metric-grid">
           <article class="metric-card"><p class="metric-label">Known income <span class="metric-symbol positive" aria-hidden="true">+</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
           <article class="metric-card"><p class="metric-label">Known spending <span class="metric-symbol" aria-hidden="true">−</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
           <article class="metric-card metric-card-emphasis"><p class="metric-label">Known cash movement <span class="metric-symbol" aria-hidden="true">⇄</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only. Not a balance.</p></article>
         </div>
         <div class="summary-context"><div><p>Known subtotals only. Transfers and card payments do not count as income or spending.</p><details class="summary-explainer"><summary>How these totals are calculated</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p></details></div><p id="coverage-summary">Coverage has not been loaded. Missing data is unavailable, not zero.</p></div>
+        <nav class="overview-destinations" aria-label="Explore this ledger">
+          <a href="#transactions"><span class="destination-icon" aria-hidden="true">↔</span><span><strong>Follow the activity</strong><small>Search records and inspect their sources</small></span><span aria-hidden="true">→</span></a>
+          <a href="#position"><span class="destination-icon" aria-hidden="true">◎</span><span><strong>Understand your position</strong><small>Dated balances, liabilities and holdings</small></span><span aria-hidden="true">→</span></a>
+          <a href="#review"><span class="destination-icon" aria-hidden="true">✓</span><span><strong id="overview-review-title">Check what needs attention</strong><small>Decisions and account-month reconciliation</small></span><span aria-hidden="true">→</span></a>
+        </nav></div>
       </section>
 
-      <section class="panel transactions-panel" id="transactions" aria-labelledby="transactions-heading">
+      <section class="panel position-panel workspace-page" id="position" hidden aria-labelledby="position-heading">
+        <div class="panel-heading"><h2 id="position-heading">Financial position</h2><span class="tag">Dated evidence · synthetic only</span></div>
+        <p id="position-scope">Choose a ledger. The position date is independent of the activity month.</p>
+        <p id="position-warning" role="status" aria-live="polite">Missing balances are unavailable, not zero.</p>
+        <div id="position-totals" class="metric-grid"></div>
+        <details><summary>Add a synthetic account</summary>
+          <form id="account-form" class="position-form">
+            <p>Invented account names only. Do not enter account numbers or real financial information. This stages an account without connecting to an institution.</p>
+            <label for="new-account-name">Invented display name<input id="new-account-name" type="text" maxlength="200" disabled></label>
+            <label for="new-account-institution">Institution<select id="new-account-institution" disabled><option value="wells-fargo">Wells Fargo</option><option value="sofi">SoFi</option><option value="fidelity">Fidelity</option></select></label>
+            <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Brokerage</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
+            <label for="new-account-currency">Three-letter currency<input id="new-account-currency" type="text" maxlength="3" placeholder="USD" disabled></label>
+            <button id="stage-account" type="button" class="secondary-button" disabled>Stage synthetic account</button>
+            <p id="account-form-status" class="status-message" tabindex="-1"></p>
+          </form>
+        </details>
+        <details><summary>Add or correct a dated synthetic balance</summary>
+          <form id="position-form" class="position-form" aria-describedby="position-help">
+            <p id="position-help">Invented data only. Enter the signed asset balance or a nonnegative amount owed for a liability. Each entry appends evidence; a correction on the same date creates a conflict until you select the supported source below. Staging does not save.</p>
+            <label for="balance-account">Account<select id="balance-account" disabled></select></label>
+            <label for="balance-date">Effective date<input id="balance-date" type="date" disabled></label>
+            <label for="balance-amount">Exact balance<input type="text" id="balance-amount" inputmode="decimal" placeholder="100.00" disabled></label>
+            <label for="balance-basis">Basis<select id="balance-basis" disabled><option value="manual">Manual</option><option value="statement">Statement</option></select></label>
+            <label for="balance-source">Evidence reference / correction reason<input type="text" id="balance-source" maxlength="300" disabled></label>
+            <button id="stage-balance" type="button" class="secondary-button" disabled>Stage dated balance</button>
+            <p id="position-form-status" class="status-message" tabindex="-1"></p>
+          </form>
+        </details>
+        <details><summary>Record an account closure</summary>
+          <form id="closure-form" class="position-form">
+            <p>Closure requires a selected zero balance on the closure date. It preserves the account and all its history. Later contradictory evidence prevents a complete closure claim.</p>
+            <label for="closure-anchor">Zero-balance evidence<select id="closure-anchor" disabled></select></label>
+            <label for="closure-source">Closure evidence reference<input type="text" id="closure-source" maxlength="300" disabled></label>
+            <button id="stage-closure" type="button" class="secondary-button" disabled>Stage account closure</button>
+            <p id="closure-form-status" class="status-message" tabindex="-1"></p>
+          </form>
+        </details>
+
+        <div id="position-accounts" class="position-accounts"></div>
+      </section>
+
+      <section class="panel position-panel workspace-page" id="holdings" aria-labelledby="holdings-heading" hidden>
+        <div class="panel-heading"><h2 id="holdings-heading">Dated holdings</h2><span class="tag">Statement evidence only</span></div>
+        <p class="panel-copy">Quantities and values come from dated evidence. No live prices. Account balances count once in financial position.</p>
+        <details class="editor-disclosure"><summary>Enter dated synthetic holdings</summary>
+          <form id="holdings-form" class="position-form">
+            <p>Copy invented statement evidence only. Quantities and values remain exact decimals. Holdings do not replace account balances or fetch prices. Same-date conflicting statements require a deliberate selection.</p>
+            <label for="holdings-account">Investment account<select id="holdings-account" disabled></select></label>
+            <label for="holdings-date">Holdings effective date<input id="holdings-date" type="date" disabled></label>
+            <label for="holdings-scope">Statement scope<select id="holdings-scope" disabled><option value="partial">Partial holdings</option><option value="complete">Complete holdings</option></select></label>
+            <label for="holdings-source">Statement evidence reference<input id="holdings-source" type="text" maxlength="300" disabled></label>
+            <div id="holdings-rows" class="position-editor-rows"></div>
+            <button id="add-holding" type="button" class="secondary-button" disabled>Add holding row</button>
+            <button id="stage-holdings" type="button" class="secondary-button" disabled>Stage dated holdings</button>
+            <p id="holdings-form-status" class="status-message" tabindex="-1"></p>
+          </form>
+        </details>
+        <div id="holdings-accounts" class="position-accounts"><p class="quiet-placeholder">Open a ledger to inspect investment holdings.</p></div>
+      </section>
+
+      <section class="panel position-panel workspace-page" id="reconciliation" aria-label="Account-month reconciliation" hidden>
+        <h2>Account-month reconciliation</h2>
+        <p id="position-coverage-help">Select an activity month above to inspect coverage. Declared imports alone do not prove completeness.</p>
+        <details><summary>Record reconciliation evidence</summary>
+          <form id="reconciliation-form" class="position-form">
+            <p>Checking, savings and credit cards use posted cash movement. Investments and loans use statement components: enter every change that explains closing balance minus opening balance, including signs. A debt reduction is negative. A complete statement declaration is evidence, not automatic reconciliation. Select the account and balance anchors for the activity month selected above. Evidence is checked against activity and unresolved records; recording a review never silently marks a month complete.</p>
+            <label for="reconcile-account">Account<select id="reconcile-account" disabled></select></label>
+            <p id="reconcile-anchor-help">Select an account and activity month to choose balance evidence.</p>
+            <label for="reconcile-opening">Opening balance evidence<select id="reconcile-opening" aria-describedby="reconcile-anchor-help" disabled></select></label>
+            <label for="reconcile-closing">Closing balance evidence<select id="reconcile-closing" aria-describedby="reconcile-anchor-help" disabled></select></label>
+            <label for="reconcile-source">Reconciliation evidence reference<input type="text" id="reconcile-source" maxlength="300" disabled></label>
+            <div id="statement-components-panel" class="position-editor-rows" hidden>
+              <p id="statement-coverage-period">Select an activity month above.</p>
+              <label class="checkbox-field" for="statement-full-month"><input id="statement-full-month" type="checkbox" disabled><span>I have a complete statement covering this entire selected month for this account.</span></label>
+              <p>Leave unchecked for partial evidence. Missing coverage or unexplained differences keep the month incomplete. An empty component list means no statement movement was recorded; it is not evidence of no movement.</p>
+              <div id="component-rows"></div>
+              <button id="add-component" type="button" class="secondary-button" disabled>Add statement component</button>
+            </div>
+            <button id="stage-reconciliation" type="button" class="secondary-button" disabled>Stage reconciliation evidence</button>
+            <p id="reconciliation-form-status" class="status-message" tabindex="-1"></p>
+          </form>
+        </details>
+
+        <div id="position-coverage"></div>
+      </section>
+
+      <section class="panel transactions-panel workspace-page" id="transactions" hidden aria-labelledby="transactions-heading">
         <div class="panel-heading"><div><p class="eyebrow">THE RECORDS BEHIND THE TOTALS</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><span class="tag">Canonical ledger</span></div>
+        <a id="resume-detail" class="resume-detail" href="#activity-detail" hidden>Continue inspecting your selected transaction <span aria-hidden="true">→</span></a>
         <div class="transaction-filters"><label class="search-field" for="transaction-search">Find a transaction<input id="transaction-search" type="search" placeholder="Search descriptions, dates or accounts" autocomplete="off" aria-describedby="search-help" disabled></label><label class="checkbox-field" for="review-only"><input id="review-only" type="checkbox" disabled><span>Needs review only</span></label></div>
-        <div class="filter-meta"><p id="search-help">Search and review filters change rows only, not the overview totals.</p><p id="filter-count" role="status" aria-live="polite" aria-atomic="true">No transactions loaded.</p></div>
-        <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 3.5h8A2.5 2.5 0 0 1 18.5 6v14l-3.3-2-3.2 2-3.2-2-3.3 2V6A2.5 2.5 0 0 1 8 3.5ZM9 8h6m-6 4h6"/></svg></div><h3>Your year, transaction by transaction</h3><p>Open a saved ledger or try the local preview. Select any transaction to inspect its source and correction history.</p><a href="#overview">Choose a ledger <span aria-hidden="true">↑</span></a></div>
-        <div class="table-wrap" id="transaction-table-wrap" tabindex="0" aria-label="Transactions, scroll horizontally to see all columns" hidden><p class="table-scroll-hint">Scroll sideways for exact amounts and review controls <span aria-hidden="true">↔</span></p><table><caption class="visually-hidden">Canonical transactions in the selected account and period. Amounts preserve their exact decimal values. Search filters rows only.</caption><thead><tr><th scope="col">Date</th><th scope="col">Description / account</th><th scope="col">Classification / category</th><th scope="col" class="amount-heading">Exact amount</th><th scope="col"><span class="visually-hidden">Review transaction</span></th></tr></thead><tbody id="transaction-rows"></tbody></table></div>
+        <div class="filter-meta"><p id="search-help">Search and review filters change rows only. Overview totals keep the selected account and period.</p><p id="filter-count" role="status" aria-live="polite" aria-atomic="true">No transactions loaded.</p></div>
+        <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 3.5h8A2.5 2.5 0 0 1 18.5 6v14l-3.3-2-3.2 2-3.2-2-3.3 2V6A2.5 2.5 0 0 1 8 3.5ZM9 8h6m-6 4h6"/></svg></div><h3>Your year, transaction by transaction</h3><p>Open a saved ledger or try the local preview. Select any transaction to inspect its source and correction history.</p><a href="#storage">Choose a ledger <span aria-hidden="true">↑</span></a></div>
+        <div class="table-wrap" id="transaction-table-wrap" tabindex="0" aria-label="Transactions in the selected scope" hidden><p class="table-scroll-hint">Scroll sideways for exact amounts and review controls <span aria-hidden="true">↔</span></p><table role="table"><caption class="visually-hidden">Canonical transactions in the selected account and period. Amounts preserve their exact decimal values. Search filters rows only.</caption><thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Description / account</th><th role="columnheader" scope="col">Classification / category</th><th role="columnheader" scope="col" class="amount-heading">Exact amount</th><th role="columnheader" scope="col"><span class="visually-hidden">Review transaction</span></th></tr></thead><tbody role="rowgroup" id="transaction-rows"></tbody></table></div>
         <div class="ledger-pagination"><p id="page-status" role="status" aria-live="polite" aria-atomic="true">No transactions to display</p><div><button id="previous-page" class="secondary-button" type="button" disabled><span aria-hidden="true">←</span> Previous</button><button id="next-page" class="secondary-button" type="button" disabled>Next <span aria-hidden="true">→</span></button></div></div>
       </section>
 
-      <section id="activity-detail" class="panel activity-detail" aria-labelledby="detail-title" hidden>
+      <section id="activity-detail" class="panel activity-detail workspace-page" aria-labelledby="detail-title" hidden>
         <div class="panel-heading"><div><p class="eyebrow">TRANSACTION DETAIL</p><h2 id="detail-title" tabindex="-1">Inspect transaction</h2></div><button id="close-detail" class="text-button" type="button">Close detail <span aria-hidden="true">×</span></button></div>
         <div class="detail-overview"><p id="detail-description"></p><p id="detail-amount" class="detail-amount"></p></div>
         <div class="detail-grid">
@@ -93,21 +191,28 @@
         </div>
       </section>
 
-      <section class="panel review-panel" id="review" aria-labelledby="review-heading">
+      <section class="panel review-panel workspace-page" id="review" hidden aria-labelledby="review-heading">
         <div class="panel-heading"><div><p class="eyebrow">A SECOND LOOK</p><h2 id="review-heading">Needs review</h2></div><span class="tag violet">Keep uncertainty visible</span></div>
         <p id="review-summary" class="panel-copy">Open a ledger to see records that need a decision.</p>
         <div id="review-queue" class="review-queue"><p class="quiet-placeholder">Unclassified activity and other unresolved records will appear here.</p></div>
       </section>
 
-      <section class="panel storage-panel" id="storage" aria-labelledby="storage-heading">
+      <section class="panel storage-panel workspace-page" id="storage" hidden aria-labelledby="storage-heading">
         <div class="panel-heading"><div><p class="eyebrow">YOUR WORKING COPY</p><h2 id="storage-heading">Storage &amp; recovery</h2></div><span class="tag">Synthetic only</span></div>
+      <section class="ledger-entry" aria-labelledby="entry-heading">
+        <div class="entry-copy"><span class="entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5zM3 10h18"/></svg></span><div><p class="eyebrow">CONNECT A SYNTHETIC LEDGER</p><h2 id="entry-heading">Open your saved copy</h2><p>Open an existing synthetic folder in Google Drive, or explore an invented year locally.</p></div></div>
+        <div class="entry-actions"><button id="open-ledger" class="primary-button" type="button">Open saved synthetic year <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></button></div><details class="preview-choices"><summary>Explore invented data locally</summary><p>No Google connection. Preview changes stay in this tab until you explicitly save.</p><div class="entry-actions"><button id="preview-year" class="secondary-button" type="button">Try a local preview</button><button id="preview-position" class="secondary-button" type="button">Try balances &amp; reconciliation</button></div></details>
+        <div class="entry-footnote"><p>Local preview stays in this tab until you explicitly save it to a newly created, empty synthetic Drive folder.</p><a href="prototype/synthetic-year.html">Need a saved year? Seed one <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></div>
+      </section>
         <p id="connection-status" class="connection-status">No Drive folder connected. Local preview is available without Google authorization.</p>
-        <p class="panel-copy">Open an existing saved synthetic year above. Changes are saved only when you choose <strong>Save changes</strong>. Keep this tab open during a save and release the session before opening this folder in another tool or on another device.</p>
-        <details class="advanced-tools"><summary>Recovery and advanced tools</summary><div class="advanced-content"><p>Recovery controls appear when an interrupted operation or stopped session needs attention. Only confirm stale-session recovery after the other session has stopped.</p><div class="storage-actions"><button id="recover-ledger" class="secondary-button" type="button" disabled>Recover interrupted operation</button><button id="recover-stale" class="secondary-button" type="button" hidden>Confirm stopped session and recover</button></div><nav class="advanced-links" aria-label="Advanced synthetic tools"><a href="prototype/pr28-import.html"><span>Import workbench<small>Account mapping, matching and linked refunds</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/pr25-acceptance.html?guide=pr28"><span>Backup &amp; restore<small>Copy and verify an existing synthetic ledger</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/local-preview.html"><span>Local CSV preview<small>Separate raw-file diagnostic, not this ledger</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/acceptance.html"><span>Acceptance tests<small>Guided synthetic storage and device checks</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></nav><p class="field-help">Release this session before using another tool with the same folder. Session coordination is best-effort; simultaneous device use is unsupported.</p></div></details>
+        <p class="panel-copy">Open an existing saved synthetic year here. Changes are saved only when you choose <strong>Save changes</strong>. Keep this tab open during a save and release the session before opening this folder in another tool or on another device.</p>
+        <section class="session-panel" aria-labelledby="session-heading"><h3 id="session-heading">Save &amp; session</h3><p id="save-state" aria-live="polite">No ledger open</p><p class="field-help">Changes are never saved automatically. Switching pages keeps your draft in this tab.</p><div class="storage-actions"><button id="save-preview" class="secondary-button" type="button" disabled>Save this preview to a new folder</button><button id="undo-last-change" class="text-button" type="button" disabled>Undo last staged change</button><button id="revert-all-changes" class="text-button" type="button" disabled>Revert all staged changes</button><button id="reopen-ledger" class="text-button" type="button" disabled>Reopen saved</button><button id="release-ledger" class="secondary-button" type="button" disabled>Release session</button></div></section>
+        <details id="recovery-tools" class="advanced-tools"><summary>Recovery and advanced tools</summary><div class="advanced-content"><p>Recovery controls appear when an interrupted operation or stopped session needs attention. Only confirm stale-session recovery after the other session has stopped.</p><div class="storage-actions"><button id="recover-ledger" class="secondary-button" type="button" disabled>Recover interrupted operation</button><button id="recover-stale" class="secondary-button" type="button" hidden>Confirm stopped session and recover</button></div><nav class="advanced-links" aria-label="Advanced synthetic tools"><a href="prototype/pr28-import.html"><span>Import workbench<small>Account mapping, matching and linked refunds</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/pr25-acceptance.html?guide=pr28"><span>Backup &amp; restore<small>Copy and verify an existing synthetic ledger</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/local-preview.html"><span>Local CSV preview<small>Separate raw-file diagnostic, not this ledger</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/acceptance.html"><span>Acceptance tests<small>Guided synthetic storage and device checks</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></nav><p class="field-help">Release this session before using another tool with the same folder. Session coordination is best-effort; simultaneous device use is unsupported.</p></div></details>
+      <footer><p>Synthetic workspace · Production financial storage disabled</p><p>Source commit <code id="build-sha">development (not deployed)</code></p><a href="prototype/">All test tools <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></footer>
       </section>
 
-      <footer><p>Synthetic workspace · Production financial storage disabled</p><p>Source commit <code id="build-sha">development (not deployed)</code></p><a href="prototype/">All test tools <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></footer>
-      <div class="save-bar" aria-label="Save and session actions"><div class="save-indicator"><span class="save-status-mark" aria-hidden="true"></span><div><p id="save-state" aria-live="polite">No ledger open</p><p class="save-reminder">Changes are never saved automatically. <span id="operation-timing" aria-live="off"></span></p></div></div><div class="save-actions"><button id="undo-last-change" class="text-button" type="button" disabled>Undo last staged change</button><button id="revert-all-changes" class="text-button" type="button" disabled>Revert all staged changes</button><button id="reopen-ledger" class="text-button" type="button" disabled>Reopen saved</button><button id="release-ledger" class="secondary-button" type="button" disabled>Release session</button><button id="save-ledger" class="primary-button" type="button" disabled>Save changes <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button></div></div>
+
+      <div id="draft-bar" class="draft-bar" aria-label="Draft and connection status" hidden><a class="draft-indicator" href="#storage"><span class="save-status-mark" aria-hidden="true"></span><span id="draft-summary" aria-live="polite">Changes stay in this tab</span></a><span id="operation-timing" aria-live="off"></span><button id="save-ledger" class="primary-button" type="button" disabled>Save changes <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><a id="draft-storage-link" class="primary-button" href="#storage" hidden>Save preview</a></div>
       <noscript><p class="status-message" role="alert">JavaScript is required to open a ledger. No connection or save has started.</p></noscript>
     </main>
   </div>

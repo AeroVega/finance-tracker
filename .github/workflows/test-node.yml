@@ -21,9 +21,13 @@ jobs:
           node-version: 26
       - name: Check browser module syntax
         run: |
+          node --check js/workspace-pages.mjs
           node --check js/canonical-workspace.mjs
           node --check js/canonical-workspace-model.mjs
           node --check js/canonical-workspace-session.mjs
+          node --check js/financial-position-contract.mjs
+          node --check js/financial-position.mjs
+          node --check js/synthetic-financial-position.mjs
           node --check js/synthetic-financial-year.mjs
           node --check js/synthetic-year-seeder.mjs
           node --check prototype/synthetic-year.mjs
