@@ -38,6 +38,8 @@ jobs:
           node --check prototype/pr28-testing-plan.mjs
           node --check prototype/pr28-testing-checks.mjs
           node --check prototype/pr28-live-checks.mjs
+      - name: Check documentation links and current-state contracts
+        run: node scripts/check-docs.mjs
       - name: Run complete Node test suite
         # Dense synthetic storage regressions must not compete for heap across files.
         run: node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs
