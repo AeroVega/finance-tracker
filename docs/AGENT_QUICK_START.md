@@ -7,7 +7,7 @@ Read this page first. It is the navigation layer, not a replacement for detailed
 1. [Contributor rules](../AGENTS.md) — privacy, permissions, branch workflow and engineering guardrails.
 2. [Project status](PROJECT_STATUS.md) — latest dated implementation, review, CI and deployment facts.
 3. [Next steps](NEXT_STEPS.md) — current Alpha dependency order and acceptance gates.
-4. Read only the contract for the code being changed. Use [the documentation index](README.md) to find it.
+4. Read only the contract for the code being changed. Use [the documentation index](README.md) to find it, and [the storage terminology glossary](STORAGE_TERMINOLOGY.md) when version names or verification states are ambiguous. Historical PR reports live in [the archive](archive/README.md).
 
 Do not read every historical PR report before starting a task.
 
