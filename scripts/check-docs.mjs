@@ -15,7 +15,6 @@ function walk(dir) {
 walk(root);
 
 const errors = [];
-const slugCounts = new Map();
 function headingSlugs(source) {
   const slugs = new Set();
   const counts = new Map();
@@ -44,7 +43,10 @@ for (const [file, original] of contents) {
     try { target = decodeURIComponent(target); } catch { errors.push(`${path.relative(root,file)}: malformed link encoding: ${target}`); continue; }
     const resolved = path.resolve(path.dirname(file), target);
     let actual = resolved;
-    if (fs.existsSync(actual) && fs.statSync(actual).isDirectory()) actual = path.join(actual, 'README.md');
+    if (fs.existsSync(actual) && fs.statSync(actual).isDirectory()) {
+      if (!match[1].includes('#')) continue;
+      actual = path.join(actual, 'README.md');
+    }
     if (!fs.existsSync(actual) || !fs.statSync(actual).isFile()) {
       errors.push(`${path.relative(root,file)}: missing local link target ${match[1]}`);
       continue;
