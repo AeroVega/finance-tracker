@@ -14,8 +14,13 @@ available in this environment and has not been adopted or claimed as deployed.
 **Verified configuration:** Pages used the feature branch as a legacy publishing
 source at initial review. After the owner changed it, the API reports `main` as
 source. Publishing PR commits no longer requires changing that setting. No merge
-or deployment is authorized. Test, measurement and publication evidence for this
-review will be recorded below. The [engineering review](PR37_ENGINEERING_REVIEW.md) records the end-to-end
+or deployment is authorized. **Verified on published code/review head `c07d141`:** 1,988 extended tests
+passed on Node 26.13.0 in 326.643 seconds, with no failures, skips or
+cancellations. Syntax, documentation and desktop/mobile Chromium preview
+checks passed. Remote CI remains queued, not passed. The
+[matched measurements](PR37_ENGINEERING_REVIEW.md#validation-and-matched-measurements)
+show reduced response-body bytes, unchanged requests/uploads, and no established
+latency or memory improvement. The [engineering review](PR37_ENGINEERING_REVIEW.md) records the end-to-end
 flow, safeguard inventory, compatibility gaps and device procedure. The
 complete-ledger loading limits in the v5 section remain open.
 
@@ -50,8 +55,9 @@ No bounded whole-database memory, selective app loading, incremental semantic
 validation or device-memory improvement is claimed. Dense mixed/retained saves
 upload substantially fewer bytes, but total requests fall only about 3% and
 timings do not establish a precise latency gain.
-PR37 remains a draft and is unmerged. The last owner-confirmed deployment remains
-`5e9c8966`; no v5 deployment or live Drive/device acceptance is claimed. Production
+PR37 remains a draft and is unmerged. **User-confirmed:** the owner tested deployed
+`5317afdf` and reported the session failure described above. Successful v5 live
+Drive/device acceptance is not established by that failed attempt. Production
 remains **NO-GO**, with invented fixtures only and no new real-data, live Drive,
 merge, deployment or production authorization. Earlier evidence follows.
 

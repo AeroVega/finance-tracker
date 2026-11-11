@@ -112,3 +112,73 @@ Use a different newly created empty synthetic folder, and stop other tabs/device
 Automated HTTP does not model real Drive indexing latency, permission visibility,
 Safari timer suspension, OAuth privacy controls or physical-device memory.
 Production remains NO-GO; no real-data acceptance is requested.
+
+## Validation and matched measurements
+
+**Verified on code/review head `c07d141a4380c1f1dae597b4638e4d112d442c44`:**
+Node 26.13.0, `FINANCE_EXTENDED_STORAGE_TESTS=1`, 768 MiB heap limit and
+`--test-concurrency=1` passed **1,988 tests**, no failures, skips or cancellations,
+in 326.643 seconds. All browser-module syntax checks and the documentation
+checker passed. Chromium loaded the synthetic position preview at 1440×1000
+and 390×844 without page errors or page overflow. This is not Safari acceptance.
+The two omitted-list regressions independently fail on baseline `288795b` with
+`ownership-unknown`, with both successful and lost create responses.
+
+The committed [per-phase CSV](evidence/pr37-session-storage.csv) contains all
+72 measured phases, including CPU and memory samples. Eight fresh serial
+processes ran A-B-B-A at each fixture size, with no competing local test or
+benchmark workload. A is `288795b63ebf228f2527eef37cd5b0f370c1eb16`; B is
+`c07d141a4380c1f1dae597b4638e4d112d442c44`, whose runtime implementation is
+`d87623c`. Source fingerprints stayed unchanged throughout every run.
+
+Both arms use canonical **v5**, the same invented fixtures and correction
+commands, the same 8 MiB physical byte cache, and real lifecycle heartbeat timers.
+The baseline harness incorrectly prints v4; its pinned default initialization
+and verifier select v5. B corrects that output label. This comparison is not
+v4 versus v5 and does not remeasure the earlier 78% upload reduction.
+
+The measured phases are initialization, empty open, seed, open, two-edit save,
+no-op save, one retained-history save, warm reopen and cold-adapter reopen.
+Every phase completed and verified exact results. Release between reopen phases
+and final cleanup are outside the timing/count sums. Body bytes exclude URL,
+header and TLS overhead. Dense runs created 336 or 338 physical objects, while marker-request totals
+were identical. The physical-layout count variation was not isolated in this
+comparison; corresponding A/B samples have identical request and upload-body
+counts.
+
+| Activities | Arm | Requests | Upload-body bytes | Response-body bytes | Sum of phase times, seconds |
+| ---: | --- | ---: | ---: | ---: | --- |
+| 253 | A | 1,530 | 1,949,951 | 16,725,390 | 13.381, 13.926 |
+| 253 | B | 1,530 | 1,949,951 | 7,713,861 | 13.254, 13.318 |
+| 2,340 | A | 12,260 / 12,288 | 10,415,675 / 10,418,128 | 384,486,364 / 384,878,979 | 88.858, 92.372 |
+| 2,340 | B | 12,260 / 12,288 | 10,415,675 / 10,418,128 | 335,702,144 / 335,733,940 | 92.049, 90.818 |
+
+| Activities | Arm | Two-edit save, seconds | Warm reopen, seconds | Cold-adapter reopen, seconds | Cumulative process max RSS, MiB |
+| ---: | --- | --- | --- | --- | --- |
+| 253 | A | 2.608, 2.839 | 1.328, 1.370 | 2.448, 2.521 | 206.1, 206.4 |
+| 253 | B | 2.772, 2.484 | 1.479, 1.381 | 2.238, 2.584 | 207.6, 216.5 |
+| 2,340 | A | 18.027, 19.708 | 8.969, 9.852 | 16.299, 17.006 | 424.0, 425.6 |
+| 2,340 | B | 18.324, 19.313 | 10.050, 8.865 | 16.848, 16.334 | 449.2, 414.3 |
+
+Response-body volume falls **53.9%** and approximately **12.7%**, respectively.
+Requests and upload bodies are unchanged in matched samples. Two runs per arm,
+variable GC and synthetic provider CPU do not establish a latency or memory
+improvement. The large workload still has expensive full-history/materializing
+reads. RSS includes the fake Drive store, request logs, heap and native memory;
+these are not browser/device capacity or per-phase memory peaks. No injected
+network delay, CORS, OAuth, real Drive indexing latency or physical-device test
+is represented. Backup/recovery correctness is covered by the extended suite;
+this comparison does not time backup or physical interruption recovery.
+
+To reproduce, check out each named commit separately and run its existing
+harness in A-B-B-A order, once with `V4_BENCH_DENSE=0` and once with `=1`:
+
+```sh
+V4_BENCH_DENSE=0 V4_BENCH_COLD_REOPEN=1 V4_BENCH_REVISIONS=1 \
+  node --max-old-space-size=768 tests/benchmark-v4-workspace.mjs
+```
+
+Remote CI is separate. [The published code-head run](https://github.com/AeroVega/finance-tracker/actions/runs/43097313469)
+was still queued when this report was prepared; it is not a passing result.
+The final evidence commit changes documentation/CSV only. Check its exact remote
+head before merge consideration. No merge or deployment was performed.
