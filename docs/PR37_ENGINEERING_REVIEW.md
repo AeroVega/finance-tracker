@@ -198,7 +198,7 @@ A post-create exact-ID metadata 404 produces the same visible state with nested
 `object-not-found`. The screenshot and counter do not identify the live cause.
 Drive's rounded "0 KB" display does not establish that a file is empty.
 
-The local candidate permits up to two additional reads of a newly created page
+The candidate permits up to two additional reads of a newly created page
 only after a successful create and an otherwise exact version-bracket failure.
 The waits are 100 and 200 ms. Every attempt checks exact identity, folder, kind,
 transaction, size and SHA-256, and requires a stable metadata version. Retry
@@ -228,7 +228,20 @@ Persistent changes, corrupt/rebound pages, offline state, retry cancellation,
 strict historical version checks and diagnostic privacy remain covered.
 
 **Publication boundary:** at this incident's review the Pages API again reported
-`feat/scalable-storage-foundation` as its publishing source. New changes stay
-local until publication is coordinated. A push would have deployment effects;
-no merge or deployment is authorized by the troubleshooting report alone.
+`feat/scalable-storage-foundation` as its publishing source. The candidate is isolated on `fix/pr37-immutable-readback`. PR37 and its Pages
+publishing branch remain unchanged at `56cafc2`. Updating that branch would have
+deployment effects and requires coordination; no merge or deployment is
+authorized by the troubleshooting report alone.
 Live cause, device behavior and live acceptance remain open.
+
+
+**Candidate validation:** runtime `6900bcee518dd448b8dc9dfdcfb10e13b6fd58d1`
+passed 1,999 extended tests on Node 26.13.0 with the documented 768 MiB heap,
+serial test concurrency and extended-storage flag, no failures/skips/cancellations,
+in 316.656 seconds. The targeted locator/seeder/diagnostic run passed 128 tests;
+the actual seeder controller passed ten tests. All changed module syntax,
+whitespace and 96-document checks passed. Chromium rendered the actual diagnostic
+module at 390×844 and 1440×1000 without page errors or horizontal overflow, with
+external HTTPS blocked. This does not establish iPhone/iPad Safari or real Drive
+behavior. No affected-folder access, merge or deployment was performed. Remote CI
+on the isolated branch remains separate from these local results.

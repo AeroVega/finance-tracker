@@ -5,10 +5,15 @@
 **User-confirmed:** deployed `56cafc2` reached four verified initialization writes
 then reported `write-unresolved`. The year-seeding phase had not started.
 [Incident analysis](PR37_ENGINEERING_REVIEW.md#initial-copy-readback-failure-on-deployed-56cafc2)
-records two distinct synthetic reproductions and the local candidate's narrowly
+records two distinct synthetic reproductions and the candidate's narrowly
 bounded new-page verification and safe diagnostics. The live cause is unconfirmed.
-The affected folder and marker remain untouched. Pages again points to the feature
-branch, so this candidate is not published or claimed deployed. Earlier evidence follows.
+The affected folder and marker remain untouched. Runtime candidate `6900bce`
+passed 1,999 extended tests on Node 26.13.0, with no failures, skips or
+cancellations, in 316.656 seconds. Diagnostic rendering passed desktop/mobile
+Chromium checks with external HTTPS blocked. The fix is isolated on
+`fix/pr37-immutable-readback`; PR37 and its Pages publishing branch remain at
+`56cafc2`. This is not a deployed fix or confirmed live acceptance. Earlier
+evidence follows.
 
 ## PR37 engineering review, November 11, 2026
 
