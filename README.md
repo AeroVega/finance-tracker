@@ -22,7 +22,7 @@ a dated record.
 
 **Verified November 10, 2026:** main at `d38681ee013cbe3e52dd861264f70490935c3582` includes the merged canonical workspace, PR32 and its PR34 preview-persistence/transfer-link follow-up. PR33's engineering workflows are also merged. The synthetic app can browse saved years, inspect evidence, stage corrections, explicitly save/reopen, save a local preview to a fresh synthetic folder and manually link transfers.
 
-**Alpha is not complete.** Financial position and reconciled coverage, historical monthly summaries from January 2023, and production controls remain. The main workspace does not yet ingest owner CSVs; the advanced canonical import workbench uses invented fixtures. See [project status](docs/PROJECT_STATUS.md) for code and PR evidence and [next steps](docs/NEXT_STEPS.md) for the four-step Alpha sequence.
+**Alpha is not complete.** Financial position and reconciled coverage were implemented in PR36. Historical monthly summaries from January 2023, supported owner-file ingestion in the main application, and production controls remain. The advanced canonical import workbench uses invented fixtures. See [project status](docs/PROJECT_STATUS.md) and [next steps](docs/NEXT_STEPS.md).
 
 Main's [Node tests passed](https://github.com/AeroVega/finance-tracker/actions/runs/42752426272), but its [Pages deployment failed at configuration](https://github.com/AeroVega/finance-tracker/actions/runs/42752426270), before artifact upload. The live served SHA remains unverified in this audit. Merged, tested and deployed are separate states.
 
@@ -36,7 +36,7 @@ The [mobile workspace redesign](docs/MOBILE_WORKSPACE_PAGES.md) separates Overvi
 
 ## Financial position and reconciled coverage
 
-The authorized synthetic [financial-position milestone](docs/FINANCIAL_POSITION.md) adds dated balances, source-backed conflict decisions, holdings evidence, debt balances and per-account/month reconciliation to the canonical workspace. Its separate invented position scenario demonstrates exact assets minus liabilities without treating transaction sums as balances. It retains explicit save/reopen and recovery boundaries. Review and owner/device acceptance remain outstanding; production persistence remains **NO-GO**.
+The [financial-position milestone](docs/FINANCIAL_POSITION.md) was implemented and merged in PR36, including dated balances, source-backed conflict decisions, holdings evidence, debt balances and per-account/month reconciliation. Its invented position scenario demonstrates exact assets minus liabilities without treating transaction sums as balances. Owner synthetic/device acceptance is recorded in PR36; production persistence remains **NO-GO**.
 
 ## Start here
 
@@ -57,7 +57,7 @@ The authorized synthetic [financial-position milestone](docs/FINANCIAL_POSITION.
 
 ## Canonical application workflow
 
-**Implemented, synthetic-only:** [Open the main workspace](index.html) to explore saved synthetic years by account and month, inspect source evidence, stage auditable corrections, explicitly save/reopen through the existing canonical storage engines, save the exact local preview (including staged corrections) to a new empty synthetic folder, and manually link outgoing/incoming transfer activities with append-only audit evidence. See [scope, limits and the new owner acceptance checks](docs/CANONICAL_MAIN_WORKSPACE.md). The owner accepted the earlier PR32 local exploration/correction/mobile experience; the newer persistence and transfer-link paths still need live acceptance. PR30 device results do not validate later changes. Balances, holdings, migration and production authorization remain later work.
+**Implemented, synthetic-only:** [Open the main workspace](index.html) to explore saved synthetic years by account and month, inspect source evidence, stage auditable corrections, explicitly save/reopen through the existing canonical storage engines, save the exact local preview (including staged corrections) to a new empty synthetic folder, and manually link outgoing/incoming transfer activities with append-only audit evidence. See [scope, limits and the new owner acceptance checks](docs/CANONICAL_MAIN_WORKSPACE.md). The owner accepted the earlier PR32 local exploration/correction/mobile experience; the newer persistence and transfer-link paths still need live acceptance. PR30 device results do not validate later changes. Historical monthly migration, supported owner-file ingestion and production authorization remain later work.
 
 ## Synthetic financial year
 
