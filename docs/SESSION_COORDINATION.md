@@ -82,3 +82,45 @@ The session test page clears the previously displayed marker classification whil
 Orderly release closes new admission while admitted writes retain their guards. Heartbeats continue during that drain. The optional `beforeRelease` callback runs after drain, before the final marker write; the application uses it to reject unresolved transaction state. This callback must inspect state only, not await another coordinator session operation on the same queue. A rejected callback retains the active marker and renewal. Final release verifies current ownership, stops renewal, writes the released marker, and verifies it by read-back. Late queued timer failures cannot replace the completed status or revive the session.
 
 This is still best-effort ownership. Background suspension can prevent renewal; stale or unverifiable sessions do not renew themselves automatically. Explicit stale-session recovery and all existing ownership guards remain required.
+
+## Delayed marker visibility and cancelled acquisition
+
+**Verified in synthetic tests, November 11, 2026:** a successful marker create
+followed by one omitted folder-list result reproduced `ownership-unknown` with
+one marker and no acquired session. **Hypothesis:** this could explain the
+owner's failure on deployed `5317afdf`; no live request evidence establishes
+that cause. The affected folder and marker must remain untouched.
+
+The Drive adapter now enumerates every candidate matching the marker name **or**
+its app property, following every page and requiring `incompleteSearch: false`.
+Unrelated ledger objects are excluded from this ownership query. Name-only and
+property-only malformed candidates and duplicates still refuse ownership.
+Database emptiness, physical history and locator checks retain full enumeration.
+Drive query syntax is documented in the [files search guide](https://developers.google.com/workspace/drive/api/guides/search-files).
+
+After a single create or update, exact readback gets up to four attempts with
+200, 400 and 800 ms waits. Only absence or the exact pre-write record permits
+another read. Conflicting ownership, a replacement ID, malformed metadata,
+authorization, network or incomplete-list errors stop immediately. A generated
+marker ID remains pinned in the adapter after dispatch. Its later absence is
+unknown ownership, never permission to create another marker. Submitted bytes
+and create/update responses never establish ownership.
+
+Each adapter read or write has a 60-second abort deadline covering listing,
+media/body consumption and verification. This is an I/O budget per operation,
+not a promised total connection time. Browser suspension can delay timers;
+abort cannot retract a remote mutation already dispatched. Expiry or cancellation
+leaves ownership unknown and preserves the marker. Offline/pagehide cancellation
+also closes queued acquisition and prevents late success from initializing the
+database. Existing guards for already-dispatched financial writes and recovery
+remain separate and unchanged.
+
+The coordinator's post-write read remains intentional. Adapter verification
+resolves ambiguous transport outcomes; the coordinator independently confirms
+ownership at its state transition. Heartbeat, normal mutation checks, explicit
+stale recovery and orderly release retain their existing roles. Nothing here
+creates a server lock, automatic takeover, automatic reconnect or cleanup.
+
+The seeder's durable-write counter observes transaction-adapter mutations; it
+excludes session-marker writes. Its zero is therefore not proof of an untouched
+folder. The failure message now states that boundary explicitly.

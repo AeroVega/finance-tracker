@@ -1,5 +1,24 @@
 # Project status
 
+## PR37 engineering review, November 11, 2026
+
+**Implemented locally:** delayed session-marker verification and cancellation,
+candidate-only marker enumeration, and removal of the unused seeder layout
+setting. See [session coordination](SESSION_COORDINATION.md#delayed-marker-visibility-and-cancelled-acquisition)
+for the reproduced failure, retry/deadline contract and remaining ownership limits.
+The owner reports a seed failure on deployed `5317afdf`; temporary listing omission
+is reproduced synthetically, not confirmed as the live cause. The affected folder
+and marker have not been accessed. The unpublished `7d517671` candidate was not
+available in this environment and has not been adopted or claimed as deployed.
+
+**Verified configuration:** Pages used the feature branch as a legacy publishing
+source at initial review. After the owner changed it, the API reports `main` as
+source. Publishing PR commits no longer requires changing that setting. No merge
+or deployment is authorized. Test, measurement and publication evidence for this
+review will be recorded below. The [engineering review](PR37_ENGINEERING_REVIEW.md) records the end-to-end
+flow, safeguard inventory, compatibility gaps and device procedure. The
+complete-ledger loading limits in the v5 section remain open.
+
 ## Canonical v5 replacement slice, November 11, 2026
 
 **Implemented in the publication candidate:** the [v5 slice](PARTITIONED_CANONICAL_STORAGE.md)
