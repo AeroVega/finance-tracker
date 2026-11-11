@@ -35,4 +35,4 @@ These measurements exclude DOM, network, Google and physical devices. They do no
 
 The owner should deploy the reviewed branch themselves, verify its source SHA, then check narrow iPhone and iPad layouts, local form feedback, evidence inspection, search during conflict review, cancelled account/month changes, and the existing synthetic save/reopen/restore/interruption acceptance. Do not repeat live actions blindly after an uncertain save.
 
-Production financial persistence remains **NO-GO**. General provider balance/holdings imports, historical monthly migration and production controls remain outside this review. See [the position contract](FINANCIAL_POSITION.md) and [Alpha queue](NEXT_STEPS.md).
+Production financial persistence remains **NO-GO**. General provider balance/holdings imports, historical monthly migration and production controls remain outside this review. See [the position contract](../FINANCIAL_POSITION.md) and [Alpha queue](../NEXT_STEPS.md).
