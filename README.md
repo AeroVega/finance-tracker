@@ -42,6 +42,7 @@ The [financial-position milestone](docs/FINANCIAL_POSITION.md) was implemented a
 ## Start here
 
 - [Agent quick start](docs/AGENT_QUICK_START.md)
+- [Storage terminology](docs/STORAGE_TERMINOLOGY.md)
 - [Documentation guide](docs/README.md)
 - [Current project status and evidence](docs/PROJECT_STATUS.md)
 - [Project charter](docs/PROJECT_CHARTER.md)
@@ -67,7 +68,7 @@ The [financial-position milestone](docs/FINANCIAL_POSITION.md) was implemented a
 
 The [Drive history verification follow-up](docs/DRIVE_HISTORY_VERIFICATION.md) reduces repeated downloads during saves by checking private, bounded session evidence against fresh Drive file versions. Full reconnect and backup integrity checks remain. This is a synthetic implementation, not production or live-Google acceptance.
 
-The [PR30 integrated performance report](docs/PR30_PERFORMANCE_INTEGRATION.md) collects the reviewed CPU, session, CSV and storage changes, final combined checks, and remaining limits. Fragmented v3 is the default for new canonical stores and fresh synthetic copies. Existing per-record v1 copies remain readable; standalone grouped-v2 copies are rejected. Existing folders are not silently migrated, and this does not establish mobile capacity.
+The [archived PR30 integrated performance report](docs/archive/PR30_PERFORMANCE_INTEGRATION.md) collects the reviewed CPU, session, CSV and storage changes, final combined checks, and remaining limits. Fragmented v3 is the default for new canonical stores and fresh synthetic copies. Existing per-record v1 copies remain readable; standalone grouped-v2 copies are rejected. Existing folders are not silently migrated, and this does not establish mobile capacity.
 
 ## PR28 canonical import foundation
 
@@ -81,7 +82,7 @@ The manual steps now have adjacent controls, progress and timing. The interrupti
 
 ## Temporary prototype navigation
 
-PR #29 squash-merged on November 8, 2026. It extends the original visual reference across the main workspace, guided acceptance pages and development tools. The [visual overhaul record](docs/PR29_VISUAL_OVERHAUL.md) explains the changes, the PR28 lessons they address, and the validation limits. The main workspace now reads synthetic canonical records through the [step-1 application flow](docs/CANONICAL_MAIN_WORKSPACE.md). The previous raw-CSV/sample page remains a separate [local preview diagnostic](prototype/local-preview.html). Production data remains disabled. PR29 preserved the original prototypes. The later owner-authorized [cleanup](docs/PROTOTYPE_CLEANUP.md) replaces the crowded entry point with one acceptance suite, retires the superseded visual sandbox and first Drive probe UI, and retains every unique recovery and diagnostic path.
+PR #29 squash-merged on November 8, 2026. It extends the original visual reference across the main workspace, guided acceptance pages and development tools. The [visual overhaul record](docs/archive/PR29_VISUAL_OVERHAUL.md) preserves the historical PR29 changes and validation limits. The main workspace now reads synthetic canonical records through the [step-1 application flow](docs/CANONICAL_MAIN_WORKSPACE.md). The previous raw-CSV/sample page remains a separate [local preview diagnostic](prototype/local-preview.html). Production data remains disabled. PR29 preserved the original prototypes. The later owner-authorized [cleanup](docs/PROTOTYPE_CLEANUP.md) replaces the crowded entry point with one acceptance suite, retires the superseded visual sandbox and first Drive probe UI, and retains every unique recovery and diagnostic path.
 
 During development, the workspace links to the [acceptance suite](prototype/acceptance.html) and a smaller [test tools index](prototype/). The [owner guide](docs/OWNER_ACCEPTANCE.md) explains the remaining physical Safari, OAuth, save/reopen, interruption, backup/restore and device handoff checks. Specialist diagnostics are grouped separately. The hub and all browser prototype pages are development-only. **They are not v1.0.0 product features.** Before the v1.0.0 release, remove the app entry point and ensure the `prototype/` pages are excluded from the user-facing GitHub Pages deployment. Retain only the automated tests and engineering documentation needed to support the shipped product.
 
