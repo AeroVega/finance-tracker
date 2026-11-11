@@ -135,10 +135,14 @@ node tests/benchmark-bounded-backup.mjs --saves=20
 node tests/benchmark-bounded-backup.mjs --saves=50
 ```
 
-Final aggregate validation on Node 24.22.1 passed **1,217/1,217 tests**, with no
+Initial foundation validation on Node 24.22.1 passed **1,217/1,217 tests**, with no
 failures, cancellations or skips. Changed JavaScript/module syntax, whitespace
 checks and 124 relative documentation file targets passed. An additional focused
 transport/backup run passed 56/56 after final fixes.
+
+The [paged storage follow-up](PAGED_STORAGE_MILESTONE.md) records later isolated
+format work, active-path byte-ownership fixes and their separate final validation.
+The initial 1,217-test count does not cover those subsequent changes.
 
 Live Google, browser rendering and physical-device capacity were not tested.
 Remote CI and publication status are separate from these local results. No

@@ -14,7 +14,9 @@ A second-generation personal finance tracker built around trustworthy data, tran
 [incremental storage foundation](docs/SCALABLE_STORAGE_FOUNDATION.md) adds segmented
 catalogs, verified/rebuildable monthly reports, bounded Drive responses and direct
 backup improvements. It does not complete bounded full-database loading or lift
-production NO-GO. Main remains `04aacf31b8aaae31fa73b10408fa22d417c0d943` at this
+production NO-GO. The follow-up [paged storage milestone](docs/PAGED_STORAGE_MILESTONE.md)
+adds isolated format and recovery modules, without switching the application to
+them. Main remains `04aacf31b8aaae31fa73b10408fa22d417c0d943` at this
 review. No merge or deployment is part of this work. The earlier status below is
 a dated record.
 

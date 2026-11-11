@@ -14,6 +14,9 @@ token-cleanup changes, and remaining production gates. The owner subsequently au
 [incremental storage foundation](SCALABLE_STORAGE_FOUNDATION.md) implements
 segmented catalogs, source-bound monthly reports, response bounds and lower-memory
 Drive backup. Full bounded loading and production controls remain unfinished.
+The follow-up [paged storage milestone](PAGED_STORAGE_MILESTONE.md) adds isolated
+immutable trees, a canonical v4 reference reader, framed archives and a root
+transaction prototype. These are not the active application storage path.
 Nothing is merged or deployed by this work. Deployment is deferred until closer to Alpha.
 Historical monthly migration, supported owner-file ingestion and production
 controls remain. **Alpha is incomplete and production remains NO-GO.**
