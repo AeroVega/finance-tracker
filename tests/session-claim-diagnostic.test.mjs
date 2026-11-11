@@ -19,7 +19,7 @@ const closingCases = [
   ['closing-session-property-changed', value => { value.appProperties.financeTrackerSession = 'v2'; }],
   ['closing-version-changed', value => { value.version = '2'; }]
 ];
-for (const [check, change] of closingCases) test(`claim reports ${check} without initializing or retrying`, async () => {
+for (const [check, change] of closingCases) test(`claim reports ${check} without initializing or repeating mutations`, async () => {
   const http = new HttpCatalogDrive();
   const fetchImpl = async (url, options) => {
     const result = await http.fetch(url, options);
@@ -42,7 +42,7 @@ for (const [check, change] of closingCases) test(`claim reports ${check} without
   assert.equal(app.acceptingWrites, false);
   assert.equal(http.mutations, 1);
   assert.equal(http.files.size, 1);
-  assert.equal(http.requests.filter(row => row.category === 'metadata').length, 1);
+  assert.equal(http.requests.filter(row => row.category === 'metadata').length, check === 'closing-version-changed' ? 4 : 1);
 });
 
 for (const mode of ['replacement', 'content']) test(`claim distinguishes ${mode} conflict`, async () => {

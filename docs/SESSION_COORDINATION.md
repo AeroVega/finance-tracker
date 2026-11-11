@@ -99,8 +99,9 @@ Database emptiness, physical history and locator checks retain full enumeration.
 Drive query syntax is documented in the [files search guide](https://developers.google.com/workspace/drive/api/guides/search-files).
 
 After a single create or update, exact readback gets up to four attempts with
-200, 400 and 800 ms waits. Only absence or the exact pre-write record permits
-another read. Conflicting ownership, a replacement ID, malformed metadata,
+200, 400 and 800 ms waits. Absence, the exact pre-write record, or the narrowly
+validated version-only disagreement described below permits another read.
+Conflicting ownership, a replacement ID, malformed metadata,
 authorization, network or incomplete-list errors stop immediately. A generated
 marker ID remains pinned in the adapter after dispatch. Its later absence is
 unknown ownership, never permission to create another marker. Submitted bytes
@@ -143,3 +144,29 @@ live reproduction. Share the displayed diagnostic text, not a HAR export,
 request headers, copied cURL, credentials or marker contents. Synthetic HTTP
 and controller tests prove propagation and refusal behavior, not live Drive
 consistency or physical Safari behavior.
+
+## Version disagreement during write verification
+
+**User-confirmed:** the diagnostic build reported `closing-version-changed`
+while claiming a session in a fresh synthetic folder. This establishes a
+list-versus-closing metadata version disagreement, not its server-side cause.
+[Drive's version contract](https://developers.google.com/workspace/drive/api/reference/rest/v3/files)
+includes every server change, including changes not visible to the user.
+Metadata settling is a hypothesis; a media GET causing that change is unproven.
+The same coordinator cannot heartbeat during initial acquisition: both use the
+session queue, and heartbeat requires verified ownership.
+
+After this adapter's own mutation only, a version-only disagreement can consume
+one of the existing bounded readback attempts. The failed-bracket JSON must
+exactly match the submitted record or the pre-write record; it is never accepted
+as ownership evidence. Each attempt repeats complete candidate enumeration,
+media reading and closing metadata verification. A conflicting record, other
+metadata disagreement, duplicate, replacement, cancellation or exhausted budget
+still fails closed. Normal reads do not retry version disagreements. No mutation
+is repeated, no marker is deleted, and the coordinator's independent read remains.
+
+**Verified in local invented HTTP fixtures:** a transient metadata-only version
+change fails on the diagnostic baseline and passes with fresh stable evidence.
+Persistent drift, competing record, duplicate appearing during the wait and
+cancellation refuse ownership without a second mutation. This is not live Drive
+acceptance or evidence that the owner's exact failure will settle within budget.

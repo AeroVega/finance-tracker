@@ -82,6 +82,8 @@ export function createDriveSessionAdapter(options) {
     signal.throwIfAborted();
     return fetchImpl(url, {...init, signal});
   };
+  // Private failed-bracket observations are never ownership evidence.
+  const changedVersionRecords = new WeakMap();
   let writtenFileId = null;
   let operationGeneration = 0;
   const assertCurrent = epoch => {
@@ -207,7 +209,9 @@ export function createDriveSessionAdapter(options) {
         closing.appProperties[SESSION_MARKER_PROPERTY] !== file.appProperties[SESSION_MARKER_PROPERTY] ? "closing-session-property-changed" :
         closing.version !== file.version ? "closing-version-changed" : null;
       if (sessionCheck) {
-        throw error("ownership-unknown", "The session marker changed while its content was being verified.", sessionCheck);
+        const failure = error("ownership-unknown", "The session marker changed while its content was being verified.", sessionCheck);
+        if (sessionCheck === "closing-version-changed") changedVersionRecords.set(failure, record);
+        throw failure;
       }
       if (epoch === generation) evidence = { binding: binding(file), record: structuredClone(record) };
     } else {
@@ -252,7 +256,14 @@ export function createDriveSessionAdapter(options) {
       let actual;
       try { actual = await read(epoch, signal); }
       catch (cause) {
-        if (cause.code !== "session-marker-not-visible") throw cause;
+        if (cause.code !== "session-marker-not-visible") {
+          // A version-only disagreement after our own mutation may be metadata
+          // settling. Never accept that read or retry a mutation. Re-enumerate
+          // all candidates and obtain a fresh media/metadata bracket instead.
+          const observed = changedVersionRecords.get(cause);
+          if (!observed || (!sameRecord(observed, expected) && !sameRecord(observed, previous)) ||
+              attempt === delays.length) throw cause;
+        }
       }
       assertCurrent(epoch);
       if (sameRecord(actual, expected)) return;
