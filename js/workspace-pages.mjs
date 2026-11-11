@@ -61,6 +61,22 @@ export function createWorkspacePages({document, window}) {
     if (current !== page) window.history[replace ? 'replaceState' : 'pushState'](null, '', '#' + page);
     apply(page, {focus});
   }
+  // Route links before the browser performs an anchor jump. Otherwise it can
+  // overwrite the previous page's scroll position or skip the filter header.
+  document.addEventListener('click', event => {
+    if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target?.closest?.('a[href^="#"]');
+    if (!link || link.getAttribute('download') !== null) return;
+    const target = link.getAttribute('target');
+    if (target && target !== '_self') return;
+    const page = link.getAttribute('href').slice(1);
+    if (!Object.hasOwn(pages, page)) return;
+    event.preventDefault();
+    if (current === page) {
+      window.scrollTo?.({top:0, behavior:'instant'});
+      $('page-title').focus({preventScroll:true});
+    } else go(page);
+  });
   window.addEventListener('hashchange', () => apply(window.location.hash.slice(1)));
   // pushState routes also participate in browser Back/Forward.
   window.addEventListener('popstate', () => apply(window.location.hash.slice(1)));

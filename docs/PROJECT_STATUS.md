@@ -1,6 +1,21 @@
 # Project status
 
-## Mobile and tablet design in PR38, November 11, 2026
+## PR38 adversarial review, November 11, 2026
+
+**Implemented:** preserve unfinished transaction edits on same-record reentry,
+confirm destructive editor changes, expose excluded posting states, control
+route-link scroll behavior and make chrome scroll in short phone windows.
+The [adversarial review](PR38_ADVERSARIAL_REVIEW.md) records the four confirmed
+findings, baseline reproductions, what works well and the implemented suggestions.
+**Verified:** 2,009/2,009 extended tests pass on Node 24.22.1 in 318.394 seconds,
+with no failures, skips or cancellations. All 82 focused controller/routing
+checks, nine rendered layouts, a separate posting-state flow, syntax,
+documentation and diff checks pass. Four regressions fail for the expected
+reasons at the isolated reviewed head and pass after repair.
+Physical Apple-device behavior remains **Unverified**. No merge,
+deployment or live Drive operation was performed.
+
+## Mobile and tablet design at 1874860 in PR38, November 11, 2026
 
 **Implemented on `feat/apple-pwa-ui`:** Home with recent scoped source activity
 and review status, an expandable filter row, tappable transaction records,

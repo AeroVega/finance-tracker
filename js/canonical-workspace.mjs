@@ -29,6 +29,13 @@ let busy = false, configured = false, page = 0, selectedActivity = null, view = 
 let viewLedger = null, viewReader = null, searchTimer = null, composingSearch = false;
 const reviewButtons = new Map();
 const homeButtons = new Map();
+const detailEditorFields = ['classification', 'category', 'amount', 'posting-status', 'posting-date', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale'];
+let detailEditorBaseline = null;
+const detailEditorValues = () => detailEditorFields.map(id => $(id).value);
+const hasUnfinishedDetail = () => selectedActivity !== null && detailEditorBaseline !== null &&
+  detailEditorValues().some((value, index) => value !== detailEditorBaseline[index]);
+const confirmDiscardDetail = () => !hasUnfinishedDetail() || window.confirm('Discard the unfinished transaction edit? Staged changes and original source records will stay unchanged.');
+const postingLabel = row => row.lifecycleStatus === 'posted' ? '' : row.lifecycleStatus === 'pending' ? 'Pending · excluded' : 'Unknown status · excluded';
 const positionButtons = [];
 let renderedPositionDate = null, positionRender = null, activeFormStatus = null;
 const positionInputs = ['balance-account', 'balance-date', 'balance-amount', 'balance-basis', 'balance-source', 'reconcile-account', 'reconcile-opening', 'reconcile-closing', 'reconcile-source', 'closure-anchor', 'closure-source', 'holdings-account', 'holdings-date', 'holdings-scope', 'holdings-source', 'statement-full-month', 'new-account-name', 'new-account-institution', 'new-account-type', 'new-account-currency'];
@@ -195,7 +202,7 @@ const action = (id, message, callback) => $(id).addEventListener('click', () => 
   if (!$(id).disabled) return run(message, callback, formStatuses[id]);
 });
 function confirmReplace() {
-  if (!session.dirty || window.confirm('Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.')) return true;
+  if ((!session.dirty && !hasUnfinishedDetail()) || window.confirm('Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.')) return true;
   announce('Action cancelled. Your local draft is unchanged.');
   return false;
 }
@@ -214,7 +221,7 @@ function render({ reset = false } = {}) {
     $('statement-full-month').checked = false; componentRows.length = 0; holdingRows.length = 0;
     $('component-rows').replaceChildren(); $('holdings-rows').replaceChildren();
     for (const id of ['holdings-source','holdings-date','reconcile-source','balance-source','balance-date','balance-amount','closure-source','new-account-name']) $(id).value = '';
-    page = 0; selectedActivity = null; $('transaction-search').value = ''; $('review-only').checked = false; $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; pages.clearDetail(); }
+    page = 0; selectedActivity = null; detailEditorBaseline = null; $('transaction-search').value = ''; $('review-only').checked = false; $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; pages.clearDetail(); }
   if (viewLedger !== session.ledger) {
     const reader = createWorkspaceViewReader(session.ledger, {monthlyIndex:session.store?.monthIndex});
     viewReader = reader; viewLedger = session.ledger;
@@ -248,8 +255,8 @@ function render({ reset = false } = {}) {
     const copy = node('span', undefined, 'recent-copy');
     copy.append(node('strong', row.sourceDescription), node('small', `${row.accountName} · ${row.reportingDate || 'Unknown date'}`));
     const amount = node('span', undefined, 'recent-value');
-    amount.append(node('strong', money(row.amountText, row.currency)), node('small', row.needsReview ? 'Needs review' : label(row.activityKind)));
-    button.append(copy, amount); button.addEventListener('click', () => { if (!busy) showDetail(row.activityId); });
+    amount.append(node('strong', money(row.amountText, row.currency)), node('small', [postingLabel(row) || label(row.activityKind), row.needsReview ? 'Needs review' : ''].filter(Boolean).join(' · ')));
+    button.append(copy, amount); button.addEventListener('click', () => inspectActivity(row.activityId));
     homeButtons.set(row.activityId, button); $('recent-activities').append(button);
   }
   if (!recent.rows.length) $('recent-activities').append(node('p', 'No activity in this account and period.', 'quiet-placeholder'));
@@ -269,16 +276,17 @@ function render({ reset = false } = {}) {
     description.append(node('strong', row.sourceDescription), metadata);
     const classification = node('td');
     classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', row.categoryId || 'No category', 'transaction-detail'));
-    if (row.needsReview) classification.append(node('small', 'Needs review: ' + row.reviewReasons.map(reviewReason).join(', '), 'transaction-detail'));
+    if (postingLabel(row)) classification.append(node('span', postingLabel(row), 'posting-state'));
+    if (row.needsReview) classification.append(node('small', 'Needs review: ' + row.reviewReasons.map(reviewReason).join(', '), 'transaction-detail review-reasons'));
     const inspect = node('button', 'Inspect →', 'text-button transaction-open'); inspect.type = 'button'; inspect.setAttribute('aria-label', `Review ${row.sourceDescription} on ${row.reportingDate || 'unknown date'}`);
     reviewButtons.set(row.activityId, inspect);
     inspect.setAttribute('aria-controls', 'activity-detail');
-    inspect.addEventListener('click', () => { if (!busy) showDetail(row.activityId); });
+    inspect.addEventListener('click', () => inspectActivity(row.activityId));
     tr.addEventListener('click', event => {
       // Keep descriptions selectable. The explicit button is also the keyboard
       // action; a bubbled button click must not open the detail twice.
       if (event.target === inspect || event.target?.closest?.('button')) return;
-      if (!busy && !window.getSelection?.()?.toString()) showDetail(row.activityId);
+      if (!window.getSelection?.()?.toString()) inspectActivity(row.activityId);
     });
     const actionCell = node('td'); actionCell.append(inspect);
     tr.append(node('td', row.reportingDate || 'Unknown date'), description, classification, node('td', money(row.amountText, row.currency)), actionCell);
@@ -477,6 +485,14 @@ function evidenceDetails(title, read) {
   });
   return details;
 }
+function inspectActivity(activityId) {
+  if (busy) return;
+  if (selectedActivity === activityId) {
+    pages.openDetail(); refresh(); $('detail-title').focus(); return;
+  }
+  if (!confirmDiscardDetail()) return;
+  showDetail(activityId);
+}
 function showDetail(activityId, {navigate = true} = {}) {
   const detail = getWorkspaceActivity(session.ledger, activityId);
   if (!detail) return;
@@ -562,6 +578,7 @@ function showDetail(activityId, {navigate = true} = {}) {
   $('posting-date').value = activity.postedDate || '';
   if (activity.lifecycleStatus === 'unknown') $('correction-type').value = 'posting-status-correction';
   $('correction-rationale').value = '';
+  detailEditorBaseline = detailEditorValues();
   correctionFields(); refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
 }
 function correctionFields() {
@@ -718,12 +735,12 @@ action('stage-correction', 'Checking your correction locally.', async () => {
 });
 $('correction-form').addEventListener('submit', event => event.preventDefault());
 $('close-detail').addEventListener('click', () => {
-  if (busy) return;
+  if (busy || !confirmDiscardDetail()) return;
   pages.closeDetail();
   if (pages.current === 'transactions') (reviewButtons.get(selectedActivity) || $('transaction-search')).focus();
   else if (pages.current === 'overview') (homeButtons.get(selectedActivity) || $('page-title')).focus();
   else $('page-title').focus();
-  selectedActivity = null; refresh();
+  selectedActivity = null; detailEditorBaseline = null; refresh();
 });
 $('correction-type').addEventListener('change', correctionFields);
 $('posting-status').addEventListener('change', correctionFields);
@@ -737,7 +754,7 @@ $('transaction-search').addEventListener('compositionstart', () => { composingSe
 $('transaction-search').addEventListener('compositionend', () => { composingSearch = false; scheduleSearch(); });
 $('previous-page').addEventListener('click', () => { if (!busy && page > 0) { page--; render(); } });
 $('next-page').addEventListener('click', () => { if (!busy && view && page + 1 < view.pages) { page++; render(); } });
-window.addEventListener('beforeunload', event => { if (busy || session.dirty) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (busy || session.dirty || hasUnfinishedDetail()) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('offline', () => { session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
 refresh();

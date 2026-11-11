@@ -12,7 +12,9 @@ const routes = [...primary, 'holdings', 'reconciliation', 'activity-detail'];
 // exercises routing, not browser layout, Safari focus, or controller rendering.
 function fixture(hash = '') {
   const nodes = new Map();
-  const document = {title:'', activeElement:null, getElementById:id => nodes.get(id) || null};
+  const documentListeners = new Map();
+  const document = {title:'', activeElement:null, getElementById:id => nodes.get(id) || null,
+    addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); }};
   for (const match of html.matchAll(/<[^!][^>]*\bid="([^"]+)"[^>]*>/g)) {
     const tag = match[0];
     const attributes = new Map([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(m => [m[1], m[2]]));
@@ -54,11 +56,35 @@ function fixture(hash = '') {
     dispatch('hashchange');
   }
   const router = createWorkspacePages({document, window});
-  return {document, window, router, followHash, get:id => {
+  function clickLink(id, options = {}) {
+    const event = {button:0, target:{closest:() => nodes.get(id)}, defaultPrevented:false,
+      preventDefault() { this.defaultPrevented = true; }, ...options};
+    for (const callback of documentListeners.get('click') || []) callback(event);
+    return event;
+  }
+  return {document, window, router, followHash, clickLink, get:id => {
     assert.ok(nodes.has(id), `HTML must contain ${id}`);
     return nodes.get(id);
   }};
 }
+
+test('ordinary route links preserve scroll, active-tab clicks return to the header, and modified clicks stay native', () => {
+  const f = fixture('#overview');
+  f.window.scrollY = 300;
+  assert.equal(f.clickLink('nav-transactions').defaultPrevented, true);
+  assertPage(f, 'transactions'); assert.equal(f.window.scrollY, 0);
+  f.window.scrollY = 120; f.clickLink('nav-overview');
+  assertPage(f, 'overview'); assert.equal(f.window.scrollY, 300);
+  const length = f.window.history.length;
+  f.clickLink('nav-overview'); assert.equal(f.window.scrollY, 0);
+  assert.equal(f.window.history.length, length);
+  f.window.history.back(); assertPage(f, 'transactions'); assert.equal(f.window.scrollY, 120);
+  f.window.history.forward(); assertPage(f, 'overview'); assert.equal(f.window.scrollY, 0);
+  for (const options of [{ctrlKey:true}, {metaKey:true}, {button:1}, {shiftKey:true}]) {
+    assert.equal(f.clickLink('nav-position', options).defaultPrevented, false);
+    assertPage(f, 'overview'); assert.equal(f.window.history.length, length);
+  }
+});
 
 function assertPage(f, page, group = page) {
   assert.equal(f.router.current, page);

@@ -1194,3 +1194,75 @@ test('an account with no activity shows an honest Home empty state and a separat
   assert.match(text(h.get('review-queue')), /Check account-month coverage/);
   assert.equal(h.state.writes, 0);
 });
+
+test('adversarial: reopening the same Home record preserves an unfinished transaction edit', async () => {
+  const h = await workspacePage(); await h.click('start-preview');
+  await h.get('recent-activities').children[0].click();
+  h.get('correction-rationale').value = 'INVENTED unfinished explanation';
+  await h.get('correction-rationale').emit('input');
+  await h.navigate('#overview'); await h.get('recent-activities').children[0].click();
+  assert.equal(h.get('correction-rationale').value, 'INVENTED unfinished explanation');
+  assert.equal(h.observed.confirmations.length, 0);
+  assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: cancelling replacement or close keeps the unfinished editor and staged graph', async () => {
+  const h = await workspacePage(); await h.click('start-preview');
+  const recent = h.get('recent-activities'); await recent.children[0].click();
+  const title = h.get('detail-title').textContent, graph = structuredClone(h.modelSession.ledger);
+  h.get('correction-rationale').value = 'INVENTED keep this unfinished edit';
+  await h.get('correction-rationale').emit('input');
+  h.observed.confirm = false;
+  await h.navigate('#overview'); await recent.children[1].click();
+  assert.equal(h.get('detail-title').textContent, title);
+  assert.equal(h.get('correction-rationale').value, 'INVENTED keep this unfinished edit');
+  await recent.children[0].click(); await h.click('close-detail');
+  assert.equal(h.location.hash, '#activity-detail');
+  assert.ok(h.observed.confirmations.length >= 2);
+  h.observed.confirm = true; await h.click('close-detail');
+  assert.equal(h.location.hash, '#overview');
+  assert.deepEqual(h.modelSession.ledger, graph); assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: Home identifies unknown posting status as excluded rather than just needing review', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.detail('INVENTED BROKERAGE FEE');
+  const broker = h.modelSession.ledger.accounts.find(account => account.accountType === 'brokerage');
+  await h.choose('account-filter', broker.accountId); await h.navigate('#overview');
+  assert.match(text(h.get('recent-activities')), /Unknown status · excluded/);
+  assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: pending classified spending is labeled as excluded in both Home and Activity', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.detail('INVENTED BROKERAGE FEE');
+  await h.choose('posting-status', 'pending');
+  h.get('correction-rationale').value = 'INVENTED pending evidence'; await h.get('correction-rationale').emit('input');
+  await h.click('stage-correction');
+  await h.choose('correction-type', 'classification'); await h.choose('classification', 'spending');
+  h.get('correction-rationale').value = 'INVENTED fee classification'; await h.get('correction-rationale').emit('input');
+  await h.click('stage-correction');
+  const broker = h.modelSession.ledger.accounts.find(account => account.accountType === 'brokerage');
+  await h.choose('account-filter', broker.accountId);
+  assert.match(text(h.get('recent-activities')), /Pending · excluded/);
+  assert.match(text(h.get('transaction-rows')), /Pending · excluded/);
+  assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: unstaged editor text participates in replacement and unload guards, clean editors do not', async () => {
+  const h = await workspacePage(); await h.click('start-preview');
+  await h.get('recent-activities').children[0].click();
+  let prevented = false;
+  await h.event('beforeunload', {preventDefault() { prevented = true; }});
+  assert.equal(prevented, false);
+  h.get('correction-rationale').value = 'INVENTED unsent explanation';
+  await h.get('correction-rationale').emit('input');
+  await h.event('beforeunload', {preventDefault() { prevented = true; }});
+  assert.equal(prevented, true);
+  const graph = structuredClone(h.modelSession.ledger);
+  h.observed.confirm = false; await h.click('preview-year');
+  assert.deepEqual(h.modelSession.ledger, graph);
+  assert.equal(h.get('correction-rationale').value, 'INVENTED unsent explanation');
+  h.observed.confirm = true; await h.click('close-detail');
+  prevented = false;
+  await h.event('beforeunload', {preventDefault() { prevented = true; }});
+  assert.equal(prevented, false); assert.equal(h.state.writes, 0);
+});

@@ -5,6 +5,11 @@ after its Apple web app foundation. This changes presentation and navigation
 interactions. The canonical financial model, storage contracts, explicit save,
 uncertain-outcome blocking and synthetic-only limits remain in force.
 
+The subsequent [adversarial review](PR38_ADVERSARIAL_REVIEW.md) retains this
+design and repairs unfinished-editor transitions, posting-status clarity,
+route scrolling and short-window editing space. The results below describe
+the initial redesign; [project status](PROJECT_STATUS.md) has current checks.
+
 ## Research and choice
 
 First-party sources consulted November 11, 2026:
@@ -36,7 +41,9 @@ without new persistence, which is unnecessary for this request.
   scope. Activity search, review-only filtering and pagination never filter Home.
   Tapping a recent record opens the existing detail page; Back returns to Home
   and restores focus to its record, or the heading if the record is no longer
-  present. The first-run synthetic preview now opens Home. The dedicated
+  present. Reopening the selected record preserves unfinished input. Replacing
+  it or closing it asks before discarding changed fields. Pending and unknown
+  posting states are labeled as excluded. The first-run synthetic preview now opens Home. The dedicated
   balances preview in Storage still opens Accounts.
 - A native expandable filter row shows the active account and period or balance
   date. It supports keyboard activation and retains selections across pages.
@@ -55,7 +62,10 @@ without new persistence, which is unnecessary for this request.
   plus any left safe-area inset gives content more room than the previous 220px
   sidebar. Larger screens use a 224px sidebar. Window resizing keeps the same
   mounted editors and shared scope. Measured bar clearance and Apple safe-area
-  rules from the foundation remain in place.
+  rules from the foundation remain in place. In short phone windows, the header
+  and draft bar scroll with the document so the fixed tabs leave room to edit.
+  Ordinary route links preserve scroll positions; reselecting a page returns
+  to its header. Modified clicks keep their native browser behavior.
 - The main app uses graphite surfaces, mint actions, tabular amounts and larger
   supporting text. Diagnostic pages retain their shared design tokens. The
   manifest and generated opaque icons match the main app's first-rendered color.

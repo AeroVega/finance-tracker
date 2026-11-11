@@ -9,7 +9,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   htmlPath = `prototype/${name}.html`, scriptPath = `prototype/${name}.mjs`, timers = {setTimeout, clearTimeout} } = {}) {
   const html = await readFile(new URL(`../../${htmlPath}`, import.meta.url), 'utf8');
   const script = await readFile(new URL(`../../${scriptPath}`, import.meta.url), 'utf8');
-  const nodes = new Map(), listeners = new Map(), intervals = new Set();
+  const nodes = new Map(), listeners = new Map(), documentListeners = new Map(), intervals = new Set();
   const observed = { focused: null, selected: null, copied: [], clipboardFailure: false, storageFailure: false, confirmations: [], confirm: true };
   function forget(node) {
     for (const child of node.children) forget(child);
@@ -57,7 +57,8 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
     for (const name of names.split(',').map(name => name.trim())) assert.ok(name in imports, `Missing import ${name}`);
     return '';
   });
-  const context = { ...imports, document: { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body') },
+  const context = { ...imports, document: { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body'),
+    addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); } },
     window, navigator, confirm: window.confirm, crypto, structuredClone, URL, Blob, TextEncoder, TextDecoder, Uint8Array,
     sessionStorage: { getItem: key => session.get(key) ?? null, setItem(key, value) { if (observed.storageFailure) throw new Error('Invented storage refusal'); session.set(key, value); }, removeItem: key => session.delete(key) },
     setInterval(callback) { intervals.add(callback); return callback; }, clearInterval: callback => intervals.delete(callback),
