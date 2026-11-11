@@ -182,3 +182,53 @@ Remote CI is separate. [The published code-head run](https://github.com/AeroVega
 was still queued when this report was prepared; it is not a passing result.
 The final evidence commit changes documentation/CSV only. Check its exact remote
 head before merge consideration. No merge or deployment was performed.
+
+## Initial-copy readback failure on deployed 56cafc2
+
+**User-confirmed:** deployed `56cafc2815ccfce226bb91ff71cdce885d79cdd1`
+reported `write-unresolved`, four verified writes, and five visible files after
+26 seconds. Progress remained "Starting…". The failure is in locator publication
+inside initial-copy setup, before the synthetic year's seeding phase. The failed
+folder and tab must be preserved; no agent inspected their Drive contents.
+
+**Verified synthetically against that exact baseline:** a metadata version
+advance between a newly created locator's independent before/after reads
+produces the same four-write/five-file state, with nested `version-mismatch`.
+A post-create exact-ID metadata 404 produces the same visible state with nested
+`object-not-found`. The screenshot and counter do not identify the live cause.
+Drive's rounded "0 KB" display does not establish that a file is empty.
+
+The local candidate permits up to two additional reads of a newly created page
+only after a successful create and an otherwise exact version-bracket failure.
+The waits are 100 and 200 ms. Every attempt checks exact identity, folder, kind,
+transaction, size and SHA-256, and requires a stable metadata version. Retry
+rechecks ownership and the original read lifetime. No POST is repeated, no new
+physical ID is allocated for the retry, and no file is deleted. Persistent
+version movement, changed bindings/bytes, lost ownership, cancellation and
+expired lifetimes leave the exact write unresolved. Historical reads remain
+strict; this is not a general retry policy for corrupt history or absent files.
+
+The seeder now explains unresolved writes without recommending a blind reconnect.
+A fixed-code diagnostic distinguishes create outcome from later readback failure,
+including bounded HTTP status/check-count fields where already available.
+It excludes raw messages, file/folder IDs, hashes, URLs, tokens, records and
+provider response bodies. It runs locally from the caught error and issues no
+Drive requests. A subsequent user action clears the displayed diagnostic.
+Initial connection progress now identifies session/setup work instead of keeping
+"Starting…" throughout it.
+
+**Verified local normal-path comparison:** exact deployed baseline and candidate
+initialization both reached ready with 99 requests, 9,715 request-body bytes,
+46,869 response-body bytes, eight transaction-adapter verified writes and eight
+files. This is a single synthetic HTTP operation-count check, not a latency or
+memory claim. The session marker accounts for the ninth HTTP mutation. The
+settled-version regression fails on the baseline and passes on the candidate,
+which also seeds and independently reopens an exact two-activity ledger.
+Persistent changes, corrupt/rebound pages, offline state, retry cancellation,
+strict historical version checks and diagnostic privacy remain covered.
+
+**Publication boundary:** at this incident's review the Pages API again reported
+`feat/scalable-storage-foundation` as its publishing source. New changes stay
+local until publication is coordinated. A push would have deployment effects;
+no merge or deployment is authorized by the troubleshooting report alone.
+Live cause, device behavior and live acceptance remain open.

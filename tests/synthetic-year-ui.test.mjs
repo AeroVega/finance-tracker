@@ -1,3 +1,4 @@
+import { storageWriteDiagnostic } from '../js/storage-write-diagnostic.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
@@ -48,7 +49,7 @@ async function legacyYearPage() {
     async prepare() {}
     async connect(options) {
       state.connects.push(options);
-      if (state.connectionError) throw Object.assign(new Error('Private provider detail must not appear'), { code: state.connectionError });
+      if (state.connectionError) throw typeof state.connectionError === 'string' ? Object.assign(new Error('Private provider detail must not appear'), { code: state.connectionError }) : state.connectionError;
       assert.ok(options.requireEmpty || options.requireExisting);
       if (options.requireEmpty) assert.equal(manifest.revision, 0, 'Fresh upload must not replace a saved copy');
       if (options.requireExisting) assert.ok(manifest.revision > 0, 'Reconnect requires the saved copy');
@@ -57,7 +58,7 @@ async function legacyYearPage() {
     }
     async release() { state.releases++; if (state.releaseVerified) this.lifecycle = null; return { released: state.releaseVerified }; }
   }
-  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder });
+  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder, storageWriteDiagnostic });
   return { ...page, state, manifest, objects, storage,
     async upload() {
       await page.choose('empty-confirmed', true); await page.click('upload');
@@ -211,7 +212,7 @@ async function pagedYearPage() {
       return state.verification;
     }
   }
-  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder: ObservedSeeder });
+  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder: ObservedSeeder, storageWriteDiagnostic });
   return { ...page, http, state, storage,
     async upload() {
       await page.choose('empty-confirmed', true); await page.click('upload');
@@ -311,4 +312,25 @@ test('new synthetic-year controller uploads genuine v5 and exactly reopens the f
   assert.ok(handoffMutations.every(row => row.kind === 'session-marker'), 'Session marker writes are not financial commits');
   assert.equal(h.get('preview-result').textContent, preview);
   assert.equal(h.intervals.size, 0);
+});
+
+
+test('unresolved setup shows safe readback cause and never initiates automatic reconnect or retry', async () => {
+  const h = await legacyYearPage();
+  h.state.connectionError = Object.assign(new Error('private-provider-message'), {code: 'write-unresolved', details: {
+    fileId: 'private-file-id', createFailed: false, readbackError: {code: 'object-not-found', message: 'private-url'}
+  }});
+  await h.upload();
+  assert.equal(h.state.connects.length, 1);
+  assert.equal(h.get('write-diagnostic').hidden, false);
+  assert.match(h.get('write-diagnostic').textContent, /object-not-found/);
+  assert.match(h.get('write-diagnostic').textContent, /completed/);
+  assert.doesNotMatch(h.get('write-diagnostic').textContent, /private-/);
+  assert.match(h.get('result').textContent, /Preserve this folder and leave this tab open/);
+  assert.doesNotMatch(h.get('result').textContent, /reconnect to verify before retrying/);
+  await new Promise(setImmediate);
+  assert.equal(h.state.connects.length, 1);
+  assert.equal(h.intervals.size, 0);
+  await h.click('preview'); await h.until(() => !h.get('preview').disabled);
+  assert.equal(h.get('write-diagnostic').hidden, true);
 });

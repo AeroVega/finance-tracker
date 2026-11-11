@@ -184,6 +184,8 @@ export function createPagedPhysicalLocators(adapter, config) {
   }
   async function publishPhysical({fileId,sha256,bytes,kind,maximum}, signal) {
     abort(signal);adapterScope();
+    const writeOwner = decodedPages?.captureRead();
+    writeOwner?.assertCurrent();
     let active = true, calls = 0, successfulGuards = 0, pending = null, guardFailure = false, guardError, failed = false, createError;
     const beforeMutation = () => {
       if (!active || pending) { guardFailure = true; return Promise.reject(new PagedLocatorError('guard-scope', 'Mutation guard is closed or already running.')); }
@@ -216,9 +218,27 @@ export function createPagedPhysicalLocators(adapter, config) {
     const ref = {fileId, sha256};
     if (signal?.aborted) fail('write-unresolved', 'Cancellation after create requires inspection of the exact physical ID.', {fileId, sha256, cancelled:true, createFailed:failed, createError});
     let saved;
-    try { saved = await readPhysical(ref, kind, maximum, signal, catalogTransaction); }
-    catch (error) {
-      fail('write-unresolved', 'Exact-ID readback did not establish the immutable write; preserve evidence.', {fileId, sha256, createFailed:failed, createError, readbackError:error});
+    // A successful create was already verified by the Drive adapter. An
+    // otherwise exact new page can still cross a metadata-version change in
+    // this independent bracket. Reverify the same ID, never resend its write.
+    // Historical reads and all binding/byte failures retain strict refusal.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, 100 * attempt));
+          abort(signal);adapterScope();writeOwner?.assertCurrent();
+          if (await assertWritable({databaseId, copyId, folderId, signal}) !== undefined) {
+            fail('invalid-guard', 'Ownership guard must return undefined.');
+          }
+        }
+        abort(signal);adapterScope();writeOwner?.assertCurrent();
+        saved = await readPhysical(ref, kind, maximum, signal, catalogTransaction);
+        writeOwner?.assertCurrent();
+        break;
+      } catch (error) {
+        if (!failed && error.code === 'version-mismatch' && attempt < 2) continue;
+        fail('write-unresolved', 'Exact-ID readback did not establish the immutable write; preserve evidence.', {fileId, sha256, createFailed:failed, createError, readbackError:error});
+      }
     }
     if (!equal(bytes, saved)) fail('write-readback-mismatch', 'Stored bytes differ from the proposed immutable bytes.');
     return ref;

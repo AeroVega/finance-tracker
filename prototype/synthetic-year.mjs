@@ -1,3 +1,4 @@
+import { storageWriteDiagnostic } from '../js/storage-write-diagnostic.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
 
@@ -11,6 +12,7 @@ const messages = {
   verified: 'Exact saved year verified.'
 };
 const failures = {
+  'write-unresolved': 'A dispatched storage write could not be independently verified. Preserve this folder and leave this tab open. Do not upload again, reconnect, recover or delete files until the diagnostic below has been inspected.',
   'ownership-unknown': 'Session ownership could not be verified. A session marker may already have been written even when this counter shows zero. Preserve this folder and marker for inspection. Do not delete the marker or blindly retry or reconnect.',
   'session-operation-cancelled': 'Session verification was cancelled. A dispatched marker write may still finish. Preserve the folder and marker; do not retry creation.',
   'unsupported-derived-projection': 'A linked refund lacks a defined category. Preserve the source copy and add an explicit category correction before making a new copy.',
@@ -70,11 +72,18 @@ async function verify() {
 }
 async function run(operation) {
   if (busy) return;
-  busy = true; writes = 0; started = Date.now(); phase = 'Starting…'; refresh(); progress();
+  busy = true; writes = 0; started = Date.now(); phase = 'Starting…';
+  $('write-diagnostic').textContent = ''; $('write-diagnostic').hidden = true;
+  refresh(); progress();
   timer = setInterval(progress, 1000);
   try { await operation(); }
   catch (error) {
     const code = typeof error?.code === 'string' && /^[a-z][a-z0-9-]{0,95}$/.test(error.code) ? error.code : 'setup-or-connection-unavailable';
+    const diagnostic = storageWriteDiagnostic(error);
+    if (diagnostic) {
+      $('write-diagnostic').textContent = 'Readback diagnostic: ' + JSON.stringify(diagnostic);
+      $('write-diagnostic').hidden = false;
+    }
     result(failures[code] || `Action did not complete (${code}). If authorization or folder selection was cancelled, nothing further will run. If setup or saving had begun, preserve the folder and reconnect to verify before retrying.`, 'error');
   } finally { clearInterval(timer); timer = null; progress(); busy = false; refresh(); }
 }
@@ -87,6 +96,7 @@ $('upload').addEventListener('click', () => {
   void run(async () => {
     result('Choose your newly created empty synthetic folder.');
     // Keep the Google authorization invocation in the user activation path.
+    phase = 'Acquiring the storage session and verifying initial setup…'; progress();
     await storage.connect({ requireEmpty: true, canonicalLayout: 'partitions-v5' });
     await seeder.admitFreshConnection(storage.lifecycle);
     await verify();
