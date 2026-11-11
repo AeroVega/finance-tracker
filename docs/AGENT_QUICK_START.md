@@ -13,7 +13,7 @@ Do not read every historical PR report before starting a task.
 
 ## Current state (November 11, 2026)
 
-- PR #37 is an open draft against `main`, based on `5e9c8966ddda10161f18d5483ff579a8a09e534a`. Its first storage foundation is active-path work; its paged-storage follow-up is isolated reference/prototype code.
+- PR #37 is an open draft against `main`. Its incremental storage foundation is active-path work; its paged-storage follow-up is isolated reference/prototype code. Check the PR head for the current revision rather than copying a SHA into this guide.
 - The application continues to use canonical per-record v1 and fragmented v3. New stores use fragmented v3; standalone grouped v2 is rejected. These canonical layout versions are distinct from locator-catalog version 1/2.
 - PR #37's catalog v2, monthly sidecar index and response/backup bounds affect the active synthetic storage path. They do not provide bounded cold loading or remove whole-ledger validation.
 - Immutable page trees, canonical v4, framed archives and root transaction protocol are not wired into the application. Do not describe them as current runtime behavior or switch paths without a separate integration plan.
