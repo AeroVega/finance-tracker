@@ -421,15 +421,23 @@ export class DashboardSyntheticStorage {
 
   async release() {
     const lifecycle = this.lifecycle;
+    const accessToken = this.accessToken;
+    const tokenExpiresAt = this.tokenExpiresAt;
     if (!lifecycle) {
       throw Object.assign(new Error("There is no active storage session to release."), { code: "release-unconfirmed" });
     }
     const result = await lifecycle.release({ reason: "dashboard-handoff" });
     // An older completion must not erase a newer lifecycle or recovery failure.
     if (result?.released !== true || this.lifecycle !== lifecycle ||
-        lifecycle.state !== "released" || lifecycle.engine?.recoveryRequired) {
+        lifecycle.state !== "released" || lifecycle.engine?.recoveryRequired ||
+        // Reauthorization can replace credentials while release is awaiting
+        // Drive. An older completion must not clear that newer authorization.
+        // Natural expiry may already have cleared the old token; that is safe.
+        (this.accessToken && (this.accessToken !== accessToken || this.tokenExpiresAt !== tokenExpiresAt))) {
       throw Object.assign(new Error("Storage release could not be verified. Keep this device selected and resolve the session before switching devices."), { code: "release-unconfirmed" });
     }
+    this.accessToken = "";
+    this.tokenExpiresAt = 0;
     this.lifecycle = null;
     if (this.retentionTimer) clearInterval(this.retentionTimer);
     this.retentionTimer = null;

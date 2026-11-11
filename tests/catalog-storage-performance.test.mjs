@@ -115,6 +115,19 @@ test("a full catalog verification reads every retained object once with at most 
   assert.equal(counts.get(manifest.locatorCatalog.fileId), 1);
 });
 
+// Exact expected cold catalog reads, derived only from the invented fixture.
+function catalogReadIds(adapter, manifest) {
+  const ids = [manifest.locatorCatalog.fileId];
+  const root = JSON.parse(new TextDecoder().decode(adapter.files.get(ids[0]).bytes));
+  let pointer = root.segmentTip;
+  while (pointer) {
+    ids.push(pointer.fileId);
+    pointer = JSON.parse(new TextDecoder().decode(adapter.files.get(pointer.fileId).bytes)).previousSegment;
+  }
+  if (root.legacyCatalog) ids.push(root.legacyCatalog.fileId);
+  return ids;
+}
+
 function enableBatchMetadata(adapter) {
   for (const file of adapter.files.values()) file.metadata.version = "1";
   adapter.readMetadataBatch = GoogleDriveTransactionAdapter.prototype.readMetadataBatch;
@@ -143,7 +156,7 @@ test("batch history verification brackets every body with fresh listings and no 
   assert.equal(lists, 2);
   assert.equal(peak, 4);
   assert.equal(active, 0);
-  assert.deepEqual(metadataIds, [manifest.locatorCatalog.fileId]);
+  assert.deepEqual(metadataIds, catalogReadIds(adapter, manifest));
   for (const entry of Object.values(catalog.entries)) assert.equal(bodies.get(entry.fileId), 1);
   const historical = Object.values(catalog.entries).find((entry) => entry.kind === "data-object");
   adapter.files.get(historical.fileId).bytes = encode("invented changed bytes");
@@ -184,8 +197,8 @@ test("batch contract and every retained binding are checked before body admissio
       adapter.readMetadataBatch = async (ids) => change(new Map(ids.map((id) =>
         [id, { ...structuredClone(adapter.files.get(id).metadata), version: "1" }])), journal.fileId);
       await assert.rejects(verifyCatalogHistory(adapter, manifest));
-      assert.deepEqual(metadataIds, [manifest.locatorCatalog.fileId]);
-      assert.deepEqual(bodyIds, [manifest.locatorCatalog.fileId]);
+      assert.deepEqual(metadataIds, catalogReadIds(adapter, manifest));
+      assert.deepEqual(bodyIds, catalogReadIds(adapter, manifest));
     });
   }
 });

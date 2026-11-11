@@ -1,3 +1,4 @@
+import { createDriveResponseLimits, readBoundedDriveJson, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
 import { DRIVE_FILES_ENDPOINT, DRIVE_UPLOAD_ENDPOINT, listFolderChildren } from "./drive-feasibility-spike.mjs";
 import { SessionCoordinationError } from "./session-coordination.mjs";
 
@@ -54,6 +55,7 @@ export function createDriveSessionAdapter(options) {
   if (!folderId) throw error("missing-folder", "Select the intended Drive folder first.");
   if (typeof fetchImpl !== "function") throw error("fetch-unavailable", "Fetch is unavailable.");
 
+  const responseLimits = createDriveResponseLimits(settings.responseLimits);
   let lastReadRecord;
   let lastReadFileId = null;
   let hasRead = false;
@@ -64,6 +66,7 @@ export function createDriveSessionAdapter(options) {
       // other Drive requests which resolve the provider inside authHeaders().
       accessToken: typeof accessToken === "function" ? accessToken() : accessToken,
       folderId,
+      responseLimits,
       fetchImpl
     });
     const candidates = files.filter((file) =>
@@ -93,19 +96,21 @@ export function createDriveSessionAdapter(options) {
     try {
       response = await fetchImpl(
         DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(file.id) + "?alt=media",
-        { method: "GET", headers: authHeaders(accessToken) }
+        { method: "GET", cache: "no-store", headers: authHeaders(accessToken) }
       );
     } catch {
       throw error("network-error", "The session marker could not be read from Google Drive.");
     }
     if (!response || !response.ok) {
+      await discardDriveResponse(response);
       throw error("drive-read-failed", "The session marker could not be read from Google Drive.");
     }
 
     let record;
     try {
-      record = JSON.parse(await response.text());
-    } catch {
+      record = await readBoundedDriveJson(response, { kind: "session-marker", limits: responseLimits });
+    } catch (cause) {
+      if (cause.code !== "invalid-json-object") throw cause;
       throw error("ambiguous-session-record", "The session marker content is not valid JSON.");
     }
     lastReadRecord = record;
@@ -124,9 +129,16 @@ export function createDriveSessionAdapter(options) {
     } catch {
       throw error("network-error", "Google Drive could not generate a session marker ID.");
     }
-    if (!response || !response.ok) throw error("drive-create-failed", "Google Drive could not generate a session marker ID.");
+    if (!response || !response.ok) {
+      await discardDriveResponse(response);
+      throw error("drive-create-failed", "Google Drive could not generate a session marker ID.");
+    }
     let payload;
-    try { payload = await response.json(); } catch { throw error("invalid-response", "Google Drive returned an invalid generated ID response."); }
+    try { payload = await readBoundedDriveJson(response, { kind: "generated-ids", limits: responseLimits }); }
+    catch (cause) {
+      if (cause.code !== "invalid-json-object") throw cause;
+      throw error("invalid-response", "Google Drive returned an invalid generated ID response.");
+    }
     if (!payload || !Array.isArray(payload.ids) || typeof payload.ids[0] !== "string" || !payload.ids[0]) {
       throw error("invalid-response", "Google Drive returned no usable session marker ID.");
     }
@@ -141,6 +153,7 @@ export function createDriveSessionAdapter(options) {
   }
 
   async function write(record) {
+    assertResponseSize(new TextEncoder().encode(JSON.stringify(record)).length, { kind: "session-marker", limits: responseLimits });
     if (!hasRead) throw error("read-before-write-required", "Read the session marker before attempting to write.");
     const previousRecord = lastReadRecord;
     const previousFileId = lastReadFileId;
@@ -179,6 +192,7 @@ export function createDriveSessionAdapter(options) {
         await readBackExpected(record);
         return;
       }
+      await discardDriveResponse(response);
       if (!response || (!response.ok && response.status !== 409)) {
         throw error("drive-create-failed", "Google Drive did not confirm session marker creation.");
       }
@@ -204,6 +218,7 @@ export function createDriveSessionAdapter(options) {
       await readBackExpected(record);
       return;
     }
+    await discardDriveResponse(response);
     if (!response || !response.ok) {
       throw error("drive-update-failed", "Google Drive did not confirm the session marker update.");
     }

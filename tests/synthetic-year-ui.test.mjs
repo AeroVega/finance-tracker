@@ -1,3 +1,4 @@
+import {createCanonicalMonthIndex, MONTH_INDEX_GROUP_SIZE} from '../js/canonical-month-index.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
@@ -47,7 +48,7 @@ async function yearPage() {
     }
     async release() { state.releases++; if (state.releaseVerified) this.lifecycle = null; return { released: state.releaseVerified }; }
   }
-  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder,
+  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder, createCanonicalMonthIndex, MONTH_INDEX_GROUP_SIZE,
     serializeCanonicalLedger, serializeFragmentedCanonicalLedger });
   return { ...page, state, manifest, objects, storage,
     async upload() {

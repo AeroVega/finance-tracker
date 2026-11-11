@@ -69,7 +69,7 @@ async function reopen(target, result, expectedLedger, expectedHistory, phase) {
     });
     target.http.phase = phase + '-history-assertions';
     const history = await verifyCatalogHistory(target.targetAdapter, result.manifest);
-    assert.deepEqual([...history.objects.keys()], [...expectedHistory.objects.keys()]);
+    assert.deepEqual(new Set(history.objects.keys()), new Set(expectedHistory.objects.keys()));
     for (const [key, bytes] of expectedHistory.objects) {
       assert.deepEqual(history.objects.get(key), bytes, 'every retained byte must survive: ' + key);
       const { fileId: originalId, ...logical } = expectedHistory.catalog.entries[key];
@@ -110,10 +110,10 @@ export async function measureCanonicalBackupFlow({ variants = [{ name: 'current'
   const retainedByKind = Object.values(sourceHistory.catalog.entries).reduce((counts, entry) => {
     counts[entry.kind] = (counts[entry.kind] || 0) + 1; return counts;
   }, {});
-  assert.equal(Object.keys(manifest.snapshot).length, 8, 'the v3 snapshot exposes bounded physical fragments rather than per-record objects');
+  assert.equal(Object.keys(manifest.snapshot).length, 10, 'the v3 snapshot exposes eight bounded physical fragments plus monthly index root and group');
   assert.equal(Object.keys(sourceHistory.catalog.entries).length,
     Object.values(retainedByKind).reduce((sum, count) => sum + count, 0));
-  assert.equal(retainedByKind['journal-event'], 62);
+  assert.equal(retainedByKind['journal-event'], 74);
   source.http.latencyMs = latencyMs;
   const report = { transportLatencyMs: latencyMs, heartbeatRequests: 0, recipeRequests,
     selectedObjects: Object.keys(manifest.snapshot).length,

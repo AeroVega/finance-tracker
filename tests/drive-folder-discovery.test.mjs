@@ -9,11 +9,7 @@ import {
 } from "../js/drive-folder-discovery.mjs";
 
 function response(status, payload) {
-  return {
-    status,
-    ok: status >= 200 && status < 300,
-    json: async () => payload
-  };
+  return new Response(JSON.stringify(payload), { status });
 }
 
 const base = {

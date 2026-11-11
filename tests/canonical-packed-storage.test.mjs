@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
 import { applyFinancialEvent } from '../js/canonical-import.mjs';
-import { CanonicalLedgerStore, CANONICAL_INDEX, validateCanonicalSnapshot } from '../js/canonical-ledger-storage.mjs';
+import { CanonicalLedgerStore, CANONICAL_INDEX, CANONICAL_PREFIX, validateCanonicalSnapshot } from '../js/canonical-ledger-storage.mjs';
 import { reassembleCanonicalObjects, fragmentCanonicalObjects } from '../js/canonical-fragments.mjs';
 import { serializeLegacyGroupedV2ForTest } from './helpers/canonical-storage-fixture.mjs';
 
@@ -46,7 +46,7 @@ test('new canonical stores default to fragmented v3 with a version-3 logical gro
   await store.save(recipe.ledger);
   const root = JSON.parse(decode(objects[CANONICAL_INDEX]));
   assert.equal(root.version, 3);
-  const physical = new Map(Object.entries(objects).map(([path, bytes]) => [path, decode(bytes)]));
+  const physical = new Map(Object.entries(objects).filter(([path]) => path.startsWith(CANONICAL_PREFIX)).map(([path, bytes]) => [path, decode(bytes)]));
   const logical = reassembleCanonicalObjects(root, physical);
   const logicalIndex = JSON.parse(logical.get(CANONICAL_INDEX));
   assert.equal(logicalIndex.version, 3);
@@ -85,7 +85,7 @@ test('existing fragmented-v3 copies with the earlier logical envelope remain rea
   await store.save(corrected);
   assert.deepEqual(await store.load(), corrected);
   const upgradedRoot = JSON.parse(decode(objects[CANONICAL_INDEX]));
-  const upgradedPhysical = new Map(Object.entries(objects).map(([path, value]) => [path, decode(value)]));
+  const upgradedPhysical = new Map(Object.entries(objects).filter(([path]) => path.startsWith(CANONICAL_PREFIX)).map(([path, value]) => [path, decode(value)]));
   const upgradedLogical = reassembleCanonicalObjects(upgradedRoot, upgradedPhysical);
   assert.equal(JSON.parse(upgradedLogical.get(CANONICAL_INDEX)).version, 3);
   assert.equal(validateCanonicalSnapshot({ objects }), true);

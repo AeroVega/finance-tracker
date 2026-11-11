@@ -1,5 +1,25 @@
 # Project status
 
+## Storage and safety update, November 11, 2026
+
+**Verified:** [PR36](https://github.com/AeroVega/finance-tracker/pull/36) is merged
+in main `04aacf31b8aaae31fa73b10408fa22d417c0d943`. Its description reports completed
+owner synthetic/device acceptance. The baseline local Node 24.22.1 suite passes
+1,120/1,120. Financial position and reconciled coverage are implemented; the
+November 10 branch-status paragraphs below are historical.
+
+The [storage scaling and production-readiness audit](STORAGE_SCALING_AND_PRODUCTION_READINESS.md)
+records measured catalog growth, whole-ledger memory limits, safe local codec and
+token-cleanup changes, and remaining production gates. The owner subsequently authorized execution and draft publication. The
+[incremental storage foundation](SCALABLE_STORAGE_FOUNDATION.md) implements
+segmented catalogs, source-bound monthly reports, response bounds and lower-memory
+Drive backup. Full bounded loading and production controls remain unfinished.
+Nothing is merged or deployed by this work. Deployment is deferred until closer to Alpha.
+Historical monthly migration, supported owner-file ingestion and production
+controls remain. **Alpha is incomplete and production remains NO-GO.**
+
+## Earlier main snapshot, November 10, 2026
+
 **Verified snapshot:** November 10, 2026. Audited `main` at [`d38681ee013cbe3e52dd861264f70490935c3582`](https://github.com/AeroVega/finance-tracker/commit/d38681ee013cbe3e52dd861264f70490935c3582). This is a dated record, not a live status feed.
 
 The synthetic canonical workspace and storage foundation are implemented. **Alpha is not complete.** Financial position, reconciled coverage, monthly-history migration and production controls remain. Production financial-data persistence is **NO-GO**.

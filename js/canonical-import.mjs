@@ -676,21 +676,34 @@ function summarizePeriod({ledger,replay,accounts,active,unresolved},{start,end,c
       continue;
     }
     if(date<start||date>end) continue;
-    const omit=reason=>{reasons.add(reason);excluded.push({activityId:a.activityId,reason});};
-    if(a.lifecycleStatus==='pending') {excluded.push({activityId:a.activityId,reason:'pending'});continue;}
-    if(a.lifecycleStatus!=='posted') {omit('unknown-lifecycle');continue;}
-    if(a.currency!==currency) {omit('different-currency');continue;}
-    const value=exactSignedDecimal(a);
-    if(value===null) {omit('unknown-amount');continue;}
-    if(!['income','spending','transfer','refund'].includes(a.activityKind)) {omit('unclassified-activity');continue;}
-    if((a.activityKind==='spending'&&compare(value,'0')>0)||(a.activityKind==='income'&&compare(value,'0')<0)||(a.activityKind==='refund'&&compare(value,'0')<=0)) {omit('classification-amount-conflict');continue;}
-    if(a.activityKind==='refund'&&!a.originalActivityId&&!a.categoryId) {omit('unmatched-refund');continue;}
-    if(a.activityKind==='income') income=add(income,value);
-    if(a.activityKind==='spending'||a.activityKind==='refund') spending=add(spending,negate(value));
-    // Only checking/savings cash movement; cards are liabilities, not cash accounts.
-    if(['checking','savings'].includes(accounts.get(a.accountId).accountType)&&a.activityKind!=='transfer') cash=add(cash,value);
+    const contribution=reportActivityContribution(a,accounts.get(a.accountId),currency);
+    if(contribution.reason) {
+      if(contribution.reason!=='pending') reasons.add(contribution.reason);
+      excluded.push({activityId:a.activityId,reason:contribution.reason});
+    } else {
+      income=add(income,contribution.income);spending=add(spending,contribution.spending);cash=add(cash,contribution.cash);
+    }
   }
   return {start,end,currency,income,spending,cash,complete:false,reasons:[...reasons],excluded};
+}
+
+/** Shared financial meaning for the full report and derived month index.
+ * The caller owns validated activity/account input and reporting-date selection.
+ * A missing refund posting date is handled before date/currency filtering.
+ */
+export function reportActivityContribution(a,account,currency) {
+  const omit=reason=>({reason,income:'0',spending:'0',cash:'0'});
+  if(a.lifecycleStatus==='pending') return omit('pending');
+  if(a.lifecycleStatus!=='posted') return omit('unknown-lifecycle');
+  if(a.currency!==currency) return omit('different-currency');
+  const value=exactSignedDecimal(a);
+  if(value===null) return omit('unknown-amount');
+  if(!['income','spending','transfer','refund'].includes(a.activityKind)) return omit('unclassified-activity');
+  if((a.activityKind==='spending'&&compare(value,'0')>0)||(a.activityKind==='income'&&compare(value,'0')<0)||(a.activityKind==='refund'&&compare(value,'0')<=0)) return omit('classification-amount-conflict');
+  if(a.activityKind==='refund'&&!a.originalActivityId&&!a.categoryId) return omit('unmatched-refund');
+  return {reason:null,income:a.activityKind==='income'?value:'0',
+    spending:['spending','refund'].includes(a.activityKind)?negate(value):'0',
+    cash:['checking','savings'].includes(account.accountType)&&a.activityKind!=='transfer'?value:'0'};
 }
 
 // One owner per application ledger. This is an in-memory optimization, not a

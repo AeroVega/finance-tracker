@@ -1,3 +1,4 @@
+import { createDriveResponseLimits, readBoundedDriveJson, readBoundedDriveBytes, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
 export const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
 export const DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files";
 
@@ -15,8 +16,9 @@ function authHeaders(accessToken) {
   return { Authorization: "Bearer " + accessToken };
 }
 
-function requireOk(response, operation) {
+async function requireOk(response, operation) {
   if (!response || !response.ok) {
+    await discardDriveResponse(response);
     const status = response && Number.isInteger(response.status) ? response.status : null;
     throw new DriveFeasibilityError(
       status === 401 ? "authorization-required" : status === 403 ? "permission-denied" : "http-error",
@@ -26,10 +28,11 @@ function requireOk(response, operation) {
   }
 }
 
-async function readJson(response, operation) {
+async function readJson(response, operation, kind = "metadata", limits) {
   try {
-    return await response.json();
-  } catch {
+    return await readBoundedDriveJson(response, { kind, limits });
+  } catch (error) {
+    if (error.code !== "invalid-json-object") throw error;
     throw new DriveFeasibilityError("invalid-response", "Drive returned an unreadable response for " + operation + ".");
   }
 }
@@ -54,6 +57,7 @@ export async function listFolderChildren(options) {
   if (!folderId) throw new DriveFeasibilityError("missing-folder", "Select a Drive folder first.");
   if (typeof fetchImpl !== "function") throw new DriveFeasibilityError("fetch-unavailable", "Fetch is unavailable.");
 
+  const limits = createDriveResponseLimits(settings.responseLimits);
   const headers = authHeaders(settings.accessToken);
   const files = [];
   const seenTokens = new Set();
@@ -69,13 +73,14 @@ export async function listFolderChildren(options) {
 
     let response;
     try {
-      response = await fetchImpl(DRIVE_FILES_ENDPOINT + "?" + params.toString(), { method: "GET", headers });
+      response = await fetchImpl(DRIVE_FILES_ENDPOINT + "?" + params.toString(), { method: "GET", headers, cache: "no-store" });
     } catch {
       throw new DriveFeasibilityError("network-error", "Could not reach Google Drive while listing the selected folder.");
     }
-    requireOk(response, "folder-child enumeration");
-    const payload = await readJson(response, "folder-child enumeration");
-    if (!payload || !Array.isArray(payload.files)) {
+    await requireOk(response, "folder-child enumeration");
+    const payload = await readJson(response, "folder-child enumeration", "list-page", limits);
+    if (!payload || !Array.isArray(payload.files) || payload.files.length > Number(params.get("pageSize")) ||
+        (payload.nextPageToken != null && typeof payload.nextPageToken !== "string")) {
       throw new DriveFeasibilityError("invalid-response", "Drive returned an unexpected folder listing.");
     }
     if (payload.incompleteSearch !== false) {
@@ -98,8 +103,8 @@ async function generateFileId(accessToken, fetchImpl) {
     method: "GET",
     headers: authHeaders(accessToken)
   });
-  requireOk(response, "pre-generated file ID request");
-  const payload = await readJson(response, "pre-generated file ID request");
+  await requireOk(response, "pre-generated file ID request");
+  const payload = await readJson(response, "pre-generated file ID request", "generated-ids");
   if (!payload || !Array.isArray(payload.ids) || typeof payload.ids[0] !== "string" || !payload.ids[0]) {
     throw new DriveFeasibilityError("invalid-generated-id", "Drive did not return a usable pre-generated file ID.");
   }
@@ -118,14 +123,14 @@ function multipartBody(boundary, metadata, content) {
   ]);
 }
 
-async function readSyntheticFile({ accessToken, fileId, expectedHash, expectedFolderId, fetchImpl }) {
+async function readSyntheticFile({ accessToken, fileId, expectedHash, expectedFolderId, fetchImpl, responseLimits = createDriveResponseLimits() }) {
   const headers = authHeaders(accessToken);
   const metadataResponse = await fetchImpl(
     DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(fileId) +
       "?fields=id,name,mimeType,parents,description,appProperties,version",
     { method: "GET", headers }
   );
-  requireOk(metadataResponse, "synthetic object metadata verification");
+  await requireOk(metadataResponse, "synthetic object metadata verification");
   const metadata = await readJson(metadataResponse, "synthetic object metadata verification");
   if (!metadata || metadata.id !== fileId) {
     throw new DriveFeasibilityError("metadata-mismatch", "The pre-generated ID did not resolve to the expected Drive file.");
@@ -138,8 +143,8 @@ async function readSyntheticFile({ accessToken, fileId, expectedHash, expectedFo
     DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(fileId) + "?alt=media",
     { method: "GET", headers }
   );
-  requireOk(contentResponse, "synthetic object read-back");
-  const contentBytes = new Uint8Array(await contentResponse.arrayBuffer());
+  await requireOk(contentResponse, "synthetic object read-back");
+  const contentBytes = await readBoundedDriveBytes(contentResponse, { kind: "stored-object", limits: responseLimits });
   const actualHash = await sha256Hex(contentBytes);
   const content = new TextDecoder().decode(contentBytes);
   if (actualHash !== expectedHash) {
@@ -161,6 +166,8 @@ export async function createSyntheticObject(options) {
   }
   if (typeof fetchImpl !== "function") throw new DriveFeasibilityError("fetch-unavailable", "Fetch is unavailable.");
 
+  const responseLimits = createDriveResponseLimits(settings.responseLimits);
+  assertResponseSize(new TextEncoder().encode(content).byteLength, { kind: "stored-object", limits: responseLimits });
   const expectedHash = await sha256Hex(content);
   const fileId = await generateFileId(accessToken, fetchImpl);
   const boundary = "finance_tracker_spike_" + fileId.replace(/[^a-zA-Z0-9]/g, "");
@@ -193,11 +200,13 @@ export async function createSyntheticObject(options) {
     if (settings.simulateLostResponse === true) {
       createResponse = await request();
       if (!createResponse || !createResponse.ok) {
-        requireOk(createResponse, "first synthetic object creation");
+        await requireOk(createResponse, "first synthetic object creation");
       }
       // Deliberately discard the successful response to model a lost response.
+      await discardDriveResponse(createResponse);
       createResponse = await request();
       if (!createResponse || createResponse.status !== 409) {
+        await discardDriveResponse(createResponse);
         throw new DriveFeasibilityError("retry-not-conflict", "Retrying the same pre-generated ID did not return the expected HTTP 409.");
       }
     } else {
@@ -208,7 +217,7 @@ export async function createSyntheticObject(options) {
         createResponse = await request();
       }
       if (!createResponse || (!createResponse.ok && createResponse.status !== 409)) {
-        requireOk(createResponse, "synthetic object creation");
+        await requireOk(createResponse, "synthetic object creation");
       }
     }
   } catch (error) {
@@ -219,6 +228,7 @@ export async function createSyntheticObject(options) {
     throw error;
   }
 
+  await discardDriveResponse(createResponse);
   let verified;
   try {
     verified = await readSyntheticFile({
@@ -226,7 +236,8 @@ export async function createSyntheticObject(options) {
       fileId,
       expectedHash,
       expectedFolderId: folderId,
-      fetchImpl
+      fetchImpl,
+      responseLimits
     });
     if (verified.content !== content) {
       throw new DriveFeasibilityError("content-mismatch", "The synthetic object content differed after read-back.");
@@ -263,7 +274,7 @@ export async function readRaceTarget(options) {
       "?fields=id,name,description,version,parents,appProperties",
     { method: "GET", headers: authHeaders(settings.accessToken) }
   );
-  requireOk(response, "race target read");
+  await requireOk(response, "race target read");
   const metadata = await readJson(response, "race target read");
   if (
     !metadata ||
@@ -321,6 +332,7 @@ export async function attemptConditionalWrite(options) {
     return { outcome: "network-unknown", status: null };
   }
 
+  await discardDriveResponse(response);
   if (response.status === 412) return { outcome: "precondition-failed", status: 412 };
   if (response.ok) return { outcome: "updated", status: response.status };
   return { outcome: "http-error", status: response.status };
@@ -333,8 +345,9 @@ export async function deleteSyntheticFile(options) {
     { method: "DELETE", headers: authHeaders(settings.accessToken) }
   );
   if (!response || !(response.ok || response.status === 404)) {
-    requireOk(response, "synthetic test-file deletion");
+    await requireOk(response, "synthetic test-file deletion");
   }
+  await discardDriveResponse(response);
   return { deletedOrAbsent: true };
 }
 
@@ -384,6 +397,7 @@ export async function probeRawIfMatch(options) {
     };
   }
 
+  await discardDriveResponse(patchResponse);
   let outcome;
   if (patchResponse.status === 412) outcome = "precondition-enforced";
   else if (patchResponse.ok) outcome = "if-match-not-enforced";

@@ -283,7 +283,7 @@ export class ApplicationStorageLifecycle {
   async readManifest() {
     try {
       await this.requireReady();
-      const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
+      const manifest = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
       if (this.catalogProtocol) {
         if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Catalog finalization must complete before reading application state.");
         await this.verifyHistory(manifest);
@@ -297,7 +297,7 @@ export class ApplicationStorageLifecycle {
   async assertCurrentManifest(expectedManifest) {
     try {
       await this.requireReady();
-      const current = await this.transactionAdapter.readJson(this.manifestFileId);
+      const current = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
       if (canonicalizeJcs(current) !== canonicalizeJcs(expectedManifest)) fail("base-conflict", "Storage changed. Reopen before continuing.");
       await this.requireReady();
       return current;
@@ -317,7 +317,7 @@ export class ApplicationStorageLifecycle {
     try {
       await this.requireReady();
       if (!this.catalogProtocol) fail("catalog-required", "A verified snapshot requires the version-2 catalog protocol.");
-      const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
+      const manifest = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
       if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Complete catalog finalization before reading a snapshot.");
       const verified = await this.verifyHistory(manifest);
       // This validates every selected logical path and its catalog binding.
@@ -328,7 +328,7 @@ export class ApplicationStorageLifecycle {
         if (!(bytes instanceof Uint8Array)) fail("object-not-found", "A selected snapshot object was not verified.");
         objects[path] = bytes.slice();
       }
-      const current = await this.transactionAdapter.readJson(this.manifestFileId);
+      const current = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
       if (canonicalizeJcs(current) !== canonicalizeJcs(manifest)) fail("base-conflict", "Storage changed while the snapshot was being verified. Reopen before continuing.");
       await this.requireReady();
       return { manifest: structuredClone(manifest), objects };
@@ -345,7 +345,7 @@ export class ApplicationStorageLifecycle {
   async readObjectVerified(logicalPath) {
     await this.requireReady();
     if (typeof logicalPath !== "string" || !logicalPath) fail("invalid-path", "A logical object path is required.");
-    const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
+    const manifest = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
     if (this.catalogProtocol && manifest.catalogFinalizationPending !== null) fail("recovery-required", "Finish catalog recovery before reading objects.");
     const reference = this.catalogProtocol
       ? resolveSnapshotLocators(manifest.snapshot, (await this.verifyHistory(manifest)).catalog)[logicalPath]

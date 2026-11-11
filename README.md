@@ -10,6 +10,14 @@ A second-generation personal finance tracker built around trustworthy data, tran
 
 ## Project status
 
+**Storage draft, November 11, 2026:** the owner-authorized
+[incremental storage foundation](docs/SCALABLE_STORAGE_FOUNDATION.md) adds segmented
+catalogs, verified/rebuildable monthly reports, bounded Drive responses and direct
+backup improvements. It does not complete bounded full-database loading or lift
+production NO-GO. Main remains `04aacf31b8aaae31fa73b10408fa22d417c0d943` at this
+review. No merge or deployment is part of this work. The earlier status below is
+a dated record.
+
 **Verified November 10, 2026:** main at `d38681ee013cbe3e52dd861264f70490935c3582` includes the merged canonical workspace, PR32 and its PR34 preview-persistence/transfer-link follow-up. PR33's engineering workflows are also merged. The synthetic app can browse saved years, inspect evidence, stage corrections, explicitly save/reopen, save a local preview to a fresh synthetic folder and manually link transfers.
 
 **Alpha is not complete.** Financial position and reconciled coverage, historical monthly summaries from January 2023, and production controls remain. The main workspace does not yet ingest owner CSVs; the advanced canonical import workbench uses invented fixtures. See [project status](docs/PROJECT_STATUS.md) for code and PR evidence and [next steps](docs/NEXT_STEPS.md) for the four-step Alpha sequence.

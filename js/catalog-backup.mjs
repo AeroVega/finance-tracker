@@ -1,7 +1,7 @@
 import { canonicalizeJcs, verifyJournal } from "./transaction-protocol.mjs";
 import { createLocatorCatalog, locatorKey, createCatalogResolver, validateLocatorCatalog } from "./drive-locator-catalog.mjs";
-import { encode, hashRaw, writeVerified, verifyCatalogHistory, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
-import { archiveOriginalImports, restoreOriginalImports, validateArchivedOriginalImports } from "./drive-original-retention.mjs";
+import { encode, hashRaw, writeVerified, verifyCatalogHistory, validateLogicalCommit, storageError, readVerified, writeCatalog } from "./catalog-storage.mjs";
+import { archiveOriginalImports, iterateArchivedOriginalImports, SyntheticOriginalRetentionStore, restoreOriginalImports, validateArchivedOriginalImports } from "./drive-original-retention.mjs";
 
 // Observers receive only fixed phases and aggregate counts. They cannot delay
 // a storage operation or turn an observer failure into a copy failure.
@@ -23,7 +23,11 @@ async function copyRetainedObjects(verified, adapter, guard, onProgress) {
       const index = next++;
       const [key, entry] = entries[index];
       try {
-        const location = await writeVerified(adapter, { content: verified.objects.get(key),
+        const content = verified.readObject ? await verified.readObject(key, entry) : verified.objects.get(key);
+        if (!(content instanceof Uint8Array) || await hashRaw(content) !== entry.sha256) {
+          throw storageError("copy-source-hash-mismatch", "A retained source object changed before copying.");
+        }
+        const location = await writeVerified(adapter, { content,
           kind: entry.kind === "data-object" ? "snapshot-object" : entry.kind,
           transactionId: entry.transactionId || verified.transactionId, name: "ft-" + entry.kind + ".bin" }, guard);
         additions[index] = { ...entry, ...location };
@@ -52,7 +56,7 @@ function decodeBase64(text) {
   return Uint8Array.from(atob(text), (part) => part.charCodeAt(0));
 }
 
-export async function validateRetainedStructure({ manifest, catalog, objects, validateStructure }) {
+export async function validateRetainedStructure({ manifest, catalog, objects, readObject, validateStructure }) {
   if (typeof validateStructure !== "function") throw storageError("structural-validator-required", "An application structural validator is required.");
   validateLocatorCatalog(catalog);
   const originalCatalog = canonicalizeJcs(catalog);
@@ -66,7 +70,13 @@ export async function validateRetainedStructure({ manifest, catalog, objects, va
       validateLogicalCommit(record, manifest.databaseId);
       if (record.commitId !== entry.identity) throw storageError("commit-identity-mismatch", "A commit locator has the wrong logical identity.");
       const resolved = resolver.resolveSnapshot(record.snapshot);
-      const snapshotObjects = Object.fromEntries(Object.keys(resolved).map((path) => [path, objects.get("data-object:" + record.snapshot[path])]));
+      const snapshotObjects = {};
+      // Only one complete historical snapshot is admitted at a time. The
+      // application validator still requires a complete graph, never a slice.
+      for (const path of Object.keys(resolved)) {
+        const key = "data-object:" + record.snapshot[path];
+        snapshotObjects[path] = readObject ? await readObject(key, pinned.entries[key]) : objects.get(key);
+      }
       if (await validateStructure({ manifest: { ...manifest, revision: record.revision, commitId: record.commitId }, commitRecord: record, objects: snapshotObjects }) !== true) {
         throw storageError("structural-validation-failed", "A retained historical snapshot failed application validation.");
       }
@@ -98,7 +108,7 @@ export async function exportCatalogArchive({ adapter, manifestFileId, withSource
   if (typeof withSourceLock !== "function") throw storageError("source-lock-required", "Export requires the source session gate.");
   return withSourceLock(async () => {
     reportProgress(onProgress, "source-verification");
-    const manifest = await adapter.readJson(manifestFileId);
+    const manifest = await adapter.readJson(manifestFileId, { kind: "manifest" });
     if (manifest.catalogFinalizationPending !== null) throw storageError("recovery-required", "Complete catalog recovery before export.");
     const { catalog, objects } = await verifyCatalogHistory(adapter, manifest);
     await validateRetainedStructure({ manifest, catalog, objects, validateStructure });
@@ -111,7 +121,7 @@ export async function exportCatalogArchive({ adapter, manifestFileId, withSource
         return { ...logical, contentBase64: base64(objects.get(key)) };
       }) };
     archive.archiveSha256 = await hashRaw(encode(archive));
-    if (canonicalizeJcs(await adapter.readJson(manifestFileId)) !== canonicalizeJcs(manifest)) throw storageError("source-changed", "The source manifest changed during export.");
+    if (canonicalizeJcs(await adapter.readJson(manifestFileId, { kind: "manifest" })) !== canonicalizeJcs(manifest)) throw storageError("source-changed", "The source manifest changed during export.");
     return archive;
   });
 }
@@ -160,6 +170,20 @@ export async function restoreCatalogArchive({ archive, targetAdapter, newCopyId 
   if (typeof newCopyId !== "string" || !newCopyId.trim() || knownCopyIds.includes(newCopyId) || !["primary", "backup"].includes(role)) throw storageError("invalid-copy-identity", "A distinct destination copy identity and supported role are required.");
   return withTargetLock(async () => {
     const verified = await verifyCatalogArchive(archive, { validateStructure, onProgress });
+    return restoreVerifiedCatalog({ verified, originalImports: archive.originalImports, targetAdapter, newCopyId,
+      role, assertTargetWritable, beforePublish, onProgress });
+  });
+}
+
+// Private entry point. Both callers have completed full source verification.
+// A Drive backup does not need to encode and decode a portable archive first.
+async function restoreVerifiedCatalog({ verified, originalImports, targetAdapter, newCopyId, role,
+  assertTargetWritable, beforePublish, onProgress }) {
+    if (typeof newCopyId !== "string" || !newCopyId.trim() ||
+        [verified.manifest.copyId, verified.manifest.restoredFromCopyId].includes(newCopyId) ||
+        !["primary", "backup"].includes(role)) {
+      throw storageError("invalid-copy-identity", "A distinct destination copy identity and supported role are required.");
+    }
     for (const [key, bytes] of verified.objects) {
       if (key.startsWith("journal-event:") || key.startsWith("migration-record:")) {
         let evidence;
@@ -183,25 +207,25 @@ export async function restoreCatalogArchive({ archive, targetAdapter, newCopyId 
         name: "ft-copy-preparation.json" }, assertTargetWritable);
       markerId = marker.fileId;
       const additions = await copyRetainedObjects({ ...verified, transactionId }, targetAdapter, assertTargetWritable, onProgress);
-      const catalog = createLocatorCatalog({ databaseId: verified.manifest.databaseId, copyId: newCopyId, additions });
-      const pointer = await writeVerified(targetAdapter, { content: catalog, kind: "locator-catalog", transactionId,
-        name: "ft-locator-catalog.json" }, assertTargetWritable);
+      const { pointer } = await writeCatalog(targetAdapter, {
+        manifest: { ...verified.manifest, copyId: newCopyId, catalogFinalizationPending: transactionId }, additions
+      }, assertTargetWritable);
       const manifest = { ...verified.manifest, copyId: newCopyId, role, lifecycleStatus: "active",
         storageBinding: { provider: "google-drive", folderId: targetAdapter.folderId }, locatorCatalog: pointer,
-        restoredFromCopyId: archive.sourceCopyId, copyPreparationFileId: markerId };
-      await restoreOriginalImports({ adapter: targetAdapter, imports: archive.originalImports, guard: assertTargetWritable });
+        restoredFromCopyId: verified.manifest.copyId, copyPreparationFileId: markerId };
+      await restoreOriginalImports({ adapter: targetAdapter, imports: originalImports, guard: assertTargetWritable });
       reportProgress(onProgress, "destination-verification");
       // Mark preparation ready before publication; without the final manifest
       // this folder still cannot be selected as a database copy.
       await assertTargetWritable();
       await targetAdapter.publishManifest(markerId, { ...preparation, state: "ready" }, { beforeMutation: assertTargetWritable });
-      await verifyCatalogHistory(targetAdapter, manifest);
+      await verifyCatalogHistory(targetAdapter, manifest, globalThis.crypto, { retainDataObjects: false });
       await beforePublish();
       reportProgress(onProgress, "publishing-manifest");
       const result = await writeVerified(targetAdapter, { content: manifest, kind: "dashboard-synthetic-manifest", transactionId,
         name: "ft-synthetic-dashboard-manifest.json" }, assertTargetWritable);
       reportProgress(onProgress, "final-verification");
-      await verifyCatalogHistory(targetAdapter, await targetAdapter.readJson(result.fileId));
+      await verifyCatalogHistory(targetAdapter, await targetAdapter.readJson(result.fileId, { kind: "manifest" }), globalThis.crypto, { retainDataObjects: false });
       return { manifestFileId: result.fileId, manifest, objectCount: additions.length };
     } catch (error) {
       let quarantined = false;
@@ -212,7 +236,7 @@ export async function restoreCatalogArchive({ archive, targetAdapter, newCopyId 
       throw Object.assign(storageError("copy-quarantined", "The copy is incomplete. Preserve the destination and retry in a fresh folder."),
         { cause: error, quarantineConfirmed: quarantined });
     }
-  });
+
 }
 
 export async function backupCatalogCopy({ sourceAdapter, sourceManifestFileId, withSourceLock, assertSourceWritable,
@@ -220,14 +244,48 @@ export async function backupCatalogCopy({ sourceAdapter, sourceManifestFileId, w
   if (sourceAdapter.folderId === targetAdapter.folderId) throw storageError("same-backup-destination", "Backup requires a separate physical folder.");
   if (typeof withSourceLock !== "function" || typeof assertSourceWritable !== "function") throw storageError("source-lock-required", "Backup requires the active source session gate.");
   return withSourceLock(async () => {
-    const base = await sourceAdapter.readJson(sourceManifestFileId);
-    const archive = await exportCatalogArchive({ adapter: sourceAdapter, manifestFileId: sourceManifestFileId,
-      withSourceLock: (operation) => operation(), validateStructure, onProgress });
-    return restoreCatalogArchive({ archive, targetAdapter, role: "backup", withTargetLock, assertTargetWritable,
-      validateStructure, onProgress, beforePublish: async () => {
-        reportProgress(onProgress, "source-recheck");
-        await assertSourceWritable();
-        if (canonicalizeJcs(await sourceAdapter.readJson(sourceManifestFileId)) !== canonicalizeJcs(base)) throw storageError("source-changed", "The source changed during backup.");
-      } });
+    const base = await sourceAdapter.readJson(sourceManifestFileId, { kind: "manifest" });
+    if (base.catalogFinalizationPending !== null) throw storageError("recovery-required", "Complete catalog recovery before backup.");
+    if (typeof withTargetLock !== "function" || typeof assertTargetWritable !== "function") {
+      throw storageError("target-lock-required", "A verified destination session gate is required.");
+    }
+    reportProgress(onProgress, "source-verification");
+    const verified = await verifyCatalogHistory(sourceAdapter, base, globalThis.crypto, { retainDataObjects: false });
+    const readObject = (key, entry) => readVerified(sourceAdapter, entry);
+    await validateRetainedStructure({ manifest: base, ...verified, readObject, validateStructure });
+    const exportedAt = new Date().toISOString();
+    const originalStore = new SyntheticOriginalRetentionStore({ adapter: sourceAdapter,
+      withWrite: work => work(), assertWritable: assertSourceWritable, now: () => exportedAt });
+    const pinnedOriginalIndex = canonicalizeJcs(await originalStore.read());
+    const validatedOriginals = async function* () {
+      const seen = new Set();
+      for await (const item of iterateArchivedOriginalImports(sourceAdapter, exportedAt, { expectedIndex: pinnedOriginalIndex })) {
+        if (seen.has(item.importId)) throw storageError("invalid-original-archive", "Archived imports must have unique identities.");
+        seen.add(item.importId);
+        await validateArchivedOriginalImports([item], exportedAt);
+        yield item;
+      }
+    };
+    // Match portable validation before writing the destination, including
+    // unfinished original-retention intents. Keep at most one original body.
+    for await (const item of validatedOriginals()) { /* validate and discard */ }
+    const originalImports = validatedOriginals();
+    const recheckSource = async () => {
+      reportProgress(onProgress, "source-recheck");
+      await assertSourceWritable();
+      if (canonicalizeJcs(await originalStore.read()) !== pinnedOriginalIndex) {
+        throw storageError("source-originals-changed", "The source original-import index changed during backup.");
+      }
+      if (canonicalizeJcs(await sourceAdapter.readJson(sourceManifestFileId, { kind: "manifest" })) !== canonicalizeJcs(base)) {
+        throw storageError("source-changed", "The source changed during backup.");
+      }
+    };
+    // The source must still be exact before any destination mutation, and once
+    // more before the destination becomes selectable. Reads are re-hashed per
+    // object while copying, so discarded bytes cannot become trusted evidence.
+    await recheckSource();
+    return withTargetLock(() => restoreVerifiedCatalog({ verified: { ...verified, manifest: base, readObject },
+      originalImports, targetAdapter, newCopyId: globalThis.crypto.randomUUID(), role: "backup",
+      assertTargetWritable, beforePublish: recheckSource, onProgress }));
   });
 }

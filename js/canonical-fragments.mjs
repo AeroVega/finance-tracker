@@ -10,8 +10,13 @@ const encoder = new TextEncoder(), decoder = new TextDecoder('utf-8', { fatal: t
 function fail() { throw Object.assign(new Error('Invalid or oversized canonical fragment inventory or payload.'), { code: 'invalid-canonical-fragments' }); }
 function base64(bytes) {
   let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
+  for (let index = 0; index < bytes.length; index++) binary += String.fromCharCode(bytes[index]);
   return btoa(binary);
+}
+function decodeBase64(text) {
+  const binary = atob(text), bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }
 function fragmentPath(path, ordinal) { return PREFIX + 'fragments/' + path.slice(PREFIX.length, -5) + '/' + String(ordinal).padStart(6, '0') + '.json'; }
 function logicalPath(path) { return path === INDEX || /^synthetic\/canonical-v1\/chunks\/(accounts|imports|observations|activities|events|reviewDecisions|positionEvents)\/\d{6,}\.json$/.test(path); }
@@ -74,7 +79,7 @@ export function reassembleCanonicalObjects(root, physical) {
         value = JSON.parse(text);
         if (!value || Object.keys(value).sort().join(',') !== 'data,format,ordinal,path,version' ||
             value.format !== FORMAT || value.version !== 1 || value.path !== path || value.ordinal !== ordinal || typeof value.data !== 'string') fail();
-        decoded = Uint8Array.from(atob(value.data), char => char.charCodeAt(0));
+        decoded = decodeBase64(value.data);
       } catch { fail(); }
       const needed = Math.max(0, Math.min(FRAGMENT_BYTES, length - ordinal * FRAGMENT_BYTES));
       if (decoded.length !== needed || base64(decoded) !== value.data) fail();

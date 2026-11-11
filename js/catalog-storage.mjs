@@ -1,5 +1,12 @@
 import { canonicalizeJcs, verifyJournal } from "./transaction-protocol.mjs";
-import { createLocatorCatalog, validateLocatorCatalog, createCatalogResolver } from "./drive-locator-catalog.mjs";
+import { createLocatorCatalog, validateLocatorCatalog, createCatalogResolver, LOCATOR_CATALOG_FORMAT } from "./drive-locator-catalog.mjs";
+
+import { validateCatalogRoot, validateCatalogSegment, SEGMENTED_CATALOG_VERSION,
+  CATALOG_SEGMENT_ENTRIES, CATALOG_SEGMENT_BYTES, CATALOG_ROOT_BYTES } from "./catalog-segments.mjs";
+
+// Private provenance binds a materialized lookup map to its verified stored root.
+// A cloned or modified map cannot silently claim a different immutable prefix.
+const catalogOrigins = new WeakMap();
 
 export function storageError(code, message) { return Object.assign(new Error(message), { code }); }
 export const encode = (value) => new TextEncoder().encode(typeof value === "string" ? value : canonicalizeJcs(value));
@@ -50,7 +57,7 @@ export async function readVerified(adapter, reference, cryptoImpl = globalThis.c
   const { fileId } = reference;
   const metadata = await adapter.readMetadata(fileId);
   verifyMetadata(adapter, reference, metadata);
-  const bytes = await adapter.readBytes(fileId);
+  const bytes = await adapter.readBytes(fileId, { kind: reference.kind });
   return verifyReadback(adapter, reference, { metadata, bytes }, cryptoImpl);
 }
 
@@ -92,6 +99,12 @@ export function requireCatalogManifest(manifest, adapter) {
 }
 
 export async function readCatalog(adapter, manifest, cryptoImpl = globalThis.crypto) {
+  return loadCatalog(adapter, manifest, cryptoImpl);
+}
+
+// Only the private session verifier can supply reuse evidence. Public reads,
+// exports and explicit reconnect begin with exact remote bytes.
+async function loadCatalog(adapter, manifest, cryptoImpl, cache = null) {
   requireCatalogManifest(manifest, adapter);
   if (manifest.copyPreparationFileId) {
     const metadata = await adapter.readMetadata(manifest.copyPreparationFileId);
@@ -103,17 +116,162 @@ export async function readCatalog(adapter, manifest, cryptoImpl = globalThis.cry
       throw storageError("copy-quarantined", "This destination has not completed verified copy preparation.");
     }
   }
-  const bytes = await readVerified(adapter, { ...manifest.locatorCatalog, kind: "locator-catalog" }, cryptoImpl);
-  const catalog = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  validateLocatorCatalog(catalog, { databaseId: manifest.databaseId, copyId: manifest.copyId });
+  const reused = new Map();
+  const candidates = new Map();
+  const batchBindings = async bindings => {
+    const metadata = await adapter.readMetadataBatch([...bindings.keys()]);
+    if (!(metadata instanceof Map) || metadata.size !== bindings.size) throw storageError("invalid-metadata-batch", "Catalog metadata must cover exactly the requested file IDs.");
+    for (const [fileId, value] of bindings) {
+      const reference = value.reference;
+      const file = metadata.get(fileId);
+      verifyMetadata(adapter, reference, file);
+      if (typeof file?.version !== "string" || !/^[0-9]+$/.test(file.version)) throw storageError("invalid-metadata-batch", "Catalog metadata requires fresh file versions.");
+    }
+    return structuredClone(metadata);
+  };
+  const previous = cache?.previousCatalog;
+  const before = previous?.size && typeof adapter.readMetadataBatch === "function" ? await batchBindings(previous) : null;
+  const readPart = async reference => {
+    if (!cache || typeof adapter.readMetadataBatch !== "function") return readVerified(adapter, reference, cryptoImpl);
+    const prior = previous?.get(reference.fileId);
+    const file = before?.get(reference.fileId) || await adapter.readMetadata(reference.fileId);
+    verifyMetadata(adapter, reference, file);
+    if (typeof file?.version !== "string" || !/^[0-9]+$/.test(file.version)) throw storageError("invalid-metadata-batch", "Catalog metadata requires fresh file versions.");
+    const canReuse = prior && canonicalizeJcs(prior.reference) === canonicalizeJcs(reference) && prior.version === file.version;
+    const bytes = canReuse ? prior.bytes.slice() : await adapter.readBytes(reference.fileId, { kind: reference.kind });
+    await verifyReadback(adapter, reference, { metadata: file, bytes }, cryptoImpl);
+    const evidence = { reference: { ...reference }, version: file.version };
+    // Every reused byte requires the closing bracket, even when the next cache
+    // budget cannot retain it. New cache candidates need that bracket too.
+    if (canReuse) reused.set(reference.fileId, evidence);
+    if (cache.nextCatalog.size < cache.maxEntries && cache.bytes + bytes.byteLength <= cache.maxBytes) {
+      candidates.set(reference.fileId, evidence);
+      cache.nextCatalog.set(reference.fileId, { ...evidence, bytes: bytes.slice() });
+      cache.bytes += bytes.byteLength;
+    }
+    return bytes;
+  };
+  const pointer = manifest.locatorCatalog;
+  const bytes = await readVerified(adapter, { ...pointer, kind: "locator-catalog" }, cryptoImpl);
+  const root = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  let catalog;
+  if (root.version === 1) {
+    catalog = validateLocatorCatalog(root, manifest);
+  } else {
+    if (bytes.byteLength > CATALOG_ROOT_BYTES) throw storageError("catalog-root-limit", "A catalog root exceeds its per-object byte limit.");
+    validateCatalogRoot(root, manifest);
+    const entries = Object.create(null);
+    const structuralIds = new Set([pointer.fileId]);
+    const physicalIds = new Set();
+    const append = source => {
+      for (const [key, entry] of Object.entries(source)) {
+        if (Object.hasOwn(entries, key)) throw storageError("duplicate-catalog-binding", "A catalog chain repeats an immutable identity.");
+        if (physicalIds.has(entry.fileId)) throw storageError("duplicate-physical-locator", "A catalog chain reuses a physical file ID.");
+        physicalIds.add(entry.fileId);
+        entries[key] = entry;
+      }
+    };
+    let segmentPointer = root.segmentTip;
+    let sequence = root.segmentCount - 1;
+    let generation = root.generation;
+    // Iterate rather than recurse: retained history has no total segment limit.
+    while (segmentPointer !== null) {
+      if (structuralIds.has(segmentPointer.fileId)) throw storageError("catalog-segment-cycle", "A catalog chain repeats a physical segment ID.");
+      structuralIds.add(segmentPointer.fileId);
+      const segmentBytes = await readPart({ ...segmentPointer, kind: "locator-catalog-segment" });
+      if (segmentBytes.byteLength > CATALOG_SEGMENT_BYTES) throw storageError("catalog-segment-limit", "A catalog segment exceeds its per-object byte limit.");
+      const segment = validateCatalogSegment(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(segmentBytes)), manifest);
+      if (segment.sequence !== sequence || segment.generation > generation || segment.generation < generation - 1 ||
+          (sequence === root.segmentCount - 1 && segment.generation !== root.generation)) {
+        throw storageError("catalog-segment-chain-mismatch", "Catalog segment order or generation does not match its root.");
+      }
+      append(segment.entries);
+      generation = segment.generation;
+      sequence--;
+      segmentPointer = segment.previousSegment;
+    }
+    if (sequence !== -1) throw storageError("catalog-segment-chain-mismatch", "The catalog chain has missing segments.");
+    let firstGeneration = 0;
+    if (root.legacyCatalog) {
+      if (structuralIds.has(root.legacyCatalog.fileId)) throw storageError("catalog-segment-cycle", "A legacy base cannot reuse a segment ID.");
+      structuralIds.add(root.legacyCatalog.fileId);
+      const legacyBytes = await readPart({ ...root.legacyCatalog, kind: "locator-catalog" });
+      const legacy = validateLocatorCatalog(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(legacyBytes)), manifest);
+      firstGeneration = legacy.generation + 1;
+      append(legacy.entries);
+    }
+    if (generation !== firstGeneration || Object.keys(entries).length !== root.entryCount) {
+      throw storageError("catalog-segment-chain-mismatch", "Catalog generations or retained entry counts do not match.");
+    }
+    for (const id of structuralIds) if (physicalIds.has(id)) throw storageError("duplicate-physical-locator", "Catalog metadata cannot also identify a retained protocol object.");
+    catalog = validateLocatorCatalog({ format: LOCATOR_CATALOG_FORMAT, version: 1, databaseId: root.databaseId,
+      copyId: root.copyId, generation: root.generation, parentCatalogHash: root.parentCatalogHash, entries }, manifest);
+  }
+  const checked = new Map([...reused, ...candidates]);
+  if (checked.size) {
+    const after = await batchBindings(checked);
+    for (const [fileId, value] of checked) if (after.get(fileId).version !== value.version) {
+      throw storageError("immutable-version-mismatch", "A catalog segment changed during verification.");
+    }
+  }
+  catalogOrigins.set(catalog, { adapter, pointer: { ...pointer }, root: structuredClone(root.version === 1 ? null : root),
+    fingerprint: await hashRaw(encode(catalog), cryptoImpl) });
   return catalog;
 }
 
 export async function writeCatalog(adapter, { manifest, previousCatalog = null, additions }, guard, cryptoImpl = globalThis.crypto) {
+  if (manifest.syntheticOnly !== true) throw storageError("synthetic-catalog-required", "Segmented catalog writes are restricted to synthetic copies.");
   const catalog = createLocatorCatalog({ databaseId: manifest.databaseId, copyId: manifest.copyId,
     previousCatalog, previousCatalogHash: previousCatalog ? manifest.locatorCatalog.sha256 : null, additions });
-  const pointer = await writeVerified(adapter, { content: catalog, kind: "locator-catalog",
-    transactionId: manifest.catalogFinalizationPending || "synthetic-catalog-maintenance", name: "ft-locator-catalog.json" }, guard, cryptoImpl);
+  let origin = null;
+  if (previousCatalog) {
+    origin = catalogOrigins.get(previousCatalog);
+    const fingerprint = await hashRaw(encode(previousCatalog), cryptoImpl);
+    if (origin) {
+      if (origin.adapter !== adapter || canonicalizeJcs(origin.pointer) !== canonicalizeJcs(manifest.locatorCatalog) || origin.fingerprint !== fingerprint) {
+        throw storageError("catalog-base-mismatch", "The materialized catalog no longer matches its verified base pointer.");
+      }
+    } else {
+      // Compatibility for callers constructing a legacy v1 base themselves.
+      if (fingerprint !== manifest.locatorCatalog.sha256) throw storageError("catalog-base-mismatch", "An unverified catalog cannot extend the selected immutable base.");
+      origin = { pointer: { ...manifest.locatorCatalog }, root: null };
+    }
+  }
+  const missing = Object.entries(catalog.entries).filter(([key]) => !previousCatalog || !Object.hasOwn(previousCatalog.entries, key));
+  if (previousCatalog && !missing.length) return { catalog: previousCatalog, pointer: { ...origin.pointer } };
+  const root = { format: LOCATOR_CATALOG_FORMAT, version: SEGMENTED_CATALOG_VERSION,
+    databaseId: catalog.databaseId, copyId: catalog.copyId, generation: catalog.generation,
+    parentCatalogHash: catalog.parentCatalogHash, entryCount: Object.keys(catalog.entries).length,
+    segmentCount: origin?.root?.segmentCount || 0, segmentTip: origin?.root?.segmentTip || null,
+    legacyCatalog: origin ? origin.root?.legacyCatalog || (origin.root ? null : origin.pointer) : null };
+  const transactionId = manifest.catalogFinalizationPending || "synthetic-catalog-maintenance";
+  let offset = 0;
+  while (offset < missing.length) {
+    const segment = { format: "finance-tracker-locator-segment", version: 1, databaseId: catalog.databaseId,
+      copyId: catalog.copyId, generation: catalog.generation, sequence: root.segmentCount,
+      previousSegment: root.segmentTip, entries: Object.create(null) };
+    let count = 0;
+    while (offset < missing.length && count < CATALOG_SEGMENT_ENTRIES) {
+      const [key, entry] = missing[offset];
+      segment.entries[key] = entry;
+      if (encode(segment).byteLength > CATALOG_SEGMENT_BYTES) {
+        delete segment.entries[key];
+        if (!count) throw storageError("catalog-segment-limit", "One locator cannot fit within a catalog segment's byte limit.");
+        break;
+      }
+      offset++; count++;
+    }
+    validateCatalogSegment(segment, manifest);
+    root.segmentTip = await writeVerified(adapter, { content: segment, kind: "locator-catalog-segment",
+      transactionId, name: "ft-locator-segment.json" }, guard, cryptoImpl);
+    root.segmentCount++;
+  }
+  validateCatalogRoot(root, manifest);
+  if (encode(root).byteLength > CATALOG_ROOT_BYTES) throw storageError("catalog-root-limit", "A catalog root exceeds its per-object byte limit.");
+  const pointer = await writeVerified(adapter, { content: root, kind: "locator-catalog",
+    transactionId, name: "ft-locator-catalog.json" }, guard, cryptoImpl);
+  catalogOrigins.set(catalog, { adapter, pointer: { ...pointer }, root: structuredClone(root),
+    fingerprint: await hashRaw(encode(catalog), cryptoImpl) });
   return { catalog, pointer };
 }
 
@@ -133,8 +291,8 @@ export function validateLogicalCommit(record, databaseId) {
 }
 
 /** Verify every retained object and the entire selected commit ancestry. */
-export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globalThis.crypto) {
-  return verifyHistory(adapter, manifest, cryptoImpl);
+export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globalThis.crypto, { retainDataObjects = true } = {}) {
+  return verifyHistory(adapter, manifest, cryptoImpl, null, { retainDataObjects });
 }
 
 /**
@@ -156,18 +314,18 @@ export function createCatalogHistoryVerifier({ maxBytes = 16 * 1024 * 1024, maxE
       if (evidence && (evidence.adapter !== adapter || evidence.crypto !== cryptoImpl || evidence.scope !== scope ||
           manifest.revision < evidence.revision)) clear();
       const epoch = generation;
-      const cache = { previous: evidence?.entries, next: new Map(), bytes: 0, maxBytes, maxEntries };
+      const cache = { previous: evidence?.entries, previousCatalog: evidence?.catalogParts, next: new Map(), nextCatalog: new Map(), bytes: 0, maxBytes, maxEntries };
       const verified = await verifyHistory(adapter, manifest, cryptoImpl, cache);
       // An offline/release/error transition during a read must not repopulate it.
       if (generation === epoch) evidence = { adapter, crypto: cryptoImpl, scope,
-        revision: manifest.revision, entries: cache.next };
+        revision: manifest.revision, entries: cache.next, catalogParts: cache.nextCatalog };
       return verified;
     } catch (error) { clear(); throw error; }
   } });
 }
 
-async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
-  const catalog = await readCatalog(adapter, manifest, cryptoImpl);
+async function verifyHistory(adapter, manifest, cryptoImpl, cache = null, { retainDataObjects = true } = {}) {
+  const catalog = await loadCatalog(adapter, manifest, cryptoImpl, cache);
   const resolver = createCatalogResolver(catalog);
   const objects = new Map();
   const journals = new Map();
@@ -190,13 +348,17 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
   };
   const metadata = typeof adapter.readMetadataBatch === "function" ? await readMetadataBatch() : null;
   const verifiedBytes = await mapImmutableReads(entries, async ([key, entry]) => {
-    if (!metadata) return readVerified(adapter, entry, cryptoImpl);
+    if (!metadata) {
+      const bytes = await readVerified(adapter, entry, cryptoImpl);
+      return !retainDataObjects && entry.kind === "data-object" ? null : bytes;
+    }
     const prior = cache?.previous?.get(key);
     const reusable = prior && prior.binding === canonicalizeJcs(entry) &&
       prior.version === metadata.get(entry.fileId).version;
     // Detach returned bytes from private evidence, and hash them on every use.
-    const bytes = reusable ? prior.bytes.slice() : (await adapter.readBytes(entry.fileId)).slice();
-    return verifyReadback(adapter, entry, { metadata: metadata.get(entry.fileId), bytes }, cryptoImpl);
+    const bytes = reusable ? prior.bytes.slice() : (await adapter.readBytes(entry.fileId, { kind: entry.kind })).slice();
+    await verifyReadback(adapter, entry, { metadata: metadata.get(entry.fileId), bytes }, cryptoImpl);
+    return !retainDataObjects && entry.kind === "data-object" ? null : bytes;
   });
   if (metadata) {
     // Bracket media reads with a second fresh complete enumeration. Membership,
@@ -209,7 +371,7 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
     }
   }
   for (const [index, [key, entry]] of entries.entries()) {
-    objects.set(key, verifiedBytes[index]);
+    if (verifiedBytes[index] !== null) objects.set(key, verifiedBytes[index]);
     if (entry.kind === "journal-event") {
       const event = JSON.parse(new TextDecoder().decode(objects.get(key)));
       if (event.eventId !== entry.identity || event.transactionId !== entry.transactionId || event.sequence !== entry.sequence) {
@@ -264,12 +426,12 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
   for (const entry of Object.values(catalog.entries).filter((entry) => entry.kind === "commit-record")) {
     if (!seen.has(entry.identity)) throw storageError("disconnected-history", "A catalog commit is not part of the selected retained ancestry.");
   }
-  if (cache && metadata) {
+  if (cache && metadata && retainDataObjects) {
     // Keep only this fully verified catalog, bounded in both bytes and entries.
     // Uncached objects are always downloaded again; hitting a limit is safe.
     for (const [key, entry] of entries) {
       const bytes = objects.get(key);
-      if (cache.next.size >= cache.maxEntries || cache.bytes + bytes.byteLength > cache.maxBytes) continue;
+      if (cache.next.size + cache.nextCatalog.size >= cache.maxEntries || cache.bytes + bytes.byteLength > cache.maxBytes) continue;
       cache.next.set(key, { binding: canonicalizeJcs(entry), version: metadata.get(entry.fileId).version, bytes: bytes.slice() });
       cache.bytes += bytes.byteLength;
     }

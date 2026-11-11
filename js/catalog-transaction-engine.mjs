@@ -26,12 +26,12 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
   async publishExact(manifestFileId, base, next) {
     await this.assertWritable();
     if (!this.isOnline()) throw storageError("offline", "Manifest publication requires an online session.");
-    if (!equal(await this.adapter.readJson(manifestFileId), base)) throw storageError("base-conflict", "The exact base manifest changed before publication.");
+    if (!equal(await this.adapter.readJson(manifestFileId, { kind: "manifest" }), base)) throw storageError("base-conflict", "The exact base manifest changed before publication.");
     await this.adapter.publishManifest(manifestFileId, next, { beforeMutation: async () => {
       if (!this.isOnline()) throw storageError("offline", "Publication stopped while offline.");
       await this.assertWritable();
     } });
-    if (!equal(await this.adapter.readJson(manifestFileId), next)) throw storageError("manifest-readback-mismatch", "The exact intended manifest did not read back.");
+    if (!equal(await this.adapter.readJson(manifestFileId, { kind: "manifest" }), next)) throw storageError("manifest-readback-mismatch", "The exact intended manifest did not read back.");
   }
 
   async journal(eventType, payload, events, additions, transactionId) {
@@ -53,7 +53,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
       // Folder enumeration catches even a start event created by a prior page
       // which died before publishing any new catalog pointer.
       const recovered = await this.recoverInternal({ manifestFileId });
-      const current = await this.adapter.readJson(manifestFileId);
+      const current = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
       if (!equal(current, expectedBase) || !equal(current, recovered.manifest)) throw storageError("base-conflict", "The transaction requires the exact verified base manifest.");
       if (current.role !== "primary") throw storageError("read-only-copy", "Backup copies cannot accept transactions.");
       // Recovery just verified this complete history after all repair writes.
@@ -67,6 +67,9 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
             ["__proto__", "prototype", "constructor"].includes(object.logicalPath)) throw storageError("invalid-logical-path", "Changed object paths must be unique and valid.");
         paths.add(object.logicalPath);
         const bytes = object.content instanceof Uint8Array ? object.content : encode(object.content);
+        // Reject data that this adapter could not reopen before starting a
+        // durable journal. Physical and logical tags share one byte budget.
+        this.adapter.assertContentSize?.(bytes, "data-object");
         planned.push({ logicalPath: object.logicalPath, bytes, sha256: await hashRaw(bytes, this.crypto) });
       }
       const files = await this.adapter.listChildren();
@@ -148,7 +151,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
   async recoverInternal({ manifestFileId }) {
     this.recoveryRequired = true;
     if (!this.isOnline()) throw storageError("offline", "Recovery requires an online connection.");
-    let manifest = await this.adapter.readJson(manifestFileId);
+    let manifest = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
     let verified = await this.verifyHistory(manifest);
     let resolver = createCatalogResolver(verified.catalog);
     const files = await this.adapter.listChildren();
@@ -286,7 +289,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
     // createLocatorCatalog rejects a duplicate/rebound enumeration result.
     manifest = await this.finalize(manifestFileId, manifest, verified.catalog, additions);
     verified = await this.verifyHistory(manifest);
-    if (!equal(await this.adapter.readJson(manifestFileId), manifest)) {
+    if (!equal(await this.adapter.readJson(manifestFileId, { kind: "manifest" }), manifest)) {
       throw storageError("base-conflict", "The manifest changed while recovery verified retained history.");
     }
     this.recoveryRequired = false;

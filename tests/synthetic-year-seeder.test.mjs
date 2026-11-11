@@ -118,7 +118,7 @@ test('the complete year saves and reopens through the real adapter and catalog/s
   setup.http.phase = 'year-seed';
   const actual = await seeder.verifyOrSeed(setup.lifecycle);
   const requestCount = setup.http.summary('year-seed').requests;
-  assert.ok(requestCount <= 600, `Grouped seed request budget exceeded: ${requestCount}`);
+  assert.ok(requestCount <= 660, `Fragmented seed with monthly index and bounded catalog segments exceeded its request budget: ${requestCount}`);
   assert.equal(setup.http.peakMutations, 1, 'durable mutations stay serial');
   setup.http.phase = 'year-verify';
   assert.equal(actual.alreadySaved, false);

@@ -1,3 +1,4 @@
+import { createDriveResponseLimits, readBoundedDriveBytes, readBoundedDriveJson, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
 import {
   canonicalizeJcs,
   createJournalEvent,
@@ -51,10 +52,11 @@ function joinBytes(parts) {
 
 export class GoogleDriveTransactionAdapter {
   constructor({ accessToken, folderId, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
-    onRequest = null, afterMutation = null, visibilityAttempts = 8, visibilityDelayMs = 500, visibilityMaxDelayMs = 5000 }) {
+    onRequest = null, afterMutation = null, responseLimits = {}, visibilityAttempts = 8, visibilityDelayMs = 500, visibilityMaxDelayMs = 5000 }) {
     if (typeof accessToken !== "function" || !folderId || typeof fetchImpl !== "function") {
       fail("invalid-adapter-config", "An access-token provider, selected folder, and fetch implementation are required.");
     }
+    this.responseLimits = createDriveResponseLimits(responseLimits);
     this.accessToken = accessToken;
     this.folderId = folderId;
     this.fetch = (...args) => fetchImpl.apply(globalThis, args);
@@ -77,18 +79,25 @@ export class GoogleDriveTransactionAdapter {
   async request(url, options = {}, { allowStatuses = [] } = {}) {
     const token = await this.accessToken();
     if (!token) fail("authorization-required", "Google Drive authorization is unavailable.");
-    const response = await this.fetch(url, {
-      ...options,
-      // Verification versions, exact manifests and media must come from Drive,
-      // never an HTTP cache in the browser. Private byte reuse is gated above.
-      cache: "no-store",
-      headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
-    });
+    let response;
+    try {
+      response = await this.fetch(url, {
+        ...options,
+        // Verification versions, exact manifests and media must come from Drive,
+        // never an HTTP cache in the browser. Private byte reuse is gated above.
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
+      });
+    } catch { fail("drive-network-error", "The Drive request did not return a confirmed response."); }
+    if (!response || !Number.isInteger(response.status)) {
+      await discardDriveResponse(response);
+      fail("invalid-drive-response", "The Drive request returned no valid HTTP response.");
+    }
     this.onRequest?.({ method: options.method || "GET", url: String(url), status: response.status });
     if (!response.ok && !allowStatuses.includes(response.status)) {
-      const body = await response.text().catch(() => "");
+      await discardDriveResponse(response);
       fail(response.status === 401 || response.status === 403 ? "authorization-required" : "drive-request-failed",
-        `Google Drive request failed (HTTP ${response.status}).`, { status: response.status, body: body.slice(0, 500) });
+        `Google Drive request failed (HTTP ${response.status}).`, { status: response.status });
     }
     return response;
   }
@@ -100,7 +109,7 @@ export class GoogleDriveTransactionAdapter {
       if (!this.fileIdRefill) {
         this.fileIdRefill = (async () => {
           const response = await this.request(`${API}/files/generateIds?count=${FILE_ID_BATCH_SIZE}&space=drive`);
-          const result = await response.json();
+          const result = await readBoundedDriveJson(response, { kind: "generated-ids", limits: this.responseLimits });
           if (!Array.isArray(result?.ids) || result.ids.length !== FILE_ID_BATCH_SIZE ||
               result.ids.some((id) => typeof id !== "string" || !id.trim() || this.seenGeneratedFileIds.has(id)) ||
               new Set(result.ids).size !== FILE_ID_BATCH_SIZE) {
@@ -127,8 +136,8 @@ export class GoogleDriveTransactionAdapter {
       });
       if (pageToken) query.set("pageToken", pageToken);
       const response = await this.request(`${API}/files?${query}`);
-      const page = await response.json();
-      if (page?.incompleteSearch !== false || !Array.isArray(page.files) ||
+      const page = await readBoundedDriveJson(response, { kind: "list-page", limits: this.responseLimits });
+      if (page?.incompleteSearch !== false || !Array.isArray(page.files) || page.files.length > 1000 ||
           (page.nextPageToken != null && typeof page.nextPageToken !== "string")) {
         fail("incomplete-folder-enumeration", "Drive did not confirm complete folder enumeration.");
       }
@@ -175,22 +184,22 @@ export class GoogleDriveTransactionAdapter {
   async readMetadata(fileId) {
     const query = new URLSearchParams({ fields: "id,name,mimeType,parents,appProperties,size,version,trashed" });
     const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?${query}`);
-    const metadata = await response.json();
-    if (metadata.id !== fileId || metadata.trashed || !metadata.parents?.includes(this.folderId)) {
+    const metadata = await readBoundedDriveJson(response, { kind: "metadata", limits: this.responseLimits });
+    if (!metadata || metadata.id !== fileId || metadata.trashed || !Array.isArray(metadata.parents) || !metadata.parents.includes(this.folderId)) {
       fail("object-location-mismatch", "A transaction file is missing, trashed, or outside the selected database folder.", { fileId });
     }
     return metadata;
   }
 
-  async readBytes(fileId) {
+  async readBytes(fileId, { kind = "stored-object" } = {}) {
     const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?alt=media`);
-    return new Uint8Array(await response.arrayBuffer());
+    return readBoundedDriveBytes(response, { kind, limits: this.responseLimits });
   }
 
-  async readJson(fileId) {
-    const bytes = await this.readBytes(fileId);
+  async readJson(fileId, options = {}) {
+    const bytes = await this.readBytes(fileId, options);
     try {
-      return JSON.parse(new TextDecoder().decode(bytes));
+      return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch {
       fail("invalid-json-object", "A stored transaction record is not valid JSON.", { fileId });
     }
@@ -231,8 +240,13 @@ export class GoogleDriveTransactionAdapter {
     );
   }
 
+  assertContentSize(content, kind) {
+    assertResponseSize(bytesOf(content).length, { kind, limits: this.responseLimits });
+  }
+
   async createImmutable({ fileId, name, kind, transactionId, content, expectedSha256 }) {
     const bytes = bytesOf(content);
+    assertResponseSize(bytes.length, { kind, limits: this.responseLimits });
     const actualHash = await hashBytes(bytes, this.crypto);
     if (actualHash !== expectedSha256) fail("content-hash-mismatch", "The bytes do not match the planned SHA-256.", { name });
     const boundary = `ft-${fileId.replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -257,9 +271,10 @@ export class GoogleDriveTransactionAdapter {
       }, { allowStatuses: [409] });
       createResponseSummary = { status: createResponse.status };
       if (createResponse.ok) {
-        const returnedMetadata = await createResponse.clone().json().catch(() => null);
-        createResponseSummary.returnedId = typeof returnedMetadata?.id === "string" ? returnedMetadata.id : null;
-        createResponseSummary.returnedName = typeof returnedMetadata?.name === "string" ? returnedMetadata.name : null;
+        const returnedMetadata = await readBoundedDriveJson(createResponse, { kind: "metadata", limits: this.responseLimits });
+        createResponseSummary.returnedId = returnedMetadata?.id === fileId ? fileId : null;
+      } else {
+        await discardDriveResponse(createResponse);
       }
     } catch (error) {
       // A network failure or server-side 5xx may have happened after Drive committed
@@ -276,8 +291,7 @@ export class GoogleDriveTransactionAdapter {
       ambiguousCreateFailure = {
         code: error.code || error.name || "unknown",
         message: error.message || String(error),
-        status: Number.isInteger(status) ? status : null,
-        body: typeof error.details?.body === "string" ? error.details.body : null
+        status: Number.isInteger(status) ? status : createResponseSummary?.status ?? null
       };
     }
 
@@ -303,7 +317,7 @@ export class GoogleDriveTransactionAdapter {
         metadataAfter.appProperties?.[TAG + "Hash"] !== actualHash) {
       fail("immutable-metadata-mismatch", "The pre-generated Drive ID contains unexpected transaction metadata.", { fileId });
     }
-    const stored = await this.readBytes(fileId);
+    const stored = await this.readBytes(fileId, { kind });
     const storedHash = await hashBytes(stored, this.crypto);
     if (storedHash !== actualHash || stored.length !== bytes.length) {
       fail("immutable-readback-mismatch", "The immutable Drive object failed exact byte verification.", { fileId });
@@ -326,20 +340,22 @@ export class GoogleDriveTransactionAdapter {
   }
 
   async publishManifest(manifestFileId, manifest, { beforeMutation } = {}) {
-    await this.readMetadata(manifestFileId);
-    await beforeMutation?.();
     const content = canonicalizeJcs(manifest);
     const bytes = new TextEncoder().encode(content);
+    assertResponseSize(bytes.length, { kind: "manifest", limits: this.responseLimits });
+    await this.readMetadata(manifestFileId);
+    await beforeMutation?.();
     const boundary = `ft-manifest-${manifest.revision}`;
     const metadata = { mimeType: MIME_JSON };
     const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${MIME_JSON}\r\n\r\n`);
     const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
-    await this.request(`${UPLOAD}/files/${encodeURIComponent(manifestFileId)}?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`, {
+    const published = await this.request(`${UPLOAD}/files/${encodeURIComponent(manifestFileId)}?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`, {
       method: "PATCH",
       headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
       body: joinBytes([head, bytes, tail])
     });
-    const visible = await this.readBytes(manifestFileId);
+    await discardDriveResponse(published);
+    const visible = await this.readBytes(manifestFileId, { kind: "manifest" });
     if (new TextDecoder().decode(visible) !== content) {
       fail("manifest-readback-mismatch", "The published manifest did not read back exactly.");
     }
@@ -386,7 +402,7 @@ export class DriveTransactionEngine {
           file.appProperties?.[TAG + "Transaction"] === transactionId)) {
         fail("transaction-already-exists", "This transaction ID already has durable journal evidence. Recover it before attempting another write.", { transactionId });
       }
-      const current = await this.adapter.readJson(manifestFileId);
+      const current = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
       if (current.revision !== expectedBase.revision || current.commitId !== expectedBase.commitId ||
           current.databaseId !== expectedBase.databaseId || current.copyId !== expectedBase.copyId) {
         fail("base-conflict", "The database manifest no longer matches the expected base revision and commit.");
@@ -483,7 +499,7 @@ export class DriveTransactionEngine {
           intendedRevision: nextManifest.revision, intendedCommitId: commitId
         });
         await this.guard();
-        const latest = await this.adapter.readJson(manifestFileId);
+        const latest = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
         if (latest.databaseId !== current.databaseId || latest.copyId !== current.copyId ||
             latest.revision !== current.revision || latest.commitId !== current.commitId) {
           fail("base-conflict", "The manifest changed before publication.");
@@ -514,7 +530,7 @@ export class DriveTransactionEngine {
     return this.enqueue(async () => {
       if (!this.isOnline()) fail("offline", "Recovery requires an online Drive connection.");
       this.recoveryRequired = true;
-      const manifest = await this.adapter.readJson(manifestFileId);
+      const manifest = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
       const hasIdentity = (value) => typeof value?.databaseId === "string" && value.databaseId.trim() !== "" &&
         typeof value?.copyId === "string" && value.copyId.trim() !== "";
       if (!hasIdentity(manifest)) {
@@ -524,7 +540,7 @@ export class DriveTransactionEngine {
       const journalFiles = files.filter((file) => file.appProperties?.[TAG + "Kind"] === "journal-event");
       const groups = new Map();
       for (const file of journalFiles) {
-        const event = await this.adapter.readJson(file.id);
+        const event = await this.adapter.readJson(file.id, { kind: "journal-event" });
         if (!event || typeof event.transactionId !== "string" || !event.transactionId) {
           fail("journal-identity-mismatch", "A journal event has no transaction identity.");
         }
@@ -596,7 +612,7 @@ export class DriveTransactionEngine {
 
       const verifyCommit = async (transactionId, state, expectedCommitId, transactionEvents) => {
         const commitFile = await findCommitFile(transactionId, transactionEvents);
-        const record = await this.adapter.readJson(commitFile.id);
+        const record = await this.adapter.readJson(commitFile.id, { kind: "commit-record" });
         const actualHash = await hashBytes(new TextEncoder().encode(canonicalizeJcs(record)), this.crypto);
         const metadataHash = commitFile.appProperties?.[TAG + "Hash"];
         const transactionBase = transactionEvents[0]?.payload || {};
@@ -617,7 +633,7 @@ export class DriveTransactionEngine {
           if (metadata.appProperties?.[TAG + "Hash"] !== reference.sha256) {
             fail("snapshot-object-metadata-mismatch", "A committed object has unexpected hash metadata.", { fileId: reference.fileId });
           }
-          const bytes = await this.adapter.readBytes(reference.fileId);
+          const bytes = await this.adapter.readBytes(reference.fileId, { kind: "snapshot-object" });
           if (await hashBytes(bytes, this.crypto) !== reference.sha256) {
             fail("snapshot-object-verification-failed", "A committed snapshot object failed exact hash verification.", { fileId: reference.fileId });
           }
@@ -809,14 +825,14 @@ export class DriveTransactionEngine {
             fail("recovery-manifest-mismatch", "The reconstructed manifest does not match the journal's intended commit.", { transactionId });
           }
           await this.assertWritable();
-          const latest = await this.adapter.readJson(manifestFileId);
+          const latest = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
           if (latest.databaseId !== base.databaseId || latest.copyId !== base.copyId ||
               latest.revision !== base.baseRevision || latest.commitId !== base.baseCommitId) {
             fail("recovery-base-changed", "The manifest base changed before recovery publication.", { transactionId });
           }
           await this.assertWritable();
           await this.adapter.publishManifest(manifestFileId, nextManifest, { beforeMutation: () => this.assertWritable() });
-          const readBack = await this.adapter.readJson(manifestFileId);
+          const readBack = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
           if (readBack.revision !== nextManifest.revision || readBack.commitId !== nextManifest.commitId) {
             fail("recovery-publication-unverified", "The recovered manifest did not read back with the intended revision and commit.", { transactionId });
           }
@@ -836,7 +852,7 @@ export class DriveTransactionEngine {
         });
       }
       this.recoveryRequired = false;
-      return { manifest: await this.adapter.readJson(manifestFileId), transactions: outcomes };
+      return { manifest: await this.adapter.readJson(manifestFileId, { kind: "manifest" }), transactions: outcomes };
     });
   }
 }

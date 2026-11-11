@@ -1,3 +1,4 @@
+import {createCanonicalMonthIndex, isCanonicalMonthIndexFor, serializeCanonicalMonthIndex, readCanonicalMonthIndex} from './canonical-month-index.mjs';
 import { fragmentCanonicalObjects, reassembleCanonicalObjects, fragmentInventory, FRAGMENT_OBJECT_BYTES } from "./canonical-fragments.mjs";
 import { canonicalizeJcs } from "./transaction-protocol.mjs";
 import { validateLedger } from "./canonical-import.mjs";
@@ -260,6 +261,9 @@ export class CanonicalLedgerStore {
     this.records = new Map();
     this.storageObjects = new Map();
     this.ledger = null;
+    this.monthIndex = null;
+    this.monthIndexStatus = 'missing';
+    this.monthObjects = new Map();
     this.busy = false;
   }
 
@@ -274,6 +278,8 @@ export class CanonicalLedgerStore {
     // Discard an earlier writable base before reading. Failed loads cannot leave
     // a stale candidate eligible for a later save.
     this.base = null;
+    this.monthIndex = null;
+    this.monthObjects = new Map();
     // The real catalog lifecycle verifies all retained history once and pins
     // this selected snapshot. Older/test lifecycle drivers keep their read path.
     const snapshot = typeof this.lifecycle.readVerifiedSnapshot === "function"
@@ -377,6 +383,15 @@ export class CanonicalLedgerStore {
     }
     logicalObjects = null;
     validateLedger(ledger);
+    const derived = await readCanonicalMonthIndex({ledger,sourceObjects:records,cryptoImpl:this.crypto,
+      readText:async path => {
+        if (!Object.hasOwn(manifest.snapshot,path)) return null;
+        const bytes = snapshot ? snapshot.objects[path] : await this.lifecycle.readObject(path);
+        // Malformed derived UTF-8/JSON rebuilds only this cache. Transport and
+        // catalog hash failures still propagate through the lifecycle.
+        try { return new TextDecoder('utf-8',{fatal:true}).decode(bytes); }
+        catch { return ''; }
+      }});
     // readVerifiedSnapshot already checked the exact manifest after reading all
     // bytes and rechecked ownership. This is a point-in-time view, not a cache.
     const current = snapshot ? manifest : await this.lifecycle.readManifest();
@@ -390,6 +405,9 @@ export class CanonicalLedgerStore {
     // records, irrespective of the physical layout selected by this copy.
     this.records = fragmented ? serializeCanonicalLedger(ledger) : records;
     this.ledger = ledger;
+    this.monthIndex = derived.index;
+    this.monthIndexStatus = derived.status;
+    this.monthObjects = derived.objects;
     return structuredClone(ledger);
   }
 
@@ -448,7 +466,10 @@ export class CanonicalLedgerStore {
       for (const path of this.storageObjects.keys()) {
         if (!storageObjects.has(path)) fail("history-removal-refused", "A save cannot drop an existing canonical object.");
       }
+      const monthIndex = isCanonicalMonthIndexFor(this.monthIndex,ledger) ? this.monthIndex : createCanonicalMonthIndex(ledger);
+      const monthObjects = await serializeCanonicalMonthIndex(monthIndex,storageObjects,this.crypto);
       const changed = [...storageObjects].filter(([path, content]) => this.storageObjects.get(path) !== content)
+        .concat([...monthObjects].filter(([path,content]) => this.monthObjects.get(path) !== content))
         .map(([logicalPath, content]) => ({ logicalPath, content }));
       if (changed.length && typeof this.lifecycle.assertCurrentManifest === "function") {
         // The real transaction engine verifies all retained history before its

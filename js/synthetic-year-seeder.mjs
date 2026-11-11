@@ -1,3 +1,4 @@
+import {isMonthIndexPath} from './canonical-month-index.mjs';
 import { CanonicalLedgerStore, CANONICAL_PREFIX } from './canonical-ledger-storage.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
@@ -48,7 +49,7 @@ export class SyntheticYearSeeder {
       this.onProgress('checking');
       const store = new CanonicalLedgerStore({ lifecycle, layout: this.layout });
       const saved = await store.load();
-      if (Object.keys(store.base.snapshot || {}).some(path => !path.startsWith(CANONICAL_PREFIX))) fail('unrecognized-seed-copy');
+      if (Object.keys(store.base.snapshot || {}).some(path => !path.startsWith(CANONICAL_PREFIX) && !isMonthIndexPath(path))) fail('unrecognized-seed-copy');
       if (saved) {
         if (!equal(saved, recipe.ledger)) fail('unrecognized-seed-copy');
         this.onProgress('verified');

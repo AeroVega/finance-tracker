@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readCatalog } from '../js/catalog-storage.mjs';
 import { CANONICAL_INDEX } from '../js/canonical-ledger-storage.mjs';
 import { createLedger, registerAccount, summarizeLedger } from '../js/canonical-import.mjs';
 import { createLiveRunner, LIVE_IDS } from '../prototype/pr28-live-checks.mjs';
@@ -69,7 +70,7 @@ test('actual HTTP adapters complete the assisted recipe within its request budge
   assert.equal(totals.spending, '101.75'); assert.equal(totals.income, '2250.37'); assert.equal(totals.complete, false);
   const manifest = h.http.json(h.manifestFileId);
   assert.equal(manifest.revision, 3); assert.equal(manifest.catalogFinalizationPending, null);
-  assert.equal(Object.keys(manifest.snapshot).length, 8);
+  assert.equal(Object.keys(manifest.snapshot).length, 10);
 
   h.http.phase = 'reconnect'; await h.lifecycle.start(); await h.driver.reopen();
   assert.equal(await runner.verifyReconnect(), true, JSON.stringify(last));
@@ -95,12 +96,15 @@ test('repeated small saves use version-checked history within a fixed request bu
     assert.deepEqual(await h.driver.reopen(), ledger);
     counts.push(h.http.summary(h.http.phase).requests);
     if (i === 0) {
-      const manifest = h.http.json(h.manifestFileId), catalog = h.http.json(manifest.locatorCatalog.fileId);
+      const manifest = h.http.json(h.manifestFileId), catalog = await readCatalog(h.lifecycle.transactionAdapter, manifest);
       firstIndexId = catalog.entries['data-object:' + manifest.snapshot[CANONICAL_INDEX]].fileId;
     }
   }
   t.diagnostic(JSON.stringify({ before: BEFORE_SMALL_COMMITS, after: counts }));
-  for (let i = 0; i < counts.length; i++) assert.ok(counts[i] <= 185, `save ${i + 1} used ${counts[i]} requests`);
+  // Segmented roots add two guarded segment writes and fresh version brackets.
+  // Monthly index/summary objects add another guarded data write. The measured
+  // 221–223 requests remain independent of these ten retained saves.
+  for (let i = 0; i < counts.length; i++) assert.ok(counts[i] <= 240, `save ${i + 1} used ${counts[i]} requests`);
   for (let i = 1; i < counts.length; i++) assert.ok(counts[i] - counts[i - 1] <= 2, 'retained-history growth exceeded the per-save budget');
   assertConcurrency(h.http);
   const mutations = h.http.mutations;
@@ -142,7 +146,7 @@ test('fresh batch metadata follows every HTTP listing page and returns detached 
   const h = await setup();
   const ledger = registerAccount(createLedger(), { institutionId: 'wells-fargo', displayName: 'Invented paginated account', currency: 'USD', accountType: 'checking' });
   await h.driver.save(ledger);
-  const manifest = h.http.json(h.manifestFileId), catalog = h.http.json(manifest.locatorCatalog.fileId);
+  const manifest = h.http.json(h.manifestFileId), catalog = await readCatalog(h.lifecycle.transactionAdapter, manifest);
   const ids = Object.values(catalog.entries).map(entry => entry.fileId);
   h.http.pageSize = 3;
   h.http.phase = 'paginated-metadata';
@@ -180,7 +184,7 @@ test('batch HTTP metadata rejects incomplete, duplicate, missing and invalid fil
   };
   for (const [name, configure] of Object.entries(scenarios)) await t.test(name, async () => {
     const h = await setup();
-    const manifest = h.http.json(h.manifestFileId), catalog = h.http.json(manifest.locatorCatalog.fileId);
+    const manifest = h.http.json(h.manifestFileId), catalog = await readCatalog(h.lifecycle.transactionAdapter, manifest);
     const id = Object.values(catalog.entries)[0].fileId;
     configure(h, id);
     h.http.phase = 'invalid-batch';

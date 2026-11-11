@@ -1,3 +1,4 @@
+import { createDriveResponseLimits, readBoundedDriveJson, discardDriveResponse } from "./drive-response-transport.mjs";
 export const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
 export const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 
@@ -22,8 +23,9 @@ function makeFolderQuery(folderName) {
   ].join(" and ");
 }
 
-function requireOk(response) {
+async function requireOk(response) {
   if (!response || !response.ok) {
+    await discardDriveResponse(response);
     const status = response && Number.isInteger(response.status) ? response.status : null;
     if (status === 401) {
       throw new DriveFolderDiscoveryError(
@@ -85,6 +87,8 @@ export async function discoverFoldersByExactName(options) {
     throw new DriveFolderDiscoveryError("fetch-unavailable", "Fetch is unavailable in this browser.");
   }
 
+  const responseLimits = createDriveResponseLimits(settings.responseLimits);
+  const seenTokens = new Set();
   const matches = [];
   let pageToken = "";
   do {
@@ -106,14 +110,16 @@ export async function discoverFoldersByExactName(options) {
         "Could not reach Google Drive. Check your connection and retry; no folder was selected."
       );
     }
-    requireOk(response);
+    await requireOk(response);
     let payload;
     try {
-      payload = await response.json();
-    } catch {
+      payload = await readBoundedDriveJson(response, { kind: "list-page", limits: responseLimits });
+    } catch (error) {
+      if (error.code !== "invalid-json-object") throw error;
       throw new DriveFolderDiscoveryError("invalid-response", "Drive folder discovery returned an unreadable response.");
     }
-    if (!payload || !Array.isArray(payload.files)) {
+    if (!payload || !Array.isArray(payload.files) || payload.files.length > 100 ||
+        (payload.nextPageToken != null && typeof payload.nextPageToken !== "string")) {
       throw new DriveFolderDiscoveryError("invalid-response", "Drive folder discovery returned an unexpected response.");
     }
     for (const file of payload.files) {
@@ -127,7 +133,11 @@ export async function discoverFoldersByExactName(options) {
         matches.push({ id: file.id, name: file.name, mimeType: file.mimeType });
       }
     }
-    pageToken = typeof payload.nextPageToken === "string" ? payload.nextPageToken : "";
+    pageToken = payload.nextPageToken || "";
+    if (pageToken && seenTokens.has(pageToken)) {
+      throw new DriveFolderDiscoveryError("pagination-loop", "Drive repeated a folder-search page token.");
+    }
+    if (pageToken) seenTokens.add(pageToken);
   } while (pageToken);
 
   return {

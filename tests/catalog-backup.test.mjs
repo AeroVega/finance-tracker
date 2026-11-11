@@ -86,7 +86,7 @@ test("source changes during copying quarantine the destination and never alter t
   const targetAdapter = new MemoryCatalogDrive("unstable-synthetic-folder");
   await assert.rejects(backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId, withSourceLock: gate,
     assertSourceWritable: async () => { const manifest = await adapter.readJson(manifestFileId); adapter.files.get(manifestFileId).bytes = encode({ ...manifest, syntheticChange: true }); },
-    targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure }), (error) => error.code === "copy-quarantined" && error.cause.code === "source-changed");
+    targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure }), (error) => error.code === "source-changed");
 });
 
 test('retained validation rejects callback changes to the catalog before returning to copy/export', async t => {
@@ -117,4 +117,84 @@ test('retained validation rejects callback changes to the catalog before returni
         return true;
       } }));
   });
+});
+
+
+test("Drive backup bypasses portable base64 and verifies discarded source payloads before copying", async () => {
+  const { adapter, manifestFileId } = await fixture();
+  const targetAdapter = new MemoryCatalogDrive("streamed-synthetic-folder");
+  const previous = globalThis.btoa;
+  globalThis.btoa = () => { throw new Error("Drive backup must not build a base64 archive"); };
+  let result;
+  try {
+    result = await backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId,
+      withSourceLock: gate, assertSourceWritable: guard, targetAdapter, withTargetLock: gate,
+      assertTargetWritable: guard, validateStructure });
+  } finally { globalThis.btoa = previous; }
+  const source = await verifyCatalogHistory(adapter, await adapter.readJson(manifestFileId));
+  const target = await verifyCatalogHistory(targetAdapter, result.manifest);
+  assert.deepEqual(target.objects, source.objects);
+});
+
+test("Drive backup rejects source data corrupted after validation and quarantines the target", async () => {
+  const { adapter, manifestFileId } = await fixture();
+  const targetAdapter = new MemoryCatalogDrive("changed-payload-synthetic-folder");
+  const source = await verifyCatalogHistory(adapter, await adapter.readJson(manifestFileId));
+  const entry = Object.values(source.catalog.entries).find(entry => entry.kind === "data-object");
+  await assert.rejects(backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId,
+    withSourceLock: gate, assertSourceWritable: guard, targetAdapter, withTargetLock: gate,
+    assertTargetWritable: guard, validateStructure, onProgress: event => {
+      if (event.phase === "destination-preparation") adapter.files.get(entry.fileId).bytes = encode("invented changed payload");
+    } }), error => error.code === "copy-quarantined" && error.cause.code === "immutable-hash-mismatch");
+  assert.equal((await targetAdapter.listChildren()).some(file => file.appProperties.financeTrackerKind === "dashboard-synthetic-manifest"), false);
+});
+
+test("Drive backup refuses unfinished original-retention intent before destination mutation", async () => {
+  const { SyntheticOriginalRetentionStore } = await import("../js/drive-original-retention.mjs");
+  const { adapter, manifestFileId } = await fixture();
+  const originals = new SyntheticOriginalRetentionStore({ adapter, withWrite: gate, assertWritable: guard });
+  adapter.stopAfter = adapter.mutations + 1;
+  await assert.rejects(originals.retainFixture({ importId: "invented-pending-original" }), { code: "page-terminated" });
+  adapter.reboot();
+  const targetAdapter = new MemoryCatalogDrive("pending-original-synthetic-folder");
+  await assert.rejects(backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId,
+    withSourceLock: gate, assertSourceWritable: guard, targetAdapter, withTargetLock: gate,
+    assertTargetWritable: guard, validateStructure }), { code: "invalid-original-archive" });
+  assert.equal(targetAdapter.files.size, 0);
+});
+
+
+test("Drive backup quarantines if the original-import inventory changes after validation", async () => {
+  const { SyntheticOriginalRetentionStore } = await import("../js/drive-original-retention.mjs");
+  const { adapter, manifestFileId } = await fixture();
+  const originals = new SyntheticOriginalRetentionStore({ adapter, withWrite: gate, assertWritable: guard });
+  await originals.retainFixture({ importId: "invented-index-change-original" });
+  const originalBase = await originals.read();
+  const targetAdapter = new MemoryCatalogDrive("changed-original-inventory-synthetic-folder");
+  await assert.rejects(backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId,
+    withSourceLock: gate, assertSourceWritable: guard, targetAdapter, withTargetLock: gate,
+    assertTargetWritable: guard, validateStructure, onProgress: event => {
+      if (event.phase === "destination-preparation") {
+        adapter.files.get(originalBase.fileId).bytes = encode({ ...originalBase.index, imports: [] });
+      }
+    } }), error => error.code === "copy-quarantined" && error.cause.code === "source-originals-changed" && error.quarantineConfirmed);
+  assert.equal((await targetAdapter.listChildren()).some(file => file.appProperties.financeTrackerKind === "dashboard-synthetic-manifest"), false);
+});
+
+
+test("Drive backup compares the inventory actually consumed, even if it changes back before publication", async () => {
+  const { SyntheticOriginalRetentionStore } = await import("../js/drive-original-retention.mjs");
+  const { adapter, manifestFileId } = await fixture();
+  const originals = new SyntheticOriginalRetentionStore({ adapter, withWrite: gate, assertWritable: guard });
+  await originals.retainFixture({ importId: "invented-inventory-aba-original" });
+  const originalBase = await originals.read();
+  const originalBytes = adapter.files.get(originalBase.fileId).bytes;
+  const targetAdapter = new MemoryCatalogDrive("aba-original-inventory-synthetic-folder");
+  await assert.rejects(backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId,
+    withSourceLock: gate, assertSourceWritable: guard, targetAdapter, withTargetLock: gate,
+    assertTargetWritable: guard, validateStructure, onProgress: event => {
+      if (event.phase === "destination-preparation") adapter.files.get(originalBase.fileId).bytes = encode({ ...originalBase.index, imports: [] });
+      if (event.phase === "destination-verification") adapter.files.get(originalBase.fileId).bytes = originalBytes;
+    } }), error => error.code === "copy-quarantined" && error.cause.code === "source-originals-changed");
+  assert.equal((await targetAdapter.listChildren()).some(file => file.appProperties.financeTrackerKind === "dashboard-synthetic-manifest"), false);
 });

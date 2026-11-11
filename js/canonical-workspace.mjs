@@ -203,7 +203,7 @@ function render({ reset = false } = {}) {
     for (const id of ['holdings-source','holdings-date','reconcile-source','balance-source','balance-date','balance-amount','closure-source','new-account-name']) $(id).value = '';
     page = 0; selectedActivity = null; $('transaction-search').value = ''; $('review-only').checked = false; $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; pages.clearDetail(); }
   if (viewLedger !== session.ledger) {
-    const reader = createWorkspaceViewReader(session.ledger);
+    const reader = createWorkspaceViewReader(session.ledger, {monthlyIndex:session.store?.monthIndex});
     viewReader = reader; viewLedger = session.ledger;
   }
   view = viewReader.view({ accountId: $('account-filter').value, month: $('month-filter').value, query: $('transaction-search').value, reviewOnly: $('review-only').checked, page });

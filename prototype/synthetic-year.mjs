@@ -1,3 +1,4 @@
+import {createCanonicalMonthIndex, MONTH_INDEX_GROUP_SIZE} from '../js/canonical-month-index.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
 import { serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
@@ -58,7 +59,8 @@ const seeder = new SyntheticYearSeeder({ onProgress: state => {
 function previewResult(recipe) {
   const ledger = recipe.ledger;
   const physical = serializeFragmentedCanonicalLedger(ledger);
-  $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. ${serializeCanonicalLedger(ledger).size} logical canonical objects grouped into ${physical.size} storage objects before journals. January–December 2025. No Drive write is needed for this preview.`;
+  const derivedCount = 1 + Math.ceil(createCanonicalMonthIndex(ledger).monthlySummaries().length / MONTH_INDEX_GROUP_SIZE);
+  $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. ${serializeCanonicalLedger(ledger).size} logical canonical objects grouped into ${physical.size + derivedCount} storage objects including derived monthly summaries, before journals. January–December 2025. No Drive write is needed for this preview.`;
 }
 async function verify() {
   const recipe = await seeder.verifyOrSeed(storage.lifecycle);

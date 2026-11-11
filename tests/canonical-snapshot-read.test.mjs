@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { ApplicationStorageLifecycle } from '../js/application-storage-lifecycle.mjs';
-import { CanonicalLedgerStore, CANONICAL_INDEX } from '../js/canonical-ledger-storage.mjs';
+import { CanonicalLedgerStore, CANONICAL_INDEX, CANONICAL_PREFIX } from '../js/canonical-ledger-storage.mjs';
 import { createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent } from '../js/canonical-import.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import { setupCatalog } from './helpers/catalog-drive.mjs';
@@ -58,7 +58,7 @@ test('snapshot bytes are detached and each subsequent call re-verifies stored by
   assert.ok(second.manifest.revision >= 1);
   const decoder = new TextDecoder();
   const root = JSON.parse(decoder.decode(second.objects[CANONICAL_INDEX]));
-  const physical = new Map(Object.entries(second.objects).map(([path, bytes]) => [path, decoder.decode(bytes)]));
+  const physical = new Map(Object.entries(second.objects).filter(([path]) => path.startsWith(CANONICAL_PREFIX)).map(([path, bytes]) => [path, decoder.decode(bytes)]));
   const logical = reassembleCanonicalObjects(root, physical);
   assert.equal(JSON.parse(logical.get(CANONICAL_INDEX)).metadata.ledgerId, ledger.ledgerId);
 });

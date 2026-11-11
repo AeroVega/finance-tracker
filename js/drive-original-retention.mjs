@@ -2,6 +2,7 @@ import { createOriginalRetentionRecord, assessOriginalRetention, processOriginal
   prepareOriginalRestore } from "./original-retention-policy.mjs";
 import { encode, hashRaw, readVerified, writeVerified, storageError } from "./catalog-storage.mjs";
 import { canonicalizeJcs } from "./transaction-protocol.mjs";
+import { readBoundedDriveJson, discardDriveResponse } from "./drive-response-transport.mjs";
 
 const INDEX_NAME = "ft-synthetic-original-imports.json";
 const INDEX_KIND = "synthetic-original-import-index";
@@ -22,6 +23,7 @@ export class GoogleDriveOriginalDeletion {
     await this.assertWritable();
     if (await this.adapter.accessToken() !== token) throw storageError("authorization-changed", "Reconnect before deleting an original under changed authorization.");
     const response = await this.adapter.request(API + encodeURIComponent(fileId), { method: "DELETE" });
+    await discardDriveResponse(response);
     if (!response.ok) throw storageError("delete-not-accepted", "Drive did not accept the original deletion.");
     if (await this.adapter.accessToken() !== token) throw storageError("authorization-changed", "Deletion outcome needs verification after authorization changed.");
     this.receipts.set(fileId, token);
@@ -33,9 +35,10 @@ export class GoogleDriveOriginalDeletion {
     // Loss of the folder grant or a different account must not masquerade as
     // absence. A lone 404 can also mean permission loss, so it is insufficient.
     const folderResponse = await this.adapter.request(API + encodeURIComponent(this.adapter.folderId) + "?fields=id,mimeType,trashed");
-    const folder = await folderResponse.json();
+    const folder = await readBoundedDriveJson(folderResponse, { kind: "metadata", limits: this.adapter.responseLimits });
     if (folder.id !== this.adapter.folderId || folder.trashed || folder.mimeType !== "application/vnd.google-apps.folder") return false;
     const response = await this.adapter.request(API + encodeURIComponent(fileId) + "?fields=id,trashed", {}, { allowStatuses: [404] });
+    await discardDriveResponse(response);
     return response.status === 404 && await this.adapter.accessToken() === token;
   }
 }
@@ -216,26 +219,36 @@ export async function validateArchivedOriginalImports(imports, exportedAt) {
 }
 
 /** Originals live outside immutable financial history so expiry can remove them. */
-export async function archiveOriginalImports(adapter, now) {
+export async function* iterateArchivedOriginalImports(adapter, now, { expectedIndex = null } = {}) {
   const store = new SyntheticOriginalRetentionStore({ adapter, withWrite: (operation) => operation(), assertWritable: async () => {}, now: () => now });
-  const { index } = await store.read();
-  const archived = [];
+  const captured = await store.read();
+  if (expectedIndex !== null && canonicalizeJcs(captured) !== expectedIndex) {
+    throw storageError("source-originals-changed", "The original-import inventory changed before its retained bytes were copied.");
+  }
+  // Capture and compare once before yielding. Later changes to the remote index
+  // cannot alter which original locators this iterator consumes.
+  const { index } = captured;
   for (const item of index.imports) {
     const record = item.originalRetention;
     const included = record && originalMayBeRestored(record, now);
     let contentBase64 = null;
     if (included) contentBase64 = base64(await readVerified(adapter, { fileId: record.sourceFileId, sha256: record.sourceSha256, kind: "retained-original", transactionId: item.importId }));
-    archived.push({ ...item, privateSourceFileRef: null,
+    yield { ...item, privateSourceFileRef: null,
       originalRetention: record ? { ...record, sourceFileId: included ? "portable-original:" + item.importId : null } : null,
-      contentBase64, originalOmitted: !included });
+      contentBase64, originalOmitted: !included };
   }
+}
+
+export async function archiveOriginalImports(adapter, now) {
+  const archived = [];
+  for await (const item of iterateArchivedOriginalImports(adapter, now)) archived.push(item);
   return archived;
 }
 
 export async function restoreOriginalImports({ adapter, imports, guard, now = new Date().toISOString() }) {
-  if (!imports?.length) return;
+  if (!imports || Array.isArray(imports) && !imports.length) return;
   const restored = [];
-  for (const item of imports) {
+  for await (const item of imports) {
     const { contentBase64, originalOmitted, ...metadata } = item;
     let record = null;
     if (!originalOmitted && item.originalRetention && originalMayBeRestored(item.originalRetention, now)) {
@@ -248,6 +261,7 @@ export async function restoreOriginalImports({ adapter, imports, guard, now = ne
       privateSourceFileRef: null, sourceFileRetentionStatus: item.sourceFileRetentionStatus === "deleted" ? "deleted" : "not-retained",
       sourceFileOmittedReason: "expired-or-deleted-original-not-restored" }) });
   }
+  if (!restored.length) return;
   const store = new SyntheticOriginalRetentionStore({ adapter, withWrite: (operation) => operation(), assertWritable: guard, now: () => now });
   const base = await store.read();
   if (base.index.imports.length) throw storageError("existing-original-imports", "Restore requires a fresh original-import index.");

@@ -10,6 +10,7 @@ Production financial-data persistence remains **NO-GO**. Merged code, green test
 | --- | --- |
 | [Project status](PROJECT_STATUS.md) | Dated main/PR/CI snapshot, capability gaps and evidence limits. |
 | [Next steps](NEXT_STEPS.md) | Four-step Alpha sequence, dependencies and measurable completion checks. |
+| [Storage scaling and production readiness](STORAGE_SCALING_AND_PRODUCTION_READINESS.md) | November 11 measurements, local preparatory changes, capacity priorities and remaining privacy/authorization/recovery gates. |
 | [Roadmap](ROADMAP.md) | Alpha, Beta and conditional January 1, 2027 v1.0.0 scope. |
 | [Product definition](PRODUCT_DEFINITION.md) | Owner-confirmed product requirements, including monthly history. |
 | [Open decisions](PRODUCT_OPEN_DECISIONS.md) | Stable question IDs, remaining owner choices and deferred work. |
@@ -36,3 +37,5 @@ The [archived November 8 handoff](archive/NEXT_STEPS_2026-11-08.md) retains earl
 For each completed change, update project status with the reviewed commit, PR state, checks actually run and remaining limits. Update next steps when a dependency or completion condition changes. Put changed product decisions in the product definition/open-decision register and changed technical decisions in the appropriate contract. Keep test, owner observation, merge, deployment and production authorization separate. Do not copy a growing PR diary into every guide.
 
 Use **Verified** for inspectable source or test evidence, **User-confirmed** for an attributed owner observation or decision, **Hypothesis** for an unproven explanation, and **Open** for unresolved work. Preserve the original date and source when carrying evidence forward.
+
+- [Incremental storage foundation and remaining scaling work](SCALABLE_STORAGE_FOUNDATION.md)

@@ -1,3 +1,4 @@
+import {createCanonicalMonthIndex,isCanonicalMonthIndexFor} from './canonical-month-index.mjs';
 import {getEffectiveActivities, summarizeLedgerPeriods} from './canonical-import.mjs';
 import {exactSignedDecimal, isCalendarDate} from './import-reconciliation.mjs';
 import {buildFinancialPosition, buildAccountMonthCoverage} from './financial-position.mjs';
@@ -61,44 +62,46 @@ function countBy(records, key) {
 }
 
 /** Calculate only when the validated snapshot or financial scope changes. */
-function buildWorkspaceScope(ledger, effective, {accountId, month}) {
+function buildWorkspaceScope(ledger, effective, {accountId, month}, index = null, prepared = null) {
   const accountsById = new Map(ledger.accounts.map(account => [account.accountId, account]));
   if (accountId && !accountsById.has(accountId)) fail('unknown-account');
   const accountIds = accountId ? [accountId] : ledger.accounts.map(account => account.accountId);
   const selected = new Set(accountIds);
-  const active = effective.filter(activity => activity.active);
-  const scopedActivities = active.filter(activity => selected.has(activity.accountId));
-  const selectedImports = ledger.imports.filter(run => selected.has(run.accountId));
-  const selectedSources = ledger.observations.filter(observation => selected.has(observation.accountId) && pendingSource(observation));
-  const dates = scopedActivities.flatMap(activity => [activity.effectiveDate, reportingDate(activity)]).filter(isCalendarDate);
-  dates.push(...selectedImports.flatMap(run => [run.declaredCoverage.start, run.declaredCoverage.end]));
-  dates.sort();
+  const scopedActivities = prepared ? [] : effective.filter(activity => activity.active && selected.has(activity.accountId));
+  const selectedImports = prepared?.selectedImports ?? ledger.imports.filter(run => selected.has(run.accountId));
+  const selectedSources = prepared?.selectedSources ?? ledger.observations.filter(observation => selected.has(observation.accountId) && pendingSource(observation));
+  const dates = prepared?.dates ?? scopedActivities.flatMap(activity => [activity.effectiveDate, reportingDate(activity)]).filter(isCalendarDate);
+  if (!prepared) { dates.push(...selectedImports.flatMap(run => [run.declaredCoverage.start, run.declaredCoverage.end])); dates.sort(); }
   const {start, end} = month ? monthBounds(month) : {start:dates[0] ?? null, end:dates.at(-1) ?? null};
   const inPeriod = date => !month || !isCalendarDate(date) || (date >= start && date <= end);
-  const months = new Set();
-  for (const event of ledger.positionEvents || []) {
-    if (!selected.has(event.accountId)) continue;
-    if (event.effectiveDate) months.add(event.effectiveDate.slice(0, 7));
-    if (event.month) months.add(event.month);
+  const months = prepared?.months ?? new Set();
+  if (!prepared) {
+    for (const event of ledger.positionEvents || []) {
+      if (!selected.has(event.accountId)) continue;
+      if (event.effectiveDate) months.add(event.effectiveDate.slice(0, 7));
+      if (event.month) months.add(event.month);
+    }
+    for (const run of selectedImports) addMonths(months, run.declaredCoverage.start, run.declaredCoverage.end);
+    for (const activity of scopedActivities) {
+      const date = reportingDate(activity);
+      if (date) months.add(date.slice(0, 7));
+    }
   }
-  for (const run of selectedImports) addMonths(months, run.declaredCoverage.start, run.declaredCoverage.end);
-  for (const activity of scopedActivities) {
-    const date = reportingDate(activity);
-    if (date) months.add(date.slice(0, 7));
-  }
-  const currencies = [...new Set([
+  const currencies = prepared?.currencies ?? [...new Set([
     ...ledger.accounts.filter(account => selected.has(account.accountId)).map(account => account.currency),
     ...scopedActivities.map(activity => activity.currency).filter(currency => /^[A-Z]{3}$/.test(currency)),
   ])].sort();
-  const summary = start && end ? summarizeLedgerPeriods(ledger, currencies.map(currency => ({start, end, currency, accountIds}))) : [];
+  const scopes = start && end ? currencies.map(currency => ({start, end, currency, accountIds})) : [];
+  const indexedReports = index ? scopes.map(scope => index.report(scope)) : null;
+  const summary = indexedReports ? indexedReports.map(result => result.report) : summarizeLedgerPeriods(ledger,scopes);
   const exclusions = excludedReviewReasons(summary);
-  const observationCounts = countBy(ledger.observations, 'activityId');
-  const eventCounts = countBy(ledger.events, 'activityId');
-  const scopedRows = scopedActivities.filter(activity => inPeriod(reportingDate(activity)))
+  const observationCounts = prepared?.observationCounts ?? countBy(ledger.observations, 'activityId');
+  const eventCounts = prepared?.eventCounts ?? countBy(ledger.events, 'activityId');
+  const scopedRows = (index ? index.activities({accountIds,month}) : scopedActivities.filter(activity => inPeriod(reportingDate(activity))))
     .map(activity => rowFor(activity, accountsById, observationCounts, eventCounts, exclusions));
   scopedRows.sort((a, b) => (b.reportingDate ?? b.effectiveDate).localeCompare(a.reportingDate ?? a.effectiveDate) ||
     a.activityId.localeCompare(b.activityId));
-  const summaryAvailability = Object.fromEntries(summary.map(report => {
+  const summaryAvailability = indexedReports ? Object.fromEntries(indexedReports.map(result => [result.report.currency,result.availability])) : Object.fromEntries(summary.map(report => {
     const excluded = new Set(report.excluded.map(value => value.activityId));
     const eligible = scopedActivities.filter(activity => {
       const date = reportingDate(activity);
@@ -136,7 +139,7 @@ function buildWorkspaceScope(ledger, effective, {accountId, month}) {
     summary, summaryAvailability, scope:{accountId, month, start, end, accountIds},
     coverage:{imports, importCount:imports.length, needsReviewImportCount:imports.filter(run => run.status === 'needs-review').length,
       latestImportAt:newest(selectedImports.flatMap(run => [run.completedAt, ...run.retryAttempts.map(attempt => attempt.completedAt)])),
-      latestActivityDate:newest(scopedActivities.map(activity => activity.effectiveDate)),
+      latestActivityDate:prepared?.latestActivityDate ?? newest(scopedActivities.map(activity => activity.effectiveDate)),
       coverageReconciled:imports.length > 0 && imports.every(run => run.coverageReconciled === true),
       sourceFilesRetained:imports.length > 0 && imports.every(run => run.sourceFileRetentionStatus === 'retained')},
     review:{activityCount:scopedRows.filter(row => row.needsReview).length, sourceCount:sourceReviews.length,
@@ -158,13 +161,37 @@ const searchableText = row => [row.sourceDescription, row.normalizedDescription,
 
 /** A reader owns a defensive snapshot, never a cache over a caller's mutable graph.
  * Create a new reader after open, correction, save or verified reopen. Its private,
- * single-scope cache is bounded: changing account/month replaces the prior scope.
+ * single-view cache is bounded: changing account/month replaces the prior view.
+ * Account metadata and month buckets belong to this snapshot and are reused.
  * Search/review/pagination reuse reports but cannot change their financial scope.
  * Every result is detached so UI mutation cannot poison subsequent reads.
  */
-export function createWorkspaceViewReader(ledger) {
+export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
   const snapshot = structuredClone(ledger);
-  const effective = getEffectiveActivities(snapshot); // validate before any cache can be used
+  const index = isCanonicalMonthIndexFor(monthlyIndex,snapshot) ? monthlyIndex : createCanonicalMonthIndex(snapshot);
+  const preparedScopes = new Map();
+  const observationCounts = countBy(snapshot.observations,'activityId'), eventCounts = countBy(snapshot.events,'activityId');
+  const prepareScope = accountId => {
+    if (preparedScopes.has(accountId)) return preparedScopes.get(accountId);
+    const selected = value => !accountId || value.accountId === accountId;
+    const scopedActivities = index.activities({accountIds:accountId ? [accountId] : snapshot.accounts.map(a => a.accountId)});
+    const selectedImports = snapshot.imports.filter(selected), selectedSources = snapshot.observations.filter(o => selected(o) && pendingSource(o));
+    const dates = scopedActivities.flatMap(a => [a.effectiveDate,reportingDate(a)]).filter(isCalendarDate);
+    dates.push(...selectedImports.flatMap(r => [r.declaredCoverage.start,r.declaredCoverage.end])); dates.sort();
+    const months = new Set();
+    for (const event of snapshot.positionEvents || []) if (selected(event)) {
+      if (event.effectiveDate) months.add(event.effectiveDate.slice(0,7));
+      if (event.month) months.add(event.month);
+    }
+    for (const run of selectedImports) addMonths(months,run.declaredCoverage.start,run.declaredCoverage.end);
+    for (const activity of scopedActivities) if (reportingDate(activity)) months.add(reportingDate(activity).slice(0,7));
+    const currencies = [...new Set([...snapshot.accounts.filter(selected).map(a => a.currency),
+      ...scopedActivities.map(a => a.currency).filter(c => /^[A-Z]{3}$/.test(c))])].sort();
+    const prepared = {selectedImports,selectedSources,dates,months,currencies,observationCounts,eventCounts,
+      latestActivityDate:newest(scopedActivities.map(a => a.effectiveDate))};
+    preparedScopes.set(accountId,prepared);
+    return prepared;
+  };
   let cached = null;
   let searchTexts = null;
   let positionCache = null;
@@ -178,11 +205,11 @@ export function createWorkspaceViewReader(ledger) {
     const selection = workspaceOptions(options);
     const {accountId, month, query, reviewOnly, pageSize} = selection;
     if (!cached || cached.scope.accountId !== accountId || cached.scope.month !== month) {
-      cached = buildWorkspaceScope(snapshot, effective, {accountId, month});
+      cached = buildWorkspaceScope(snapshot, null, {accountId, month}, index, prepareScope(accountId));
       searchTexts = cached.rows.map(searchableText);
     }
     return selectWorkspaceRows(cached, searchTexts, selection);
-  }, position({asOf, accountId = ''} = {}) {
+  }, monthlySummaries() { return index.monthlySummaries(); }, position({asOf, accountId = ''} = {}) {
     const accountIds = accountScope(accountId);
     if (!isCalendarDate(asOf)) fail('invalid-position-as-of');
     if (!positionCache || positionCache.asOf !== asOf || positionCache.accountId !== accountId) {

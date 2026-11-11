@@ -24,7 +24,7 @@ test("every durable mutation tolerates real page loss and a fresh engine recover
   const baseline = await setupCatalog();
   await baseline.engine.transact(baseline.transaction);
   const boundaries = baseline.adapter.mutations;
-  assert.equal(boundaries, 14);
+  assert.equal(boundaries, 16);
   for (let boundary = 1; boundary <= boundaries; boundary++) {
     await t.test("termination after durable mutation " + boundary, async () => {
       const { adapter, engine, transaction, manifestFileId } = await setupCatalog();
