@@ -67,7 +67,7 @@ const required = [
   ['README.md', /Financial position and reconciled coverage were implemented in PR36/],
   ['docs/PROJECT_STATUS.md', /PR36[\s\S]{0,250}financial position/i],
   ['docs/AGENT_QUICK_START.md', /Production financial-data persistence is \*\*NO-GO\*\*/],
-  ['docs/STORAGE_TERMINOLOGY.md', /Grouped v2 \\(canonical\\)[\s\S]*?Rejected/i],
+  ['docs/STORAGE_TERMINOLOGY.md', /Grouped v2 \(canonical\)[\s\S]*?Rejected/i],
 ];
 for (const [relative, pattern] of required) {
   const file = path.join(root, relative);
