@@ -26,7 +26,7 @@ Every preparation failure rebuilds all mutable indexes from the unchanged publis
 
 The repeatable `node --expose-gc tests/benchmark-ledger-session.mjs session 10` and corresponding `pure 10` commands run separate CPU-only invented ten-year fixtures. Their final validated JSON hashes must match. Each reports opening, ten event commands, validated export, retained heap after GC, and whole-process high-water RSS. The latter includes fixture construction and is not the operation's true peak. These benchmarks do not prove a browser/mobile memory reduction or a network/storage speedup. Sessions deliberately retain replay/index state, trading persistent memory for lower repeated-command CPU. Opening, full export and pure fallback still scan the full graph.
 
-**Verified:** the [final combined-branch regression](PR30_PERFORMANCE_INTEGRATION.md) passed on both supported Node versions. **Open:** real Safari/mobile behavior, owner live acceptance and deployment. Local integration and independent review evidence follow below. This feature does not change the synthetic-only production gate.
+**Verified:** the [final combined-branch regression](archive/PR30_PERFORMANCE_INTEGRATION.md) passed on both supported Node versions. **Open:** real Safari/mobile behavior, owner live acceptance and deployment. Local integration and independent review evidence follow below. This feature does not change the synthetic-only production gate.
 
 ### Local ten-year measurement (Node 24.22.1)
 
