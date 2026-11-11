@@ -141,6 +141,7 @@ export function createPagedPhysicalLocators(adapter, config) {
   const readMetadata = adapter.readMetadata.bind(adapter), readBytes = adapter.readBytes.bind(adapter);
   const allocate = adapter.allocateFileId?.bind(adapter), create = adapter.createImmutable?.bind(adapter), assertWritable = config.assertWritable;
   const catalogTransaction = 'paged-locators';
+  const decodedPages=getOwnedLocatorDecoder(adapter);
   function adapterScope() {
     if (adapter.folderId !== folderId) fail('adapter-scope-mismatch', 'Adapter folder changed after construction.');
   }
@@ -157,15 +158,16 @@ export function createPagedPhysicalLocators(adapter, config) {
     return {version:m.version, size:m.size};
   }
   async function readPhysical(ref, kind, maximum, signal, transactionId) {
-    abort(signal); adapterScope();
+    const owner=decodedPages?.captureRead();
+    abort(signal); adapterScope();owner?.assertCurrent();
     const before = metadata(await readMetadata(ref.fileId, {maxBytes:PAGED_LOCATOR_ROOT_BYTES, signal}), ref, kind, transactionId, maximum);
-    abort(signal);
+    abort(signal);owner?.assertCurrent();
     const bytes = ownedBytes(await readBytes(ref.fileId, {kind:physicalKind(kind), maxBytes:maximum, signal}), maximum);
-    abort(signal);
+    abort(signal);owner?.assertCurrent();
     if (BigInt(bytes.length) !== BigInt(before.size) || await digest(bytes) !== ref.sha256) fail('hash-mismatch', 'Physical object does not match its exact bytes and size.');
-    abort(signal);
+    abort(signal);owner?.assertCurrent();
     const after = metadata(await readMetadata(ref.fileId, {maxBytes:PAGED_LOCATOR_ROOT_BYTES, signal}), ref, kind, transactionId, maximum);
-    abort(signal);
+    abort(signal);owner?.assertCurrent();
     if (before.version !== after.version || before.size !== after.size) fail('version-mismatch', 'Physical object changed during verification.');
     return bytes;
   }
@@ -215,25 +217,26 @@ export function createPagedPhysicalLocators(adapter, config) {
     if (!equal(bytes, saved)) fail('write-readback-mismatch', 'Stored bytes differ from the proposed immutable bytes.');
     return ref;
   }
-  const decodedPages=getOwnedLocatorDecoder(adapter);
   async function readJson(ref, kind, maximum, signal, index=null) {
+    const owner=decodedPages?.captureRead();
     try {
-    const bytes = await readPhysical(ref, kind, maximum, signal, catalogTransaction);
+    const bytes = await readPhysical(ref, kind, maximum, signal, catalogTransaction);owner?.assertCurrent();
     if(decodedPages){
       const value=await decodedPages.decode({bytes,sha256:ref.sha256,signal,profile:{schema:kind==='locator-catalog'?'root':'page',version:kind==='locator-catalog'?3:1,databaseId,copyId,index,maxNodeBytes,maxEntries,maxChildren}});
-      abort(signal);adapterScope();return {value,bytes};
+      abort(signal);adapterScope();owner?.assertCurrent();return {value,bytes};
     }
     let value;
     try { value = JSON.parse(decoder.decode(bytes)); } catch { fail('invalid-json', 'Expected valid UTF-8 JSON.'); }
     if (!equal(bytes, encode(value, maximum))) fail('noncanonical-json', 'Stored JSON must be canonical without duplicate fields.');
     return {value, bytes};
-    }catch(error){decodedPages?.invalidate();throw error;}
+    }catch(error){owner?.invalidate();throw error;}
   }
   const {key,reference,summary,nodeFor,validateNode,validateRoot}=createLocatorCodec({databaseId,copyId,maxNodeBytes,maxEntries,maxChildren});
   async function readNode(ref, index, signal) {
-    const {value:node, bytes} = await readJson(ref, 'locator-catalog-page', maxNodeBytes, signal, index);
+    const owner=decodedPages?.captureRead();
+    const {value:node, bytes} = await readJson(ref, 'locator-catalog-page', maxNodeBytes, signal, index);owner?.assertCurrent();
     if(!decodedPages)validateNode(node, index);
-    if (['height', 'count', 'min', 'max'].some(k => ref[k] !== node[k])) {decodedPages?.invalidate();fail('child-mismatch', 'Child bytes contradict the parent reference.');}
+    if (['height', 'count', 'min', 'max'].some(k => ref[k] !== node[k])) {owner?.invalidate();fail('child-mismatch', 'Child bytes contradict the parent reference.');}
     return {node, bytes};
   }
   async function writeNode(index, type, items, signal) {

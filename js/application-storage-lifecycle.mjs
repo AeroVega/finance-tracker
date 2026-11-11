@@ -1,4 +1,4 @@
-import { PagedApplicationStorage } from "./paged-application-storage.mjs";
+import {PagedApplicationStorage,isObsoletePagedVerificationFailure,currentPagedVerificationFailure} from './paged-application-storage.mjs';
 import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "./drive-transaction-engine.mjs";
 import { createDriveSessionAdapter } from "./drive-session-adapter.mjs";
 import { SessionCoordinator } from "./session-coordination.mjs";
@@ -115,14 +115,32 @@ export class ApplicationStorageLifecycle {
       fetchImpl: this.fetchImpl
     });
     this.coordinator = (this.factories.createCoordinator || ((options) => new SessionCoordinator(options)))({ adapter: this.sessionAdapter });
-    this.transactionAdapter = (this.factories.createTransactionAdapter || ((options) => new GoogleDriveTransactionAdapter(options)))({
+    const transactionAdapter = (this.factories.createTransactionAdapter || ((options) => new GoogleDriveTransactionAdapter(options)))({
       ...this.adapterOptions,
       accessToken: this.accessToken,
       folderId: this.folderId,
       fetchImpl: this.fetchImpl,
       afterMutation: this.afterMutation,
-      cryptoImpl: this.crypto
+      cryptoImpl: this.crypto,
+      ...(this.pagedCanonical?{captureMutationGuard:()=>{
+        const engine=this.engine,generation=engine?.verificationGeneration?.(),coordinator=this.coordinator,
+          sessionId=coordinator?.session?.sessionId,folderId=this.folderId,assertEngine=engine?.captureMutationGuard?.();
+        return ()=>{
+          const online=this.isOnline();
+          if(this.transactionAdapter!==transactionAdapter||this.engine!==engine||this.coordinator!==coordinator||this.folderId!==folderId||transactionAdapter.folderId!==folderId||
+            coordinator?.session?.sessionId!==sessionId||!coordinator?.canWrite||this.releasePending||!online)
+            fail("verification-scope-closed","Mutation lifetime or ownership changed before dispatch.");
+          engine?.assertVerificationGeneration?.(generation);assertEngine?.();
+        };
+      },
+      onExpiredMutation:error=>{
+        if(this.transactionAdapter!==transactionAdapter)return;
+        // Unlike an obsolete read, a dispatched write can change this copy.
+        this.engine.recoveryRequired=true;
+        if(this.state!=="recovery-required"||this.acceptingWrites)this.pauseAfterReadFailure(error);
+      }}:{})
     });
+    this.transactionAdapter=transactionAdapter;
     this.engine = (this.factories.createEngine || ((options) => new (this.pagedCanonical ? PagedApplicationStorage : this.catalogProtocol ? CatalogTransactionEngine : DriveTransactionEngine)(options)))({
       adapter: this.transactionAdapter,
       verificationPlans: this.verificationPlans,
@@ -164,6 +182,7 @@ export class ApplicationStorageLifecycle {
   }
 
   async recoverBeforeUse() {
+    this.transactionAdapter?.assertMutationsSettled?.();
     this.acceptingWrites = false;
     this.publish("recovering", "Checking Drive transaction state…");
     const result = await this.coordinator.withWrite(async () => {
@@ -291,9 +310,11 @@ export class ApplicationStorageLifecycle {
   }
 
   async readPartitionedSnapshot() {
-    try { await this.requireReady(); if (!this.pagedCanonical) fail("paged-required", "This copy does not use canonical v4.");
-      return await this.engine.readSnapshot();
-    } catch (error) { this.pauseAfterReadFailure(error); throw error; }
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
+    try { await this.requireReady();engine?.assertVerificationGeneration?.(generation);
+      if (!this.pagedCanonical) fail("paged-required", "This copy does not use canonical v4.");
+      const snapshot=await engine.readSnapshot();engine.assertSnapshotCurrent(snapshot);return snapshot;
+    } catch (error) { if(!isObsoletePagedVerificationFailure(error))this.pauseAfterReadFailure(error); throw error; }
   }
 
   async savePartitionedRoot(input) {
@@ -302,35 +323,42 @@ export class ApplicationStorageLifecycle {
   }
 
   async readManifest() {
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
     try {
-      await this.requireReady();
-      const manifest = this.pagedCanonical ? JSON.parse(new TextDecoder().decode(await this.engine.physical.readManifest())) : await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
+      await this.requireReady();engine?.assertVerificationGeneration?.(generation);
+      const manifest = this.pagedCanonical ? JSON.parse(new TextDecoder().decode(await this.engine.readManifest())) : await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
       if (this.pagedCanonical) {
         if (manifest.pending !== null) fail("recovery-required", "Finish root publication before reading.");
       } else if (this.catalogProtocol) {
         if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Catalog finalization must complete before reading application state.");
         await this.verifyHistory(manifest);
       }
-      return manifest;
-    } catch (error) { this.pauseAfterReadFailure(error); throw error; }
+      engine?.assertVerificationGeneration?.(generation);return manifest;
+    } catch (error) { if(!isObsoletePagedVerificationFailure(error))this.pauseAfterReadFailure(error); throw error; }
   }
 
   // Changed-save preflight only. The transaction engine still verifies full
   // retained history before writing; this is not a replacement snapshot reader.
   async assertCurrentManifest(expectedManifest) {
+    let closure;
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
     try {
-      await this.requireReady();
-      const current = this.pagedCanonical ? JSON.parse(new TextDecoder().decode(await this.engine.physical.readManifest())) : await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
+      await this.requireReady();engine?.assertVerificationGeneration?.(generation);
+      const current = this.pagedCanonical ? JSON.parse(new TextDecoder().decode(await this.engine.readManifest())) : await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
       if (this.pagedCanonical) {
-        await this.engine.finishSnapshot();
-        const after = JSON.parse(new TextDecoder().decode(await this.engine.physical.readManifest()));
+        engine.assertVerificationGeneration(generation);
+        closure=await this.engine.finishSnapshot();engine.assertVerificationGeneration(generation);
+        const after = JSON.parse(new TextDecoder().decode(await this.engine.readManifest()));engine.assertVerificationGeneration(generation);
         if (canonicalizeJcs(after) !== canonicalizeJcs(current)) fail("base-conflict", "Root changed while physical evidence was being checked.");
       }
       if (canonicalizeJcs(current) !== canonicalizeJcs(expectedManifest)) fail("base-conflict", "Storage changed. Reopen before continuing.");
       await this.requireReady();
+      if(this.pagedCanonical){engine.assertVerificationGeneration(generation);this.engine.completeSnapshot(closure,current);}
       return current;
     } catch (error) {
-      if (error?.code !== "base-conflict") this.pauseAfterReadFailure(error);
+      const outdated=isObsoletePagedVerificationFailure(error);
+      if(this.pagedCanonical)this.engine.discardSnapshot(closure,generation);
+      if (error?.code !== "base-conflict"&&!outdated) this.pauseAfterReadFailure(error);
       throw error;
     }
   }
@@ -360,7 +388,7 @@ export class ApplicationStorageLifecycle {
       if (canonicalizeJcs(current) !== canonicalizeJcs(manifest)) fail("base-conflict", "Storage changed while the snapshot was being verified. Reopen before continuing.");
       await this.requireReady();
       return { manifest: structuredClone(manifest), objects };
-    } catch (error) { this.pauseAfterReadFailure(error); throw error; }
+    } catch (error) { if(!isObsoletePagedVerificationFailure(error))this.pauseAfterReadFailure(error); throw error; }
   }
 
   pauseAfterReadFailure(error) {
@@ -393,29 +421,44 @@ export class ApplicationStorageLifecycle {
   }
 
   async requireReady() {
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
     try {
+      if(this.pagedCanonical)this.transactionAdapter?.assertNoExpiredMutation?.();
       if (!this.started || !this.acceptingWrites || this.state !== "ready") {
         fail("storage-not-ready", "Private storage is not in a verified ready state.");
       }
       await this.coordinator.assertCanWrite({ online: this.isOnline() });
+      engine?.assertVerificationGeneration?.(generation);
+      if(!this.started||!this.acceptingWrites||this.state!=="ready")fail("storage-not-ready","Storage readiness changed during ownership verification.");
     } catch (error) {
+      engine?.assertVerificationGeneration?.(generation);
       this.engine?.invalidateHistory?.();
       this.sessionAdapter?.clear?.();
-      throw error;
+      throw engine?.verificationFailure?.(error)??currentPagedVerificationFailure(error);
     }
   }
 
   async transact(transaction) {
-    await this.requireReady();
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
+    await this.requireReady();engine?.assertVerificationGeneration?.(generation);
+    let result,handedOff=false;
     try {
-      const result = await this.coordinator.withWrite(() => this.engine.transact(transaction));
+      result = await this.coordinator.withWrite(() => {
+        engine?.assertVerificationGeneration?.(generation);handedOff=true;return engine.transact(transaction);
+      });
+      if(this.pagedCanonical)engine.assertTransactionCurrent(result);
       // A committed transaction is not proof that ownership survived its final
       // read-back. Preserve a concurrent heartbeat/offline failure status.
       if (!this.releasePending && this.acceptingWrites && this.coordinator.canWrite && this.isOnline()) {
         this.publish("ready", "Changes synchronized.");
       }
+      if(this.pagedCanonical){await this.requireReady();this.engine.completeTransaction(result);}
       return result;
     } catch (error) {
+      if(!handedOff){engine?.assertVerificationGeneration?.(generation);error=currentPagedVerificationFailure(error);}
+      const outdated=isObsoletePagedVerificationFailure(error);
+      if(this.pagedCanonical)this.engine.discardTransaction(result);
+      if(outdated)throw error;
       if (error?.code === "transaction-unresolved" || this.engine.recoveryRequired) {
         this.acceptingWrites = false;
         this.publish("recovery-required", "A save needs recovery before more changes can be made.", error?.code || "recovery-required");
@@ -428,6 +471,7 @@ export class ApplicationStorageLifecycle {
   }
 
   async recover() {
+    this.transactionAdapter?.assertMutationsSettled?.();
     if (this.releasePending) fail("release-unconfirmed", "Session handoff is still in progress.");
     if (!this.coordinator?.canWrite || !this.isOnline()) fail("storage-not-ready", "A verified online session is required for recovery.");
     this.acceptingWrites = false;

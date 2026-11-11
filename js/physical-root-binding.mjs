@@ -151,10 +151,13 @@ const physicalKind = kind => kind === 'data-object' ? 'snapshot-object' : kind;
  * readManifest/writeManifest and direct physical methods have separate contracts.
  * See ROOT_TRANSACTION_PROTOCOL.md, protocol-4 companion, for lifecycle requirements. */
 export class PhysicalRootBinding {
+  #captureOperationGuard; #operationGuard=null;
   #adapter; #folderId; #assert; #verifiers; #lineage; #baselines = new WeakMap(); #queue = Promise.resolve(); #limits; #verifySourceEvidence;
-  constructor({adapter, assertWritable, verificationPlans, lineageVerifiers = new Map(), locatorOptions = {}, verifySourceEvidence}) {
+  constructor({adapter, assertWritable, verificationPlans, lineageVerifiers = new Map(), locatorOptions = {}, verifySourceEvidence, captureOperationGuard = () => () => {}}) {
     if (!adapter || ['readMetadata', 'readBytes', 'allocateFileId', 'createImmutable', 'readManifest', 'writeManifest'].some(k => typeof adapter[k] !== 'function') ||
         typeof assertWritable !== 'function' || !(verificationPlans instanceof Map) || !verificationPlans.size || !(lineageVerifiers instanceof Map)) fail('invalid-adapter', 'Direct physical storage, exact manifest access, ownership and verifier registries are required.');
+    if(typeof captureOperationGuard!=='function')fail('invalid-adapter','An operation guard factory must be callable.');
+    this.#captureOperationGuard=captureOperationGuard;
     this.#folderId = id(adapter.folderId);
     this.#adapter=snapshotPhysicalAdapter(adapter);
     this.#assert = assertWritable; this.#verifiers = new Map(verificationPlans); this.#lineage = new Map(lineageVerifiers);
@@ -163,11 +166,22 @@ export class PhysicalRootBinding {
     if (Object.keys(this.#limits).some(k => !['maxNodeBytes', 'maxEntries', 'maxChildren'].includes(k))) fail('invalid-options', 'Only locator page budgets can be configured.');
     for (const [name, fn] of [...this.#verifiers, ...this.#lineage]) if (typeof name !== 'string' || typeof fn !== 'function') fail('invalid-verifier', 'Verifier registrations require stable names and executable code.');
   }
-  #enqueue(fn) { const result = this.#queue.then(fn); this.#queue = result.catch(() => {}); return result; }
-  #scope() { if (this.#adapter.folderId !== this.#folderId) fail('copy-mismatch', 'The original adapter changed its physical destination.'); }
+  #enqueue(fn) {
+    // Capture before entering the queue. A later application session must not
+    // authorize the continuation of an older admitted operation.
+    const guard=this.#captureOperationGuard();
+    if(typeof guard!=='function')fail('invalid-guard','An operation guard must be callable.');
+    const result=this.#queue.then(async()=>{
+      this.#operationGuard=guard;
+      try {this.#scope();const result=await fn();this.#scope();return result;}
+      finally {this.#operationGuard=null;}
+    });
+    this.#queue=result.catch(()=>{});return result;
+  }
+  #scope() { if(this.#operationGuard?.()!==undefined)fail('invalid-guard','Operation guards must throw on failure and return undefined.'); if (this.#adapter.folderId !== this.#folderId) fail('copy-mismatch', 'The original adapter changed its physical destination.'); }
   async #manifest(signal) {
     this.#scope(); abort(signal); const raw = owned(await this.#adapter.readManifest({maxBytes:PHYSICAL_ROOT_LIMITS.manifestBytes, signal}), PHYSICAL_ROOT_LIMITS.manifestBytes);
-    abort(signal); const m = manifest(decode(raw, PHYSICAL_ROOT_LIMITS.manifestBytes));
+    this.#scope();abort(signal); const m = manifest(decode(raw, PHYSICAL_ROOT_LIMITS.manifestBytes));
     if (m.storageBinding.folderId !== this.#adapter.folderId) fail('copy-mismatch', 'Manifest belongs to another physical destination.');
     return m;
   }
@@ -176,7 +190,7 @@ export class PhysicalRootBinding {
     this.#scope(); abort(signal); const result = await this.#assert(copy(expected), {signal}); abort(signal); this.#scope();
     if (result !== undefined) fail('invalid-guard', 'Ownership must throw on failure and return undefined.');
   }
-  async #guard(expected,signal) {await this.#owned(expected,signal);await this.#exact(expected,signal);abort(signal);}
+  async #guard(expected,signal) {await this.#owned(expected,signal);await this.#exact(expected,signal);this.#scope();abort(signal);}
   #tree(m, expected, signal) {
     return createPagedPhysicalLocators(this.#adapter, {...this.#limits, databaseId:m.databaseId, copyId:m.copyId, folderId:m.storageBinding.folderId,
       assertWritable:async () => this.#owned(expected, signal)});

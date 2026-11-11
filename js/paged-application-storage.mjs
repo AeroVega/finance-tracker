@@ -10,6 +10,14 @@ import {createPhysicalDriveAdapter,PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND} from
 export {createPhysicalDriveAdapter,PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND} from './physical-drive-adapter.mjs';
 export const PAGED_INITIALIZATION_FORMAT = 'finance-tracker-paged-initialization';
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
+const failureOwners=new WeakMap();
+export const isObsoletePagedVerificationFailure=error=>error!==null&&typeof error==='object'&&failureOwners.get(error)?.()===true;
+export function currentPagedVerificationFailure(error) {return error!==null&&typeof error==='object'&&failureOwners.has(error)?Object.assign(new Error('Current application verification failed.',{cause:error}),{code:error.code}):error;}
+function obsolete(error) {
+  const result=Object.assign(new Error('An older application verification was invalidated.',{cause:error}),{code:error?.code??'verification-scope-closed'});
+  failureOwners.set(result,()=>true);return result;
+}
+
 
 
 export async function inspectPagedCanonicalCopy(adapter) {
@@ -64,82 +72,195 @@ export async function initializePagedCanonicalCopy({adapter, guard, cryptoImpl =
 }
 
 export class PagedApplicationStorage {
-  #selectedManifest;
+  #physical; #selectedManifest; #plans; #planEntries; #beginSemantic; #endSemantic;
+  #generation=Object.freeze({});
+  #current=null; #closures=new WeakMap(); #results=new WeakMap(); #snapshots=new WeakMap();
   constructor({adapter,assertWritable,verificationPlans,manifestFileId,onReadFailure = () => {},cryptoImpl = globalThis.crypto}) {
     Object.defineProperty(this,'adapter',{value:adapter,enumerable:true});
+    Object.defineProperty(this,'physical',{enumerable:true,get:()=>this.#physical});
     Object.defineProperty(this,'manifestFileId',{enumerable:true,get:()=>this.#selectedManifest,set:value=>{
       if(this.#selectedManifest!==undefined&&value!==this.#selectedManifest){this.invalidateHistory();fail('copy-mismatch','Selected manifest cannot change within an application session.');}
       this.#selectedManifest=value;
     }});
-    this.assertWritable=async () => { await assertWritable(); }; this.verificationPlans=verificationPlans; this.onReadFailure=onReadFailure; this.manifestFileId=manifestFileId; this.crypto=cryptoImpl; this.recoveryRequired=false;
+    Object.defineProperty(this,'assertWritable',{value:async()=>{await assertWritable();}});
+    this.verificationPlans=verificationPlans;this.#plans=verificationPlans;
+    this.#planEntries=[...Map.prototype.entries.call(verificationPlans)];
+    this.#beginSemantic=verificationPlans.beginVerification;this.#endSemantic=verificationPlans.endVerification;
+    this.onReadFailure=onReadFailure;this.manifestFileId=manifestFileId;this.crypto=cryptoImpl;this.recoveryRequired=false;
   }
-  invalidateHistory() { this.physical?.invalidateReadCache(); this.snapshotToken=null; this.verificationPlans?.endVerification?.(this.semanticToken); this.semanticToken=null; }
+  #checkPlans() {
+    const entries=[...Map.prototype.entries.call(this.#plans)];
+    if(this.verificationPlans!==this.#plans||this.#plans.beginVerification!==this.#beginSemantic||this.#plans.endVerification!==this.#endSemantic||
+      entries.length!==this.#planEntries.length||entries.some(([k,v],i)=>k!==this.#planEntries[i][0]||v!==this.#planEntries[i][1]))
+      fail('verification-plan-changed','Installed verification plans cannot change during an application session.');
+  }
+  verificationGeneration() {return this.#generation;}
+  captureMutationGuard() {
+    const generation=this.#generation,context=this.#current,physicalGuard=context?.physicalGuard??this.#physical?.captureVerificationLifetime();
+    return ()=>{this.assertVerificationGeneration(generation);this.#checkPlans();if(context)this.#assertOpen(context);else physicalGuard?.();};
+  }
+  #assertOpen(context) {
+    this.#live(context);
+    if(context.closed)fail('verification-scope-closed','The application verification is already closed.');
+    context.physicalGuard();
+  }
+  verificationFailure(error) {
+    // Always create a per-call result. Reusing an Error object from a different
+    // callback must not transfer its old operation or alter another catch.
+    const generation=this.#generation;
+    const result=Object.assign(new Error(error?.message??'Application verification failed.',{cause:error}),{code:error?.code,...(error?.details===undefined?{}:{details:error.details})});
+    failureOwners.set(result,()=>this.#generation!==generation);return result;
+  }
+  assertVerificationGeneration(generation) {if(generation!==this.#generation)throw obsolete(Object.assign(new Error('Application session changed.'),{code:'verification-scope-closed'}));}
+  async readManifest() {
+    const generation=this.#generation;
+    try {const bytes=await this.physical.readManifest();this.assertVerificationGeneration(generation);return bytes;}
+    catch(error){this.assertVerificationGeneration(generation);throw this.verificationFailure(error);}
+  }
+  #end(context) {this.#endSemantic?.call(this.#plans,context.semanticToken);}
+  #live(context) {
+    if(!context||this.#current!==context)throw obsolete(Object.assign(new Error('Application verification was invalidated.'),{code:'verification-scope-closed'}));
+    this.#checkPlans();
+  }
+  invalidateHistory(context) {
+    if(context!==undefined&&this.#current!==context)return false;
+    const prior=this.#current;this.#current=null;this.#generation=Object.freeze({});
+    this.physical?.invalidateReadCache();
+    if(prior)this.#end(prior);
+    return true;
+  }
   binding(manifestFileId=this.manifestFileId) {
-    this.manifestFileId=manifestFileId;
-    if (!this.physical) this.physical=createPhysicalDriveAdapter(this.adapter,{manifestFileId,assertWritable:this.assertWritable});
-    if (!this.engine) this.engine=new PhysicalRootBinding({adapter:this.physical,assertWritable:this.assertWritable,verificationPlans:this.verificationPlans,verifySourceEvidence:this.verificationPlans?.verifySourceEvidence});
+    this.#checkPlans();this.manifestFileId=manifestFileId;
+    if(!this.#physical)this.#physical=createPhysicalDriveAdapter(this.adapter,{manifestFileId,assertWritable:this.assertWritable});
+    if(!this.engine)this.engine=new PhysicalRootBinding({adapter:this.physical,assertWritable:this.assertWritable,
+      verificationPlans:this.#plans,verifySourceEvidence:this.#plans.verifySourceEvidence,
+      captureOperationGuard:()=>{const context=this.#current;return ()=>this.#assertOpen(context);}});
     return this.engine;
   }
+  async #begin() {
+    this.#checkPlans();
+    if(this.#current){
+      if(!this.#current.closed)fail('verification-scope-open','Finish the previous application verification.');
+      this.#current=null;
+    }
+    const context={physicalToken:null,semanticToken:null,closed:false,manifest:null,handle:Object.freeze({})};
+    this.#current=context;this.#generation=Object.freeze({});context.generation=this.#generation;
+    try {
+      context.physicalToken=await this.physical.beginVerification();
+      context.physicalGuard=this.#physical.captureVerificationLifetime(context.physicalToken);this.#assertOpen(context);
+      context.semanticToken=this.#beginSemantic?.call(this.#plans);
+      this.#assertOpen(context);
+      return context;
+    }catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
+  }
+  async #close(context) {
+    try {await this.physical.closeVerification(context.physicalToken);this.#live(context);context.closed=true;}
+    finally {this.#end(context);}
+  }
   async recover({manifestFileId=this.manifestFileId}={}) {
-    this.recoveryRequired=true;
-    const engine=this.binding(manifestFileId), token=await this.physical.beginVerification();
-    const semanticToken=this.verificationPlans?.beginVerification?.();this.semanticToken=semanticToken;
-    try { const result=await engine.recover(); await engine.verifyBaseline(); await this.physical.closeVerification(token); this.verificationPlans?.endVerification?.(semanticToken); if(this.semanticToken===semanticToken)this.semanticToken=null; this.recoveryRequired=false; return result; }
-    catch(error) {this.invalidateHistory();throw error;}
+    this.invalidateHistory();this.recoveryRequired=true;
+    const engine=this.binding(manifestFileId),context=await this.#begin();
+    try {
+      this.#live(context);
+      const result=await engine.recover();this.#live(context);
+      await engine.verifyBaseline();this.#live(context);await this.#close(context);
+      this.#live(context);this.#current=null;this.recoveryRequired=false;return result;
+    }catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
   }
   async readSnapshot() {
-    await this.assertWritable();
-    await this.finishSnapshot();
-    const token=await this.physical.beginVerification();
-    const semanticToken=this.verificationPlans?.beginVerification?.();this.semanticToken=semanticToken;
-    const manifest=JSON.parse(dec.decode(await this.physical.readManifest()));
-    await this.binding().verifyBaseline();
-    if (!same(manifest,JSON.parse(dec.decode(await this.physical.readManifest())))) fail('base-conflict','Root changed during full verification.');
-    if (manifest.pending !== null) fail('recovery-required','Finish paged recovery before reading.');
-    const tree=createPagedPhysicalLocators(this.physical,{databaseId:manifest.databaseId,copyId:manifest.copyId,folderId:this.adapter.folderId,assertWritable:this.assertWritable});
-    this.snapshotToken=token;
-    return {manifest,rootHash:manifest.root,store:{read:async (hash,opts={}) => {
-      this.physical.assertVerification(token);
-      const read=(async()=>{try {
-        // Immutable reads are provisional inside this owned scope. Fresh
-        // ownership is checked at opening/closure, never inferred from a read.
-        const bytes=await tree.readObject(manifest.locatorRoot,{kind:'data-object',sha256:hash},{signal:opts.signal});
-        if (opts.maxBytes !== undefined && bytes.length > opts.maxBytes) fail('byte-limit','Object exceeds requested bound.'); return bytes;
-      }catch(error){this.recoveryRequired=true;this.invalidateHistory();this.onReadFailure(error);throw error;}})();
-      this.physical.trackRead(token,read);return read;
-    }}};
-  }
-
-  async finishSnapshot() {
-    if(this.snapshotClosing) return this.snapshotClosing;
-    if(!this.snapshotToken) return;
-    const token=this.snapshotToken, semanticToken=this.semanticToken;
-    const closing=(async()=>{
-      try {await this.physical.closeVerification(token);}
-      finally {this.verificationPlans?.endVerification?.(semanticToken);if(this.semanticToken===semanticToken)this.semanticToken=null;}
-    })();
-    this.snapshotClosing=closing;
-    try {await closing;}
-    finally {if(this.snapshotClosing===closing)this.snapshotClosing=null;if(this.snapshotToken===token)this.snapshotToken=null;}
-  }
-
-  async transact({expectedBase,rootHash,objects,preparationStore,transactionId=this.crypto.randomUUID(),operation='synthetic-canonical-import',semanticVersion=PAGED_CANONICAL_VERIFIER}) {
-    const engine=this.binding();
-    await this.finishSnapshot();
-    const token=await this.physical.beginVerification();
-    const semanticToken=this.verificationPlans?.beginVerification?.();this.semanticToken=semanticToken;
+    const engine=this.binding(),generation=this.#generation;
+    try {await this.assertWritable();this.assertVerificationGeneration(generation);}
+    catch(error){this.assertVerificationGeneration(generation);throw this.verificationFailure(error);}
+    await this.finishSnapshot();this.assertVerificationGeneration(generation);
+    const context=await this.#begin();
     try {
-    if (!same(expectedBase,JSON.parse(dec.decode(await this.physical.readManifest())))) fail('base-conflict','Reopen the current root before saving.');
+      this.#live(context);
+      const manifest=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
+      await engine.verifyBaseline();this.#live(context);
+      const current=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
+      if(!same(manifest,current))fail('base-conflict','Root changed during full verification.');
+      if(manifest.pending!==null)fail('recovery-required','Finish paged recovery before reading.');
+      context.manifest=structuredClone(manifest);this.#closures.set(context.handle,context);
+      const tree=createPagedPhysicalLocators(this.physical,{databaseId:manifest.databaseId,copyId:manifest.copyId,folderId:this.adapter.folderId,assertWritable:this.assertWritable});
+      const snapshot={manifest,rootHash:manifest.root,store:{read:async(hash,opts={})=>{
+        this.#live(context);this.physical.assertVerification(context.physicalToken);
+        const read=(async()=>{try {
+          const bytes=await tree.readObject(manifest.locatorRoot,{kind:'data-object',sha256:hash},{signal:opts.signal});
+          this.#live(context);
+          if(opts.maxBytes!==undefined&&bytes.length>opts.maxBytes)fail('byte-limit','Object exceeds requested bound.');return bytes;
+        }catch(error){if(this.invalidateHistory(context)){this.recoveryRequired=true;error=this.verificationFailure(error);this.onReadFailure(error);}else error=obsolete(error);throw error;}})();
+        this.physical.trackRead(context.physicalToken,read);return read;
+      }}};
+      this.#snapshots.set(snapshot,context);return snapshot;
+    }catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
+  }
+  assertSnapshotCurrent(snapshot) {
+    const context=this.#snapshots.get(snapshot);
+    if(!context)fail('verification-scope-closed','Snapshot result is not owned by this application.');
+    this.#live(context);
+  }
+  async finishSnapshot() {
+    const context=this.#current;
+    if(!context?.manifest)return;
+    if(context.closing)return context.closing;
+    if(context.closed)return context.handle;
+    context.closing=(async()=>{
+      try {await this.#close(context);this.#live(context);return context.handle;}
+      catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
+    })();
+    return context.closing;
+  }
+  completeSnapshot(handle,manifest) {
+    const context=this.#closures.get(handle);
+    if(!context)return;
+    this.assertVerificationGeneration(context.generation);
+    if(context.completed)return;
+    this.#live(context);
+    if(!context.closed||!same(context.manifest,manifest))fail('base-conflict','Snapshot completion does not match its closed manifest.');
+    context.completed=true;this.#current=null;
+  }
+  discardSnapshot(handle,generation) {
+    const context=this.#closures.get(handle);
+    if(context)return this.invalidateHistory(context);
+    return generation===this.#generation?this.invalidateHistory():false;
+  }
+  assertTransactionCurrent(result) {
+    const context=this.#results.get(result);
+    if(!context)fail('verification-scope-closed','Transaction result is not owned by this application.');
+    this.#live(context);
+  }
+  completeTransaction(result) {
+    this.assertTransactionCurrent(result);
+    const context=this.#results.get(result);
+    this.#live(context);
+    if(!context.closed||!same(context.manifest,result.manifest))fail('base-conflict','Transaction completion does not match its closed manifest.');
+    this.#current=null;this.#results.delete(result);
+  }
+  discardTransaction(result) {const context=this.#results.get(result);if(context)this.invalidateHistory(context);}
+  async transact({expectedBase,rootHash,objects,preparationStore,transactionId=this.crypto.randomUUID(),operation='synthetic-canonical-import',semanticVersion=PAGED_CANONICAL_VERIFIER}) {
+    const engine=this.binding(),generation=this.#generation;
+    await this.finishSnapshot();this.assertVerificationGeneration(generation);
+    const context=await this.#begin();
+    try {
+    this.#live(context);
+    const current=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
+    if (!same(expectedBase,current)) fail('base-conflict','Reopen the current root before saving.');
     this.recoveryRequired=true;
-    const verifiedBase=await engine.verifyBaseline();
+    const verifiedBase=await engine.verifyBaseline();this.#live(context);
     const typedStore={read: (q,opts) => preparationStore.read(q.sha256,opts)};
     const tree=createPagedPhysicalLocators(this.physical,{databaseId:expectedBase.databaseId,copyId:expectedBase.copyId,folderId:this.adapter.folderId,assertWritable:this.assertWritable});
     const additions=(async function* () { for await (const d of objects) {
       const existing=await tree.get(expectedBase.locatorRoot,{kind:d.kind,sha256:d.sha256});
       if (!existing) yield d;
     }})();
-    const intent=await engine.prepare({verifiedBase,root:rootHash,transactionId,operation,semanticVersion,objects:additions,preparationStore:typedStore});
-    const result=await engine.transact({intent,preparationStore:typedStore}); await this.physical.closeVerification(token); this.verificationPlans?.endVerification?.(semanticToken); if(this.semanticToken===semanticToken)this.semanticToken=null; this.recoveryRequired=false; return result;
-    } catch(error) { this.invalidateHistory(); throw error; }
+    const intent=await engine.prepare({verifiedBase,root:rootHash,transactionId,operation,semanticVersion,objects:additions,preparationStore:typedStore});this.#live(context);
+    const result=await engine.transact({intent,preparationStore:typedStore});this.#live(context);
+    await this.#close(context);this.#live(context);
+    const after=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
+    if(!same(result.manifest,after))fail('base-conflict','Root changed after transaction closure.');
+    await this.assertWritable();this.#live(context);
+    context.manifest=structuredClone(result.manifest);this.#results.set(result,context);
+    this.recoveryRequired=false;return result;
+    }catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
   }
 }

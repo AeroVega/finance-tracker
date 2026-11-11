@@ -48,15 +48,25 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
     if((old!==undefined||sessionFacts.size<proofEntryBudget)&&sessionFactBytes-oldCost+cost<=proofByteBudget){sessionFacts.set(key,fingerprint);sessionFactBytes+=cost-oldCost;}
   }};
   const resetProofs=current=>{if(current){current.proofs.clear();current.proofBytes=0;current.phase++;}};
-  const poison = (code,message) => { clearFacts(); const error=Object.assign(new Error(message),{code}); if(scope){scope.failed=error;resetProofs(scope);} cache.clear();metadata.clear();cacheBytes=0;manifestCache=null; throw error; };
-  const validateMetadata = (m,id) => {
+  // Every awaited read belongs to the scope/phase captured before dispatch.
+  // Neither late bytes nor late cleanup may mutate a successor's evidence.
+  const capture=()=>({current:scope,epoch:generation,phase:scope?.phase});
+  const currentOwner=owner=>owner.epoch===generation&&owner.current===scope&&owner.phase===scope?.phase&&!owner.current?.closed;
+  const liveRead=(owner,signal)=>{
+    if(signal?.aborted)throw new DOMException('Physical read cancelled.','AbortError');
+    if(!currentOwner(owner))fail('verification-scope-closed','Physical read belongs to an expired scope.');
+    if(adapter.folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed.');
+    if(owner.current?.failed)throw owner.current.failed;
+  };
+  const poison = (code,message,owner) => {const error=Object.assign(new Error(message),{code});if(currentOwner(owner)){clearFacts();if(owner.current){owner.current.failed=error;resetProofs(owner.current);}cache.clear();metadata.clear();cacheBytes=0;manifestCache=null;}throw error;};
+  const validateMetadata = (m,id,owner) => {
     if (!m || m.id!==id || m.trashed!==false || !Array.isArray(m.parents) || !m.parents.includes(adapter.folderId) ||
-        typeof m.version!=='string' || !/^[1-9][0-9]*$/.test(m.version) || typeof m.size!=='string' || !/^(0|[1-9][0-9]*)$/.test(m.size)) poison('metadata-mismatch','Physical metadata identity, size or version is invalid.');
+        typeof m.version!=='string' || !/^[1-9][0-9]*$/.test(m.version) || typeof m.size!=='string' || !/^(0|[1-9][0-9]*)$/.test(m.size)) poison('metadata-mismatch','Physical metadata identity, size or version is invalid.',owner);
     return m;
   };
   const checkScope = async () => {
     if(!scope)return;
-    const current=scope;
+    const current=scope,owner=capture();
     if(current.phaseClose)return current.phaseClose;
     current.phaseClosing=true;
     const closing=(async()=>{
@@ -66,7 +76,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       const fresh=await adapter.readMetadataSnapshot();
       if(scope!==current||current.closed)fail('verification-scope-closed','Verification scope changed.');
       for(const [id,expected]of current.used) {
-        if(!fresh.has(id)||!same(validateMetadata(fresh.get(id),id),expected))fail('verification-metadata-changed','Physical evidence changed during verification.');
+        if(!fresh.has(id)||!same(validateMetadata(fresh.get(id),id,owner),expected))fail('verification-metadata-changed','Physical evidence changed during verification.');
       }
       await assertWritable();
       if(scope!==current||current.closed)fail('verification-scope-closed','Verification was invalidated during its final ownership check.');
@@ -77,21 +87,26 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
     })();
     current.phaseClose=closing;
     try {await closing;}
-    catch(error){clearFacts();if(scope===current){current.failed=error;resetProofs(current);}throw error;}
+    catch(error){if(currentOwner(owner)){clearFacts();current.failed=error;resetProofs(current);}throw error;}
     finally{if(current.phaseClose===closing)current.phaseClose=null;}
   };
-  const missing = async fn => { try { return await fn(); } catch(e) {
-    clearFacts();manifestCache=null;
-    if(scope && !(e?.code === "drive-request-failed" && e.details?.status === 404)) scope.failed=e;
-    if (e?.code === 'drive-request-failed' && e.details?.status === 404) fail('object-not-found', 'The exact physical object is absent.'); throw e;
+  const missing = async (fn,owner) => {try {const result=await fn();liveRead(owner);return result;}catch(error){
+    if(currentOwner(owner)){clearFacts();manifestCache=null;
+      if(owner.current&&!(error?.code==='drive-request-failed'&&error.details?.status===404))owner.current.failed=error;
+    }
+    if(error?.code==='drive-request-failed'&&error.details?.status===404)fail('object-not-found','The exact physical object is absent.');
+    throw error;
   }};
   const physical = {
     get folderId() { return adapter.folderId; },
     invalidateReadCache() { clearFacts();generation++; manifestCache=null; cache.clear(); metadata.clear(); cacheBytes=0; if(scope){scope.closed=true;resetProofs(scope);} scope=null; },
     async beginVerification() {
+      let owner=capture();
       try {
       if(adapter.folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed before opening.');
       if(scope) fail('verification-scope-open','Finish the current verification before starting another.');
+      // Also distinguish null-scope reads across a complete intervening scope.
+      generation++;owner=capture();
       const token=Object.freeze({}), openedAt=generation;
       const opening=await adapter.readMetadataSnapshot();
       if(adapter.folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed while opening.');
@@ -99,16 +114,27 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       if(scope) fail('verification-scope-open','Verification scopes cannot overlap.');
       metadata.clear();
       scope={token,opening,used:new Map(),closed:false,closing:false,phaseClosing:false,phaseClose:null,pending:new Set(),phase:0,proofs:new Map(),proofBytes:0}; return token;
-      }catch(error){clearFacts();throw error;}
+      }catch(error){if(currentOwner(owner))clearFacts();throw error;}
     },
     async closeVerification(token) {
-      if(scope?.token!==token || scope.closed) {clearFacts();fail('verification-scope-closed','Verification scope is closed.');}
-      const current=scope; current.closing=true;
+      if(scope?.token!==token || scope.closed) {fail('verification-scope-closed','Verification scope is closed.');}
+      const current=scope,owner=capture(); current.closing=true;
       try { await Promise.all([...current.pending]);
         if(scope!==current || current.closed) fail('verification-scope-closed','Verification was invalidated while draining.');
         await checkScope(); }
-      catch(error){clearFacts();throw error;}
-      finally {current.closed=true;resetProofs(current);if(scope===current)scope=null;metadata.clear();}
+      catch(error){if(currentOwner(owner))clearFacts();throw error;}
+      finally {current.closed=true;resetProofs(current);if(scope===current&&owner.epoch===generation){scope=null;metadata.clear();}}
+    },
+    // Publication changes phases inside one scope. It must not revive a scope
+    // that was closed, failed, invalidated or moved to another physical copy.
+    captureVerificationLifetime(token) {
+      const current=scope,epoch=generation;
+      if(token!==undefined&&current?.token!==token)fail('verification-scope-closed','Verification token is not current.');
+      return ()=>{
+        if(epoch!==generation||scope!==current||current?.closed||current?.closing)fail('verification-scope-closed','Verification lifetime is closed.');
+        if(adapter.folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed.');
+        if(current?.failed)throw current.failed;
+      };
     },
     assertVerification(token) { if(scope?.token!==token || scope.closed || scope.closing || scope.phaseClosing) fail('verification-scope-closed','Verification scope is closed.'); },
     trackRead(token,read) {
@@ -117,40 +143,45 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
     },
     allocateFileId: (...args) => adapter.allocateFileId(...args),
     readMetadata: async (id, opts) => {
+      const owner=capture(),current=owner.current;
       try {
-      let value;
-      if(scope) {
-        value=scope.used.get(id) ?? scope.opening.get(id);
-        if(!value) value=await missing(() => adapter.readMetadata(id,opts));
-        value=structuredClone(value); scope.used.set(id,structuredClone(value));
-      } else value=await missing(() => adapter.readMetadata(id, opts));
-      validateMetadata(value,id);
-      if(opts?.maxBytes !== undefined && encode(value).length>opts.maxBytes) poison('byte-limit','Physical metadata exceeds its requested bound.');
+      liveRead(owner,opts?.signal);let value;
+      if(current) {
+        value=current.used.get(id)??current.opening.get(id);
+        if(!value)value=await missing(()=>adapter.readMetadata(id,opts),owner);
+        liveRead(owner,opts?.signal);value=structuredClone(value);current.used.set(id,structuredClone(value));
+      } else {value=await missing(()=>adapter.readMetadata(id,opts),owner);liveRead(owner,opts?.signal);}
+      validateMetadata(value,id,owner);
+      if(opts?.maxBytes !== undefined && encode(value).length>opts.maxBytes) poison('byte-limit','Physical metadata exceeds its requested bound.',owner);
       metadata.delete(id); metadata.set(id,canonicalizeJcs(value));
       while(metadata.size>128) metadata.delete(metadata.keys().next().value);
       return value;
-      }catch(error){clearFacts();if(scope&&error?.code!=='object-not-found'){scope.failed=error;resetProofs(scope);}throw error;}
+      }catch(error){if(currentOwner(owner)){clearFacts();if(current&&error?.code!=='object-not-found'){current.failed=error;resetProofs(current);}}throw error;}
     },
     readBytes: async (id, opts={}) => {
+      const owner=capture(),current=owner.current;
       try {
+      liveRead(owner,opts.signal);
       const fingerprint=metadata.get(id); metadata.delete(id);
       const hit=cache.get(id);
       if (fingerprint && hit?.fingerprint===fingerprint && hit.bytes.length <= (opts.maxBytes ?? 65536)) {
         cache.delete(id); cache.set(id,hit); return hit.bytes.slice();
       }
-      const bytes=ownedBytes(await missing(() => adapter.readBytes(id,opts)),Math.min(opts.maxBytes??65536,65536));
+      const bytes=ownedBytes(await missing(() => adapter.readBytes(id,opts),owner),Math.min(opts.maxBytes??65536,65536));
+      liveRead(owner,opts.signal);
       if (fingerprint && bytes.length<=65536) {
         const evidence=JSON.parse(fingerprint);
-        if(evidence.size!==String(bytes.length) || evidence.appProperties?.financeTrackerHash!==await partitionDigest(bytes)) poison('hash-mismatch','Physical bytes do not match metadata before cache admission.');
+        const sha256=await partitionDigest(bytes);liveRead(owner,opts.signal);
+        if(evidence.size!==String(bytes.length)||evidence.appProperties?.financeTrackerHash!==sha256)poison('hash-mismatch','Physical bytes do not match metadata before cache admission.',owner);
         if (hit) {cache.delete(id); cacheBytes-=hit.bytes.length;}
         while(cacheBytes+bytes.length>cacheBudget && cache.size) {const key=cache.keys().next().value; cacheBytes-=cache.get(key).bytes.length; cache.delete(key);}
         cache.set(id,{fingerprint,bytes:bytes.slice()}); cacheBytes+=bytes.length;
       }
       return bytes;
-      } catch(error) {clearFacts();if(scope){scope.failed=error;resetProofs(scope);}cache.clear();metadata.clear();cacheBytes=0;manifestCache=null;throw error;}
+      } catch(error) {if(currentOwner(owner)){clearFacts();if(current){current.failed=error;resetProofs(current);}cache.clear();metadata.clear();cacheBytes=0;manifestCache=null;}throw error;}
     },
     verifyImmutableObject: input => {
-      const current=scope,phase=current?.phase,epoch=generation;
+      const owner=capture(),current=owner.current;
       const operation=(async()=>{
         try {
           const {fileId,sha256,kind,transactionId,folderId=selectedFolderId,maxBytes=65536,signal}=input;
@@ -158,7 +189,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
           const live=()=>{
             if(signal?.aborted)throw new DOMException('Immutable verification cancelled.','AbortError');
             if(adapter.folderId!==selectedFolderId||folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed.');
-            if(epoch!==generation || (current && (scope!==current || current.closed || current.phase!==phase)))fail('verification-scope-closed','Immutable verification phase changed.');
+            if(!currentOwner(owner))fail('verification-scope-closed','Immutable verification phase changed.');
             if(current?.failed)throw current.failed;
           };
           live();if(current?.closing||current?.phaseClosing)fail('verification-scope-closed','Verification is closing.');
@@ -166,7 +197,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
              !['snapshot-object','commit-record','journal-event','migration-record','protocol-object'].includes(kind)||
              !Number.isSafeInteger(maximum)||maximum<=0)fail('invalid-immutable-query','Expected an exact bounded immutable reference.');
           const validate=m=>{
-            validateMetadata(m,fileId);
+            validateMetadata(m,fileId,owner);
             if(m.appProperties?.financeTrackerKind!==kind || m.appProperties?.financeTrackerHash!==sha256 ||
                typeof m.appProperties?.financeTrackerTransaction!=='string' ||
                (transactionId!==undefined&&m.appProperties.financeTrackerTransaction!==transactionId))fail('metadata-mismatch','Immutable reference does not match its typed binding.');
@@ -187,8 +218,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
           }
           return {byteLength:bytes.length};
         } catch(error) {
-          clearFacts();
-          if(current && scope===current){current.failed=error;resetProofs(current);}
+          if(currentOwner(owner)){clearFacts();if(current){current.failed=error;resetProofs(current);}}
           throw error;
         }
       })();
@@ -197,7 +227,9 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
     },
     createImmutable: input => adapter.createImmutable(input),
     readManifest: async (opts = {}) => {
+      const owner=capture();
       try {
+      liveRead(owner,opts.signal);
       const validate = m => {
         if (m.id !== manifestFileId || m.trashed !== false || !Array.isArray(m.parents) || !m.parents.includes(adapter.folderId) ||
             m.name !== PAGED_MANIFEST_NAME || m.appProperties?.financeTrackerKind !== PAGED_MANIFEST_KIND ||
@@ -206,26 +238,28 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       };
       const maximum=Math.min(opts.maxBytes ?? 16384,16384);
       if(!Number.isSafeInteger(maximum)||maximum<=0)fail('invalid-response-limits','A finite manifest byte budget is required.');
-      const openedAt=generation;
-      const before=validate(await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384}));
+      const beforeRaw=await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384});liveRead(owner,opts.signal);
+      const before=validate(beforeRaw);
       if(opts.signal?.aborted)throw new DOMException('Manifest read cancelled.','AbortError');
-      if(openedAt!==generation)fail('verification-scope-closed','Manifest read was invalidated.');
+      liveRead(owner,opts.signal);
       const fingerprint=canonicalizeJcs(before);
       if(manifestCache?.fingerprint===fingerprint) {
         if(manifestCache.bytes.length>maximum)fail('drive-response-too-large','Manifest exceeds the requested byte budget.');
         return manifestCache.bytes.slice();
       }
       const bytes=ownedBytes(await adapter.readBytes(manifestFileId,{...opts,kind:'manifest',maxBytes:maximum}),maximum);
-      const after=validate(await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384}));
+      liveRead(owner,opts.signal);
+      const afterRaw=await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384});liveRead(owner,opts.signal);
+      const after=validate(afterRaw);
       if(opts.signal?.aborted)throw new DOMException('Manifest read cancelled.','AbortError');
       if (fingerprint!==canonicalizeJcs(after) || before.size!==String(bytes.length)) fail('manifest-version-mismatch','Manifest changed while being read.');
-      if(openedAt!==generation)fail('verification-scope-closed','Manifest read was invalidated.');
+      liveRead(owner,opts.signal);
       manifestCache={fingerprint,bytes:bytes.slice()};
       return bytes;
-      } catch(error) { clearFacts();if(scope)scope.failed=error; manifestCache=null;cache.clear();metadata.clear();cacheBytes=0;throw error; }
+      } catch(error) {if(currentOwner(owner)){clearFacts();if(owner.current)owner.current.failed=error;manifestCache=null;cache.clear();metadata.clear();cacheBytes=0;}throw error;}
     },
     writeManifest: async (bytes, opts={}) => {
-      const current=scope,epoch=generation;let phase;
+      const current=scope,epoch=generation;let phase,publicationMayHaveDispatched=false,publisherEntered=false,firstGuardRejected=false;
       const live=()=>{
         if(opts.signal?.aborted)throw new DOMException('Manifest publication cancelled.','AbortError');
         if(adapter.folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed.');
@@ -236,22 +270,36 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       try {
         live();await checkScope();live();phase=current?.phase;
         await assertWritable();live();
+        publisherEntered=true;
         const result=await adapter.publishManifest(manifestFileId,JSON.parse(dec.decode(bytes)),{...opts,beforeMutation:async()=>{
-          live();await assertWritable();live();await opts.beforeMutation?.();live();
+          try {live();await assertWritable();live();await opts.beforeMutation?.();live();}
+          catch(error){if(!publicationMayHaveDispatched)firstGuardRejected=true;throw error;}
+          // A conforming publisher cannot dispatch until this complete guard
+          // succeeds. Keep uncertainty sticky across later retry rejections.
+          publicationMayHaveDispatched=true;
         }});
+        publicationMayHaveDispatched=true;
         live();metadata.clear();
         if(current) {
           const opening=await adapter.readMetadataSnapshot();live();
           current.opening=opening;current.used.clear();resetProofs(current);current.phaseClosing=false;
         }
         return result;
-      } catch(error) {clearFacts();if(current&&scope===current){current.failed=error;resetProofs(current);}throw error;}
-      finally {manifestCache=null;}
+      } catch(error) {
+        // A publication past its complete guard may have changed authority even when
+        // its caller expired. Do not preserve a successor's cached evidence.
+        if(publicationMayHaveDispatched||publisherEntered&&!firstGuardRejected||epoch===generation&&scope===current)clearFacts();
+        if(epoch===generation&&scope===current&&current){current.failed=error;resetProofs(current);}
+        throw error;
+      }finally{if(publicationMayHaveDispatched||publisherEntered&&!firstGuardRejected||epoch===generation&&scope===current)manifestCache=null;}
 
     }
   };
-  const locatorDecoder=Object.freeze({invalidate:clearDecoded,decode:input=>{
-    const epoch=decodeEpoch,openedAt=generation,current=scope,phase=current?.phase,signal=input.signal;
+  const locatorDecoder=Object.freeze({invalidate:clearDecoded,captureRead:()=>{
+    const owner=capture(),epoch=decodeEpoch;
+    return Object.freeze({assertCurrent:()=>liveRead(owner),invalidate:()=>{if(currentOwner(owner)&&epoch===decodeEpoch)clearDecoded();}});
+  },decode:input=>{
+    const owner=capture(),epoch=decodeEpoch,openedAt=owner.epoch,current=owner.current,phase=owner.phase,signal=input.signal;
     const operation=(async()=>{
     const live=()=>{
       if(signal?.aborted)throw new DOMException('Locator decode cancelled.','AbortError');
@@ -269,7 +317,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       while(decodedNodes.size>=128||decodedBytes+cost>2*1024*1024){const first=decodedNodes.keys().next().value;if(first===undefined)break;decodedBytes-=decodedNodes.get(first).cost;decodedNodes.delete(first);}
       if(cost<=2*1024*1024){decodedNodes.set(key,{value:owned,cost});decodedBytes+=cost;}
       return structuredClone(owned);
-    }catch(error){clearFacts();if(current&&scope===current){current.failed=error;resetProofs(current);}throw error;}
+    }catch(error){if(currentOwner(owner)&&epoch===decodeEpoch){clearFacts();if(current){current.failed=error;resetProofs(current);}}throw error;}
     })();
     if(current){current.pending.add(operation);operation.then(()=>current.pending.delete(operation),()=>current.pending.delete(operation));}
     return operation;

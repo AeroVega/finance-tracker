@@ -52,11 +52,14 @@ function joinBytes(parts) {
 }
 
 export class GoogleDriveTransactionAdapter {
+  #captureMutationGuard; #onExpiredMutation; #pendingMutations=new Set(); #mutationScopes=new WeakMap();
   constructor({ accessToken, folderId, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
-    onRequest = null, afterMutation = null, responseLimits = {}, visibilityAttempts = 8, visibilityDelayMs = 500, visibilityMaxDelayMs = 5000 }) {
+    onRequest = null, afterMutation = null, captureMutationGuard = () => () => {}, onExpiredMutation = () => {}, responseLimits = {}, visibilityAttempts = 8, visibilityDelayMs = 500, visibilityMaxDelayMs = 5000 }) {
     if (typeof accessToken !== "function" || !folderId || typeof fetchImpl !== "function") {
       fail("invalid-adapter-config", "An access-token provider, selected folder, and fetch implementation are required.");
     }
+    if(typeof captureMutationGuard!=="function"||typeof onExpiredMutation!=="function")fail("invalid-adapter-config","Mutation lifetime callbacks must be callable.");
+    this.#captureMutationGuard=captureMutationGuard;this.#onExpiredMutation=onExpiredMutation;
     this.responseLimits = createDriveResponseLimits(responseLimits);
     this.accessToken = accessToken;
     this.folderId = folderId;
@@ -77,20 +80,55 @@ export class GoogleDriveTransactionAdapter {
     this.fileIdRefill = null;
   }
 
-  async request(url, options = {}, { allowStatuses = [], beforeMutation } = {}) {
+  #mutationGuard() {
+    const guard=this.#captureMutationGuard();
+    if(typeof guard!=="function")fail("invalid-guard","A mutation lifetime guard must be callable.");
+    return ()=>{if(guard()!==undefined)fail("invalid-guard","Mutation lifetime guards must return undefined.");};
+  }
+
+  assertNoExpiredMutation() {
+    for(const guard of this.#pendingMutations){try{guard();}catch(error){this.#onExpiredMutation(error);fail("mutation-in-flight","An expired mutation must settle before this copy can be used.");}}
+  }
+  assertMutationsSettled() {
+    this.assertNoExpiredMutation();
+    if(this.#pendingMutations.size)fail("mutation-in-flight","Wait for the issued mutation to settle before recovery.");
+  }
+
+  async #mutation(run) {
+    const guard=this.#mutationGuard(),token=Object.freeze({}),scope={guard,dispatched:false,active:true};
+    this.#mutationScopes.set(token,scope);
+    try {
+      const result=await run(token);
+      guard();return result;
+    }catch(error){
+      if(scope.dispatched){try{guard();}catch(expired){this.#onExpiredMutation(expired);}}
+      throw error;
+    }finally{scope.active=false;this.#mutationScopes.delete(token);this.#pendingMutations.delete(guard);}
+  }
+
+  async request(url, options = {}, { allowStatuses = [], beforeMutation, mutationScope } = {}) {
+    // Capture before token/ownership awaits. This synchronous fence is separate
+    // from the async remote ownership check and runs in the fetch call's turn.
+    const mutation=!['GET','HEAD'].includes(String(options.method??'GET').toUpperCase());
+    const guard=mutation?this.#mutationGuard():null,scope=this.#mutationScopes.get(mutationScope);
+    if(mutationScope!==undefined&&!scope)fail("invalid-guard","Mutation scope is not owned by this adapter.");
     const token = await this.accessToken();
     if (!token) fail("authorization-required", "Google Drive authorization is unavailable.");
     await beforeMutation?.();
+    const fetch=this.fetch,requestOptions={
+      ...options,
+      // Verification versions, exact manifests and media must come from Drive,
+      // never an HTTP cache in the browser. Private byte reuse is gated above.
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
+    };
+    if(scope){if(!scope.active)fail("verification-scope-closed","Mutation scope is closed.");scope.guard();}
+    guard?.();
+    // Only private accounting remains between the final fence and fetch.
+    if(scope){scope.dispatched=true;this.#pendingMutations.add(scope.guard);}
     let response;
-    try {
-      response = await this.fetch(url, {
-        ...options,
-        // Verification versions, exact manifests and media must come from Drive,
-        // never an HTTP cache in the browser. Private byte reuse is gated above.
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
-      });
-    } catch { fail("drive-network-error", "The Drive request did not return a confirmed response."); }
+    try {response=await fetch.call(this,url,requestOptions);}
+    catch {fail("drive-network-error","The Drive request did not return a confirmed response.");}
     if (!response || !Number.isInteger(response.status)) {
       await discardDriveResponse(response);
       fail("invalid-drive-response", "The Drive request returned no valid HTTP response.");
@@ -251,6 +289,7 @@ export class GoogleDriveTransactionAdapter {
   }
 
   async createImmutable({ fileId, name, kind, transactionId, content, expectedSha256, maxBytes, beforeMutation, signal }) {
+    return this.#mutation(async mutationScope=>{
     const bytes = copyOwnedBytes(bytesOf(content));
     assertResponseSize(bytes.length, { kind, limits: this.responseLimits });
     if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || bytes.length > maxBytes)) fail("byte-limit", "Object exceeds its explicit byte budget.");
@@ -270,14 +309,13 @@ export class GoogleDriveTransactionAdapter {
     const url = `${UPLOAD}/files?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`;
     let ambiguousCreateFailure = null;
     let createResponseSummary = null;
-    let mutationStarted=false;
     try {
       const createResponse = await this.request(url, {
         signal,
         method: "POST",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
         body
-      }, { allowStatuses: [409], beforeMutation:async()=>{await beforeMutation?.();mutationStarted=true;} });
+      }, {allowStatuses:[409],beforeMutation,mutationScope});
       createResponseSummary = { status: createResponse.status };
       if (createResponse.ok) {
         const returnedMetadata = await readBoundedDriveJson(createResponse, { kind: "metadata", limits: this.responseLimits });
@@ -286,7 +324,7 @@ export class GoogleDriveTransactionAdapter {
         await discardDriveResponse(createResponse);
       }
     } catch (error) {
-      if(!mutationStarted)throw error;
+      if(!this.#mutationScopes.get(mutationScope).dispatched)throw error;
       // A network failure or server-side 5xx may have happened after Drive committed
       // the create. Resolve those ambiguous outcomes using the same pre-generated ID.
       // Definitive client errors (including 400/404) prove the request was rejected;
@@ -338,6 +376,7 @@ export class GoogleDriveTransactionAdapter {
     const readback = { metadata: structuredClone(metadataAfter), bytes: stored.slice() };
     await this.afterMutation?.({ kind, operation: "create" });
     return { fileId, sha256: actualHash, size: bytes.length, readback };
+    });
   }
 
   async appendJournal(event, fileId) {
@@ -350,6 +389,7 @@ export class GoogleDriveTransactionAdapter {
   }
 
   async publishManifest(manifestFileId, manifest, { beforeMutation } = {}) {
+    return this.#mutation(async mutationScope=>{
     const content = canonicalizeJcs(manifest);
     const bytes = new TextEncoder().encode(content);
     assertResponseSize(bytes.length, { kind: "manifest", limits: this.responseLimits });
@@ -362,7 +402,7 @@ export class GoogleDriveTransactionAdapter {
       method: "PATCH",
       headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
       body: joinBytes([head, bytes, tail])
-    }, {beforeMutation});
+    }, {beforeMutation,mutationScope});
     await discardDriveResponse(published);
     const visible = await this.readBytes(manifestFileId, { kind: "manifest" });
     if (new TextDecoder().decode(visible) !== content) {
@@ -370,6 +410,7 @@ export class GoogleDriveTransactionAdapter {
     }
     await this.afterMutation?.({ kind: "manifest", operation: "publish" });
     return manifest;
+    });
   }
 }
 
