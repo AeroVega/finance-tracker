@@ -23,13 +23,14 @@ Production financial-data persistence remains **NO-GO**. Code, tests, owner acce
 - [Provider formats](PROVIDER-IMPORT-SPECS.md) and [PR28 import](PR28_CANONICAL_IMPORT.md): import provenance, mapping and reconciliation.
 - [Database identity/lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md), [application lifecycle](APPLICATION_STORAGE_LIFECYCLE.md), [transaction recovery](TRANSACTION_STAGING_AND_RECOVERY.md) and [session coordination](SESSION_COORDINATION.md): storage authority and safe writes.
 - [Fragmented canonical storage](FRAGMENTED_CANONICAL_STORAGE.md): current application layout policy. New stores use fragmented v3; per-record v1 remains readable; standalone grouped v2 is rejected. Canonical layout versions are distinct from locator-catalog versions.
+- [Storage terminology](STORAGE_TERMINOLOGY.md): canonical/catalog/protocol/archive version names and verification vocabulary.
 - [Segmented locator catalogs](SEGMENTED_LOCATOR_CATALOG.md), [monthly index](CANONICAL_MONTH_INDEX.md) and [Drive response bounds](DRIVE_RESPONSE_BOUNDS.md): PR37 active-path contracts.
 - [Immutable page trees](IMMUTABLE_PAGE_TREE.md), [partitioned canonical storage](PARTITIONED_CANONICAL_STORAGE.md), [framed backup](FRAMED_BACKUP_STREAM.md) and [root transaction protocol](ROOT_TRANSACTION_PROTOCOL.md): isolated follow-up contracts, not wired into the application.
 - [Backup and restore](DRIVE_BACKUP_AND_RESTORE.md), [original-source retention](ORIGINAL_SOURCE_RETENTION.md) and [Google configuration](GOOGLE_DRIVE_CONFIGURATION.md): operational requirements.
 
 ## Evidence and history
 
-PR/acceptance reports and linked benchmark reports describe checks on specific revisions. They are historical evidence, not current acceptance or production readiness. The [archive](archive/) contains superseded handoffs and explorations; do not treat archived instructions as the current queue.
+PR/acceptance reports and linked benchmark reports describe checks on specific revisions. They are historical evidence, not current acceptance or production readiness. The [historical report archive](archive/README.md) collects superseded PR reports, handoffs and explorations; do not treat archived instructions as the current queue.
 
 ## Maintenance rules
 
