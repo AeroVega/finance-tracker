@@ -1,3 +1,4 @@
+import { diagnosticMessage } from '../js/app-diagnostics.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -25,12 +26,13 @@ async function setup() {
     async clearSyntheticSnapshot() { calls.clear++; await clearing.promise; this.options.onSnapshot([]); }
     async saveSyntheticSnapshot(rows) { calls.save++; calls.savedSnapshots.push(structuredClone(rows)); await saving.promise; this.options.onSnapshot(rows); }
   }
-  const context = { Intl, Date, TextEncoder, Set, Promise,
+  const context = { showDiagnostic: diagnosticMessage, clearDiagnostic() {}, Intl, Date, TextEncoder, Set, Promise,
     document: { getElementById: get, createElement: node },
     fakeStorage: { DashboardSyntheticStorage: Storage, createDashboardReleaseHandler: () => () => {} },
     fakeDiagnostic: { createStorageDiagnostics: () => ({ record() {}, format() { return ""; } }) } };
   vm.createContext(context);
   const source = readFileSync(new URL("../js/app.js", import.meta.url), "utf8")
+    .replace(/^import .*app-diagnostics.*;\n/m, '')
     .replace("let syntheticStorage = null;", "globalThis.testState = state; let syntheticStorage = null;")
     .replace('import("./dashboard-synthetic-storage.mjs")', "Promise.resolve(fakeStorage)")
     .replace('import("./storage-diagnostics.mjs")', "Promise.resolve(fakeDiagnostic)");

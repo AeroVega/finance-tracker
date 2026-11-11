@@ -1,3 +1,4 @@
+import { diagnosticMessage } from '../js/app-diagnostics.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
@@ -18,7 +19,7 @@ async function dashboard({ saveGate = null } = {}) {
     async prepare() {}
     async saveSyntheticSnapshot(rows) { writes.push(rows); if (saveGate) await saveGate; this.options.onSnapshot(rows); }
   }
-  const context = {
+  const context = { showDiagnostic: diagnosticMessage, clearDiagnostic() {},
     Intl, Date, TextEncoder, Set, Promise,
     addEventListener: (name, handler) => events.set(name, handler),
     document: { getElementById: get, createElement: element },
@@ -27,6 +28,7 @@ async function dashboard({ saveGate = null } = {}) {
   };
   vm.createContext(context);
   const source = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8')
+    .replace(/^import .*app-diagnostics.*;\n/m, '')
     .replace('let syntheticStorage = null;', 'globalThis.testState = state; let syntheticStorage = null;')
     .replace('import("./dashboard-synthetic-storage.mjs")', 'Promise.resolve(fakeStorage)')
     .replace('import("./storage-diagnostics.mjs")', 'Promise.resolve(fakeDiagnostic)');
@@ -117,7 +119,7 @@ test('pending synthetic mutations request an unload warning until verified succe
 test('workspace navigation follows hash and back/forward without intercepting clicks or reloading', () => {
   const links = ['#overview', '#import', '#transactions', '#storage'].map(href => ({ attrs: { href }, getAttribute(k) { return this.attrs[k]; }, setAttribute(k,v) { this.attrs[k]=v; }, removeAttribute(k) { delete this.attrs[k]; } }));
   const events = new Map(), location = { hash: '' };
-  const context = { document: { querySelectorAll: () => links }, location, addEventListener: (name, callback) => events.set(name, callback) };
+  const context = { showDiagnostic: diagnosticMessage, clearDiagnostic() {}, document: { querySelectorAll: () => links }, location, addEventListener: (name, callback) => events.set(name, callback) };
   vm.runInNewContext(readFileSync(new URL('../js/workspace-navigation.js', import.meta.url), 'utf8'), context);
   assert.equal(links[0].attrs['aria-current'], 'location');
   for (const hash of ['#transactions', '#import', '#transactions', '']) {

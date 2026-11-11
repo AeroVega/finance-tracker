@@ -1,3 +1,4 @@
+import { clearDiagnostic, showDiagnostic } from "../js/app-diagnostics.mjs";
 import { DashboardSyntheticStorage } from "../js/dashboard-synthetic-storage.mjs";
 import { validateSyntheticApplicationSnapshot } from "../js/synthetic-application-structure.mjs";
 import { GoogleDriveTransactionAdapter } from "../js/drive-transaction-engine.mjs";
@@ -36,7 +37,7 @@ let boundary = 0;
 let retainedAt = null;
 const ownedDestinations = new Set();
 const readyActions = ["save", "verify-source", "backup", "quarantine", "export", "restore", "retain", "before-expiry", "expiry", "pause-save", "expire"];
-function result(id, message, kind = "pass") { $(id).textContent = message; $(id).dataset.result = kind; }
+function result(id, message, kind = "pass") { if (kind !== "error") clearDiagnostic($(id)); $(id).textContent = message; $(id).dataset.result = kind; }
 function refresh() {
   const lifecycle = storage.lifecycle;
   const ready = lifecycle?.state === "ready" && lifecycle.acceptingWrites;
@@ -49,7 +50,7 @@ function refresh() {
   $("archive").disabled = busy;
 }
 const storage = new DashboardSyntheticStorage({
-  onStatus: (status) => { result("connection", status.message, status.kind === "error" ? "error" : "pass"); refresh(); },
+  onStatus: (status) => { result("connection", status.code ? showDiagnostic({ code: status.code }, { surface: "developer-tool", target: $("connection") }) : status.message, status.code || status.kind === "error" ? "error" : "pass"); refresh(); },
   afterMutation: async ({ kind }) => {
     if (!stopBoundary) return;
     boundary += 1;
@@ -101,7 +102,7 @@ async function runAction(status, operation) {
   catch (error) {
     // Stable codes only; provider bodies and private folder/file IDs stay out
     // of page diagnostics, downloads and public acceptance evidence.
-    result(status, "Action did not complete: " + (error.code || "unexpected-error") + ". Reconnect or inspect the preserved synthetic evidence before retrying.", "error");
+    result(status, showDiagnostic(error, { surface: "developer-tool", target: $(status) }), "error");
   } finally { progress?.finish(succeeded); busy = false; refresh(); }
 }
 function action(id, status, operation) {
@@ -166,9 +167,8 @@ $("archive").addEventListener("change", async () => {
       await verifyCatalogArchive(archive, { validateStructure, onProgress: progress.onProgress });
       loadedArchive = archive;
       result("copy-result", "PASS: local archive independently verified.");
-    } catch {
-      // Retain the existing fixed rejection text, without JSON/parser details.
-      result("copy-result", "Archive rejected. Use a verified version-2 synthetic application archive.", "error");
+    } catch (error) {
+      result("copy-result", showDiagnostic(error, { surface: "developer-tool", target: $("copy-result") }), "error");
       return false;
     }
   });
@@ -207,7 +207,7 @@ action("expire", "oauth-result", async () => {
 });
 window.addEventListener("pagehide", () => { for (const coordinator of ownedDestinations) void coordinator.release().catch(() => {}); });
 storage.prepare().then(() => { configured = true; result("connection", "Google services ready. Connect to a dedicated synthetic primary."); refresh(); })
-  .catch(() => { result("connection", "Google services or deployment configuration are unavailable. Use the documented branch deployment after CI and review; no Drive operations were attempted.", "error"); refresh(); });
+  .catch((error) => { result("connection", showDiagnostic(error, { surface: "developer-tool", target: $("connection") }), "error"); refresh(); });
 refresh();
 
 }
@@ -217,9 +217,9 @@ function mountV4CopyTools() {
   const $=id=>document.getElementById(id);
   $("legacy-tools").hidden=true;$("v4-copy-tools").hidden=false;
   let busy=false,configured=false;
-  const storage=new DashboardSyntheticStorage({onStatus:status=>{$("v4-result").textContent=status.message;refresh();}});
+  const storage=new DashboardSyntheticStorage({onStatus:status=>{if (!status.code) clearDiagnostic($("v4-result")); $("v4-result").textContent=status.code ? showDiagnostic({ code: status.code }, { surface: "developer-tool", target: $("v4-result") }) : status.message;refresh();}});
   const plans=()=>canonicalPartitionVerificationPlans({verifyMigrationEvidence:verifyCanonicalMigrationEvidence});
-  const say=text=>{$("v4-result").textContent=text;};
+  const say=(text,error=false)=>{if(!error)clearDiagnostic($("v4-result"));$("v4-result").textContent=text;};
   function refresh(){
     const ready=storage.lifecycle?.state==='ready'&&storage.lifecycle.acceptingWrites,paged=storage.lifecycle?.pagedCanonical;
     $("v4-connect").disabled=busy||!configured||ready;
@@ -247,9 +247,7 @@ function mountV4CopyTools() {
   function action(id,work){$(id).addEventListener('click',async()=>{
     if(busy)return;busy=true;refresh();say('Working. Keep this page open until verification finishes.');
     try{await work();}catch(error){
-      if(error.code==='unsupported-derived-projection') say('This legacy copy has a linked refund whose original activity has no category. Keep the source, add and save an explicit category correction to that original activity, then retry migration to a fresh folder. No source evidence was changed.');
-      else if(['external-original-retention-not-supported','retained-original-migration-not-supported'].includes(error.code)) say('This copy has separate original-retention metadata or files. V4 backup/migration cannot preserve their deletion schedule yet. Keep the source unchanged and use the legacy archive2 backup tools where applicable; no originals were deleted.');
-      else say('Not completed: '+(error.code||'unexpected-error')+'. Preserve any interrupted destination and choose a new empty folder.');
+      say(showDiagnostic(error, { surface: 'developer-tool', target: $('v4-result') }), true);
     }
     finally{busy=false;refresh();}
   });}
@@ -290,5 +288,5 @@ function mountV4CopyTools() {
   });
   action('v4-restore',async()=>{const file=$("v4-archive").files[0];await destination(target=>restorePagedCanonicalArchive({...target,source:file.stream()}));say('Saved framed file independently restored and verified. No source bytes were read.');});
   $("v4-archive").addEventListener('change',refresh);
-  storage.prepare().then(()=>{configured=true;say('Ready. Choose an existing source or a saved framed file.');refresh();}).catch(()=>say('Google setup unavailable. No storage operation started.'));
+  storage.prepare().then(()=>{configured=true;say('Ready. Choose an existing source or a saved framed file.');refresh();}).catch(error=>say(showDiagnostic(error, { surface: 'developer-tool', target: $('v4-result') }), true));
 }

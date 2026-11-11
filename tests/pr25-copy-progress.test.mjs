@@ -1,3 +1,4 @@
+import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -11,7 +12,10 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const failure = (code) => Object.assign(new Error("Private provider details must not be displayed"), { code });
 function node() {
   let text = "";
-  return { dataset: {}, hidden: false, disabled: false, writes: 0, events: new Map(), files: [],
+  return { children: [], attributes: {},
+    append(...items) { this.children.push(...items); }, setAttribute(key, value) { this.attributes[key] = value; },
+    insertAdjacentElement(position, item) { this.diagnosticPanel = item; }, remove() {}, focus() {}, select() {},
+    dataset: {}, hidden: false, disabled: false, writes: 0, events: new Map(), files: [],
     get textContent() { return text; }, set textContent(value) { text = value; this.writes++; },
     addEventListener(type, callback) { this.events.set(type, callback); },
     emit(type) { return this.events.get(type)?.(); } };
@@ -100,9 +104,11 @@ async function page() {
     chooseSyntheticFolder: () => { state.calls.push(["pick"]); return state.pick(); },
     startCopyProgress: (options) => startCopyProgress({ ...options, now: () => state.now,
       schedule: (callback) => { state.timers.set(++state.timerId, callback); return state.timerId; }, cancel: (id) => state.timers.delete(id) }),
-    document: { getElementById: get, createElement: () => ({ click() { state.downloads++; } }) },
+    document: { getElementById: get, createElement: tag => ({ ...node(), click() { if (tag === "a") state.downloads++; } }) },
     window: { addEventListener() {} }, navigator: { onLine: true }, crypto, Blob, confirm: () => true,
     URL: { createObjectURL: () => "blob:invented", revokeObjectURL() {} }, setTimeout: () => 0 };
+  context.clearDiagnostic = clearDiagnostic;
+  context.showDiagnostic = (error, options) => showDiagnostic(error, { ...options, document: context.document, navigator: context.navigator });
   vm.runInNewContext(source.replace(/^import .*;$/gm, ""), context);
   await tick();
   const callsBeforeConnect = state.calls.length;
@@ -176,7 +182,7 @@ test("failed and empty archive selections never leave a loaded archive or a pass
   assert.equal(h.get("restore").disabled, false);
   await h.load({ text: async () => "private invalid JSON" });
   assert.equal(h.get("restore").disabled, true); assert.equal(h.get("verify-archive").disabled, true);
-  assert.match(h.get("copy-result").textContent, /^Archive rejected/); assert.match(h.get("copy-phase").textContent, /did not complete/);
+  assert.match(h.get("copy-result").textContent, /Error code: unknown/); assert.match(h.get("copy-phase").textContent, /did not complete/);
   assert.doesNotMatch(h.text(), /private invalid|PASS/);
   h.state.verify = async () => { throw failure("invalid-archive"); };
   await h.load({ text: async () => "{}" }); assert.equal(h.get("restore").disabled, true); assert.match(h.get("copy-phase").textContent, /did not complete/);

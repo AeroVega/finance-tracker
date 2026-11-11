@@ -1,5 +1,4 @@
-import { sessionClaimDiagnostic } from '../js/session-claim-diagnostic.mjs';
-import { storageWriteDiagnostic } from '../js/storage-write-diagnostic.mjs';
+import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
 
@@ -11,24 +10,6 @@ const messages = {
   saving: 'Saving invented canonical records with canonical v5 and recoverable root publication…',
   reopening: 'Independently reopening and comparing every canonical record…',
   verified: 'Exact saved year verified.'
-};
-const failures = {
-  'write-unresolved': 'A dispatched storage write could not be independently verified. Preserve this folder and leave this tab open. Do not upload again, reconnect, recover or delete files until the diagnostic below has been inspected.',
-  'ownership-unknown': 'Session ownership could not be verified. A session marker may already have been written even when this counter shows zero. Preserve this folder and marker for inspection. Do not delete the marker or blindly retry or reconnect.',
-  'session-operation-cancelled': 'Session verification was cancelled. A dispatched marker write may still finish. Preserve the folder and marker; do not retry creation.',
-  'unsupported-derived-projection': 'A linked refund lacks a defined category. Preserve the source copy and add an explicit category correction before making a new copy.',
-  'empty-folder-required': 'The selected folder is not empty. No upload was started. Choose a newly created empty synthetic folder.',
-  'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. No records were changed. Preserve it and choose a new empty synthetic folder for a canonical version-5 copy.',
-  'existing-copy-required': 'No existing synthetic copy was found. Reconnect does not initialize a folder.',
-  'fresh-genesis-required': 'The folder is no longer a fresh empty copy. No year was uploaded. Preserve it and choose a new empty folder.',
-  'unrecognized-seed-copy': 'This copy is different from this version’s exact invented year. It will not be replaced or appended to. Preserve it and choose a new empty folder.',
-  'new-empty-folder-required': 'This tab cannot safely retry into this copy. Preserve it and choose a new empty folder.',
-  'seed-readback-mismatch': 'Read-back did not match the invented year. Success is not verified. Preserve this folder for inspection.',
-  'authorization-required': 'Google authorization expired or is unavailable. Reconnect to the same folder, then verify before retrying.',
-  'transaction-unresolved': 'The upload did not finish and verify. Some files may have been saved. Reconnect to the same folder and use recovery if offered before verifying or retrying.',
-  'nonempty-folder': 'This folder has files without a supported manifest. Preserve it for inspection and choose a new empty synthetic folder.',
-  'reconnect-required': 'Reconnect and resolve the storage session before continuing.',
-  'release-unconfirmed': 'Release was not verified. Resolve the connection before switching devices.'
 };
 function result(text, state = '') { $('result').textContent = text; $('result').dataset.state = state; }
 function refresh() {
@@ -52,7 +33,8 @@ function progress() {
 const storage = new DashboardSyntheticStorage({
   maintainOriginals: false,
   onStatus: status => {
-    $('connection').textContent = status.state === 'ready' ? 'Synthetic storage connected. Use the year result below to confirm the upload.' : status.message;
+    if (!status.code) clearDiagnostic($('connection'));
+    $('connection').textContent = status.state === 'ready' ? 'Synthetic storage connected. Use the year result below to confirm the upload.' : status.code ? showDiagnostic({code: status.code}, {surface: 'synthetic-year', target: $('connection')}) : status.message;
     refresh();
   },
   afterMutation: () => { writes += 1; progress(); }
@@ -74,18 +56,12 @@ async function verify() {
 async function run(operation) {
   if (busy) return;
   busy = true; writes = 0; started = Date.now(); phase = 'Starting…';
-  $('write-diagnostic').textContent = ''; $('write-diagnostic').hidden = true;
+  clearDiagnostic($('result'));
   refresh(); progress();
   timer = setInterval(progress, 1000);
   try { await operation(); }
   catch (error) {
-    const code = typeof error?.code === 'string' && /^[a-z][a-z0-9-]{0,95}$/.test(error.code) ? error.code : 'setup-or-connection-unavailable';
-    const diagnostic = storageWriteDiagnostic(error) || sessionClaimDiagnostic(error);
-    if (diagnostic) {
-      $('write-diagnostic').textContent = (diagnostic.code === 'ownership-unknown' ? 'Session diagnostic: ' : 'Readback diagnostic: ') + JSON.stringify(diagnostic);
-      $('write-diagnostic').hidden = false;
-    }
-    result(failures[code] || `Action did not complete (${code}). If authorization or folder selection was cancelled, nothing further will run. If setup or saving had begun, preserve the folder and reconnect to verify before retrying.`, 'error');
+    result(showDiagnostic(error, {surface: 'synthetic-year', target: $('result')}), 'error');
   } finally { clearInterval(timer); timer = null; progress(); busy = false; refresh(); }
 }
 $('preview').addEventListener('click', () => run(async () => {
@@ -132,7 +108,7 @@ refresh();
 // starts until the user presses Upload or Reconnect.
 storage.prepare().then(() => {
   configured = true; $('configuration').textContent = 'Google setup loaded. Nothing uploads until you choose a folder and confirm.'; refresh();
-}).catch(() => {
-  $('configuration').textContent = 'Google setup is unavailable. Local preview still works. Use a configured deployment and reload for Drive actions.';
+}).catch(error => {
+  $('configuration').textContent = showDiagnostic(error, {surface: 'synthetic-year', target: $('configuration')});
   refresh();
 });

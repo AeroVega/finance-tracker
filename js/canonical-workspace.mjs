@@ -6,7 +6,7 @@ import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-wor
 import { getEffectiveActivities } from './canonical-import.mjs';
 import { exactSignedDecimal, isCalendarDate } from './import-reconciliation.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
-import { googleStartupMessage } from './google-startup-diagnostics.mjs';
+import { showDiagnostic, clearDiagnostic } from './app-diagnostics.mjs';
 
 const $ = id => document.getElementById(id);
 const pages = createWorkspacePages({document, window});
@@ -45,55 +45,15 @@ function scheduleSearch() {
 const storage = new DashboardSyntheticStorage({
   maintainOriginals: false,
   onStatus(status) {
+    if (!status.code) clearDiagnostic($('connection-status'));
     if (status.state !== 'ready') session.invalidate();
     $('connection-status').textContent = status.state === 'ready'
       ? 'Connected to a synthetic copy. Opening and saves verify its canonical records.'
-      : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
+      : status.code ? showDiagnostic({code: status.code}, {surface: 'workspace', target: $('connection-status')}) : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
     refresh();
   }
 });
 const session = new CanonicalWorkspaceSession({ storage });
-const messages = {
-  'unsupported-derived-projection': 'This ledger contains a linked refund without a defined category. Keep the original copy. Add an explicit category correction to the original activity, save it, then retry the new copy.',
-  'canonical-ledger-required': 'This copy has no saved canonical ledger. Release it, seed a synthetic year in a new empty folder, then open that saved copy here.',
-  'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. It was not initialized or modified. Preserve it and create a new synthetic copy using fragmented version 3.',
-  'existing-copy-required': 'Choose the folder where you already saved the synthetic year. This workspace does not initialize empty folders.',
-  'correction-rationale-required': 'Explain the evidence or reason for this correction.',
-  'classification-amount-conflict': 'That classification conflicts with the amount. Income must not be negative and spending must not be positive.',
-  'category-required': 'Enter a category for this transaction.',
-  'invalid-posting-status-correction': 'Choose Posted with a valid posting date, or Pending or Unknown without a posting date. Explain the evidence for the change.',
-  'posting-status-unchanged': 'The posting status and date are unchanged. Choose a different value or another correction.',
-  'invalid-amount': 'Enter an exact decimal amount, for example -125.50.',
-  'reopen-before-editing': 'Reopen verified saved records before editing. Your local changes have not been discarded.',
-  'authorization-cancelled': 'Google authorization was cancelled. No saved records were replaced.',
-  'picker-cancelled': 'Folder selection was cancelled. No saved records were replaced.',
-  'synthetic-folder-required': 'Choose an existing invented-data folder with “synthetic” in its name. No saved records were replaced.',
-  'base-conflict': 'The saved copy changed. Reopen verified records before deciding what to retry.',
-  'transaction-unresolved': 'The save result is uncertain. Recover if offered, then reopen saved records before retrying.',
-  'reconnect-required': 'The connection could not be verified. Reconnect and reopen saved records before editing.',
-  'verified-draft-required': 'There is no verified draft eligible for saving. Reopen saved records before editing.',
-  'verified-preview-required': 'Load a local synthetic preview with no active Drive session before saving it to a new folder.',
-  'new-empty-folder-required': 'The selected folder did not pass fresh-copy admission. No existing copy was changed; choose a newly created empty synthetic folder.',
-  'seed-readback-mismatch': 'The new copy could not be independently verified. Keep this tab open, recover if offered, then reopen before deciding what to do next.',
-  'transfer-link-rationale-required': 'Explain why these two activities represent the same transfer.',
-  'invalid-transfer-link': 'These activities cannot be linked. Confirm that both are active transfers in different accounts, with equal opposite amounts in the same currency, and that neither is already linked.',
-  'invalid-holding': 'Each holding needs a unique identifier, type, nonnegative exact quantity and value.',
-  'invalid-reconciliation-component': 'Each component needs a supported movement kind, signed exact amount and statement reference.',
-  'invalid-position-statement-coverage': 'Complete statement coverage must match the selected full month and account scope.',
-  'invalid-position-amount': 'Enter an exact decimal balance without a currency symbol or separators.',
-  'invalid-position-money': 'Enter an exact decimal amount without currency symbols or separators.',
-  'negative-holding-value': 'Enter a nonnegative statement value for each holding. Short positions are not supported.',
-  'invalid-position-month': 'Choose a calendar month before recording reconciliation evidence.',
-  'closure-requires-selected-zero-balance': 'Choose a zero balance for this account on its closure date.',
-  'invalid-statement-coverage': 'The complete statement declaration must match the selected account and calendar month.',
-  'reconciliation-requires-selected-anchors': 'Resolve conflicting balances first, then choose the selected opening and closing evidence.',
-  'invalid-account': 'Enter an invented account name, a listed institution and account type, and a three-letter uppercase currency.',
-  'invalid-position-date': 'Choose a valid effective date.',
-  'invalid-reconciliation-anchors': 'Choose the previous month-end opening balance and selected month-end closing balance for this account.',
-  'invalid-position-source': 'Add a source evidence reference.',
-  'liability-balance-must-be-positive': 'Enter a nonnegative amount owed for this liability, without a minus sign.',
-  'release-unconfirmed': 'Release was not verified. Keep this copy selected and resolve its session before switching devices.'
-};
 function announce(text, kind = 'info') {
   $('action-status').textContent = text; $('action-status').dataset.kind = kind;
   if (activeFormStatus) {
@@ -178,13 +138,12 @@ async function run(message, operation, formStatus = null) {
   // Apply a queued query before an action so cancellation leaves rows and input aligned.
   if (searchTimer !== null) { cancelSearch(); page = 0; render(); }
   activeFormStatus = formStatus;
+  clearDiagnostic($('action-status'));
   busy = true; operationStarted = Date.now(); refresh(); announce(message);
   const timer = setInterval(refresh, 1000);
   try { await operation(); }
   catch (error) {
-    const candidate = error?.code || (error instanceof TypeError ? error.message : '');
-    // Provider details and arbitrary codes are not safe user-facing diagnostics.
-    const message = Object.hasOwn(messages, candidate) ? messages[candidate] : 'Action did not complete. Check the connection and available recovery actions.';
+    const message = showDiagnostic(error, {surface: 'workspace', target: $('action-status')});
     announce(message + (session.dirty ? ' Your staged changes remain in this tab.' : ''), 'error');
   } finally { clearInterval(timer); busy = false; operationStarted = null; refresh(); activeFormStatus = null; }
 }
@@ -702,7 +661,7 @@ window.addEventListener('online', refresh);
 refresh();
 storage.prepare().then(() => { configured = true; refresh(); }).catch(error => {
   configured = false;
-  $('connection-status').textContent = googleStartupMessage(error);
+  $('connection-status').textContent = showDiagnostic(error, {surface: 'workspace', target: $('connection-status')});
   refresh();
 });
 correctionFields(); refresh();

@@ -1,3 +1,4 @@
+import { createDiagnostic, diagnosticMessage } from './app-diagnostics.mjs';
 import { verifyCanonicalMigrationEvidence, withSourceEvidenceVerification } from "./paged-canonical-backup.mjs";
 import { inspectPagedCanonicalCopy, initializePagedCanonicalCopy } from "./paged-application-storage.mjs";
 import { canonicalPartitionVerificationPlans } from "./canonical-paged-storage.mjs";
@@ -233,8 +234,9 @@ export class DashboardSyntheticStorage {
     return this.readyPromise;
   }
 
-  publish(state, message, kind = "info") {
-    this.onStatus({ state, message, kind });
+  publish(state, message, kind = "info", error = null) {
+    const safe = kind === "error" ? createDiagnostic(error) : null;
+    this.onStatus({ state, message: safe ? diagnosticMessage({code: safe.code}) : message, kind, ...(safe ? {code: safe.code} : {}) });
   }
 
   token() {
@@ -337,7 +339,7 @@ export class DashboardSyntheticStorage {
           // Keep this provider synchronous; an async wrapper becomes Bearer [object Promise].
           accessToken: () => this.token(),
           makeManifest: manifestBuilder,
-          onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info"),
+          onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info", {code: status.code}),
           onDiagnostic: (entry) => this.onDiagnostic(entry)
         });
       }
@@ -358,7 +360,7 @@ export class DashboardSyntheticStorage {
       return { folderName: this.folderName, snapshot };
     } catch (error) {
       const lifecycleState = this.lifecycle?.state || "error";
-      this.publish(lifecycleState, error.message || "Synthetic storage could not be connected.", "error");
+      this.publish(lifecycleState, "", "error", error);
       throw error;
     } finally {
       this.busy = false;

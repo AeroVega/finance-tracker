@@ -39,3 +39,5 @@ PR/acceptance reports and linked benchmark reports describe checks on specific r
 Update [project status](PROJECT_STATUS.md) for material implementation/evidence changes and [next steps](NEXT_STEPS.md) when dependencies or acceptance criteria change. Put each technical invariant in one focused contract and link to it; do not duplicate a PR diary across guides.
 
 Use **Verified** for inspectable source/test evidence, **User-confirmed** for attributed owner decisions/observations, **Hypothesis** for unproven explanations and **Open** for unresolved work. Preserve dates and source revisions. When documents conflict, use the newest dated status evidence, the focused technical contract for behavior, and [AGENTS.md](../AGENTS.md) for permissions. Flag and fix stale summaries rather than silently combining them.
+
+- [Shared application diagnostics](APP_DIAGNOSTICS.md) — safe reports, codes, clipboard fallback and coverage limits.

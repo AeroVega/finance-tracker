@@ -1,3 +1,4 @@
+import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -39,7 +40,8 @@ async function controller(saved) {
       setAttribute(key, value) { this.attributes[key] = String(value); },
       addEventListener(type, callback) { if (!this.events.has(type)) this.events.set(type, []); this.events.get(type).push(callback); },
       async emit(type, event = {}) { if (type === 'click' && this.disabled) return; for (const callback of this.events.get(type) || []) await callback(event); },
-      focus() { focused = this; },
+      focus() { focused = this; }, select() {}, remove() {},
+      insertAdjacentElement(position, node) { this.diagnosticPanel = node; },
       querySelectorAll(selector) { const tags = selector.split(',').map(tag => tag.toUpperCase()); return descendants(this).filter(node => tags.includes(node.tagName)); },
       querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     };
@@ -65,6 +67,8 @@ async function controller(saved) {
     confirm: () => state.answer
   };
   const executable = source.replace(/^import .*;$/gm, '').replace(/^export /gm, '').replaceAll('import.meta.url', JSON.stringify(moduleUrl.href));
+  context.clearDiagnostic = clearDiagnostic;
+  context.showDiagnostic = (error, options) => showDiagnostic(error, { ...options, document: context.document, navigator: context.navigator });
   vm.runInNewContext(executable + '\nglobalThis.page = { withAcceptanceWorkbench, inspect: () => ({ ledger, dirty, busy }) };', context);
   await tick(); await get('connect').emit('click');
   return { state, get, context, page: context.page, storage: () => storage, focused: () => focused,
@@ -318,7 +322,8 @@ test('failed and cancelled reopen keep drafts, while a successful different-copy
   await enter(labelled(details, 'Match to activity'), ledger.activities[0].activityId, 'change');
   await enter(labelled(details, 'Search match activities by description, date or activity ID'), 'Unsubmitted search draft');
   h.state.onLoad = () => { throw new TypeError('invented-load-unavailable'); }; await h.click('reopen');
-  assert.match(h.get('result').textContent, /invented-load-unavailable/);
+  assert.match(h.get('result').textContent, /Error code: unknown/);
+  assert.doesNotMatch(h.get('result').textContent, /invented-load-unavailable/);
   assert.equal(labelled(row, 'Decision rationale').value, 'Retain until explicit successful discard');
   await enter(h.get('activity'), ledger.activities[0].activityId, 'change'); await enter(h.get('evidence'), 'Invented staged classification'); await h.click('event');
   h.state.answer = false; await h.click('reopen');

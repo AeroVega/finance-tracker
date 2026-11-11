@@ -1,3 +1,4 @@
+import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -14,7 +15,9 @@ const gate=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});ret
 async function controller(search='?guide=v4') {
   const nodes=new Map(),calls={connect:[],release:0,pick:[],start:0,stop:0,targetRelease:0,backup:[],restore:[],export:[],migrate:[]};
   const state={folders:[],connected:false,paged:true,fail:null,pending:null,sourceOwnership:true,lifecycleState:'ready'};let storage;
-  function element(){const handlers=new Map();return {hidden:false,disabled:false,files:[],textContent:'',dataset:{},
+  function element(){const handlers=new Map();return {hidden:false,disabled:false,files:[],textContent:'',dataset:{},children:[],attributes:{},
+    append(...items){this.children.push(...items);},setAttribute(key,value){this.attributes[key]=value;},
+    insertAdjacentElement(position,node){this.diagnosticPanel=node;},remove(){},focus(){},select(){},
     addEventListener(type,fn){handlers.set(type,fn);},async emit(type){return handlers.get(type)?.();},click(){return this.emit('click');}};}
   for(const m of html.matchAll(/\bid="([^"]+)"/g))nodes.set(m[1],element());
   const get=id=>{assert.ok(nodes.has(id),id);return nodes.get(id);};
@@ -53,6 +56,8 @@ async function controller(search='?guide=v4') {
     storageError:(code,message)=>Object.assign(new Error(message),{code})};
   const context={...imports,document:{getElementById:get,createElement:element},location:{search},
     window:{},navigator:{onLine:true},confirm:()=>true,URL,Blob,Uint8Array,setTimeout:()=>0};
+  context.clearDiagnostic=clearDiagnostic;
+  context.showDiagnostic=(error,options)=>showDiagnostic(error,{...options,document:context.document,navigator:context.navigator});
   vm.runInNewContext(source.replace(/^import .*;$/gm,''),context,{filename:'pr25-acceptance.mjs'});await tick();
   return {get,state,calls,storage,context,async click(id){if(!get(id).disabled)await get(id).emit('click');await tick();}};
 }
@@ -90,7 +95,12 @@ test('actual guide=v4 route connects only existing source, releases and selects 
 test('destination picker cancellation performs no destination mutation and permits another attempt',async()=>{
   const h=await controller();await h.click('v4-connect');await h.click('v4-backup');
   assert.match(h.get('v4-result').textContent,/picker-cancelled/);assert.equal(h.calls.start,0);assert.equal(h.calls.backup.length,0);
+  const panel=h.get('v4-result').diagnosticPanel;
+  assert.equal(panel.attributes['aria-label'],'Safe error diagnostics');
+  assert.equal(panel.children[2].textContent,'Copy diagnostics');
+  assert.equal(JSON.parse(panel.children[1].children[0].value).surface,'developer-tool');
   assert.equal(h.get('v4-backup').disabled,false);h.state.folders.push('invented-target');await h.click('v4-backup');
+  assert.equal(panel.hidden,true,'new action removes the old diagnostic panel');
   assert.equal(h.calls.backup.length,1);assert.equal(h.calls.targetRelease,1);assert.equal(h.calls.stop,1);
 });
 
@@ -120,7 +130,7 @@ test('read-only backup restore uses a fresh target and releases both owned sessi
 
 test('native file export cancellation cannot claim saved success and retry writes the selected sink',async()=>{
   const h=await controller();await h.click('v4-connect');h.context.window.showSaveFilePicker=async()=>{throw {code:'picker-cancelled'};};
-  await h.click('v4-export');assert.equal(h.calls.export.length,0);assert.match(h.get('v4-result').textContent,/Not completed/);
+  await h.click('v4-export');assert.equal(h.calls.export.length,0);assert.match(h.get('v4-result').textContent,/Error code: picker-cancelled/);
   const chunks=[];let closed=false;h.context.window.showSaveFilePicker=async()=>({createWritable:async()=>({write:async chunk=>chunks.push(chunk),close:async()=>{closed=true;}})});
   await h.click('v4-export');assert.equal(chunks.length,1);assert.equal(closed,true);assert.match(h.get('v4-result').textContent,/written and closed/);
 });
@@ -137,6 +147,6 @@ test('interrupted source is never announced verified or copied and can release i
 test('unsupported legacy refund migration gives an actionable source-preserving correction',async()=>{
   const h=await controller();h.state.paged=false;await h.click('v4-connect');h.state.folders.push('invented-migration');
   h.state.fail='migrate';h.state.errorCode='unsupported-derived-projection';await h.click('v4-migrate');
-  assert.match(h.get('v4-result').textContent,/save an explicit category correction/);assert.match(h.get('v4-result').textContent,/No source evidence was changed/);
+  assert.match(h.get('v4-result').textContent,/add an explicit category correction/);assert.match(h.get('v4-result').textContent,/Preserve the source copy/);
   assert.equal(h.calls.targetRelease,1);assert.equal(h.get('v4-migrate').disabled,false);
 });

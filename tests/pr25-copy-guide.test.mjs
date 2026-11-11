@@ -36,7 +36,9 @@ async function sourceFixture(serialize = serializeCanonicalLedger) {
 function element(id) {
   return { id, dataset: {}, disabled: false, hidden: false, textContent: '', value: '', files: [], events: new Map(),
     addEventListener(type, callback) { this.events.set(type, callback); }, emit(type, event) { return this.events.get(type)?.(event); },
-    after(node) { node.afterId = id; } };
+    after(node) { node.afterId = id; }, children: [], attributes: {},
+    append(...nodes) { this.children.push(...nodes); }, setAttribute(key, value) { this.attributes[key] = value; },
+    insertAdjacentElement(position, node) { this.diagnosticPanel = node; }, remove() {}, focus() {}, select() {} };
 }
 async function page(serialize = serializeCanonicalLedger) {
   const source = await sourceFixture(serialize);
@@ -62,7 +64,7 @@ async function page(serialize = serializeCanonicalLedger) {
     download: archive => state.downloads.push(structuredClone(archive)) });
   const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([, id]) => [id, element(id)]));
   const get = id => elements.get(id), events = new Map();
-  const ui = mountCopyGuide({ document: { getElementById: get }, driver,
+  const ui = mountCopyGuide({ document: { getElementById: get, createElement: element }, driver,
     window: { confirm: () => state.confirm, addEventListener: (event, callback) => events.set(event, callback) }, now: () => state.now,
     progressFactory: options => startCopyProgress({ ...options, now: () => state.now,
       schedule: callback => { state.timers.set(++state.sequence, callback); return state.sequence; }, cancel: id => state.timers.delete(id) }) });
@@ -350,7 +352,7 @@ test('actual guide handlers preserve the completed HTTP-adapter recipe plus a si
     makeCoordinator: folder => { const coordinator = new SessionCoordinator({ adapter: createDriveSessionAdapter({ folderId: folder.id, accessToken, fetchImpl: drives.get(folder.id).fetch }) }); sessions.push(coordinator); return coordinator; },
     download: archive => { downloaded = structuredClone(archive); } });
   const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([, id]) => [id, element(id)])), get = id => elements.get(id);
-  const ui = mountCopyGuide({ document: { getElementById: get }, window: { addEventListener() {}, confirm: () => true }, driver,
+  const ui = mountCopyGuide({ document: { getElementById: get, createElement: element }, window: { addEventListener() {}, confirm: () => true }, driver,
     progressFactory: options => startCopyProgress({ ...options, schedule: () => 1, cancel() {} }) });
   ui.ready();
   try {
@@ -464,4 +466,18 @@ test('pagehide during pending stale-source recovery releases the late claim, and
     else assert.equal(h.state.sessions[0].canWrite, false);
     assert.equal(h.state.timers.size, 0);
   }
+});
+
+test('throwing error code accessor still ends working state and renders safe diagnostics', async () => {
+  const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,element(id)]));
+  const get=id=>elements.get(id);
+  const hostile=Object.defineProperty({},'code',{get(){throw Error('private-getter')}});
+  const ui=mountCopyGuide({document:{getElementById:get,createElement:element},window:{addEventListener(){}},
+    driver:{async chooseSource(){throw hostile;}, hasSessions(){return false;}},progressFactory:()=>({finish(){}})});
+  ui.ready();
+  await get('guide-source').emit('click');
+  assert.match(get('guide-source-result').textContent,/Action did not complete/);
+  assert.ok(get('guide-source-result').diagnosticPanel);
+  assert.equal(get('guide-source').disabled,false);
+  assert.doesNotMatch(get('guide-source-result').textContent,/private-/);
 });

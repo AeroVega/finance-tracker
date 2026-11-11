@@ -323,17 +323,17 @@ test('unresolved setup shows safe readback cause and never initiates automatic r
   }});
   await h.upload();
   assert.equal(h.state.connects.length, 1);
-  assert.equal(h.get('write-diagnostic').hidden, false);
-  assert.match(h.get('write-diagnostic').textContent, /object-not-found/);
-  assert.match(h.get('write-diagnostic').textContent, /completed/);
-  assert.doesNotMatch(h.get('write-diagnostic').textContent, /private-/);
+  assert.equal(h.diagnostics().length, 1);
+  assert.match(h.diagnostics()[0].children[1].children[0].value, /object-not-found/);
+  assert.match(h.diagnostics()[0].children[1].children[0].value, /completed/);
+  assert.doesNotMatch(h.diagnostics()[0].children[1].children[0].value, /private-/);
   assert.match(h.get('result').textContent, /Preserve this folder and leave this tab open/);
   assert.doesNotMatch(h.get('result').textContent, /reconnect to verify before retrying/);
   await new Promise(setImmediate);
   assert.equal(h.state.connects.length, 1);
   assert.equal(h.intervals.size, 0);
   await h.click('preview'); await h.until(() => !h.get('preview').disabled);
-  assert.equal(h.get('write-diagnostic').hidden, true);
+  assert.equal(h.diagnostics().length, 0);
 });
 
 test('unconfirmed session shows only a fixed check and does not retry or reconnect', async () => {
@@ -344,15 +344,15 @@ test('unconfirmed session shows only a fixed check and does not retry or reconne
   });
   await h.upload();
   assert.equal(h.state.connects.length, 1);
-  assert.equal(h.get('write-diagnostic').hidden, false);
-  assert.equal(h.get('write-diagnostic').textContent,
-    'Session diagnostic: {"code":"ownership-unknown","check":"closing-version-changed"}');
+  assert.equal(h.diagnostics().length, 1);
+  assert.deepEqual(JSON.parse(h.diagnostics()[0].children[1].children[0].value).detail,
+    {code: 'ownership-unknown', check: 'closing-version-changed'});
   assert.match(h.get('result').textContent, /Preserve this folder and marker/);
-  assert.doesNotMatch(h.get('write-diagnostic').textContent + h.get('result').textContent, /private-/);
+  assert.doesNotMatch(h.diagnostics()[0].children[1].children[0].value + h.get('result').textContent, /private-/);
   await new Promise(setImmediate);
   assert.equal(h.state.connects.length, 1);
   assert.equal(h.state.writes, 0);
   assert.equal(h.intervals.size, 0);
   await h.click('preview'); await h.until(() => !h.get('preview').disabled);
-  assert.equal(h.get('write-diagnostic').hidden, true);
+  assert.equal(h.diagnostics().length, 0);
 });

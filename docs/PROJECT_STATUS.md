@@ -1,5 +1,17 @@
 # Project status
 
+## Shared privacy-safe diagnostics, November 11, 2026
+
+**Implemented in this change:** one shared error-code/message/report path across
+workspace, seeder, local preview and retained developer tools. Reports use a
+strict field allowlist, offer Copy and selectable fallback, and never upload or
+retry automatically. Asynchronous lifecycle error statuses use the same privacy
+boundary. See the [diagnostic contract](APP_DIAGNOSTICS.md) for exact coverage,
+verification and exclusions. The final local extended suite passed 2,039/2,039
+tests on Node 24.22.1 with no failures or skips. Browser-rendered checks are blocked by this
+executor's Chromium process restrictions; physical Safari, live Google and owner
+acceptance remain separate. This is not a deployment claim or production approval.
+
 ## Initial-copy readback incident, November 11, 2026
 
 **User-confirmed:** deployed `56cafc2` reached four verified initialization writes

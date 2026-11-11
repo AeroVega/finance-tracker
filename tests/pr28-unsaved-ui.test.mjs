@@ -1,3 +1,4 @@
+import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -38,7 +39,8 @@ async function controller({ guided = false, actualPaged = false } = {}) {
       setAttribute(key, value) { this.attributes[key] = value; },
       addEventListener(type, callback) { if (!this.events.has(type)) this.events.set(type, []); this.events.get(type).push(callback); },
       async emit(type, event = {}) { for (const callback of this.events.get(type) || []) await callback(event); },
-      focus() { focused = this; },
+      focus() { focused = this; }, select() { this.selected = true; }, remove() {},
+      insertAdjacentElement(position, node) { this.diagnosticPanel = node; },
       querySelectorAll(selector) { const tags = selector.split(',').map(tag => tag.toUpperCase()); return descendants(this).filter(node => tags.includes(node.tagName)); },
       querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
     };
@@ -97,6 +99,8 @@ async function controller({ guided = false, actualPaged = false } = {}) {
     fetch: async url => { const bytes = await readFile(url); return { ok: true, arrayBuffer: async () => bytes }; }
   };
   const executable = source.replace(/^import .*;$/gm, '').replace(/^export /gm, '').replaceAll('import.meta.url', JSON.stringify(moduleUrl.href));
+  context.clearDiagnostic = clearDiagnostic;
+  context.showDiagnostic = (error, options) => showDiagnostic(error, { ...options, document: context.document, navigator: context.navigator });
   vm.runInNewContext(executable + '\nglobalThis.page = { withAcceptanceWorkbench, subscribeAcceptanceStatus, pausePreparedInterruption, inspect: () => ({ ledger, dirty, busy, store, saveState, ledgerSession }) };', context);
   await tick();
   const click = id => get(id).emit('click');
@@ -376,7 +380,8 @@ for (const retry of ['connect', 'reopen', 'recover', 'stale']) test(`a verified 
   const h = await controller(); await h.click('connect'); await h.stage();
   h.state.onSave = () => { throw Object.assign(new Error('failed'), { code: 'verification-failed' }); };
   await h.click('save'); assert.equal(h.get('result').dataset.error, 'true');
-  assert.match(h.get('result').textContent, /verification-failed/);
+  assert.match(h.get('result').textContent, /Error code: unknown/);
+  assert.doesNotMatch(h.get('result').textContent, /verification-failed/);
   h.state.onSave = null;
   if (retry === 'recover') h.storage().lifecycle.state = 'recovery-required';
   if (retry === 'stale') h.storage().lifecycle.state = 'stale-session';

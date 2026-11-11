@@ -1,38 +1,14 @@
+import { copyGuideMessages as labels } from '../js/app-diagnostic-messages.mjs';
+import { clearDiagnostic, showDiagnostic, createDiagnostic } from "../js/app-diagnostics.mjs";
 import { startCopyProgress } from "./pr25-copy-progress.mjs";
 import { createElapsedTimer, formatElapsed } from "./pr28-testing-timing.mjs";
 
-const labels = Object.freeze({
-  "selection-cancelled": "Selection cancelled. Nothing passed. Choose again when ready.",
-  "authorization-cancelled": "Google authorization was closed or blocked. Try the source button again.",
-  "authorization-required": "Google authorization is unavailable or expired. Release sessions, then reconnect before retrying.",
-  "synthetic-folder-required": "Choose a dedicated test folder with 'synthetic' in its name, such as 'synthetic-backup'. No copy was started for this selection. Backup and restore destinations must also be new and empty.",
-  "canonical-source-required": "Choose the existing completed canonical synthetic source. An empty folder, backup or unrelated fixture is not a source for this check. No database was created.",
-  "original-source-required": "That folder was used as a destination in this run. Choose the original completed source.",
-  "retained-originals-unsupported": "This source includes separately retained original files. This guide is limited to canonical synthetic fixtures without those files. Release this source and use Advanced PR25 tools for original-file retention checks. No backup or restore was started.",
-  "source-changed": "The source changed since verification. Release sessions and choose the source again. Do not rerun the 25 live checks.",
-  "recovery-required": "The source needs catalog transaction recovery. Release its session, then use the PR28 workbench recovery controls on this same source. Recovering a stale session alone does not repair a transaction.",
-  "unfinished-history": "The source contains unfinished transaction history. Release its session and use the PR28 workbench to recover this same source before copying it.",
-  "source-graph-mismatch": "The exact retained history does not match the selected source. This step did not pass. Preserve any destination for inspection.",
-  "different-export-selected": "Choose the actual file from this run's download. Another valid export does not prove this file roundtrip.",
-  "fresh-destination-required": "Choose a new empty synthetic folder, distinct from the source and every prior destination. Keep existing or interrupted folders as evidence.",
-  "stale-session": "A previous source session is stale. Stop its other tabs/devices, then use Confirm stopped sessions below.",
-  "session-active": "Another session is active. Release it on the other tab/device before trying again.",
-  "copy-quarantined": "The copy did not finish. Quarantine has NOT been independently confirmed here. Preserve this destination. Retry only in a new empty folder after resolving session release.",
-  "release-unconfirmed": "Session release was not confirmed. This step has not passed. Keep this tab open and use Release sessions. Do not switch devices or reuse the destination.",
-  "operation-and-release-unconfirmed": "The copy or reopen failed, and session release also could not be confirmed. Neither part passed. Preserve the destination. Quarantine is unverified. Use Release sessions before trying a new empty destination.",
-  "release-stale-session": "An existing session expired while this page was open. Stop every other tab/device using these synthetic folders, then confirm recovery and release below. No takeover occurred.",
-  "ownership-lost": "This page could not revalidate its original session identity. No takeover occurred. Preserve the folders and resolve the current session on its owning tab/device before continuing.",
-  "release-required": "Release the current sessions before choosing a source again.",
-  "page-interrupted": "This tab was interrupted. No unfinished step passed. Reopen this guide, choose the original source again and use new empty destinations. Keep interrupted destinations as evidence."
-});
-const safeMessage = error => Object.hasOwn(labels, error?.code) ? labels[error.code] :
-  "The step did not finish or verify. Keep any destination as evidence. Release sessions before reconnecting; use a new empty destination for another copy attempt. Provider details are not included.";
 
 // This is the page's actual event-handler controller, also exercised with
 // controlled Drive/file boundaries by Node tests. It stores no report or data.
 export function mountCopyGuide({ document, window, driver, progressFactory = startCopyProgress, now = () => globalThis.performance?.now?.() }) {
   const $ = id => document.getElementById(id);
-  const write = (id, text, kind = "pending") => { $(id).textContent = text; $(id).dataset.result = kind; };
+  const write = (id, text, kind = "pending", diagnostic = false) => { if (!diagnostic) clearDiagnostic($(id)); $(id).textContent = text; $(id).dataset.result = kind; };
   const states = { source: false, backup: false, export: false, archive: false, restore: false };
   let busy = false, configured = false, interrupted = false, stale = false, releaseStale = false, releaseBlocked = false, held = false;
   const buttons = ["guide-source", "guide-backup", "guide-export", "guide-restore", "guide-release", "guide-recover"];
@@ -62,10 +38,11 @@ export function mountCopyGuide({ document, window, driver, progressFactory = sta
     write("guide-next", next, states.restore ? "pass" : "pending");
   }
   function showError(status, error) {
-    stale = error?.code === "stale-session";
-    releaseStale = error?.code === "release-stale-session";
-    if (["release-unconfirmed", "operation-and-release-unconfirmed", "release-stale-session", "ownership-lost"].includes(error?.code)) releaseBlocked = true;
-    write(status, safeMessage(error), error?.code === "selection-cancelled" ? "pending" : "error");
+    const code = createDiagnostic(error).code;
+    stale = code === "stale-session";
+    releaseStale = code === "release-stale-session";
+    if (["release-unconfirmed", "operation-and-release-unconfirmed", "release-stale-session", "ownership-lost"].includes(code)) releaseBlocked = true;
+    write(status, showDiagnostic(error, { surface: "copy-guide", target: $(status), document }), code === "selection-cancelled" ? "pending" : "error", true);
   }
   async function run(status, work) {
     if (busy || interrupted || !configured) return;

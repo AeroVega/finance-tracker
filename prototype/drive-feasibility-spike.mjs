@@ -1,3 +1,4 @@
+import { clearDiagnostic, showDiagnostic } from "../js/app-diagnostics.mjs";
 import { GOOGLE_CONFIG } from "../js/google-config.js";
 import { validateGoogleConfig } from "../js/google-config-validation.mjs";
 import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "../js/drive-transaction-engine.mjs";
@@ -26,6 +27,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 function status(id, message, kind = "info") {
+  if (kind !== "error") clearDiagnostic($(id));
   const node = $(id);
   node.textContent = message;
   node.dataset.kind = kind;
@@ -130,7 +132,7 @@ async function verifyFolder(item) {
   } catch (error) {
     state.folderId = "";
     setReady(false);
-    status("connection-status", error instanceof Error ? error.message : "Could not access the selected folder.", "error");
+    status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error");
   }
 }
 function openPicker() {
@@ -169,14 +171,15 @@ $("connect-google").addEventListener("click", async () => {
     $("select-folder").disabled = false;
     status("connection-status", "Connected for this page session. Choose a dedicated test folder.", "success");
   } catch (error) {
-    status("connection-status", error instanceof Error ? error.message : "Could not connect to Google.", "error");
+    status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error");
   } finally {
     $("connect-google").disabled = false;
   }
 });
 $("select-folder").addEventListener("click", () => {
+  clearDiagnostic($("connection-status"));
   try { openPicker(); }
-  catch (error) { status("connection-status", error instanceof Error ? error.message : "Could not open Picker.", "error"); }
+  catch (error) { status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error"); }
 });
 
 $("list-children").addEventListener("click", async () => {
@@ -186,7 +189,7 @@ $("list-children").addEventListener("click", async () => {
     const files = await listFolderChildren({ accessToken: token(), folderId: state.folderId });
     status("listing-status", "PASS: complete listing returned " + files.length + " child item(s). Names are not treated as unique IDs.", "success");
   } catch (error) {
-    status("listing-status", error instanceof Error ? error.message : "Folder enumeration failed.", "error");
+    status("listing-status", showDiagnostic(error, { surface: "developer-tool", target: $("listing-status") }), "error");
   } finally { $("list-children").disabled = false; }
 });
 
@@ -206,7 +209,7 @@ $("create-object").addEventListener("click", async () => {
     status("object-status", "PASS: retry returned HTTP 409; the existing object was read back and its exact SHA-256 verified. File ID: " + result.fileId + " · SHA-256: " + result.sha256, "success");
   } catch (error) {
     if (error && error.fileId) { state.createdFileIds.add(error.fileId); $("cleanup").disabled = false; }
-    status("object-status", error instanceof Error ? error.message + (error.fileId ? " Temporary file ID: " + error.fileId : "") : "Synthetic object test failed.", "error");
+    status("object-status", showDiagnostic(error, { surface: "developer-tool", target: $("object-status") }), "error");
   } finally { $("create-object").disabled = false; }
 });
 
@@ -306,8 +309,7 @@ $("run-transaction-test").addEventListener("click", async () => {
     $("cleanup").disabled = !state.createdFileIds.size;
     status(
       "transaction-test-status",
-      error instanceof Error ? error.message + " Any created synthetic files are retained for inspection and cleanup." :
-        "Synthetic Drive transaction test failed. Inspect the selected test folder before retrying.",
+      showDiagnostic(error, { surface: "developer-tool", target: $("transaction-test-status") }),
       "error"
     );
   } finally {
@@ -332,11 +334,12 @@ $("create-race").addEventListener("click", async () => {
     status("race-read-status", "Created synthetic race-test file. Share this ID with the second session: " + result.fileId, "success");
   } catch (error) {
     if (error && error.fileId) { state.createdFileIds.add(error.fileId); $("cleanup").disabled = false; }
-    status("race-read-status", error instanceof Error ? error.message + (error.fileId ? " Temporary file ID: " + error.fileId : "") : "Could not create race-test file.", "error");
+    status("race-read-status", showDiagnostic(error, { surface: "developer-tool", target: $("race-read-status") }), "error");
   } finally { $("create-race").disabled = false; }
 });
 
 $("read-race").addEventListener("click", async () => {
+  clearDiagnostic($("race-read-status"));
   $("read-race").disabled = true;
   state.raceEtag = "";
   state.raceVersion = "";
@@ -353,7 +356,7 @@ $("read-race").addEventListener("click", async () => {
     );
     $("attempt-write").disabled = !result.etagVisible;
   } catch (error) {
-    status("race-read-status", error instanceof Error ? error.message : "Could not read race-test file.", "error");
+    status("race-read-status", showDiagnostic(error, { surface: "developer-tool", target: $("race-read-status") }), "error");
   } finally { $("read-race").disabled = false; }
 });
 
@@ -373,7 +376,7 @@ $("attempt-write").addEventListener("click", async () => {
       result.outcome === "precondition-failed" ? "warning" : "error";
     status("race-write-status", "Conditional-write result: " + result.outcome + " (HTTP " + (result.status || "unknown") + "). Writer marker: " + writerMarker, kind);
   } catch (error) {
-    status("race-write-status", error instanceof Error ? error.message : "Conditional write failed.", "error");
+    status("race-write-status", showDiagnostic(error, { surface: "developer-tool", target: $("race-write-status") }), "error");
   }
 });
 
@@ -401,7 +404,7 @@ $("raw-if-match").addEventListener("click", async () => {
       status("raw-if-match-status", "Drive returned HTTP " + result.status + " to the raw If-Match probe. This is not a concurrency pass; inspect the response and repeat only after understanding the error." + finalState, "warning");
     }
   } catch (error) {
-    status("raw-if-match-status", error instanceof Error ? error.message : "Raw If-Match probe failed before a result was established.", "error");
+    status("raw-if-match-status", showDiagnostic(error, { surface: "developer-tool", target: $("raw-if-match-status") }), "error");
   } finally {
     $("raw-if-match").disabled = !state.folderId || !$("race-file-id").value.trim();
   }
@@ -411,12 +414,13 @@ $("race-file-id").addEventListener("input", () => {
 });
 
 $("reread-race").addEventListener("click", async () => {
+  clearDiagnostic($("race-write-status"));
   $("reread-race").disabled = true;
   try {
     const result = await readRaceTarget({ accessToken: token(), fileId: $("race-file-id").value.trim(), expectedFolderId: state.folderId });
     status("race-write-status", "Final state: version " + (result.version || "unavailable") + " · description " + result.description + " · ETag " + (result.etag || "not exposed"), "success");
   } catch (error) {
-    status("race-write-status", error instanceof Error ? error.message : "Could not read final state.", "error");
+    status("race-write-status", showDiagnostic(error, { surface: "developer-tool", target: $("race-write-status") }), "error");
   } finally { $("reread-race").disabled = false; }
 });
 
@@ -449,5 +453,5 @@ loadGoogleLibraries().then(() => {
   $("connect-google").disabled = false;
   status("connection-status", "Google services are ready. Enter the Cloud configuration, then connect.");
 }).catch((error) => {
-  status("connection-status", error instanceof Error ? error.message : "Google services could not load.", "error");
+  status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error");
 });

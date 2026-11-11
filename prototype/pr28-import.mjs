@@ -1,3 +1,4 @@
+import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import { canonicalizeJcs } from '../js/transaction-protocol.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
@@ -67,23 +68,6 @@ let reviewPage = 0, decisionPage = 0;
 const reviewDrafts = new Map(), reversalDrafts = new Map();
 function resetReviewState() { reviewPage = 0; decisionPage = 0; reviewDrafts.clear(); reversalDrafts.clear(); }
 const element = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
-const inputMessages = Object.freeze({
-  'account-mapping-required': 'Choose a destination for every source account.',
-  'coverage-dates-required': 'Choose both declared coverage dates for every account.',
-  'coverage-order-invalid': 'Declared end must be on or after declared start.',
-  'coverage-confirmation-required': 'Confirm the declared coverage for every account.',
-  'currency-required': 'Enter an explicit three-letter ISO currency such as USD. No currency is assumed.',
-  'review-reversal-dependency': 'This decision has later changes that depend on it. It cannot be returned to review automatically.',
-  'account-name-required': 'Enter a name for each new invented account.',
-  'distinct-account-required': 'Map each source account to a distinct destination account.',
-  'evidence-required': 'Enter evidence and a rationale for this change.',
-  'review-rationale-required': 'Enter a rationale for this review decision.',
-  'match-target-required': 'Choose an activity to match.',
-  'reconnect-required': 'Reconnect before changing review decisions.',
-  'preview-required': 'Preview the currently selected fixture and map its accounts before staging.',
-  'unknown-fixture': 'Choose one of the bundled invented fixtures.',
-  'fixture-unavailable': 'The bundled fixture could not be loaded. Try again when connected.'
-});
 function inputError(code) { throw Object.assign(new Error(code), { code }); }
 function recordCounts() { return `${ledger.accounts.length} accounts, ${ledger.imports.length} import runs, ${ledger.observations.length} source observations, ${ledger.activities.length} activities, ${ledger.events.length} audit events, and ${ledger.reviewDecisions.length} review decisions.`; }
 const message = (text, error = false) => { $('result').textContent = text; $('result').dataset.error = String(error); };
@@ -133,7 +117,8 @@ function refresh() {
   refreshSaveStatus(ready);
 }
 const storage = new DashboardSyntheticStorage({
-  onStatus: status => { $('connection').textContent = status.message === 'Synthetic storage connected. CSV imports remain local to this page.' ? 'Synthetic storage connected. Staged changes remain local until you choose Save canonical ledger.' : status.message; refresh(); },
+  onStatus: status => {
+    if (!status.code) clearDiagnostic($('connection')); $('connection').textContent = status.message === 'Synthetic storage connected. CSV imports remain local to this page.' ? 'Synthetic storage connected. Staged changes remain local until you choose Save canonical ledger.' : status.code ? showDiagnostic({code: status.code}, {surface: 'import', target: $('connection')}) : status.message; refresh(); },
   afterMutation: async () => {
     if (!pauseAfterFirstWrite) return;
     pauseAfterFirstWrite = false;
@@ -145,13 +130,12 @@ const storage = new DashboardSyntheticStorage({
 });
 async function run(operation, feedbackId = null) {
   if (busy) return;
+  clearDiagnostic($('result'));
   busy = true; refresh();
   if (feedbackId) { $(feedbackId).dataset.error = 'false'; $(feedbackId).textContent = 'Checking and staging locally…'; }
   try { await operation(); }
   catch (error) {
-    const candidate = error.code || (error instanceof TypeError ? error.message : '');
-    const code = typeof candidate === 'string' && /^[a-z][a-z0-9-]{0,95}$/.test(candidate) ? candidate : 'invalid-input-or-unavailable';
-    const failure = (inputMessages[code] || 'Action did not complete: ' + code + '. Check inputs or reconnect and reopen before retrying.') + (dirty ? ' Staged changes remain in this tab.' : '');
+    const failure = showDiagnostic(error, {surface: 'import', target: $('result')}) + (dirty ? ' Staged changes remain in this tab.' : '');
     message(failure, true);
     if (feedbackId) { $(feedbackId).textContent = failure; $(feedbackId).dataset.error = 'true'; }
   }
@@ -486,7 +470,7 @@ $('event-type').addEventListener('change',()=>{ $('refund-posting-fields').hidde
 $('show-save').addEventListener('click', () => { if ($('workbench-details')) $('workbench-details').open = true; $('save-title').focus(); });
 window.addEventListener('beforeunload',event=>{ if(dirty||busy){event.preventDefault();event.returnValue='';} });
 window.addEventListener('online',refresh); window.addEventListener('offline',refresh);
-storage.prepare().then(()=>{configured=true;refresh();}).catch(()=>{$('connection').textContent='Google configuration unavailable. No data saved. Use the configured synthetic deployment.';refresh();});
+storage.prepare().then(()=>{configured=true;refresh();}).catch(error=>{$('connection').textContent=showDiagnostic(error, {surface: 'import', target: $('connection')});refresh();});
 refresh();
 
 // Narrow module-only integration. No token, folder, adapter or lifecycle handle is

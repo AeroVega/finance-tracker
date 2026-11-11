@@ -351,3 +351,25 @@ test("a committed save does not erase ownership loss during its final read-back"
   assert.equal(statuses.at(-1).state, "ownership-unknown");
   assert.equal(engine.recoveryRequired, false);
 });
+
+test('asynchronous reconnect status cannot expose provider messages or arbitrary codes', async () => {
+  const {lifecycle, statuses, sessionAdapter} = setup();
+  await lifecycle.start();
+  sessionAdapter.read = async () => { throw Object.assign(new Error('private-provider-token-url'), {code:'private-account-id'}); };
+  await lifecycle.handleOnline();
+  assert.equal(lifecycle.acceptingWrites,false);
+  assert.doesNotMatch(JSON.stringify(statuses), /private-/);
+  assert.ok(statuses.at(-1).code);
+});
+
+test('a throwing error accessor cannot prevent fail-closed reconnect status', async () => {
+  const {lifecycle, statuses} = setup();
+  await lifecycle.start();
+  const error = Object.defineProperties({}, {message:{get(){throw Error('private-message-getter')}}, code:{get(){throw Error('private-code-getter')}}});
+  lifecycle.coordinator.resume = async () => { throw error; };
+  await lifecycle.handleOnline();
+  assert.equal(lifecycle.acceptingWrites,false);
+  assert.equal(lifecycle.state,'ownership-unknown');
+  assert.equal(statuses.at(-1).code,'unknown');
+  assert.doesNotMatch(JSON.stringify(statuses), /private-/);
+});
