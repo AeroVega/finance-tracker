@@ -17,7 +17,7 @@ Drive backup. Full bounded loading and production controls remain unfinished.
 The follow-up [paged storage milestone](PAGED_STORAGE_MILESTONE.md) adds isolated
 immutable trees, a canonical v4 reference reader, framed archives and a root
 transaction prototype. These are not the active application storage path.
-Nothing is merged or deployed by this work. Deployment is deferred until closer to Alpha.
+PR37 is not merged. A temporary branch preview was published to the shared Pages site at `5e9c8966`; this is not a main-branch or production release. Deployment/owner acceptance remains a separate gate.
 Historical monthly migration, supported owner-file ingestion and production
 controls remain. **Alpha is incomplete and production remains NO-GO.**
 
