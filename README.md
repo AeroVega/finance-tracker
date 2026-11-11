@@ -40,6 +40,7 @@ The [financial-position milestone](docs/FINANCIAL_POSITION.md) was implemented a
 
 ## Start here
 
+- [Agent quick start](docs/AGENT_QUICK_START.md)
 - [Documentation guide](docs/README.md)
 - [Current project status and evidence](docs/PROJECT_STATUS.md)
 - [Project charter](docs/PROJECT_CHARTER.md)
