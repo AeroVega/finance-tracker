@@ -1,3 +1,4 @@
+import { sessionClaimDiagnostic } from '../js/session-claim-diagnostic.mjs';
 import { storageWriteDiagnostic } from '../js/storage-write-diagnostic.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
@@ -79,9 +80,9 @@ async function run(operation) {
   try { await operation(); }
   catch (error) {
     const code = typeof error?.code === 'string' && /^[a-z][a-z0-9-]{0,95}$/.test(error.code) ? error.code : 'setup-or-connection-unavailable';
-    const diagnostic = storageWriteDiagnostic(error);
+    const diagnostic = storageWriteDiagnostic(error) || sessionClaimDiagnostic(error);
     if (diagnostic) {
-      $('write-diagnostic').textContent = 'Readback diagnostic: ' + JSON.stringify(diagnostic);
+      $('write-diagnostic').textContent = (diagnostic.code === 'ownership-unknown' ? 'Session diagnostic: ' : 'Readback diagnostic: ') + JSON.stringify(diagnostic);
       $('write-diagnostic').hidden = false;
     }
     result(failures[code] || `Action did not complete (${code}). If authorization or folder selection was cancelled, nothing further will run. If setup or saving had begun, preserve the folder and reconnect to verify before retrying.`, 'error');

@@ -1,3 +1,4 @@
+import { sessionClaimDiagnostic } from '../js/session-claim-diagnostic.mjs';
 import { storageWriteDiagnostic } from '../js/storage-write-diagnostic.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -58,7 +59,7 @@ async function legacyYearPage() {
     }
     async release() { state.releases++; if (state.releaseVerified) this.lifecycle = null; return { released: state.releaseVerified }; }
   }
-  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder, storageWriteDiagnostic });
+  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder, storageWriteDiagnostic, sessionClaimDiagnostic });
   return { ...page, state, manifest, objects, storage,
     async upload() {
       await page.choose('empty-confirmed', true); await page.click('upload');
@@ -212,7 +213,7 @@ async function pagedYearPage() {
       return state.verification;
     }
   }
-  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder: ObservedSeeder, storageWriteDiagnostic });
+  const page = await pageController('synthetic-year', { DashboardSyntheticStorage: Storage, SyntheticYearSeeder: ObservedSeeder, storageWriteDiagnostic, sessionClaimDiagnostic });
   return { ...page, http, state, storage,
     async upload() {
       await page.choose('empty-confirmed', true); await page.click('upload');
@@ -330,6 +331,27 @@ test('unresolved setup shows safe readback cause and never initiates automatic r
   assert.doesNotMatch(h.get('result').textContent, /reconnect to verify before retrying/);
   await new Promise(setImmediate);
   assert.equal(h.state.connects.length, 1);
+  assert.equal(h.intervals.size, 0);
+  await h.click('preview'); await h.until(() => !h.get('preview').disabled);
+  assert.equal(h.get('write-diagnostic').hidden, true);
+});
+
+test('unconfirmed session shows only a fixed check and does not retry or reconnect', async () => {
+  const h = await legacyYearPage();
+  h.state.connectionError = Object.assign(new Error('private-provider-message'), {
+    code: 'ownership-unknown', sessionCheck: 'closing-version-changed',
+    response: 'private-response', sessionId: 'private-session-id'
+  });
+  await h.upload();
+  assert.equal(h.state.connects.length, 1);
+  assert.equal(h.get('write-diagnostic').hidden, false);
+  assert.equal(h.get('write-diagnostic').textContent,
+    'Session diagnostic: {"code":"ownership-unknown","check":"closing-version-changed"}');
+  assert.match(h.get('result').textContent, /Preserve this folder and marker/);
+  assert.doesNotMatch(h.get('write-diagnostic').textContent + h.get('result').textContent, /private-/);
+  await new Promise(setImmediate);
+  assert.equal(h.state.connects.length, 1);
+  assert.equal(h.state.writes, 0);
   assert.equal(h.intervals.size, 0);
   await h.click('preview'); await h.until(() => !h.get('preview').disabled);
   assert.equal(h.get('write-diagnostic').hidden, true);

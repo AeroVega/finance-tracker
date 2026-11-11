@@ -124,3 +124,22 @@ creates a server lock, automatic takeover, automatic reconnect or cleanup.
 The seeder's durable-write counter observes transaction-adapter mutations; it
 excludes session-marker writes. Its zero is therefore not proof of an untouched
 folder. The failure message now states that boundary explicitly.
+
+## Safe claim diagnostics
+
+The synthetic-year page displays a fixed `Session diagnostic` for an
+`ownership-unknown` failure. Its allowlisted `check` distinguishes replacement
+marker IDs, prewrite or readback record disagreements, individual closing
+metadata checks, and the coordinator's independent readback. `unknown` means
+this diagnostic cannot distinguish the cause. The diagnostic includes no IDs,
+versions, timestamps, hashes, URLs, tokens, raw exceptions or provider bodies.
+It is observational only: it does not retry a write, relax any ownership check,
+recover a session, or initialize a ledger after an unconfirmed claim.
+
+For the owner-reported claim failure on `b9e3950`, these are possible failing
+checks, not an established live cause. Preserve the affected folder and tab.
+Use a separate disposable synthetic folder for any subsequently authorized
+live reproduction. Share the displayed diagnostic text, not a HAR export,
+request headers, copied cURL, credentials or marker contents. Synthetic HTTP
+and controller tests prove propagation and refusal behavior, not live Drive
+consistency or physical Safari behavior.
