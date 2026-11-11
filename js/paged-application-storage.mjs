@@ -1,6 +1,6 @@
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {partitionDigest} from './canonical-partitions.mjs';
-import {EMPTY_CANONICAL_BYTES, PAGED_CANONICAL_VERIFIER} from './paged-canonical-format.mjs';
+import {EMPTY_CANONICAL_BYTES, PAGED_CANONICAL_VERIFIER, LEGACY_PAGED_CANONICAL_VERIFIER, canonicalProfileForVerifier} from './paged-canonical-format.mjs';
 import {PhysicalRootBinding, createPhysicalRootManifest, createPortableLogicalCommit, PORTABLE_COMMIT_FORMAT, PHYSICAL_MANIFEST_FORMAT} from './physical-root-binding.mjs';
 import {createPagedPhysicalLocators} from './paged-physical-locators.mjs';
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -40,7 +40,7 @@ export async function initializePagedCanonicalCopy({adapter, guard, cryptoImpl =
   if (!found) {
     const files = await adapter.listChildren();
     if (files.some(f => f.appProperties?.financeTrackerSession !== 'v1')) fail('nonempty-folder', 'A fresh paged copy requires an empty synthetic folder.');
-    const marker = {format:PAGED_INITIALIZATION_FORMAT,version:1,syntheticOnly:true,folderId:adapter.folderId,
+    const marker = {format:PAGED_INITIALIZATION_FORMAT,version:2,canonicalProfile:'partitions-v5',syntheticOnly:true,folderId:adapter.folderId,
       databaseId:cryptoImpl.randomUUID(),copyId:cryptoImpl.randomUUID(),transactionId:cryptoImpl.randomUUID(),
       rootFileId:await adapter.allocateFileId(),commitFileId:await adapter.allocateFileId()};
     const manifestFileId = await adapter.allocateFileId(), raw = encode(marker);
@@ -50,13 +50,13 @@ export async function initializePagedCanonicalCopy({adapter, guard, cryptoImpl =
   }
   if (found.manifest.format === PHYSICAL_MANIFEST_FORMAT) return found.manifestFileId;
   const m = found.manifest;
-  const keys = ['format','version','syntheticOnly','folderId','databaseId','copyId','transactionId','rootFileId','commitFileId'];
-  if (Object.keys(m).length !== keys.length || keys.some(k => !Object.hasOwn(m,k)) || m.version !== 1 || m.folderId !== adapter.folderId ||
-      keys.slice(3).some(k => typeof m[k] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(m[k])) || m.rootFileId === m.commitFileId) fail('invalid-initialization', 'Initialization identity is invalid.');
+  const keys = ['format','version','syntheticOnly','folderId','databaseId','copyId','transactionId','rootFileId','commitFileId',...(m.version===2?['canonicalProfile']:[])];
+  if (Object.keys(m).length !== keys.length || keys.some(k => !Object.hasOwn(m,k)) || ![1,2].includes(m.version) || (m.version===2&&m.canonicalProfile!=='partitions-v5') || m.folderId !== adapter.folderId ||
+      ['folderId','databaseId','copyId','transactionId','rootFileId','commitFileId'].some(k => typeof m[k] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(m[k])) || m.rootFileId === m.commitFileId) fail('invalid-initialization', 'Initialization identity is invalid.');
   const exactGuard = async () => { await guard(); if (!same(JSON.parse(dec.decode(await physical.readManifest())),m)) fail('base-conflict','Initialization marker changed.'); };
   const physical = createPhysicalDriveAdapter(adapter,{manifestFileId:found.manifestFileId,assertWritable:guard});
   const root = await partitionDigest(EMPTY_CANONICAL_BYTES);
-  const commit = createPortableLogicalCommit({databaseId:m.databaseId,parent:null,revision:'0',previousRoot:null,root,transactionId:m.transactionId,operation:'genesis',semanticVersion:PAGED_CANONICAL_VERIFIER});
+  const commit = createPortableLogicalCommit({databaseId:m.databaseId,parent:null,revision:'0',previousRoot:null,root,transactionId:m.transactionId,operation:'genesis',semanticVersion:m.version===1?LEGACY_PAGED_CANONICAL_VERIFIER:PAGED_CANONICAL_VERIFIER});
   const commitBytes = encode(commit), commitHash = await partitionDigest(commitBytes), entries=[];
   for (const [fileId,kind,bytes,sha256] of [[m.rootFileId,'data-object',EMPTY_CANONICAL_BYTES,root],[m.commitFileId,'commit-record',commitBytes,commitHash]]) {
     await exactGuard();
@@ -97,11 +97,11 @@ export class PagedApplicationStorage {
   verificationGeneration() {return this.#generation;}
   captureMutationGuard() {
     const generation=this.#generation,context=this.#current,physicalGuard=context?.physicalGuard??this.#physical?.captureVerificationLifetime();
-    return ()=>{this.assertVerificationGeneration(generation);this.#checkPlans();if(context)this.#assertOpen(context);else physicalGuard?.();};
+    return ()=>{this.assertVerificationGeneration(generation);this.#checkPlans();if(context){this.#assertOpen(context);if(context.preparing)fail('verification-scope-closed','Preparation reads have not finished.');}else physicalGuard?.();};
   }
   #assertOpen(context) {
     this.#live(context);
-    if(context.closed)fail('verification-scope-closed','The application verification is already closed.');
+    if(context.closed||context.closing)fail('verification-scope-closed','The application verification is closing or closed.');
     context.physicalGuard();
   }
   verificationFailure(error) {
@@ -143,7 +143,7 @@ export class PagedApplicationStorage {
       if(!this.#current.closed)fail('verification-scope-open','Finish the previous application verification.');
       this.#current=null;
     }
-    const context={physicalToken:null,semanticToken:null,closed:false,manifest:null,handle:Object.freeze({})};
+    const context={physicalToken:null,semanticToken:null,closed:false,manifest:null,reads:new Set(),handle:Object.freeze({})};
     this.#current=context;this.#generation=Object.freeze({});context.generation=this.#generation;
     try {
       context.physicalToken=await this.physical.beginVerification();
@@ -153,8 +153,15 @@ export class PagedApplicationStorage {
       return context;
     }catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
   }
+  #trackRead(context,read) {
+    context.reads.add(read);read.then(()=>context.reads.delete(read),()=>context.reads.delete(read));
+    this.physical.trackRead(context.physicalToken,read);return read;
+  }
   async #close(context) {
-    try {await this.physical.closeVerification(context.physicalToken);this.#live(context);context.closed=true;}
+    // A locator lookup may admit its bounded body proof only after walking its
+    // pages. Finish those already-owned operations before closing physical
+    // proof admission. Snapshot entry points reject new reads while draining.
+    try {await Promise.all([...context.reads]);this.#live(context);await this.physical.closeVerification(context.physicalToken);this.#live(context);context.closed=true;}
     finally {this.#end(context);}
   }
   async recover({manifestFileId=this.manifestFileId}={}) {
@@ -182,14 +189,18 @@ export class PagedApplicationStorage {
       if(manifest.pending!==null)fail('recovery-required','Finish paged recovery before reading.');
       context.manifest=structuredClone(manifest);this.#closures.set(context.handle,context);
       const tree=createPagedPhysicalLocators(this.physical,{databaseId:manifest.databaseId,copyId:manifest.copyId,folderId:this.adapter.folderId,assertWritable:this.assertWritable});
-      const snapshot={manifest,rootHash:manifest.root,store:{read:async(hash,opts={})=>{
-        this.#live(context);this.physical.assertVerification(context.physicalToken);
+      const head=JSON.parse(dec.decode(await tree.readObject(manifest.locatorRoot,{kind:'commit-record',sha256:manifest.headCommit.sha256})));
+      this.#live(context);
+      const profile=canonicalProfileForVerifier(head.semanticVersion);
+      const snapshot={manifest,rootHash:manifest.root,semanticVersion:profile.verifier,
+      store:{read:async(hash,opts={})=>{
+        this.#live(context);if(context.closing)fail('verification-scope-closed','Snapshot is closing.');this.physical.assertVerification(context.physicalToken);
         const read=(async()=>{try {
           const bytes=await tree.readObject(manifest.locatorRoot,{kind:'data-object',sha256:hash},{signal:opts.signal});
           this.#live(context);
           if(opts.maxBytes!==undefined&&bytes.length>opts.maxBytes)fail('byte-limit','Object exceeds requested bound.');return bytes;
         }catch(error){if(this.invalidateHistory(context)){this.recoveryRequired=true;error=this.verificationFailure(error);this.onReadFailure(error);}else error=obsolete(error);throw error;}})();
-        this.physical.trackRead(context.physicalToken,read);return read;
+        return this.#trackRead(context,read);
       }}};
       this.#snapshots.set(snapshot,context);return snapshot;
     }catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
@@ -237,7 +248,56 @@ export class PagedApplicationStorage {
     this.#current=null;this.#results.delete(result);
   }
   discardTransaction(result) {const context=this.#results.get(result);if(context)this.invalidateHistory(context);}
-  async transact({expectedBase,rootHash,objects,preparationStore,transactionId=this.crypto.randomUUID(),operation='synthetic-canonical-import',semanticVersion=PAGED_CANONICAL_VERIFIER}) {
+  async #prepareRoot(context,prepare,base,semanticVersion,tree) {
+    const pending=new Set();let accepting=true,failed=false,failure,callbackFailed=false,callbackFailure,result;
+    const remember=error=>{if(!failed){failed=true;failure=error;}};
+    const reject=error=>{const promise=Promise.reject(error);promise.catch(()=>{});return promise;};
+    const guard=()=>{this.assertVerificationGeneration(context.generation);this.#assertOpen(context);this.physical.assertVerification(context.physicalToken);};
+    const read=(hash,options={})=>{
+      if(!accepting)return reject(Object.assign(new Error('Preparation reader is closed.'),{code:'verification-scope-closed'}));
+      let signal,maxBytes;
+      try {
+        guard();({signal,maxBytes}=options);
+        if(maxBytes!==undefined&&(!Number.isSafeInteger(maxBytes)||maxBytes<1))fail('byte-limit','Expected a positive object byte bound.');
+        guard();
+      }catch(error){remember(error);return reject(error);}
+      // Register before starting asynchronous work. Return this same Promise so
+      // unawaited failures are observed without leaving an untracked wrapper.
+      const operation=Promise.resolve().then(async()=>{
+        guard();const bytes=await tree.readObject(base.locatorRoot,{kind:'data-object',sha256:hash},{signal});guard();
+        if(maxBytes!==undefined&&bytes.length>maxBytes)fail('byte-limit','Object exceeds requested bound.');return bytes;
+      }).catch(error=>{remember(error);throw error;});
+      pending.add(operation);operation.then(()=>pending.delete(operation),()=>pending.delete(operation));
+      try {this.#trackRead(context,operation);}catch(error){remember(error);return reject(error);}
+      return operation;
+    };
+    const own=result=>{
+      if(!result||Object.keys(result).length!==3||!['rootHash','objects','preparationStore'].every(key=>Object.hasOwn(result,key)))
+        fail('invalid-preparation','Preparation must return a root, descriptors and owned bytes.');
+      const {rootHash,objects,preparationStore}=result,read=preparationStore?.read;
+      if(typeof rootHash!=='string'||!Array.isArray(objects)||typeof read!=='function')
+        fail('invalid-preparation','Callback preparation requires a root, descriptor array and byte reader.');
+      return {rootHash,objects:structuredClone(objects),preparationStore:Object.freeze({read:read.bind(preparationStore)})};
+    };
+    context.preparing=true;
+    try {
+      try {
+        const returned=prepare(Object.freeze({rootHash:base.root,semanticVersion,store:Object.freeze({read})}));
+        // A synchronous callback loses read admission before any queued work.
+        const settled=returned&&typeof returned.then==='function'?await returned:returned;
+        accepting=false;result=own(settled);
+      }catch(error){callbackFailed=true;callbackFailure=error;}
+      finally {accepting=false;await Promise.allSettled([...pending]);}
+      guard();
+      if(callbackFailed)throw callbackFailure;
+      if(failed)throw failure;
+      return result;
+    }finally{accepting=false;context.preparing=false;}
+  }
+  async transact({expectedBase,rootHash,objects,preparationStore,prepare,transactionId=this.crypto.randomUUID(),operation='synthetic-canonical-import',semanticVersion=PAGED_CANONICAL_VERIFIER}) {
+    expectedBase=structuredClone(expectedBase);
+    if(prepare!==undefined&&(typeof prepare!=='function'||rootHash!==undefined||objects!==undefined||preparationStore!==undefined))
+      fail('invalid-preparation','Provide either a preparation callback or prepared root inputs.');
     const engine=this.binding(),generation=this.#generation;
     await this.finishSnapshot();this.assertVerificationGeneration(generation);
     const context=await this.#begin();
@@ -246,11 +306,20 @@ export class PagedApplicationStorage {
     const current=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
     if (!same(expectedBase,current)) fail('base-conflict','Reopen the current root before saving.');
     this.recoveryRequired=true;
-    const verifiedBase=await engine.verifyBaseline();this.#live(context);
-    const typedStore={read: (q,opts) => preparationStore.read(q.sha256,opts)};
-    const tree=createPagedPhysicalLocators(this.physical,{databaseId:expectedBase.databaseId,copyId:expectedBase.copyId,folderId:this.adapter.folderId,assertWritable:this.assertWritable});
+    const verifiedBase=await engine.verifyBaseline({expectedManifest:current});this.#live(context);
+    const tree=createPagedPhysicalLocators(this.physical,{databaseId:current.databaseId,copyId:current.copyId,folderId:current.storageBinding.folderId,assertWritable:this.assertWritable});
+    if(prepare!==undefined) {
+      const head=JSON.parse(dec.decode(await tree.readObject(current.locatorRoot,{kind:'commit-record',sha256:current.headCommit.sha256})));this.#assertOpen(context);
+      const profile=canonicalProfileForVerifier(head.semanticVersion);
+      if(profile.verifier!==semanticVersion)fail('canonical-profile-mismatch','Preparation must preserve the selected canonical profile.');
+      const prepared=await this.#prepareRoot(context,prepare,current,profile.verifier,tree);this.#assertOpen(context);
+      ({rootHash,objects,preparationStore}=prepared);
+    }
+    const readPreparation=preparationStore?.read?.bind(preparationStore);
+    if(typeof readPreparation!=='function')fail('invalid-preparation','Preparation requires a byte reader.');
+    const typedStore={read:(q,opts)=>readPreparation(q.sha256,opts)};
     const additions=(async function* () { for await (const d of objects) {
-      const existing=await tree.get(expectedBase.locatorRoot,{kind:d.kind,sha256:d.sha256});
+      const existing=await tree.get(current.locatorRoot,{kind:d.kind,sha256:d.sha256});
       if (!existing) yield d;
     }})();
     const intent=await engine.prepare({verifiedBase,root:rootHash,transactionId,operation,semanticVersion,objects:additions,preparationStore:typedStore});this.#live(context);

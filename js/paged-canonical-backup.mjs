@@ -1,4 +1,4 @@
-/** Synthetic v4 copies. Traversal and transport are bounded per object; the
+/** Synthetic partitioned copies. Traversal and transport are bounded per object; the
  * registered application semantic verifier may materialize a legacy ledger. */
 import {createImmutablePageTree} from './immutable-page-tree.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
@@ -6,6 +6,7 @@ import {createPagedPhysicalLocators} from './paged-physical-locators.mjs';
 import {createPhysicalRootManifest,createPortableLogicalCommit,PORTABLE_COMMIT_FORMAT,PhysicalRootBinding} from './physical-root-binding.mjs';
 import {encodeFramedBackup,writeFramedBackup,restoreFramedBackup} from './framed-backup-stream.mjs';
 import {partitionDigest} from './canonical-partitions.mjs';
+import {PAGED_CANONICAL_VERIFIER,canonicalProfileForVerifier} from './paged-canonical-format.mjs';
 import {PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND,createPhysicalDriveAdapter} from './paged-application-storage.mjs';
 import {verifyCatalogArchive} from './catalog-backup.mjs';
 const enc = new TextEncoder(), dec = new TextDecoder('utf-8',{fatal:true});
@@ -107,9 +108,10 @@ async function verifySourcePhysicalEvidenceInner({manifest,evidenceRoot,readObje
     },allocateFileId:deny,createImmutable:deny,writeManifest:deny};
   const sourcePlans=new Map([...verificationPlans].map(([name,verify])=>[name,async input=>{
     await verify(input);
-    if(input.commit?.operation==='migrate-legacy-v4'&&checkLegacy) {
+    if(checkLegacy&&input.commit?.operation===canonicalProfileForVerifier(input.commit.semanticVersion).migrationOperation) {
       const {validateSyntheticApplicationSnapshot}=await import('./synthetic-application-structure.mjs');
-      const old=await verifyLegacyMigrationEvidence({evidenceRoot:input.commit.changeEvidenceRoot,readObject:input.readObject,validateStructure:validateSyntheticApplicationSnapshot,signal});
+      const old=await verifyLegacyMigrationEvidence({evidenceRoot:input.commit.changeEvidenceRoot,readObject:input.readObject,validateStructure:validateSyntheticApplicationSnapshot,signal,
+        exactFields:canonicalProfileForVerifier(input.commit.semanticVersion).version===5});
       checkLegacy(old);
     }
   }]));
@@ -261,6 +263,8 @@ export async function exportPagedCanonicalArchive({sourceAdapter,sourceManifestF
     finally {verificationPlans?.endVerification?.(semanticScope);}
     if(!same(pinned,await sourceWitness(sourceAdapter,sourceManifestFileId))) fail('source-changed');
     const tree=treeFor(captured.adapter,manifest);
+    const head=json(await tree.readObject(manifest.locatorRoot,{kind:'commit-record',sha256:manifest.headCommit.sha256},{signal}));
+    const profile=canonicalProfileForVerifier(head.semanticVersion);
     const evidence=await prepareSourceEvidence({captured,pinned,sourceAdapter,manifestFileId:sourceManifestFileId,signal});
     async function* objects() {
       const sentData=new Set();
@@ -275,8 +279,8 @@ export async function exportPagedCanonicalArchive({sourceAdapter,sourceManifestF
       }
       for(const [hash,raw] of evidence.prepared) {if(sentData.has(hash))continue;sentData.add(hash);yield {hash,bytes:raw,descriptor:{kind:'data-object',identity:hash}};}
     }
-    const root={profile:'canonical4-physical4',databaseId:manifest.databaseId,sourceCopyId:manifest.copyId,revision:manifest.revision,
-      canonical:{version:4,sha256:manifest.root},catalog:null,protocol:{version:4,sha256:manifest.headCommit.sha256},sourceEvidence:{version:1,sha256:evidence.root}};
+    const root={profile:profile.archiveProfile,databaseId:manifest.databaseId,sourceCopyId:manifest.copyId,revision:manifest.revision,
+      canonical:{version:profile.version,sha256:manifest.root},catalog:null,protocol:{version:4,sha256:manifest.headCommit.sha256},sourceEvidence:{version:1,sha256:evidence.root}};
     await writeFramedBackup({sink,root,objects:objects(),limits:{maxObjectBytes:MAX},signal,beforeSeal:async()=>{
       await assertSourceWritable();
       await requireCatalogOnlyOriginals(sourceAdapter);
@@ -289,18 +293,21 @@ export async function exportPagedCanonicalArchive({sourceAdapter,sourceManifestF
 }
 /** New destination only. Incomplete markers and copied bytes are preserved on
  * failure. A manifest is created exactly once, after complete EOF verification. */
-export async function restorePagedCanonicalArchive({source,targetAdapter,withTargetLock,assertTargetWritable,newCopyId=globalThis.crypto.randomUUID(),role='primary',verificationPlans,lineageVerifiers,signal,beforePublish=async()=>{},beforeTargetPreparation=async()=>{}}) {
+export async function restorePagedCanonicalArchive({source,targetAdapter,withTargetLock,assertTargetWritable,newCopyId=globalThis.crypto.randomUUID(),role='primary',verificationPlans,lineageVerifiers,signal,beforePublish=async()=>{},beforeTargetPreparation=async()=>{},assertPublicationSource=async()=>{}}) {
   if(typeof withTargetLock!=='function'||typeof assertTargetWritable!=='function') fail('target-lock-required');
+  const targetFolderId=targetAdapter.folderId;
+  const assertDestination=()=>{abort(signal);if(targetAdapter.folderId!==targetFolderId)fail('copy-mismatch');};
   verificationPlans=withSourceEvidenceVerification(verificationPlans);
-  return withTargetLock(async()=>{
+  const result=await withTargetLock(async()=>{
+    assertDestination();
     const staged=new Map();
     let tree,locatorRoot,manifest,root,physical,scope,objectCount=0n;
     const transactionId=globalThis.crypto.randomUUID();
-    const guard=async()=>{abort(signal);await assertTargetWritable();};
+    const guard=async()=>{assertDestination();await assertTargetWritable();assertDestination();};
     const staging={
       async begin(input) {
         root=input.root;
-        if(root.profile!=='canonical4-physical4'||newCopyId===root.sourceCopyId||!['primary','backup'].includes(role)) fail('invalid-copy-identity');
+        if(!['canonical4-physical4','canonical5-physical4'].includes(root.profile)||newCopyId===root.sourceCopyId||!['primary','backup'].includes(role)) fail('invalid-copy-identity');
         for await(const file of targetAdapter.iterateChildren()) {
           if(!(file.name==='finance-tracker-active-session.json'&&file.appProperties?.financeTrackerSession==='v1')) fail('fresh-destination-required');
         }
@@ -343,8 +350,10 @@ export async function restorePagedCanonicalArchive({source,targetAdapter,withTar
         revision:root.revision,root:root.canonical.sha256,headCommit:{format:PORTABLE_COMMIT_FORMAT,version:4,sha256:root.protocol.sha256},locatorRoot,sourceEvidence:root.sourceEvidence});
       if(targetAdapter.provider==='google-drive') manifest.storageBinding.provider='google-drive';
       const head=json(await tree.readObject(locatorRoot,{kind:'commit-record',sha256:root.protocol.sha256},{signal}));
+      const profile=canonicalProfileForVerifier(head.semanticVersion);
+      if(root.profile!==profile.archiveProfile||root.canonical.version!==profile.version)fail('archive-canonical-profile-mismatch');
       if(root.sourceEvidence===null) {
-        if(head.operation!=='migrate-legacy-v4'||head.revision!=='0'||!head.changeEvidenceRoot)fail('source-evidence-required');
+        if(head.operation!==profile.migrationOperation||head.revision!=='0'||!head.changeEvidenceRoot)fail('source-evidence-required');
         const origin=json(await tree.readObject(locatorRoot,{kind:'data-object',sha256:head.changeEvidenceRoot},{signal}));
         if(origin.format!==LEGACY_MIGRATION_FORMAT||origin.version!==1||origin.sourceCopyId!==root.sourceCopyId||origin.databaseId!==root.databaseId)fail('source-evidence-required');
       }
@@ -357,7 +366,13 @@ export async function restorePagedCanonicalArchive({source,targetAdapter,withTar
     await beforePublish();
     await physical.closeVerification(scope);
     await guard();
-    const pointer=await writeExact(targetAdapter,bytes(manifest),PAGED_MANIFEST_KIND,transactionId,guard,signal,PAGED_MANIFEST_NAME);
+    // The source check is repeatable, unlike the one-shot beforePublish hook.
+    // It runs again inside the adapter's actual manifest mutation guard, after
+    // target evidence closure, ID allocation and token awaits. Target ownership
+    // remains the final async check; the adapter's synchronous lifetime fence
+    // still runs at dispatch. Separate copies cannot be checked atomically.
+    const publicationGuard=async()=>{await assertPublicationSource();await guard();};
+    const pointer=await writeExact(targetAdapter,bytes(manifest),PAGED_MANIFEST_KIND,transactionId,publicationGuard,signal,PAGED_MANIFEST_NAME);
     const reopened=await readManifest(targetAdapter,pointer.fileId);
     if(!same(reopened,manifest)) fail('published-copy-mismatch');
     scope=await physical.beginVerification();
@@ -365,9 +380,14 @@ export async function restorePagedCanonicalArchive({source,targetAdapter,withTar
     try {await verifyPagedCopy({adapter:physical,manifest:reopened,verificationPlans,lineageVerifiers,signal});}
     finally {verificationPlans?.endVerification?.(semanticScope);}
     await physical.closeVerification(scope);
+    // Still inside the target gate, report a late source loss without erasing
+    // an already-issued exact manifest or claiming cross-copy atomicity.
+    await publicationGuard();
+    assertDestination();
     return {manifest:reopened,manifestFileId:pointer.fileId,objectCount:String(objectCount)};
     } finally {physical?.invalidateReadCache();}
   });
+  assertDestination();return result;
 }
 /** Direct copy uses backpressure rather than constructing a Blob or JSON archive. */
 export async function backupPagedCanonicalCopy(options) {
@@ -376,7 +396,9 @@ export async function backupPagedCanonicalCopy(options) {
     const pinned=await sourceWitness(options.sourceAdapter,options.sourceManifestFileId);
     const checkSource=async()=>{
       await options.assertSourceWritable();
+      await requireCatalogOnlyOriginals(options.sourceAdapter);
       if(!same(pinned,await sourceWitness(options.sourceAdapter,options.sourceManifestFileId))) fail('source-changed');
+      await options.assertSourceWritable();
     };
     const stream=new TransformStream(undefined,{highWaterMark:1},{highWaterMark:0});
     const controller=new AbortController();
@@ -385,6 +407,7 @@ export async function backupPagedCanonicalCopy(options) {
     const common={...options,withSourceLock:fn=>fn(),signal:controller.signal};
     const exporting=exportPagedCanonicalArchive({...common,sink:stream.writable});
     const restoring=restorePagedCanonicalArchive({...common,source:stream.readable,role:options.role??'backup',
+      assertPublicationSource:checkSource,
       beforeTargetPreparation:async()=>{await options.beforeTargetPreparation?.();await checkSource();},
       beforePublish:async()=>{await options.beforePublish?.();await checkSource();}});
     exporting.catch(()=>controller.abort());restoring.catch(()=>controller.abort());
@@ -402,7 +425,7 @@ function matchesLegacyManifest(source,portable) {
   return same(logical,portable);
 }
 /** Compatibility boundary: archive2 construction/verification materializes its
- * legacy input. Stored evidence is chunked, so subsequent v4 transport remains
+ * legacy input. Stored evidence is chunked, so subsequent paged transport remains
  * bounded and source-independent. No source file ID is rebound or trusted. */
 export async function writeLegacyMigrationEvidence({archive,sourceManifest,store,validateStructure,signal}) {
   await verifyCatalogArchive(archive,{validateStructure});
@@ -420,15 +443,23 @@ export async function writeLegacyMigrationEvidence({archive,sourceManifest,store
     sourceRevision:archive.manifest.revision,sourceManifestHash:await partitionDigest(bytes(sourceManifest)),archiveSha256:archive.archiveSha256,
     payloadSha256:await partitionDigest(raw),payloadBytes:String(raw.length),first:next}),{signal});
 }
-export async function verifyLegacyMigrationEvidence({evidenceRoot,readObject,validateStructure,signal}) {
+export async function verifyLegacyMigrationEvidence({evidenceRoot,readObject,validateStructure,signal,exactFields=false}) {
   const read=async hash=>{abort(signal);const raw=await readObject({kind:'data-object',sha256:hash});if(raw.length>MAX||await partitionDigest(raw)!==hash) fail('migration-evidence-hash');return json(raw);};
+  const fields=(value,keys,code)=>{
+    if(exactFields&&(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key))))fail(code);
+  };
   const evidence=await read(evidenceRoot);
+  // V5 pins the complete evidence envelope. Existing v4 archives keep their
+  // original decoder interpretation rather than being silently tightened.
+  fields(evidence,['format','version','databaseId','sourceCopyId','sourceRevision','sourceManifestHash','archiveSha256','payloadSha256','payloadBytes','first'],'migration-evidence-format');
   if(evidence.format!==LEGACY_MIGRATION_FORMAT||evidence.version!==1||!/^\d+$/.test(evidence.payloadBytes)) fail('migration-evidence-format');
+  if(exactFields&&(typeof evidence.payloadBytes!=='string'||!(/^(0|[1-9][0-9]*)$/).test(evidence.payloadBytes)))fail('migration-evidence-format');
   // Legacy decoder already has whole-archive semantics. The exact stated byte
   // length also bounds cycle attacks without a growing visited-hash set.
   const chunks=[];let length=0n,next=evidence.first;
   while(next!==null) {
     const chunk=await read(next);
+    fields(chunk,['format','version','next','base64'],'migration-chunk-format');
     if(chunk.format!=='finance-tracker-legacy-evidence-chunk'||chunk.version!==1||typeof chunk.base64!=='string'||chunk.base64.length>32000) fail('migration-chunk-format');
     const binary=atob(chunk.base64),raw=Uint8Array.from(binary,c=>c.charCodeAt(0));
     if(raw.length===0) fail('migration-empty-chunk');
@@ -439,6 +470,7 @@ export async function verifyLegacyMigrationEvidence({evidenceRoot,readObject,val
   const raw=new Uint8Array(Number(length));let offset=0;for(const chunk of chunks){raw.set(chunk,offset);offset+=chunk.length;}
   if(await partitionDigest(raw)!==evidence.payloadSha256) fail('migration-payload-mismatch');
   const payload=json(raw),{archive,sourceManifest}=payload;
+  fields(payload,['archive','sourceManifest'],'migration-payload-format');
   if(!matchesLegacyManifest(sourceManifest,archive.manifest)||await partitionDigest(bytes(sourceManifest))!==evidence.sourceManifestHash||archive.archiveSha256!==evidence.archiveSha256||archive.manifest.databaseId!==evidence.databaseId||archive.sourceCopyId!==evidence.sourceCopyId||archive.manifest.revision!==evidence.sourceRevision) fail('migration-source-mismatch');
   if(archive.originalImports?.some(item=>item.contentBase64!==null&&item.contentBase64!==undefined)) fail('retained-original-migration-not-supported');
   const verified=await verifyCatalogArchive(archive,{validateStructure});
@@ -479,9 +511,10 @@ export function assertLegacyCopyIdentity(verified,targetCopyId) {
 }
 
 export async function verifyCanonicalMigrationEvidence({manifest,commit,currentLedger,readObject,signal}) {
-  if(commit.operation!=='migrate-legacy-v4'||commit.revision!=='0'||!commit.changeEvidenceRoot) fail('migration-commit-mismatch');
+  const profile=canonicalProfileForVerifier(commit.semanticVersion);
+  if(commit.operation!==profile.migrationOperation||commit.revision!=='0'||!commit.changeEvidenceRoot) fail('migration-commit-mismatch');
   const {validateSyntheticApplicationSnapshot}=await import('./synthetic-application-structure.mjs');
-  const verified=await verifyLegacyMigrationEvidence({evidenceRoot:commit.changeEvidenceRoot,readObject,validateStructure:validateSyntheticApplicationSnapshot,signal});
+  const verified=await verifyLegacyMigrationEvidence({evidenceRoot:commit.changeEvidenceRoot,readObject,validateStructure:validateSyntheticApplicationSnapshot,signal,exactFields:profile.version===5});
   assertLegacyCopyIdentity(verified,manifest?.copyId);
   if(verified.manifest.databaseId!==commit.databaseId||!same(await legacyMigrationLedger(verified),currentLedger)) fail('migration-latest-ledger-mismatch');
 }
@@ -494,8 +527,9 @@ export async function migrateLegacyCanonicalCopy(options) {
     await assertSourceWritable();
     const {exportCatalogArchive}=await import('./catalog-backup.mjs');
     const {validateSyntheticApplicationSnapshot}=await import('./synthetic-application-structure.mjs');
-    const {buildCompactPartitionedCanonicalLedger}=await import('./canonical-partitions.mjs');
-    const {EMPTY_CANONICAL_BYTES,PAGED_CANONICAL_VERIFIER}=await import('./paged-canonical-format.mjs');
+    const {updatePartitionedCanonicalLedger}=await import('./canonical-partitions.mjs');
+    const {readVerifiedPartitionedLedger}=await import('./canonical-paged-storage.mjs');
+    const profile=canonicalProfileForVerifier(PAGED_CANONICAL_VERIFIER);
     await requireCatalogOnlyOriginals(sourceAdapter);
     const sourcePin=await sourceWitness(sourceAdapter,sourceManifestFileId,true),original=sourcePin.manifest;
     if(original.version===4||original.syntheticOnly!==true) fail('legacy-source-required');
@@ -507,21 +541,31 @@ export async function migrateLegacyCanonicalCopy(options) {
     if(!ledger) fail('canonical-legacy-ledger-required');
     const store={write:async raw=>{abort(signal);if(raw.length>MAX)fail('object-byte-limit');const owned=new Uint8Array(raw),hash=await partitionDigest(owned);prepared.set(hash,owned);return hash;},
       read:async hash=>{const raw=prepared.get(hash);if(!raw)fail('missing-preparation-object');return raw.slice();}};
-    const rootHash=ledger?(await buildCompactPartitionedCanonicalLedger(ledger,store,{signal})).rootHash:await store.write(EMPTY_CANONICAL_BYTES);
+    const {rootHash}=await updatePartitionedCanonicalLedger(ledger,store,{signal});
+    // The shared batch writer may prepare empty or superseded tree paths.
+    // Audit the complete final graph independently before admitting its exact
+    // reachable objects to this fresh copy. Legacy evidence is added afterward
+    // and is deliberately outside this canonical-only filter.
+    const reachable=new Set();
+    const audited=await readVerifiedPartitionedLedger({read:async(hash,options)=>{
+      const raw=await store.read(hash,options);reachable.add(hash);return raw;
+    }},rootHash,{signal});
+    if(audited.version!==profile.version||!same(audited.ledger,ledger))fail('migration-canonical-readback-mismatch');
+    for(const hash of prepared.keys())if(!reachable.has(hash))prepared.delete(hash);
     const evidenceRoot=await writeLegacyMigrationEvidence({archive,sourceManifest:original,store,validateStructure:validateSyntheticApplicationSnapshot,signal});
     const commit=createPortableLogicalCommit({databaseId:original.databaseId,parent:null,revision:'0',previousRoot:null,root:rootHash,
-      transactionId:globalThis.crypto.randomUUID(),operation:'migrate-legacy-v4',semanticVersion:PAGED_CANONICAL_VERIFIER,changeEvidenceRoot:evidenceRoot});
+      transactionId:globalThis.crypto.randomUUID(),operation:profile.migrationOperation,semanticVersion:profile.verifier,changeEvidenceRoot:evidenceRoot});
     const rawCommit=bytes(commit),head=await partitionDigest(rawCommit);
     async function* objects(){for(const [hash,raw] of prepared) yield {hash,bytes:raw,descriptor:{kind:'data-object',identity:hash}};
       yield {hash:head,bytes:rawCommit,descriptor:{kind:'commit-record',identity:head}};}
-    const root={profile:'canonical4-physical4',databaseId:original.databaseId,sourceCopyId:original.copyId,revision:'0',canonical:{version:4,sha256:rootHash},catalog:null,protocol:{version:4,sha256:head},sourceEvidence:null};
+    const root={profile:profile.archiveProfile,databaseId:original.databaseId,sourceCopyId:original.copyId,revision:'0',canonical:{version:profile.version,sha256:rootHash},catalog:null,protocol:{version:4,sha256:head},sourceEvidence:null};
     const source=encodeFramedBackup({root,objects:objects(),limits:{maxObjectBytes:MAX},signal,beforeSeal:async()=>{
       await assertSourceWritable();
       await requireCatalogOnlyOriginals(sourceAdapter);
       if(!same(sourcePin,await sourceWitness(sourceAdapter,sourceManifestFileId,true))) fail('source-changed');
     }});
-    const checkSource=async()=>{await assertSourceWritable();await requireCatalogOnlyOriginals(sourceAdapter);if(!same(sourcePin,await sourceWitness(sourceAdapter,sourceManifestFileId,true))) fail('source-changed');};
-    return restorePagedCanonicalArchive({...options,newCopyId,source,role:'primary',
+    const checkSource=async()=>{await assertSourceWritable();await requireCatalogOnlyOriginals(sourceAdapter);if(!same(sourcePin,await sourceWitness(sourceAdapter,sourceManifestFileId,true))) fail('source-changed');await assertSourceWritable();};
+    return restorePagedCanonicalArchive({...options,newCopyId,source,role:'primary',assertPublicationSource:checkSource,
       beforeTargetPreparation:async()=>{await options.beforeTargetPreparation?.();await checkSource();},
       beforePublish:async()=>{await options.beforePublish?.();await checkSource();}});
   });

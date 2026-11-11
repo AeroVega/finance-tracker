@@ -143,7 +143,7 @@ test('year UI is opt-in, has recovery and release, and cannot ingest user CSVs',
   assert.doesNotMatch(js, /storage-layout|chunks-v2|serializePackedCanonicalLedger/);
   for (const id of ['upload','reconnect','verify','recover','stale','release']) assert.match(html, new RegExp('id="' + id + '"[^>]*disabled'));
   assert.match(js, /if \(busy\) return/);
-  assert.match(js, /connect\(\{ requireEmpty: true, canonicalLayout: 'partitions-v4' \}\)/);
+  assert.match(js, /connect\(\{ requireEmpty: true, canonicalLayout: 'partitions-v5' \}\)/);
   assert.match(js, /connect\(\{ requireExisting: true \}\)/);
   assert.match(js, /beforeunload/);
   assert.doesNotMatch(js, /localStorage|sessionStorage|console\./);

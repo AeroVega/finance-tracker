@@ -1,10 +1,10 @@
 import {canonicalizeJcs} from './transaction-protocol.mjs';
-import {buildCompactPartitionedCanonicalLedger,partitionDigest,createPartitionObjectIO} from './canonical-partitions.mjs';
+import {buildCompactPartitionedCanonicalLedger,updatePartitionedCanonicalLedger,partitionDigest,createPartitionObjectIO} from './canonical-partitions.mjs';
 import {createCanonicalPartitionReader} from './canonical-partition-reader.mjs';
 import {createCanonicalMonthIndex} from './canonical-month-index.mjs';
 import {validateLedger} from './canonical-import.mjs';
 import {assertCanonicalLedgerTransition} from './canonical-history.mjs';
-import {PAGED_CANONICAL_LAYOUT,PAGED_CANONICAL_VERIFIER,isEmptyCanonicalRoot} from './paged-canonical-format.mjs';
+import {PAGED_CANONICAL_LAYOUT,PAGED_CANONICAL_VERIFIER,LEGACY_PAGED_CANONICAL_VERIFIER,canonicalProfileForVerifier,isEmptyCanonicalRoot} from './paged-canonical-format.mjs';
 
 const fail = code => { throw Object.assign(new Error(code),{code}); };
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
@@ -18,18 +18,20 @@ export async function readVerifiedPartitionedLedger(store,rootHash,{signal} = {}
   const reader = await createCanonicalPartitionReader(store,rootHash,{signal});
   const result = await reader.fullAudit({signal,maxRecords:Number.MAX_SAFE_INTEGER});
   if (result.verification.source !== 'full-ledger-validated' || result.verification.derived !== 'semantic-verified') fail('canonical-derived-mismatch');
-  return {ledger:result.ledger,reader,valueCodec:root.valueCodec??null};
+  return {ledger:result.ledger,reader,valueCodec:root.valueCodec??null,version:root.version};
 }
 
 /** Each retained logical edge must preserve immutable evidence. Individually
  * valid historical snapshots alone cannot establish append-only history. */
 async function verifyCanonicalCommit({manifest,commit,readObject,readBaseObject,signal,verifyMigrationEvidence},auditLedger) {
-  if (commit.semanticVersion !== PAGED_CANONICAL_VERIFIER || commit.root !== manifest.root) fail('canonical-commit-mismatch');
+  const profile=canonicalProfileForVerifier(commit.semanticVersion);
+  if (commit.root !== manifest.root) fail('canonical-commit-mismatch');
   const store = {read:(hash,options) => readObject({kind:'data-object',sha256:hash},options)};
   const current = await auditLedger(store,commit.root,{signal});
+  if(current.ledger!==null&&current.version!==profile.version)fail('canonical-profile-mismatch');
   if (commit.revision === '0') {
     if (commit.previousRoot !== null) fail('canonical-genesis-mismatch');
-    if (commit.operation === 'migrate-legacy-v4') {
+    if (commit.operation === profile.migrationOperation) {
       if (!current.ledger || !commit.changeEvidenceRoot || typeof verifyMigrationEvidence !== 'function') fail('migration-verifier-required');
       await verifyMigrationEvidence({manifest,commit,currentLedger:current.ledger,readObject,signal});
     } else if (commit.operation !== 'genesis' || current.ledger !== null || commit.changeEvidenceRoot !== null) fail('canonical-genesis-mismatch');
@@ -39,6 +41,12 @@ async function verifyCanonicalCommit({manifest,commit,readObject,readBaseObject,
   if (commit.previousRoot !== null) {
     const previousStore = {read:(hash,options) => (readBaseObject ?? readObject)({kind:'data-object',sha256:hash},options)};
     const previous = await auditLedger(previousStore,commit.previousRoot,{signal});
+    if(previous.ledger!==null&&previous.version!==profile.version)fail('canonical-profile-mismatch');
+    if(commit.parent) {
+      const parentStore={read:(hash,options)=>(readBaseObject??readObject)({kind:'commit-record',sha256:hash},options)};
+      const parent=await createPartitionObjectIO(parentStore).read(commit.parent.sha256,{signal});
+      if(parent.semanticVersion!==profile.verifier)fail('canonical-profile-mismatch');
+    }
     assertCanonicalLedgerTransition(previous.ledger,current.ledger);
   } else if (commit.revision !== '0') fail('canonical-genesis-mismatch');
 }
@@ -70,7 +78,7 @@ export function canonicalPartitionVerificationPlans({verifyMigrationEvidence} = 
     }
     return result;
   };
-  const verify=async input=>{
+  const verify=async (input,verifier)=>{
     const owner=active;
     // A successful immutable edge proof avoids repeating complete ledger
     // materialization at each physical publication phase. The physical engine
@@ -81,8 +89,8 @@ export function canonicalPartitionVerificationPlans({verifyMigrationEvidence} = 
       // caller mutation must not make the audited edge differ from its key.
       input={...input,manifest:structuredClone(input.manifest),commit:JSON.parse(canonicalizeJcs(input.commit))};
       if(input.signal?.aborted)throw new DOMException('Verification cancelled.','AbortError');
-      if(input.commit.root!==input.manifest.root)fail('canonical-commit-mismatch');
-      const key=owner&&input.commit.operation!=='migrate-legacy-v4'?canonicalizeJcs(input.commit):null;
+      if(input.commit.semanticVersion!==verifier||input.commit.root!==input.manifest.root)fail('canonical-commit-mismatch');
+      const key=owner&&!['migrate-legacy-v4','migrate-legacy-v5'].includes(input.commit.operation)?canonicalizeJcs(input.commit):null;
       if(key&&verifiedEdges.has(key))return;
       await verifyCanonicalCommit({...input,verifyMigrationEvidence},(store,hash,options)=>auditLedger(store,hash,options,owner));
       if(input.signal?.aborted)throw new DOMException('Verification cancelled.','AbortError');
@@ -92,7 +100,7 @@ export function canonicalPartitionVerificationPlans({verifyMigrationEvidence} = 
       throw error;
     }
   };
-  const plans=new Map([[PAGED_CANONICAL_VERIFIER,verify]]);
+  const plans=new Map([LEGACY_PAGED_CANONICAL_VERIFIER,PAGED_CANONICAL_VERIFIER].map(verifier=>[verifier,input=>verify(input,verifier)]));
   Object.defineProperties(plans,{
     beginVerification:{value:()=>{if(active)fail('semantic-scope-open');audited.clear();verifiedEdges.clear();active=Object.freeze({});return active;}},
     endVerification:{value:owner=>{if(owner!==active)return;active=null;audited.clear();verifiedEdges.clear();}}
@@ -100,7 +108,7 @@ export function canonicalPartitionVerificationPlans({verifyMigrationEvidence} = 
   return plans;
 }
 
-/** Actual application adapter for canonical v4. The physical lifecycle owns
+/** Existing application adapter dispatches canonical v4 and v5. The physical lifecycle owns
  * session checks, publication, retained-history verification and recovery. */
 export class PagedCanonicalLedgerStore {
   constructor({lifecycle,cryptoImpl = globalThis.crypto}) {
@@ -120,6 +128,9 @@ export class PagedCanonicalLedgerStore {
     // Do not retain a stale writable baseline when ownership or the root changes
     // while the application materializes its view.
     await this.lifecycle.assertCurrentManifest(snapshot.manifest);
+    const profile=canonicalProfileForVerifier(snapshot.semanticVersion);
+    if(result.ledger!==null&&result.version!==profile.version)fail('canonical-profile-mismatch');
+    this.layout=profile.layout;this.semanticVersion=profile.verifier;
     this.base=structuredClone(snapshot.manifest);this.ledger=result.ledger;this.reader=result.reader;this.valueCodec=result.valueCodec??null;
     this.monthIndex=result.ledger?createCanonicalMonthIndex(result.ledger):null;
     this.monthIndexStatus=result.ledger?'verified':'missing';
@@ -132,21 +143,33 @@ export class PagedCanonicalLedgerStore {
     this.busy=true;
     try {
       if(same(ledger,this.ledger)) {await this.lifecycle.assertCurrentManifest(this.base);return structuredClone(this.ledger);}
-      // Preparation is private memory until the lifecycle durably stages exact
-      // fixed-ID bodies. A lost tab must not be needed to recover publication.
-      const prepared=new Map();
-      const preparationStore={
-        read:async hash=>{const raw=prepared.get(hash);if(!raw)fail('missing-preparation-object');return raw.slice();},
-        write:async raw=>{const owned=new Uint8Array(raw),hash=await partitionDigest(owned);prepared.set(hash,owned);return hash;}
-      };
-      const {rootHash}=await buildCompactPartitionedCanonicalLedger(ledger,preparationStore);
-      const descriptors=[...prepared].map(([sha256,raw])=>({kind:'data-object',identity:sha256,sha256,byteLength:raw.length}))
-        .sort((a,b)=>a.sha256<b.sha256?-1:a.sha256>b.sha256?1:0);
-      const expectedBase=this.base;
-      await this.lifecycle.assertCurrentManifest(expectedBase);
+      const expectedBase=structuredClone(this.base),baseLedger=structuredClone(this.ledger),semanticVersion=this.semanticVersion;
       this.base=null;
-      await this.lifecycle.savePartitionedRoot({expectedBase,rootHash,objects:descriptors,preparationStore,
-        semanticVersion:PAGED_CANONICAL_VERIFIER,operation:'synthetic-canonical-import',transactionId:this.crypto.randomUUID()});
+      await this.lifecycle.savePartitionedRoot({expectedBase,semanticVersion,operation:'synthetic-canonical-import',transactionId:this.crypto.randomUUID(),
+        prepare:async({rootHash:baseRootHash,semanticVersion:verifiedVersion,store})=>{
+          const profile=canonicalProfileForVerifier(verifiedVersion);
+          if(profile.verifier!==semanticVersion)fail('canonical-profile-mismatch');
+          const prepared=new Map();
+          const preparationStore={
+            read:async(hash,options)=>prepared.has(hash)?prepared.get(hash).slice():store.read(hash,options),
+            write:async raw=>{const owned=new Uint8Array(raw),hash=await partitionDigest(owned);prepared.set(hash,owned);return hash;}
+          };
+          const {rootHash}=profile.version===5
+            ?await updatePartitionedCanonicalLedger(ledger,preparationStore,{baseRootHash:baseLedger===null?null:baseRootHash,baseLedger})
+            :await buildCompactPartitionedCanonicalLedger(ledger,preparationStore);
+          // Keep the complete independent financial audit and exact requested
+          // ledger check. Only final-reachable prepared bytes become descriptors;
+          // the authoritative transaction excludes already-retained objects.
+          const reachable=new Set();
+          const audited=await readVerifiedPartitionedLedger({read:async(hash,options)=>{
+            const raw=await preparationStore.read(hash,options);reachable.add(hash);return raw;
+          }},rootHash);
+          if(!same(audited.ledger,ledger))fail('canonical-preparation-mismatch');
+          const objects=[];
+          for(const sha256 of reachable)if(prepared.has(sha256))objects.push({kind:'data-object',identity:sha256,sha256,byteLength:prepared.get(sha256).length});
+          objects.sort((a,b)=>a.sha256<b.sha256?-1:a.sha256>b.sha256?1:0);
+          return {rootHash,objects,preparationStore};
+        }});
       const verified=await this.loadVerified();
       if(!same(verified,ledger)){this.base=null;fail('canonical-readback-mismatch');}
       return verified;

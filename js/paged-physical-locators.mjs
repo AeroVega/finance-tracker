@@ -125,6 +125,8 @@ function entry(value) {
 }
 
 /** adapter: folderId, readMetadata(id, {signal}), readBytes(id, {kind,maxBytes,signal}),
+ * readMetadata reports an absent exact ID with code 'object-not-found'; all other
+ * failures remain errors, never evidence that an allocated ID is available.
  * allocateFileId({signal}), createImmutable({...bytes/bindings,beforeMutation,signal}).
  * createImmutable must call beforeMutation immediately before EACH mutation attempt,
  * settle all attempts before returning, and never overwrite an existing file.
@@ -171,13 +173,17 @@ export function createPagedPhysicalLocators(adapter, config) {
     if (before.version !== after.version || before.size !== after.size) fail('version-mismatch', 'Physical object changed during verification.');
     return bytes;
   }
-  async function writePhysical(value, kind, maximum, signal) {
+  async function preparePhysical(value, kind, maximum, signal) {
     if (!allocate || !create || typeof assertWritable !== 'function') fail('read-only', 'Writes require immutable create, ID allocation and an ownership guard.');
     abort(signal);
     const bytes = encode(value, maximum), sha256 = await digest(bytes);
     abort(signal);
     adapterScope();
     const fileId = identifier(await allocate({signal})); abort(signal); adapterScope();
+    return {fileId,sha256,bytes,kind,maximum};
+  }
+  async function publishPhysical({fileId,sha256,bytes,kind,maximum}, signal) {
+    abort(signal);adapterScope();
     let active = true, calls = 0, successfulGuards = 0, pending = null, guardFailure = false, guardError, failed = false, createError;
     const beforeMutation = () => {
       if (!active || pending) { guardFailure = true; return Promise.reject(new PagedLocatorError('guard-scope', 'Mutation guard is closed or already running.')); }
@@ -216,6 +222,9 @@ export function createPagedPhysicalLocators(adapter, config) {
     }
     if (!equal(bytes, saved)) fail('write-readback-mismatch', 'Stored bytes differ from the proposed immutable bytes.');
     return ref;
+  }
+  async function writePhysical(value, kind, maximum, signal) {
+    return publishPhysical(await preparePhysical(value,kind,maximum,signal),signal);
   }
   async function readJson(ref, kind, maximum, signal, index=null) {
     const owner=decodedPages?.captureRead();
@@ -325,30 +334,183 @@ export function createPagedPhysicalLocators(adapter, config) {
     root.files = await insert(root.files, 'files', e.fileId, pk, signal);
     root.entryCount = String(decimal(root.entryCount) + 1n); return true;
   }
-  // Initial app integration materializes descriptors, not body bytes. Build each
-  // index bottom-up once instead of publishing three COW paths per descriptor.
-  async function bulkIndex(index, pairs, signal) {
+  // All groups in a level belong to the final tree. In particular, never write
+  // a temporary root for each proposed descriptor in a batch.
+  async function packLevel(index, type, items, signal, plan = null) {
+    const groups=[];let group=[];
+    for(const item of items) {
+      if(group.length && !fits(index,type,[...group,item])) {groups.push(group);group=[];}
+      group.push(item);
+      if(!fits(index,type,group)) fail('byte-limit','One locator or child cannot fit its bounded page.');
+    }
+    if(group.length)groups.push(group);
+    if(type==='branch' && groups.at(-1).length===1) {
+      const last=groups.pop(),previous=groups.at(-1);
+      if(!previous) fail('byte-limit','A parent requires at least two children.');
+      if(previous.length>=3)last.unshift(previous.pop());
+      else {last.unshift(...groups.pop());if(!fits(index,type,last))fail('byte-limit','A balanced parent cannot fit its child references.');}
+      groups.push(last);
+    }
+    const refs=[];for(const items of groups) {
+      abort(signal);refs.push(plan ? await planNode(plan,index,type,items,signal) : await writeNode(index,type,items,signal));
+    }return refs;
+  }
+  // Empty-tree construction is the same bottom-up case used by a batch that
+  // grows beyond its old root. It does not rebuild nonempty untouched subtrees.
+  async function bulkIndex(index, pairs, signal, plan = null) {
     if (!pairs.length) return null;
-    const writeLevel = async (type, items) => {
-      const groups=[];let group=[];
-      for(const item of items) {
-        if(group.length && !fits(index,type,[...group,item])) {groups.push(group);group=[];}
-        group.push(item);
-        if(!fits(index,type,group)) fail('byte-limit','One locator or child cannot fit its bounded page.');
-      }
-      if(group.length)groups.push(group);
-      if(type==='branch' && groups.at(-1).length===1) {
-        const last=groups.pop(),previous=groups.at(-1);
-        if(!previous) fail('byte-limit','A parent requires at least two children.');
-        if(previous.length>=3)last.unshift(previous.pop());
-        else {last.unshift(...groups.pop());if(!fits(index,type,last))fail('byte-limit','A balanced parent cannot fit its child references.');}
-        groups.push(last);
-      }
-      const refs=[];for(const items of groups) {abort(signal);refs.push(await writeNode(index,type,items,signal));}return refs;
-    };
-    let refs=await writeLevel('leaf',pairs);
-    while(refs.length>1)refs=await writeLevel('branch',refs);
+    let refs=await packLevel(index,'leaf',pairs,signal,plan);
+    while(refs.length>1)refs=await packLevel(index,'branch',refs,signal,plan);
     return refs[0];
+  }
+  // Route sorted proposed keys together. This preflight visits each affected
+  // page once per index, before any of the three indexes starts writing.
+  async function findMany(ref, index, pairs, signal) {
+    const found=new Map(),active=new Set();
+    async function visit(ref, start, end) {
+      abort(signal);
+      if(ref===null || start===end)return;
+      if(active.has(ref.fileId))fail('cycle','A page refers to a physical ancestor.');
+      active.add(ref.fileId);
+      const {node}=await readNode(ref,index,signal);
+      if(node.nodeType==='leaf') {
+        let at=0;
+        for(let i=start;i<end;i++) {
+          while(at<node.entries.length && node.entries[at][0]<pairs[i][0])at++;
+          if(at<node.entries.length && node.entries[at][0]===pairs[i][0])found.set(pairs[i][0],node.entries[at][1]);
+        }
+      } else {
+        let from=start;
+        for(let at=0;at<node.children.length && from<end;at++) {
+          const child=node.children[at];let to=from;
+          while(to<end && (at===node.children.length-1 || pairs[to][0]<=child.max))to++;
+          if(to>from)await visit(child,from,to);
+          from=to;
+        }
+      }
+      active.delete(ref.fileId);
+    }
+    await visit(ref,0,pairs.length);return found;
+  }
+  async function insertMany(ref, index, pairs, signal, plan) {
+    if(ref===null)return bulkIndex(index,pairs,signal,plan);
+    const active=new Set();
+    async function visit(ref, start, end) {
+      abort(signal);
+      if(start===end)return [ref];
+      if(active.has(ref.fileId))fail('cycle','A page refers to a physical ancestor.');
+      active.add(ref.fileId);
+      const {node}=await readNode(ref,index,signal);const items=[];plan.knownIds.add(ref.fileId);
+      if(node.nodeType==='leaf') {
+        for(const [k,value] of node.entries) {
+          if(plan.entries[index].has(k))fail('duplicate-entry','A batch cannot repeat an old or proposed key.');
+          plan.entries[index].set(k,value);
+        }
+        let at=0;
+        for(let i=start;i<end;i++) {
+          while(at<node.entries.length && node.entries[at][0]<pairs[i][0])items.push(node.entries[at++]);
+          if(at<node.entries.length && node.entries[at][0]===pairs[i][0])fail('duplicate-entry','Insert cannot replace an immutable binding.');
+          items.push(pairs[i]);
+        }
+        while(at<node.entries.length)items.push(node.entries[at++]);
+      } else {
+        let from=start;
+        for(let at=0;at<node.children.length;at++) {
+          const child=node.children[at];let to=from;
+          while(to<end && (at===node.children.length-1 || pairs[to][0]<=child.max))to++;
+          // Do not mutate decoded pages or copy unchanged descendants. Each
+          // changed child emits only nodes used by this final parent level.
+          if(to===from) {
+            if(plan.reused[index].has(child.fileId))fail('duplicate-child','A batch cannot repeat an unchanged subtree.');
+            plan.knownIds.add(child.fileId);plan.reused[index].set(child.fileId,child);items.push(child);
+          } else for(const changed of await visit(child,from,to))items.push(changed);
+          from=to;
+        }
+      }
+      active.delete(ref.fileId);
+      return packLevel(index,node.nodeType,items,signal,plan);
+    }
+    let refs=await visit(ref,0,pairs.length);
+    while(refs.length>1)refs=await packLevel(index,'branch',refs,signal,plan);
+    return refs[0];
+  }
+  async function planPhysical(plan, value, kind, maximum, signal) {
+    const record=await preparePhysical(value,kind,maximum,signal);
+    if(plan.records.has(record.fileId) || plan.knownIds.has(record.fileId))fail('invalid-plan','An allocated ID repeats a planned or retained file.');
+    plan.records.set(record.fileId,record);return record;
+  }
+  async function planNode(plan, index, type, items, signal) {
+    const node=validateNode(nodeFor(index,type,items),index);
+    const record=await planPhysical(plan,node,'locator-catalog-page',maxNodeBytes,signal);
+    return {fileId:record.fileId,sha256:record.sha256,...summary(node)};
+  }
+  // This is a separate traversal of the encoded candidate, not the insertion
+  // recursion. Check the exact old frontier, touched-leaf/new-entry union and
+  // new-page closure before creating anything. Planned bytes are not physical
+  // evidence: every later create still needs its guard and exact-ID readback.
+  async function verifyPlannedCatalog(plan, candidate, signal) {
+    const seen=new Set(),usedEntries={},usedReused={},writes=[];
+    for(const index of INDEXES) {usedEntries[index]=new Set();usedReused[index]=new Set();}
+    async function visit(ref,index=null) {
+      abort(signal);adapterScope();
+      if(seen.has(ref.fileId))fail('invalid-plan','A candidate repeats a physical page.');
+      const record=plan.records.get(ref.fileId);
+      if(!record) {
+        const old=index===null?undefined:plan.reused[index].get(ref.fileId);
+        if(!old || canonicalizeJcs(old)!==canonicalizeJcs(ref) || usedReused[index].has(ref.fileId))fail('invalid-plan','A candidate changed or repeated its retained frontier.');
+        usedReused[index].add(ref.fileId);return;
+      }
+      if(plan.knownIds.has(ref.fileId))fail('invalid-plan','A planned page reuses a retained physical ID.');
+      seen.add(ref.fileId);
+      const maximum=index===null?PAGED_LOCATOR_ROOT_BYTES:maxNodeBytes;
+      if(record.fileId!==ref.fileId || record.sha256!==ref.sha256 || record.maximum!==maximum ||
+        record.kind!==(index===null?'locator-catalog':'locator-catalog-page'))fail('invalid-plan','Planned page bindings do not match the candidate.');
+      const bytes=ownedBytes(record.bytes,maximum);
+      if(await digest(bytes)!==ref.sha256)fail('invalid-plan','Planned bytes do not match their exact hash.');
+      abort(signal);adapterScope();
+      let node;
+      try {node=JSON.parse(decoder.decode(bytes));}catch {fail('invalid-plan','A planned page is not valid UTF-8 JSON.');}
+      if(!equal(bytes,encode(node,maximum)))fail('invalid-plan','A planned page is not canonical bounded JSON.');
+      if(index===null) {
+        validateRoot(node);
+        if(node.generation!==plan.generation || node.entryCount!==plan.entryCount ||
+          canonicalizeJcs(node.previous)!==canonicalizeJcs(plan.previous))fail('invalid-plan','A candidate changed its generation, previous root or count.');
+        for(const name of INDEXES)if(node[name]!==null)await visit(node[name],name);
+      } else {
+        validateNode(node,index);
+        if(['height','count','min','max'].some(k=>ref[k]!==node[k]))fail('invalid-plan','A planned child contradicts its parent reference.');
+        if(node.nodeType==='branch')for(const child of node.children)await visit(child,index);
+        else for(const [k,value] of node.entries) {
+          if(!plan.entries[index].has(k) || usedEntries[index].has(k) ||
+            canonicalizeJcs(plan.entries[index].get(k))!==canonicalizeJcs(value))fail('invalid-plan','A candidate changed its exact touched-leaf and addition union.');
+          usedEntries[index].add(k);
+        }
+      }
+      writes.push(record);
+    }
+    await visit({fileId:candidate.fileId,sha256:candidate.sha256});
+    if(seen.size!==plan.records.size)fail('invalid-plan','The batch contains an unreachable planned page.');
+    for(const index of INDEXES)if(usedEntries[index].size!==plan.entries[index].size || usedReused[index].size!==plan.reused[index].size)
+      fail('invalid-plan','The candidate omits a retained subtree or expected entry.');
+    return writes;
+  }
+  async function verifyPlannedIdsAbsent(plan, signal) {
+    const owner=decodedPages?.captureRead();
+    // Probe only changed-output IDs, including the new catalog root. Exact-ID
+    // metadata also covers bodies, descendants below reused frontiers, previous
+    // catalogs and other existing files without retaining a database-wide set.
+    for(const {fileId} of plan.records.values()) {
+      abort(signal);adapterScope();owner?.assertCurrent();
+      let absent=false;
+      try {await readMetadata(fileId,{maxBytes:PAGED_LOCATOR_ROOT_BYTES,signal});}
+      catch(error) {
+        abort(signal);adapterScope();owner?.assertCurrent();
+        if(error?.code!=='object-not-found')throw error;
+        absent=true;
+      }
+      abort(signal);adapterScope();owner?.assertCurrent();
+      if(!absent)fail('invalid-plan','An allocated physical ID already exists.');
+    }
   }
   async function buildOwned(values, root, signal) {
     const indexes={objects:[],identities:[],files:[]};const identities=new Set(),files=new Set();
@@ -385,19 +547,58 @@ export function createPagedPhysicalLocators(adapter, config) {
     return writePhysical(root, 'locator-catalog', PAGED_LOCATOR_ROOT_BYTES, signal);
   }
   async function setMany(inputRoot, iterable, opts = {}) {
-    const ref=pin(inputRoot),{signal}=options(opts,['signal']);
-    await verify(ref,{signal});const {root}=await readRoot(ref,signal),merged=new Map();
-    for await(const e of entries(ref,{signal}))merged.set(objectKey(e),e);
-    let changed=false;
+    const ref=pin(inputRoot),{signal}=options(opts,['signal']);abort(signal);
+    if(!iterable || (!iterable[Symbol.iterator] && !iterable[Symbol.asyncIterator]))fail('invalid-input','SetMany requires iterable locators.');
+    // Retain the proposed batch, never materialize the existing catalog. There
+    // is no aggregate descriptor limit: callers still own batching/memory.
+    const proposed=new Map(),identities=new Map(),files=new Map();
     for await(const input of iterable) {
-      const e=entry(clone(input)),pk=objectKey(e),existing=merged.get(pk);abort(signal);
-      if(existing) {
+      const e=entry(clone(input)),pk=objectKey(e),ik=identityKey(e),existing=proposed.get(pk);abort(signal);
+      if(existing!==undefined) {
         if(canonicalizeJcs(existing)!==canonicalizeJcs(e))fail('replacement-forbidden','A kind and hash cannot be rebound.');
-      } else {merged.set(pk,e);changed=true;}
+        continue;
+      }
+      if(identities.has(ik))fail('replacement-forbidden','A legacy identity cannot be rebound.');
+      if(files.has(e.fileId))fail('duplicate-physical-locator','A physical file cannot identify multiple immutable objects.');
+      proposed.set(pk,e);identities.set(ik,pk);files.set(e.fileId,pk);
     }
-    if(!changed)return ref;
-    root.previous=ref;root.generation=String(decimal(root.generation)+1n);
-    return buildOwned([...merged.values()],root,signal);
+    // Full fresh physical verification remains mandatory, including for no-op
+    // batches. Run it after input consumption so an iterator cannot alter an old
+    // object after verification and have that changed body silently retained.
+    await verify(ref,{signal});const {root}=await readRoot(ref,signal);
+    const ordered=values=>[...values].sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
+    const existing={
+      objects:await findMany(root.objects,'objects',ordered(proposed),signal),
+      identities:await findMany(root.identities,'identities',ordered(identities),signal),
+      files:await findMany(root.files,'files',ordered(files),signal)
+    };
+    const additions={objects:[],identities:[],files:[]};
+    for(const [pk,e] of proposed) {
+      const ik=identityKey(e),old=existing.objects.get(pk),byIdentity=existing.identities.get(ik),byFile=existing.files.get(e.fileId);
+      if(old!==undefined) {
+        if(canonicalizeJcs(old)!==canonicalizeJcs(e))fail('replacement-forbidden','A kind and hash cannot be rebound.');
+        if(byIdentity!==pk || byFile!==pk)fail('index-mismatch','Secondary bindings do not match the existing locator.');
+      } else {
+        if(byIdentity!==undefined)fail('replacement-forbidden','A legacy identity cannot be rebound.');
+        if(byFile!==undefined)fail('duplicate-physical-locator','A physical file cannot identify multiple immutable objects.');
+        additions.objects.push([pk,e]);additions.identities.push([ik,pk]);additions.files.push([e.fileId,pk]);
+      }
+    }
+    if(!additions.objects.length)return ref;
+    for(const [,e] of additions.objects)await verifyEntry(e,signal);
+    // Known IDs are an early collision check, not the complete physical inventory.
+    const plan={records:new Map(),knownIds:new Set([ref.fileId,...files.keys()]),entries:{},reused:{},previous:ref,
+      generation:String(decimal(root.generation)+1n),entryCount:String(decimal(root.entryCount)+BigInt(additions.objects.length))};
+    for(const index of INDEXES) {plan.entries[index]=new Map(additions[index]);plan.reused[index]=new Map();}
+    // Retain only the proposed batch, touched old leaves/frontier and new page
+    // bytes. All fixed IDs are allocated before the first immutable create.
+    for(const index of INDEXES)root[index]=await insertMany(root[index],index,ordered(additions[index]),signal,plan);
+    root.entryCount=plan.entryCount;root.previous=ref;root.generation=plan.generation;validateRoot(root);
+    const candidate=await planPhysical(plan,root,'locator-catalog',PAGED_LOCATOR_ROOT_BYTES,signal);
+    const writes=await verifyPlannedCatalog(plan,candidate,signal);
+    await verifyPlannedIdsAbsent(plan,signal);
+    for(const record of writes)await publishPhysical(record,signal);
+    return {fileId:candidate.fileId,sha256:candidate.sha256};
   }
   async function resolved(inputRoot, query, opts, needBytes = true) {
     const ref = pin(inputRoot), q = clone(query), {signal} = options(opts, ['signal']); fields(q, ['kind', 'sha256']);

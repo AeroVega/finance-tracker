@@ -439,6 +439,7 @@ export class ApplicationStorageLifecycle {
   }
 
   async transact(transaction) {
+    if(this.pagedCanonical)transaction={...transaction,expectedBase:structuredClone(transaction.expectedBase)};
     const engine=this.engine,generation=engine?.verificationGeneration?.();
     await this.requireReady();engine?.assertVerificationGeneration?.(generation);
     let result,handedOff=false;

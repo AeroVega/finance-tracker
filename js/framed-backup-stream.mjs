@@ -72,7 +72,8 @@ function snapshotRoot(value, limits) {
   // A distinct descriptor, rather than reinterpreting the existing protocol-3
   // descriptor. Old readers reject the additional field before staging.
   const physical = Object.hasOwn(value, "profile");
-  if (physical && value.profile !== "canonical4-physical4") fail("unsupported-root-profile", "Unsupported framed root profile.");
+  if (physical && !["canonical4-physical4", "canonical5-physical4"].includes(value.profile)) fail("unsupported-root-profile", "Unsupported framed root profile.");
+  const canonicalVersion = physical && value.profile === "canonical5-physical4" ? 5 : 4;
   for (const key of ["databaseId", "sourceCopyId", "revision"]) {
     if (typeof value[key] !== "string" || !value[key].length || value[key].length > limits.maxHeaderBytes) {
       fail("invalid-root", "Root identities and revision must be bounded strings.");
@@ -90,7 +91,7 @@ function snapshotRoot(value, limits) {
       result.sourceEvidence = Object.freeze({version:1,sha256:identifier(value.sourceEvidence.sha256)});
     }
   } else if (Object.hasOwn(value,"sourceEvidence")) fail("invalid-root", "Source evidence requires the physical profile.");
-  for (const [name, version] of [["canonical", 4], ["catalog", 3], ["protocol", physical ? 4 : 3]]) {
+  for (const [name, version] of [["canonical", canonicalVersion], ["catalog", 3], ["protocol", physical ? 4 : 3]]) {
     const descriptor = value[name];
     if (descriptor === null) result[name] = null;
     else {
@@ -285,7 +286,7 @@ export async function* encodeFramedBackup({ root, objects, limits: inputLimits, 
       checkAbort(signal);
       const next = await source.next();
       if (next.done) break;
-      const physical = metadata.root.profile === "canonical4-physical4";
+      const physical = Object.hasOwn(metadata.root, "profile");
       fields(next.value, ["hash", "bytes", ...(physical ? ["descriptor"] : [])]);
       const hash = identifier(next.value.hash);
       let body = copyBytes(next.value.bytes, limits.maxObjectBytes);
@@ -429,7 +430,7 @@ export async function restoreFramedBackup({ source, staging, verifyStructure, li
         await begin(Object.freeze({ state: "incomplete", formatVersion: FRAMED_BACKUP_VERSION, root, signal }));
         checkAbort(signal);
       } else if (type === OBJECT) {
-        objectHeader(header, limits, root.profile === "canonical4-physical4");
+        objectHeader(header, limits, Object.hasOwn(root, "profile"));
         canonicalHeader(header, bytes);
         let body = await reader.read(header.byteLength);
         const bodyDigest = await digest(body);

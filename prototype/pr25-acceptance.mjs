@@ -253,25 +253,25 @@ function mountV4CopyTools() {
     }
     finally{busy=false;refresh();}
   });}
-  action('v4-connect',async()=>{await storage.connect({requireExisting:true});if(storage.lifecycle?.state!=='ready'||!storage.lifecycle.acceptingWrites){say('Source is not verified and ready. Release this session when available, then use workspace recovery for the same folder before copying.');return;}say(storage.lifecycle.pagedCanonical?'Verified canonical v4 source connected.':'Verified legacy source connected. Migration is explicit and creates a new copy.');});
+  action('v4-connect',async()=>{await storage.connect({requireExisting:true});if(storage.lifecycle?.state!=='ready'||!storage.lifecycle.acceptingWrites){say('Source is not verified and ready. Release this session when available, then use workspace recovery for the same folder before copying.');return;}say(storage.lifecycle.pagedCanonical?'Verified paged canonical source connected.':'Verified legacy source connected. Migration is explicit and creates a new copy.');});
   action('v4-release',async()=>{await storage.release();say('Source released. File restore can still run without reading the source.');});
-  action('v4-backup',async()=>{const result=await destination(target=>backupPagedCanonicalCopy({...source(),...target}));say('Verified v4 backup created with separate physical locators. '+result.objectCount+' immutable objects.');});
+  action('v4-backup',async()=>{const result=await destination(target=>backupPagedCanonicalCopy({...source(),...target}));say('Verified paged backup created with separate physical locators. '+result.objectCount+' immutable objects.');});
   action('v4-export',async()=>{
     if(typeof window.showSaveFilePicker==='function'){
-      const handle=await window.showSaveFilePicker({suggestedName:'finance-tracker-synthetic-v4.ftbs'});
+      const handle=await window.showSaveFilePicker({suggestedName:'finance-tracker-synthetic-paged.ftbs'});
       await exportPagedCanonicalArchive({...source(),sink:await handle.createWritable()});
       say('Framed archive written and closed. Select the saved file to test an independent restore.');
     }else{
       const chunks=[];await exportPagedCanonicalArchive({...source(),sink:{write:async chunk=>chunks.push(chunk)}});
       const url=URL.createObjectURL(new Blob(chunks,{type:'application/octet-stream'}));
-      const link=document.createElement('a');link.href=url;link.download='finance-tracker-synthetic-v4.ftbs';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+      const link=document.createElement('a');link.href=url;link.download='finance-tracker-synthetic-paged.ftbs';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
       say('Download requested using the memory-buffered browser fallback. Saving is not confirmed; select the actual saved file to restore.');
     }
   });
   action('v4-migrate',async()=>{
-    if(!confirm('Create a new v4 copy while preserving the original and complete legacy history evidence? The legacy source must contain only invented data.'))return;
+    if(!confirm('Create a new v5 copy while preserving the original and complete legacy history evidence? The legacy source must contain only invented data.'))return;
     await destination(target=>migrateLegacyCanonicalCopy({...source(),...target}));
-    say('Fresh v4 migration independently verified, including exact latest ledger and complete retained legacy history. Original source unchanged.');
+    say('Fresh v5 migration independently verified, including exact latest ledger and complete retained legacy history. Original source unchanged.');
   });
   action('v4-restore-backup',async()=>{
     try{storage.token();}catch{await authorizeCopyGuide(storage);}
@@ -279,7 +279,7 @@ function mountV4CopyTools() {
     if(folder.id===storage.folderId&&storage.lifecycle?.state==='ready') throw storageError('source-already-connected','Release the connected source first.');
     const adapter=new GoogleDriveTransactionAdapter({folderId:folder.id,accessToken:()=>storage.token()});
     const selected=await inspectPagedCanonicalCopy(adapter);
-    if(!selected||selected.manifest.role!=='backup') throw storageError('backup-copy-required','Select a completed v4 backup.');
+    if(!selected||selected.manifest.role!=='backup') throw storageError('backup-copy-required','Select a completed paged backup.');
     const coordinator=new SessionCoordinator({adapter:createDriveSessionAdapter({folderId:folder.id,accessToken:()=>storage.token()})});let stop;
     try{
       await coordinator.start();stop=coordinator.startHeartbeat();

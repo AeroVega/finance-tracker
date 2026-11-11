@@ -1,6 +1,45 @@
 # Project status
 
+## Canonical v5 replacement slice, November 11, 2026
+
+**Implemented in the publication candidate:** the [v5 slice](PARTITIONED_CANONICAL_STORAGE.md)
+extends the existing paged store and lifecycle with coalesced canonical and locator
+updates and final-reachable new-page uploads. New synthetic copies and explicit
+v1/v3 fresh-copy migration output use canonical v5. Existing v4 copies keep their
+profile and writer; v4-to-v5 migration is not implemented. Full logical derived
+validation accepts different valid tree topologies. Compact source/derived 2,
+locator 3, physical protocol 4 and framed transport 3 retain their meanings, with
+an explicit `canonical5-physical4` archive profile. Initialization marker 2 pins
+v5; interrupted marker-1 initialization remains v4.
+
+**Verified repair baseline:** the required extended suite passed 1,840 tests on
+local `1993fb6a3d0e19f9909f48277257c03cad656c41`. [Published repair `89a29b6`](https://github.com/AeroVega/finance-tracker/commit/89a29b612747cc56cefeefd4bbb6bf2a818a939a)
+passed [CI run 43029837232](https://github.com/AeroVega/finance-tracker/actions/runs/43029837232).
+That repair evidence is separate from the v5 gate. Both ordinary and required
+extended suites passed **1,972/1,972** on candidate `39b3d1e` (Node 24.22.1),
+with no failures or skips. Publication code commit `d9d04c7` has the identical
+tree. Independent review found and verified the exact-base preparation repair.
+The [matched synthetic evidence](V5_MATCHED_SYNTHETIC_EVIDENCE.md) records all
+eight successful A-B-B-A runs, input checks, counts, timing variation and limits.
+The assembled publication code also passed **1,972/1,972** in the required
+extended gate. Documentation checks passed after the final guide corrections.
+Remote CI remains separate and must be checked on the exact PR head.
+
+**Open:** full financial validation, retained-history and physical checks,
+whole-ledger workspace cloning/materialization and preparation memory remain.
+No bounded whole-database memory, selective app loading, incremental semantic
+validation or device-memory improvement is claimed. Dense mixed/retained saves
+upload substantially fewer bytes, but total requests fall only about 3% and
+timings do not establish a precise latency gain.
+PR37 remains a draft and is unmerged. The last owner-confirmed deployment remains
+`5e9c8966`; no v5 deployment or live Drive/device acceptance is claimed. Production
+remains **NO-GO**, with invented fixtures only and no new real-data, live Drive,
+merge, deployment or production authorization. Earlier evidence follows.
+
 ## Canonical v4 app integration, November 11, 2026
+
+Historical checkpoint, superseded by the v5 status above. These results describe
+the earlier v4 integration, not the current v5 slice.
 
 **Implemented locally in PR37 work:** new synthetic copies use canonical v4
 through seeding, preview/import saves, workspace corrections/reopen, interrupted
@@ -119,7 +158,7 @@ Code evidence: [workspace model](../js/canonical-workspace-model.mjs), [workspac
 - **User-confirmed, recorded in the workspace guide:** the owner accepted PR32 local synthetic-year exploration, evidence/corrections and mobile workspace experience. Preserve that observation; do not repeat unaffected checks merely because the PR merged.
 - **Open:** the newer preview-to-Drive save, transfer-link persistence and interruption checks. The guide does not provide a new acceptance pass for these paths. Record the full tested SHA with the next result.
 - **User-confirmed, historical:** PR25, PR28 and PR30 records contain bounded live synthetic/device results. They do not validate every later screen or every interruption boundary.
-- **Implemented checklist correction:** the [acceptance plan](../prototype/acceptance-plan.mjs) now requests canonical v4 seeding, explicit v1/v3 migration and v4 backup/restore. This removes the obsolete grouped-v2 steps; it does not establish owner acceptance. Use [the current owner guide](OWNER_ACCEPTANCE.md).
+- **Implemented checklist correction:** the [acceptance plan](../prototype/acceptance-plan.mjs) now requests canonical v5 seeding, explicit v1/v3 migration and v5 backup/restore. This removes the obsolete grouped-v2 steps; it does not establish owner acceptance. Use [the current owner guide](OWNER_ACCEPTANCE.md).
 
 ## Safety and release boundary
 

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
+import {createHash, webcrypto} from 'node:crypto';
+import {runInNewContext} from 'node:vm';
 import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import {createPagedPhysicalLocators} from '../js/paged-physical-locators.mjs';
 import {PhysicalRootBinding, createPortableLogicalCommit, createPhysicalRootManifest, PORTABLE_COMMIT_FORMAT, PHYSICAL_ROOT_LIMITS} from '../js/physical-root-binding.mjs';
@@ -199,6 +200,41 @@ test('verifier reads are typed, scoped, single-flight, drained and sticky on fal
   let caught = false; try { await falsy.verifyBaseline(); } catch (e) { caught = true; assert.equal(e, null); } assert.ok(caught);
 });
 
+for (const reason of [undefined, null, false, 0, '', new Error('invented verification failure')]) {
+  const label = reason instanceof Error ? 'Error' : String(reason);
+  for (const mode of ['callback', 'caught-read']) test(`${mode} rejection with ${JSON.stringify(label)} stops recovery and revokes read access`, async () => {
+    const f = await fixture(), p = await prepared(f); await stopAt(f, p, 'ready');
+    const before = f.adapter.current(), readBytes = f.adapter.readBytes.bind(f.adapter); let rejectReads = false, savedRead, hit = false;
+    f.adapter.readBytes = (fileId, options) => { if (rejectReads) return Promise.reject(reason); return readBytes(fileId, options); };
+    const verifier = async ctx => {
+      if (ctx.phase !== 'before-ready') return domain(ctx);
+      hit = true; savedRead = ctx.readObject;
+      if (mode === 'callback') throw reason;
+      rejectReads = true;
+      try { await ctx.readObject(query('data-object', ctx.manifest.root)); } catch {}
+    };
+    const binding = engine(f.adapter, {verificationPlans:new Map([['invented-sum-v1', verifier]])});
+    let rejected = false;
+    try { await binding.recover(); } catch (caught) { rejected = true; assert.equal(caught, reason); }
+    assert.ok(hit); assert.ok(rejected); assert.deepEqual(f.adapter.current(), before);
+    await assert.rejects(savedRead(query('data-object', before.root)), {code:'verification-scope-closed'});
+  });
+}
+
+test('verification failure after publication preserves pending until a fresh recovery verifies it', async () => {
+  const f = await fixture(), p = await prepared(f);
+  const verifier = async ctx => { await domain(ctx); if (ctx.phase === 'before-finalization') throw new Error('invented final verification failure'); };
+  await assert.rejects(engine(f.adapter, {verificationPlans:new Map([['invented-sum-v1', verifier]])}).transact(p), /invented final verification failure/);
+  assert.equal(f.adapter.current().pending.state, 'published'); assert.equal(f.adapter.current().revision, '1');
+  const result = await engine(f.adapter).recover(); assert.equal(result.manifest.pending, null); assert.equal(result.manifest.revision, '1');
+});
+
+test('changing the caller verifier registry cannot replace the registered implementation', async () => {
+  const f = await fixture(), plans = new Map([['invented-sum-v1', async () => { throw new Error('invented registered rejection'); }]]);
+  const binding = engine(f.adapter, {verificationPlans:plans}); plans.set('invented-sum-v1', async () => {});
+  await assert.rejects(binding.verifyBaseline(), /invented registered rejection/); assert.equal(f.adapter.stats.writes, 0);
+});
+
 test('forged baseline and wrong-copy physical references cannot authorize a write', async () => {
   const f = await fixture();
   await assert.rejects(f.engine.prepare({verifiedBase:{}, root:hash(f.root), transactionId:'x', operation:'x', semanticVersion:'invented-sum-v1'}), {code:'verified-baseline-required'});
@@ -300,11 +336,13 @@ for (const mode of ['omission', 'unauthorized-addition', 'replacement', 'corrupt
   assert.equal(f.adapter.current().pending.state, 'ready');
 });
 
-test('preparation writes only inert plan pages and never infers intent from orphans', async () => {
+test('restart reads only the clean manifest and never searches for or adopts orphan plans', async () => {
   const f = await fixture(); f.adapter.hook = e => { if (e.type === 'create' && e.point === 'after') { f.adapter.disconnected = true; throw new Error('invented preparation crash'); } };
   await assert.rejects(prepared(f)); f.adapter.hook = null; f.adapter.disconnected = false;
-  assert.equal(f.adapter.current().pending, null); const writes = f.adapter.stats.writes;
-  assert.equal((await f.engine.recover()).status, 'idle'); assert.equal(f.adapter.stats.writes, writes);
+  assert.equal(f.adapter.current().pending, null); const before = f.adapter.current(), writes = f.adapter.stats.writes, files = f.adapter.files.size;
+  for (const method of ['readBytes', 'readMetadata', 'allocateFileId', 'listFiles', 'findFiles']) f.adapter[method] = () => assert.fail('idle recovery must not inspect or adopt orphan evidence');
+  assert.deepEqual(await engine(f.adapter).recover(), {status:'idle', manifest:before});
+  assert.equal(f.adapter.stats.writes, writes); assert.equal(f.adapter.files.size, files);
   assert.ok(f.adapter.events.some(e => e.kind === 'protocol-object' && e.state === 'clean'));
 });
 
@@ -380,7 +418,10 @@ test('plan pages stream beyond one page with bounded bodies and exact counters',
   const bodies = [];
   for (let i = 0; i < 67; i++) { const raw = encode({inventedAuxiliary:i}); bodies.push({kind:'data-object', identity:hash(raw), sha256:hash(raw), byteLength:raw.length, raw}); }
   const prep = {read:async q => bodies.find(x => x.sha256 === q.sha256).raw}; let emitted = 0;
-  const objects = (async function* () { for (const {raw, ...d} of sort(bodies)) { emitted++; yield d; } })();
+  const objects = (async function* () { for (const {raw, ...d} of sort(bodies)) {
+    if (emitted === PHYSICAL_ROOT_LIMITS.planEntries) assert.ok(f.adapter.events.some(e => e.kind === 'protocol-object'), 'flush a durable plan page before requesting the remaining descriptors');
+    emitted++; yield d;
+  } })();
   const value = await f.engine.prepare({verifiedBase, root:base.root, transactionId:'invented-many-plan', operation:'append-invented-source', semanticVersion:'invented-sum-v1', objects, preparationStore:prep});
   assert.equal(emitted, 67); assert.equal(value.objectCount, '69');
   let pointer = value.planRoot, remaining = 69n, pages = 0;
@@ -412,6 +453,93 @@ test('shared preparation bytes are rejected before admission or proposed body wr
   assert.equal(f.adapter.current().pending, null); assert.equal(f.adapter.events.length, 0);
 });
 
+test('cross-realm shared buffers cannot cross manifest or preparation byte boundaries', async () => {
+  const shared = new Uint8Array(runInNewContext('new SharedArrayBuffer(8)'));
+  Object.defineProperty(shared, 'buffer', {value:new ArrayBuffer(8)});
+  const f = await fixture(); f.adapter.readManifest = async () => shared;
+  await assert.rejects(engine(f.adapter).recover(), {code:'invalid-bytes'});
+  const g = await fixture(), p = await prepared(g), before = g.adapter.current(), events = g.adapter.events.length;
+  await assert.rejects(g.engine.transact({...p, preparationStore:{read:async () => shared}}), {code:'invalid-bytes'});
+  assert.deepEqual(g.adapter.current(), before);
+  assert.ok(g.adapter.events.slice(events).every(e => e.type === 'create' && e.kind !== 'data-object' && e.state === 'clean'), 'only inert generated evidence may precede an invalid body');
+});
+
+test('cross-realm ordinary buffers remain usable through ordinary Uint8Array views', async () => {
+  const f = await fixture(), p = await prepared(f);
+  const foreign = bytes => { const result = new Uint8Array(runInNewContext(`new ArrayBuffer(${bytes.length})`)); result.set(bytes); return result; };
+  f.adapter.manifest = foreign(f.adapter.manifest);
+  const read = f.adapter.readBytes.bind(f.adapter); f.adapter.readBytes = async (fileId, options) => foreign(await read(fileId, options));
+  assert.equal((await engine(f.adapter).transact(p)).status, 'committed');
+});
+
+test('decorated oversized manifests and preparation bodies cannot bypass intrinsic byte bounds', async () => {
+  for (const boundary of ['manifest', 'preparation']) {
+    const f = await fixture(), p = await prepared(f), maximum = boundary === 'manifest' ? PHYSICAL_ROOT_LIMITS.manifestBytes : PHYSICAL_ROOT_LIMITS.objectBytes;
+    const raw = new Uint8Array(maximum + 1);
+    Object.defineProperties(raw, {length:{value:1}, byteLength:{value:1}, buffer:{value:new ArrayBuffer(1)}, slice:{value:() => f.adapter.manifest}});
+    if (boundary === 'manifest') f.adapter.readManifest = async () => raw;
+    const events = f.adapter.events.length;
+    await assert.rejects(boundary === 'manifest' ? engine(f.adapter).recover() : f.engine.transact({...p, preparationStore:{read:async () => raw}}), {code:'byte-limit'});
+    assert.ok(f.adapter.events.slice(events).every(e => e.type === 'create' && e.kind !== 'data-object' && e.state === 'clean'));
+    assert.equal(f.adapter.current().pending, null);
+  }
+});
+
+test('Buffer-backed direct reads and preparation bodies are copied before digest awaits', async () => {
+  const f = await fixture(), p = await prepared(f), read = f.adapter.readBytes.bind(f.adapter), borrowed = new Set();
+  const borrow = bytes => { const buffer = Buffer.from(bytes); borrowed.add(buffer); return buffer; };
+  f.adapter.readBytes = async (fileId, options) => borrow(await read(fileId, options));
+  const preparationStore = {read:async (query, options) => borrow(await p.preparationStore.read(query, options))};
+  const originalCrypto = globalThis.crypto; let mutations = 0;
+  Object.defineProperty(globalThis, 'crypto', {configurable:true, value:{subtle:{digest:async (algorithm, bytes) => {
+    for (const buffer of borrowed) { buffer.fill(0); mutations++; } borrowed.clear();
+    return webcrypto.subtle.digest(algorithm, bytes);
+  }}}});
+  try { assert.equal((await engine(f.adapter).transact({...p, preparationStore})).status, 'committed'); }
+  finally { Object.defineProperty(globalThis, 'crypto', {configurable:true, value:originalCrypto}); }
+  assert.ok(mutations > 0);
+});
+
+test('strict manifest decoding rejects alternate JSON, unknown fields and future versions', async () => {
+  for (const [mutate, code] of [
+    [m => enc.encode(JSON.stringify(m, null, 2)), 'noncanonical-json'],
+    [m => encode({...m, extra:true}), 'invalid-shape'],
+    [m => encode({...m, version:99}), 'unsupported-manifest']
+  ]) {
+    const f = await fixture(); f.adapter.manifest = mutate(f.adapter.current());
+    await assert.rejects(engine(f.adapter).recover(), {code}); assert.equal(f.adapter.stats.writes, 0);
+  }
+});
+
+for (const field of ['root', 'headCommit', 'revision', 'databaseId', 'copyId', 'role']) test(`recovery rejects pending manifest ${field} substitution`, async () => {
+  const f = await fixture(), p = await prepared(f); await stopAt(f, p, 'ready');
+  const m = f.adapter.current();
+  m[field] = field === 'root' ? '0'.repeat(64) : field === 'headCommit' ? {...m.headCommit, sha256:'0'.repeat(64)} : field === 'revision' ? '9' : field === 'role' ? 'backup' : 'invented-substitution';
+  f.adapter.manifest = encode(m); const writes = f.adapter.stats.writes;
+  await assert.rejects(engine(f.adapter).recover(), {code:'pending-mismatch'});
+  assert.deepEqual(f.adapter.current(), m); assert.equal(f.adapter.stats.writes, writes);
+});
+
+test('unknown metadata read failures never authorize a replacement immutable create', async () => {
+  const f = await fixture(), p = await prepared(f), read = f.adapter.readMetadata.bind(f.adapter), writes = f.adapter.stats.writes;
+  const entry = f.adapter.json(p.intent.planRoot).entries.find(e => e.kind === 'data-object');
+  f.adapter.readMetadata = (fileId, options) => fileId === entry.fileId ? Promise.reject(new Error('invented permission failure')) : read(fileId, options);
+  await assert.rejects(engine(f.adapter).transact(p), /invented permission failure/);
+  assert.equal(f.adapter.stats.writes, writes); assert.equal(f.adapter.current().pending, null); assert.equal(f.adapter.files.has(entry.fileId), false);
+});
+
+for (const type of ['create', 'manifest']) test(`adapter that bypasses its ${type} guard cannot report successful publication`, async () => {
+  const f = await fixture(), p = await prepared(f); let attempted, mutations = 0;
+  if (type === 'create') f.adapter.createImmutable = async ({fileId, content, kind, transactionId}) => {
+    attempted = fileId; mutations++; f.adapter.save(fileId, content, kind, transactionId);
+  };
+  else f.adapter.writeManifest = async bytes => { mutations++; f.adapter.manifest = new Uint8Array(bytes); };
+  await assert.rejects(engine(f.adapter).transact(p), {code:'adapter-contract'}); assert.equal(mutations, 1);
+  assert.equal(f.adapter.current().root, p.intent.baseManifest.root);
+  if (type === 'create') { assert.ok(f.adapter.files.has(attempted)); assert.equal(f.adapter.current().pending, null); }
+  else assert.equal(f.adapter.current().pending.state, 'admitted');
+});
+
 test('changing supplied preparation bytes fails fixed-ID hash validation and keeps admission', async () => {
   const f = await fixture(), p = await prepared(f); for (const raw of p.bodies.values()) raw[0] ^= 1;
   await assert.rejects(f.engine.transact(p), {code:'hash-mismatch'}); assert.equal(f.adapter.current().pending, null);
@@ -426,11 +554,35 @@ test('malformed plan count and wrong-copy plan binding are rejected before admis
   }
 });
 
+test('individually sorted plan pages cannot reorder descriptors across their boundary', async () => {
+  const f = await fixture(), base = f.adapter.current(), verifiedBase = await f.engine.verifyBaseline(), bodies = new Map();
+  for (let i = 0; i < PHYSICAL_ROOT_LIMITS.planEntries + 2; i++) {
+    const raw = encode({inventedBoundaryObject:i}); bodies.set(hash(raw), raw);
+  }
+  const objects = sort([...bodies].map(([sha256, raw]) => ({kind:'data-object', identity:sha256, sha256, byteLength:raw.length})));
+  const preparationStore = {read:async q => bodies.get(q.sha256)};
+  const intent = await f.engine.prepare({verifiedBase, root:base.root, transactionId:'invented-cross-page', operation:'append-invented-source', semanticVersion:'invented-sum-v1', objects, preparationStore});
+  const later = f.adapter.json(intent.planRoot), earlier = f.adapter.json(later.previous);
+  // Swap unique adjacent descriptors so each page remains sorted and every
+  // descriptor is retained, but the earlier page now ends after the later starts.
+  [earlier.entries[earlier.entries.length - 1], later.entries[0]] = [later.entries[0], earlier.entries.at(-1)];
+  for (const page of [earlier, later]) assert.deepEqual(page.entries, sort([...page.entries]));
+  later.previous = f.adapter.save(await f.adapter.allocateFileId(), encode(earlier), 'protocol-object', intent.transactionId);
+  intent.planRoot = f.adapter.save(await f.adapter.allocateFileId(), encode(later), 'protocol-object', intent.transactionId);
+  const writes = f.adapter.stats.writes;
+  await assert.rejects(f.engine.transact({intent, preparationStore}), {code:'invalid-plan'});
+  assert.deepEqual(f.adapter.current(), base); assert.equal(f.adapter.stats.writes, writes);
+});
+
 test('missing original direct plan never falls back to a catalog or folder search', async () => {
   const f = await fixture(), p = await prepared(f); await stopAt(f, p, 'ready');
+  const originalPlan = f.adapter.files.get(p.intent.planRoot.fileId);
+  const orphan = f.adapter.save(await f.adapter.allocateFileId(), originalPlan.bytes, 'protocol-object', p.intent.transactionId);
   f.adapter.files.delete(p.intent.planRoot.fileId); const before = f.adapter.current(), next = f.adapter.next;
-  await assert.rejects(f.engine.recover({preparationStore:p.preparationStore}), {code:'object-not-found'});
+  for (const method of ['listFiles', 'findFiles']) f.adapter[method] = () => assert.fail('recovery must use the admitted physical ID');
+  await assert.rejects(engine(f.adapter).recover({preparationStore:p.preparationStore}), {code:'object-not-found'});
   assert.deepEqual(f.adapter.current(), before); assert.equal(f.adapter.next, next);
+  assert.ok(f.adapter.files.has(orphan.fileId), 'identical orphan bytes are preserved but never adopted');
 });
 
 test('a registered historical verifier can retain exact old bytes without reinterpretation', async () => {

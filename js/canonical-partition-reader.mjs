@@ -1,9 +1,10 @@
+import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {validateLedger} from './canonical-import.mjs';
 import {monthBounds} from './financial-position-contract.mjs';
 import {PARTITION_COLLECTIONS,createPartitionObjectIO,createPartitionValueCodec,validatePartitionRoot,
   validatePartitionSource,validatePartitionDerived,validatePartitionCollection,
   partitionFields,partitionOptions,partitionAbort,partitionFail,partitionCount,partitionOrdinal,
-  partitionLimit,partitionDigest,buildPartitionDerived} from './canonical-partitions.mjs';
+  partitionLimit,partitionDigest,buildPartitionDerived,partitionDerivedEntries} from './canonical-partitions.mjs';
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const checkId = id => { if (typeof id !== 'string' || !ID.test(id)) partitionFail('invalid-partition-record-id'); };
@@ -172,24 +173,34 @@ export async function createCanonicalPartitionReader(store,rootHash,options = {}
     }
     if (!Array.isArray(ledger.events) || source.eventFrontier !== String(ledger.events.length) || source.positionEventFrontier !== String(ledger.positionEvents?.length ?? 0)) partitionFail('partition-frontier-mismatch');
     validateLedger(ledger); sourceState = 'full-ledger-validated';
-    // Rebuilding uses a private temporary store. An audit never repairs stored
-    // bytes or writes to the caller's store. This currently retains full output.
-    const expectedObjects = new Map();
-    const expectedStore = {async read(hash) { const bytes = expectedObjects.get(hash); if (!bytes) partitionFail('missing-audit-object'); return bytes.slice(); },
-      async write(bytes) { const hash = await partitionDigest(bytes); expectedObjects.set(hash,bytes.slice()); return hash; }};
-    const expectedHash = await buildPartitionDerived(ledger,root.source,expectedStore,{signal,version});
-    if (expectedHash !== root.derived) {
-      derivedState = 'invalid';
-      return {ledger,verification:verification()};
-    }
-    // Hash equality binds meaning, but does not prove remote objects exist or
-    // still contain those bytes. Read every derived tree and nested value now.
-    for (const name of ['effectiveActivities','monthActivities','summaries']) {
-      await tree.verify(derived[name],{signal});
-      for await (const [,value] of tree.entries(derived[name],{signal})) {
-        if (name === 'monthActivities') checkId(value);
-        else await codec.materialize(value,expansion);
+    if (root.version === 4) {
+      // Original/compact v4 retains its deterministic derived-root contract.
+      const expectedObjects = new Map();
+      const expectedStore = {async read(hash) { const bytes = expectedObjects.get(hash); if (!bytes) partitionFail('missing-audit-object'); return bytes.slice(); },
+        async write(bytes) { const hash = await partitionDigest(bytes); expectedObjects.set(hash,bytes.slice()); return hash; }};
+      const expectedHash = await buildPartitionDerived(ledger,root.source,expectedStore,{signal,version});
+      if (expectedHash !== root.derived) {
+        derivedState = 'invalid';
+        return {ledger,verification:verification()};
       }
+    }
+    const expected = root.version === 5 ? partitionDerivedEntries(ledger,{version}) : null;
+    // Verify actual availability and every decoded logical entry in both
+    // directions. V5 permits any valid topology, never omitted or extra rows.
+    for (const name of ['effectiveActivities','monthActivities','summaries']) {
+      const info = await tree.verify(derived[name],{signal});
+      if (expected && info.count !== String(expected[name].length)) {
+        derivedState = 'invalid'; return {ledger,verification:verification()};
+      }
+      let ordinal = 0;
+      for await (const [key,value] of tree.entries(derived[name],{signal})) {
+        const decoded = name === 'monthActivities' ? (checkId(value),value) : await codec.materialize(value,expansion);
+        if (expected && (expected[name][ordinal]?.[0] !== key || canonicalizeJcs(expected[name][ordinal][1]) !== canonicalizeJcs(decoded))) {
+          derivedState = 'invalid'; return {ledger,verification:verification()};
+        }
+        ordinal++;
+      }
+      if (expected && ordinal !== expected[name].length) { derivedState = 'invalid'; return {ledger,verification:verification()}; }
     }
     derivedState = 'semantic-verified';
     return {ledger,verification:verification()};

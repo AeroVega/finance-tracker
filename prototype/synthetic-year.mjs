@@ -6,14 +6,14 @@ let busy = false, configured = false, writes = 0, started = 0, phase = '', timer
 const messages = {
   preparing: 'Preparing the invented year locally…',
   checking: 'Checking the selected copy and existing canonical records…',
-  saving: 'Saving invented canonical records with canonical v4 and recoverable root publication…',
+  saving: 'Saving invented canonical records with canonical v5 and recoverable root publication…',
   reopening: 'Independently reopening and comparing every canonical record…',
   verified: 'Exact saved year verified.'
 };
 const failures = {
-  'unsupported-derived-projection': 'A linked refund lacks a defined category. Preserve the source copy and add an explicit category correction before making a v4 copy.',
+  'unsupported-derived-projection': 'A linked refund lacks a defined category. Preserve the source copy and add an explicit category correction before making a new copy.',
   'empty-folder-required': 'The selected folder is not empty. No upload was started. Choose a newly created empty synthetic folder.',
-  'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. No records were changed. Preserve it and choose a new empty synthetic folder for a canonical version-4 copy.',
+  'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. No records were changed. Preserve it and choose a new empty synthetic folder for a canonical version-5 copy.',
   'existing-copy-required': 'No existing synthetic copy was found. Reconnect does not initialize a folder.',
   'fresh-genesis-required': 'The folder is no longer a fresh empty copy. No year was uploaded. Preserve it and choose a new empty folder.',
   'unrecognized-seed-copy': 'This copy is different from this version’s exact invented year. It will not be replaced or appended to. Preserve it and choose a new empty folder.',
@@ -57,7 +57,7 @@ const seeder = new SyntheticYearSeeder({ onProgress: state => {
 } });
 function previewResult(recipe) {
   const ledger = recipe.ledger;
-  $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. New copies use canonical v4 with compact values and paged fallback. January–December 2025. No Drive write is needed for this preview.`;
+  $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. New copies use canonical v5 with compact values and paged fallback. January–December 2025. No Drive write is needed for this preview.`;
 }
 async function verify() {
   const recipe = await seeder.verifyOrSeed(storage.lifecycle);
@@ -85,7 +85,7 @@ $('upload').addEventListener('click', () => {
   void run(async () => {
     result('Choose your newly created empty synthetic folder.');
     // Keep the Google authorization invocation in the user activation path.
-    await storage.connect({ requireEmpty: true, canonicalLayout: 'partitions-v4' });
+    await storage.connect({ requireEmpty: true, canonicalLayout: 'partitions-v5' });
     await seeder.admitFreshConnection(storage.lifecycle);
     await verify();
   });

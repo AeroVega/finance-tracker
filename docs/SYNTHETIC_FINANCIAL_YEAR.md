@@ -6,7 +6,7 @@
 
 **Implemented:** [Seed a synthetic year](../prototype/synthetic-year.html), linked from the main workspace and prototype hub. The default recipe is calendar year **2025**, the last complete calendar year at implementation time. The UI intentionally offers one reproducible version rather than importing user files. It is not a production dashboard, an investment engine or a projection implementation.
 
-Production financial-data persistence remains **NO-GO** under [PR #27](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md). No real-data test, live Drive action, merge, deployment, or production activation is authorized or claimed by this implementation. No paid service, framework or new authentication scope was introduced. The current synthetic-year page writes [canonical v4](PARTITIONED_CANONICAL_STORAGE.md), with compact values and paged fallback. Existing per-record v1 and fragmented v3 copies remain compatible and are not silently migrated. Standalone grouped v2 is rejected. New copies use the reviewed v4 physical publication and recovery path with existing session ownership checks. The initial feature preserved existing prototype pages. The later owner-authorized [cleanup](PROTOTYPE_CLEANUP.md) retires superseded UI while preserving earlier acceptance records.
+Production financial-data persistence remains **NO-GO** under [PR #27](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md). No real-data test, live Drive action, merge, deployment, or production activation is authorized or claimed by this implementation. No paid service, framework or new authentication scope was introduced. The current synthetic-year page writes [canonical v5](PARTITIONED_CANONICAL_STORAGE.md), with compact values and paged fallback. Existing per-record v1, fragmented v3 and canonical v4 copies remain compatible and are not silently migrated. Standalone grouped v2 is rejected. New copies use the reviewed v4 physical publication and recovery path with existing session ownership checks. The initial feature preserved existing prototype pages. The later owner-authorized [cleanup](PROTOTYPE_CLEANUP.md) retires superseded UI while preserving earlier acceptance records.
 
 ## Recipe and financial meaning
 
@@ -34,7 +34,7 @@ Balances, historical valuations, net worth, investment performance and complete-
 7. The existing `CanonicalLedgerStore`, application lifecycle and catalog engine save the canonical graph with all current ownership, offline, exact-base, provenance, immutable-history, journal and recovery safeguards. A new store independently reopens and compares the complete graph before success is shown.
 8. An exact previously saved recipe verifies without another financial commit. A different ledger, an unrelated logical object, a backup destination or changed empty-copy identity cannot be replaced or appended to by this page. Existing record history and unsupported folders are preserved.
 
-After verified release, open the [main workspace](../index.html#storage) and choose **Open saved synthetic year** to inspect this canonical year and stage corrections. The [v4 copy guide](../prototype/pr25-acceptance.html?guide=v4) provides backup/export/restore. The old four-row dashboard diagnostic is a separate payload. Reports must retain the recipe's qualifications rather than infer complete balances.
+After verified release, open the [main workspace](../index.html#storage) and choose **Open saved synthetic year** to inspect this canonical year and stage corrections. The [paged copy guide](../prototype/pr25-acceptance.html?guide=v4) provides backup/export/restore. The old four-row dashboard diagnostic is a separate payload. Reports must retain the recipe's qualifications rather than infer complete balances.
 
 ## Interruption and retry
 
@@ -52,13 +52,13 @@ Beforeunload asks the browser to warn while an operation or session is active. M
 
 ### Historical grouped canonical experiment (deprecated)
 
-**Historical implementation, superseded by the current v4 policy above:** the earlier synthetic-year page offered a grouped `chunks-v2` layout as an opt-in performance experiment. Standalone grouped-v2 copies are now rejected and the old writer/selector has been removed. The measurements below remain historical evidence only; they are not the current seeder format. It groups each canonical collection into fixed append-order buckets of at most 64 records and at most 128 KiB of stored UTF-8 JSON per chunk. The same 722 logical objects become **15 physical payload objects**. The largest fixture chunk is 128,922 bytes, below the 131,072-byte limit.
+**Historical implementation, superseded by the current policy above:** the earlier synthetic-year page offered a grouped `chunks-v2` layout as an opt-in performance experiment. Standalone grouped-v2 copies are now rejected and the old writer/selector has been removed. The measurements below remain historical evidence only; they are not the current seeder format. It groups each canonical collection into fixed append-order buckets of at most 64 records and at most 128 KiB of stored UTF-8 JSON per chunk. The same 722 logical objects become **15 physical payload objects**. The largest fixture chunk is 128,922 bytes, below the 131,072-byte limit.
 
 The index remains at the existing canonical index path but declares version 2. Old clients reject the unsupported version rather than interpreting the copy as empty. Current clients read per-record v1 and fragmented v3. Standalone grouped v2 is rejected. An existing version-1 ledger continues writing version 1 even if a caller requests chunks. No existing copy is migrated, compacted or rewritten; historical snapshots retain their original format. A conversion tool is not part of this work.
 
 All record identities, source observations, collection order and events remain unchanged. Before packing, the store performs the same per-record immutable-history, source-evidence, retry and metadata checks as before. Grouping changes physical placement, not financial meaning. New records extend the last bucket or add a bucket. Corrections append events; mutable review records can change only under the existing logical rules. Unchanged chunks reuse their content hashes. A chunk's old bytes remain in immutable retained history after replacement.
 
-Chunk boundaries do not move when a record changes size. An oversized chunk fails before any write instead of repartitioning, truncating or silently changing formats. Readers enforce raw-byte size as well as exact chunk identity, inventory, record order and envelope keys. Missing, extra, mixed or malformed canonical paths fail closed. The 128 KiB limit is a synthetic implementation bound, not a Google service limit. The historical grouped-v2 writer refused these oversized groups. Fragmented v3 later replaced that experiment; new copies now use [canonical v4](PARTITIONED_CANONICAL_STORAGE.md).
+Chunk boundaries do not move when a record changes size. An oversized chunk fails before any write instead of repartitioning, truncating or silently changing formats. Readers enforce raw-byte size as well as exact chunk identity, inventory, record order and envelope keys. Missing, extra, mixed or malformed canonical paths fail closed. The 128 KiB limit is a synthetic implementation bound, not a Google service limit. The historical grouped-v2 writer refused these oversized groups. Fragmented v3 later replaced that experiment; new copies now use [canonical v5](PARTITIONED_CANONICAL_STORAGE.md).
 
 The existing engine still saves changed payloads and their journals serially. Ownership and exact-base checks, independent read-back, hash verification of all retained history, recovery and backup/export/restore validation remain in force. No persistent cache or verification shortcut was introduced. Repeated edits still retain historical chunks, so this is not a solution to unlimited retained-history growth or production scale.
 
@@ -104,7 +104,7 @@ Local Chromium checked 320×740, 390×844, 768×1024, 844×390 and 1440×1000 la
 
 ### Historical grouped-v2 owner procedure
 
-The procedure below belongs to the deprecated grouped-v2 experiment and preserves its expected counts. Do not run it against the current seeder. Use [the current owner acceptance guide](OWNER_ACCEPTANCE.md) for v4, only after a separately authorized deployment.
+The procedure below belongs to the deprecated grouped-v2 experiment and preserves its expected counts. Do not run it against the current seeder. Use [the current owner acceptance guide](OWNER_ACCEPTANCE.md) for v5, only after a separately authorized deployment.
 
 1. Preview locally. Confirm 253 activities and 722 logical canonical objects grouped into 15 storage objects. Confirm no Drive connection occurs for preview.
 2. Try a nonempty disposable synthetic folder and cancel Picker once. Both must stop without a new upload. Do not use a real-data folder for refusal tests.
@@ -114,6 +114,6 @@ The procedure below belongs to the deprecated grouped-v2 experiment and preserve
 6. If any operation fails, preserve the folder and use the documented reconnect/recovery path. An interrupted initial setup or post-reload empty copy requires a new folder, not deletion or repeated blind upload.
 
 
-## Current canonical v4 storage
+## Current canonical storage
 
-**Implemented, synthetic-only:** new copies use [canonical v4](PARTITIONED_CANONICAL_STORAGE.md). Existing per-record v1 and fragmented v3 copies retain their interpretation; the [copy guide](../prototype/pr25-acceptance.html?guide=v4) offers explicit migration into a fresh folder while preserving source history. Full ledger/history verification still materializes data. The earlier v1/v3 benchmarks above do not measure the v4 app path or establish device capacity.
+**Implemented, synthetic-only:** new copies use [canonical v5](PARTITIONED_CANONICAL_STORAGE.md). Existing per-record v1, fragmented v3 and canonical v4 copies retain their interpretation; the [copy guide](../prototype/pr25-acceptance.html?guide=v4) offers explicit v1/v3 migration into a fresh v5 folder while preserving source history. V4-to-v5 migration is not implemented. Full ledger/history verification still materializes data. The earlier v1/v3 benchmarks above do not measure the current app path or establish device capacity.

@@ -317,9 +317,12 @@ export class PhysicalRootBinding {
       return copy(m);
     });
   }
-  verifyBaseline({signal} = {}) {
+  verifyBaseline({signal,expectedManifest} = {}) {
+    const expected = expectedManifest === undefined ? undefined : copy(expectedManifest);
     return this.#enqueue(async () => {
-      const m = await this.#manifest(signal); manifest(m, true); if (m.role !== 'primary') fail('read-only-copy', 'A backup copy cannot supply a writable baseline.');
+      const m = await this.#manifest(signal); manifest(m, true);
+      if (expected !== undefined && canonicalizeJcs(expected) !== canonicalizeJcs(m)) fail('base-conflict', 'Reopen the current root before saving.');
+      if (m.role !== 'primary') fail('read-only-copy', 'A backup copy cannot supply a writable baseline.');
       await this.#guard(m, signal); const tree = this.#tree(m, m, signal);
       await tree.verify(m.locatorRoot, {signal}); await this.#history(tree, m.locatorRoot, m, signal);
       await this.#receiptChain(m, m, signal); await this.#guard(m, signal);

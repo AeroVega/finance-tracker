@@ -270,7 +270,7 @@ async function saveLedger(next = ledger) {
     saveState = 'unverified'; refresh(); throw error;
   }
 }
-action('connect', async () => { if (dirty && !confirm('Discard unsaved local changes and connect?')) return; invalidateLedgerSession(true); store=null; await storage.connect({canonicalLayout:'partitions-v4'}); if (storage.lifecycle?.state === 'ready') await loadLedger(); });
+action('connect', async () => { if (dirty && !confirm('Discard unsaved local changes and connect?')) return; invalidateLedgerSession(true); store=null; await storage.connect({canonicalLayout:'partitions-v5'}); if (storage.lifecycle?.state === 'ready') await loadLedger(); });
 action('stale', async () => { if (confirm('Confirm all prior tabs and devices using this synthetic folder have stopped.')) { invalidateLedgerSession(true); await storage.recoverStaleSession(); if (!dirty || confirm('Session recovered. Discard unsaved local changes and reopen?')) await loadLedger(); } });
 action('recover', async () => { invalidateLedgerSession(true); await storage.lifecycle.recover(); if (!dirty || confirm('Recovery completed. Discard unsaved local changes and reopen?')) await loadLedger(); });
 action('release', async () => { if (dirty && !confirm('Release without saving local changes? They remain in this tab only.')) return; invalidateLedgerSession(true); await storage.release(); store=null; });

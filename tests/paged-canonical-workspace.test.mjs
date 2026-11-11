@@ -15,10 +15,11 @@ async function fixture() {
   const lifecycle={pagedCanonical:true,state:'ready',acceptingWrites:true,folderId:'invented-folder',
     readManifest:async()=>structuredClone(manifest),
     assertCurrentManifest:async expected=>assert.deepEqual(expected,manifest),
-    readPartitionedSnapshot:async()=>({manifest:structuredClone(manifest),rootHash:manifest.root,
+    readPartitionedSnapshot:async()=>({manifest:structuredClone(manifest),rootHash:manifest.root,semanticVersion:PAGED_CANONICAL_VERIFIER,
       store:{read:async hash=>{assert.ok(objects.has(hash));return objects.get(hash).slice();}}}),
-    async savePartitionedRoot({expectedBase,rootHash,objects:descriptors,preparationStore,semanticVersion}) {
+    async savePartitionedRoot({expectedBase,rootHash,objects:descriptors,preparationStore,semanticVersion,prepare}) {
       assert.deepEqual(expectedBase,manifest);assert.equal(semanticVersion,PAGED_CANONICAL_VERIFIER);
+      if(prepare)({rootHash,objects:descriptors,preparationStore}=await prepare({rootHash:manifest.root,semanticVersion,store:{read:async hash=>{assert.ok(objects.has(hash));return objects.get(hash).slice();}}}));
       for(const d of descriptors)objects.set(d.sha256,await preparationStore.read(d.sha256));
       const commit={root:rootHash,previousRoot:manifest.root,revision:String(BigInt(manifest.revision)+1n),semanticVersion,operation:'synthetic-canonical-import',changeEvidenceRoot:null};
       const next={...manifest,root:rootHash,revision:commit.revision};
@@ -28,12 +29,12 @@ async function fixture() {
   return {lifecycle,objects,commits,ledger:replayFixture(2).ledger};
 }
 
-test('actual canonical store dispatches paged lifecycle, saves true v4, and workspace corrects/reopens exact source',async()=>{
+test('actual canonical store dispatches paged lifecycle, saves true v5, and workspace corrects/reopens exact source',async()=>{
   const h=await fixture(),store=new CanonicalLedgerStore({lifecycle:h.lifecycle});
-  assert.equal(store.layout,'partitions-v4');assert.equal(await store.load(),null);
+  assert.equal(store.layout,'partitions-v5');assert.equal(await store.load(),null);
   await store.save(h.ledger);
   const root=JSON.parse(new TextDecoder().decode(h.objects.get(store.base.root)));
-  assert.equal(root.version,4);assert.equal(root.format,'finance-tracker-partitioned-canonical');
+  assert.equal(root.version,5);assert.equal(root.format,'finance-tracker-partitioned-canonical');
   const session=new CanonicalWorkspaceSession({storage:{lifecycle:h.lifecycle}});
   await session.loadVerified();const before=structuredClone(session.ledger);
   session.correct({activityId:session.ledger.activities[0].activityId,type:'posting-status-correction',lifecycleStatus:'pending',postedDate:null,rationale:'Invented pending evidence'});
@@ -110,7 +111,7 @@ test('exact edge memo snapshots commit fields before asynchronous audit',async()
 });
 
 
-test('v4 retained edges preserve exact optional source fields and unknown extra evidence',async()=>{
+test('v5 retained edges preserve exact optional source fields and unknown extra evidence',async()=>{
   const h=await fixture();
   for(const edit of [ledger=>{ledger.observations[0].extraEvidence=null;},ledger=>{delete ledger.observations[0].physicalLine;},ledger=>{ledger.imports[0].sourceIgnoredCount=99;}]){
     const proposed=structuredClone(h.ledger);edit(proposed);
@@ -118,7 +119,7 @@ test('v4 retained edges preserve exact optional source fields and unknown extra 
   }
 });
 
-test('actual v4 saves retries and reimports without overriding manual posting correction',async()=>{
+test('actual v5 saves retries and reimports without overriding manual posting correction',async()=>{
   for(const scenario of ['retry','posting']) {
     const h=await fixture(),store=new CanonicalLedgerStore({lifecycle:h.lifecycle});await store.load();
     const f=scenario==='retry'?retryFixture(2):lifecycleFixture(2);let ledger=f.ledger;
@@ -135,12 +136,12 @@ test('actual v4 saves retries and reimports without overriding manual posting co
 });
 
 
-test('workspace local preview creates a genuine v4 copy through explicit new-copy controller',async()=>{
+test('workspace local preview creates a genuine v5 copy through explicit new-copy controller',async()=>{
   const h=await fixture(),calls=[];
   const storage={lifecycle:null,async connect(options){calls.push(options);this.lifecycle=h.lifecycle;}};
   const session=new CanonicalWorkspaceSession({storage});session.preview(h.ledger);await session.savePreviewToNewCopy();
-  assert.deepEqual(calls,[{requireEmpty:true,canonicalLayout:'partitions-v4'}]);assert.equal(session.store.layout,'partitions-v4');
-  const root=JSON.parse(new TextDecoder().decode(h.objects.get(session.store.base.root)));assert.equal(root.version,4);assert.equal(root.valueCodec,'compact-json-v1');
+  assert.deepEqual(calls,[{requireEmpty:true,canonicalLayout:'partitions-v5'}]);assert.equal(session.store.layout,'partitions-v5');
+  const root=JSON.parse(new TextDecoder().decode(h.objects.get(session.store.base.root)));assert.equal(root.version,5);assert.equal(root.valueCodec,'compact-json-v1');
   assert.deepEqual(session.ledger,h.ledger);assert.equal(session.mode,'saved');assert.equal(session.dirty,false);await session.reopen();
 });
 

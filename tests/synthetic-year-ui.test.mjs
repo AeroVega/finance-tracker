@@ -145,7 +145,7 @@ test('legacy storage seam retains fragmented v3 on reconnect without conversion 
   assert.equal(h.state.connects.at(-1).requireExisting, true);
   assert.equal(h.state.writes, 1);
   assert.deepEqual(h.objects, saved);
-  assert.match(h.get('preview-result').textContent, /New copies use canonical v4 with compact values and paged fallback/);
+  assert.match(h.get('preview-result').textContent, /New copies use canonical v5 with compact values and paged fallback/);
   assert.doesNotMatch(h.get('preview-result').textContent, /\d+ (?:physical |storage |payload )objects/);
   assert.equal(h.get('result').dataset.state, 'success');
   h.navigator.onLine = false; await h.event('offline');
@@ -173,13 +173,13 @@ async function pagedYearPage() {
       const adapter = new GoogleDriveTransactionAdapter({ folderId: http.folderId,
         accessToken: () => 'invented-test-token', fetchImpl: http.fetch });
       if (requireEmpty) {
-        assert.equal(canonicalLayout, 'partitions-v4', 'The checked-in upload handler must request canonical v4');
+        assert.equal(canonicalLayout, 'partitions-v5', 'The checked-in upload handler must request canonical v5');
         await requireEmptySyntheticFolder(adapter);
       }
       const inspected = await inspectPagedCanonicalCopy(adapter);
-      if (requireExisting) assert.ok(inspected, 'Reconnect must select an existing saved v4 copy');
+      if (requireExisting) assert.ok(inspected, 'Reconnect must select an existing saved v5 copy');
       const lifecycle = new ApplicationStorageLifecycle({
-        syntheticOnly: true, pagedCanonical: Boolean(inspected) || canonicalLayout === 'partitions-v4',
+        syntheticOnly: true, pagedCanonical: Boolean(inspected) || canonicalLayout === 'partitions-v5',
         verificationPlans: canonicalPartitionVerificationPlans(),
         folderName: 'Invented synthetic year controller', folderId: http.folderId,
         manifestFileId: inspected?.manifestFileId,
@@ -226,7 +226,7 @@ async function pagedYearPage() {
   };
 }
 
-test('new synthetic-year controller uploads genuine v4 and exactly reopens the full year without another financial commit', async t => {
+test('new synthetic-year controller uploads genuine v5 and exactly reopens the full year without another financial commit', async t => {
   const h = await pagedYearPage();
   t.after(async () => { if (h.storage.lifecycle?.coordinator?.canWrite) await h.storage.release(); });
   const expected = (await createSyntheticFinancialYear()).ledger;
@@ -238,16 +238,16 @@ test('new synthetic-year controller uploads genuine v4 and exactly reopens the f
   assert.equal(h.http.requests.length, 0, 'Local preview makes no storage request');
   const preview = h.get('preview-result').textContent;
   assert.match(preview, /253 activities, 253 source observations and 207 audit events/);
-  assert.match(preview, /New copies use canonical v4 with compact values and paged fallback/);
+  assert.match(preview, /New copies use canonical v5 with compact values and paged fallback/);
   assert.doesNotMatch(preview, /\d+ (?:physical |storage |payload )objects/);
   assert.match(h.get('result').textContent, /No Google connection or Drive write/);
 
   await h.upload();
-  assert.deepEqual(h.state.connects, [{ requireEmpty: true, canonicalLayout: 'partitions-v4' }]);
+  assert.deepEqual(h.state.connects, [{ requireEmpty: true, canonicalLayout: 'partitions-v5' }]);
   assert.equal(h.get('result').dataset.state, 'success', h.get('result').textContent);
   assert.match(h.get('result').textContent, /Uploaded and independently verified the complete invented year/);
   assert.equal(h.state.results[0].alreadySaved, false);
-  assert.equal(h.state.results[0].storageLayout, 'partitions-v4');
+  assert.equal(h.state.results[0].storageLayout, 'partitions-v5');
   assert.deepEqual(h.state.results[0].ledger, expected);
   const first = h.storage.lifecycle;
   const manifest = await first.readManifest();
@@ -262,7 +262,7 @@ test('new synthetic-year controller uploads genuine v4 and exactly reopens the f
   };
   const root = storedJson(manifest.root);
   assert.equal(root.format, 'finance-tracker-partitioned-canonical');
-  assert.equal(root.version, 4);
+  assert.equal(root.version, 5);
   assert.equal(root.valueCodec, 'compact-json-v1');
   assert.equal(storedJson(root.source).format, 'finance-tracker-partitioned-canonical-source');
   assert.equal(storedJson(root.source).version, 2);
@@ -295,7 +295,7 @@ test('new synthetic-year controller uploads genuine v4 and exactly reopens the f
   assert.equal(h.get('result').dataset.state, 'success', h.get('result').textContent);
   assert.match(h.get('result').textContent, /already contains the exact invented year.*No financial records were added or replaced/);
   assert.equal(h.state.results[1].alreadySaved, true);
-  assert.equal(h.state.results[1].storageLayout, 'partitions-v4');
+  assert.equal(h.state.results[1].storageLayout, 'partitions-v5');
   assert.deepEqual(h.state.results[1].ledger, expected);
   await h.click('verify');
   assert.equal(h.get('result').dataset.state, 'success', h.get('result').textContent);

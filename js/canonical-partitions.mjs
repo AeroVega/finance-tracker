@@ -7,6 +7,7 @@ import {createImmutablePageTree, PAGE_TREE_MAX_BYTES} from './immutable-page-tre
 
 export const PARTITIONED_CANONICAL_FORMAT = 'finance-tracker-partitioned-canonical';
 export const PARTITIONED_CANONICAL_VERSION = 4;
+export const BATCHED_CANONICAL_VERSION = 5;
 export const PARTITION_VALUE_CHARS = 1024;
 export const COMPACT_PARTITION_CODEC = 'compact-json-v1';
 export const PARTITION_INLINE_BYTES = 4096;
@@ -336,8 +337,8 @@ export function createPartitionValueCodec(store,options = {}) {
 export function validatePartitionRoot(root) {
   const compact = Object.hasOwn(root ?? {},'valueCodec');
   partitionFields(root,['format','version','syntheticOnly','source','derived',...(compact?['valueCodec']:[])]);
-  if (root.format !== PARTITIONED_CANONICAL_FORMAT || root.version !== 4 || root.syntheticOnly !== true ||
-      (compact && root.valueCodec !== COMPACT_PARTITION_CODEC)) partitionFail('unsupported-partitioned-canonical');
+  if (root.format !== PARTITIONED_CANONICAL_FORMAT || ![4,5].includes(root.version) || root.syntheticOnly !== true ||
+      (root.version === 5 && !compact) || (compact && root.valueCodec !== COMPACT_PARTITION_CODEC)) partitionFail('unsupported-partitioned-canonical');
   partitionHash(root.source); partitionHash(root.derived); return root;
 }
 export function validatePartitionSource(source,version = source?.version) {
@@ -360,18 +361,17 @@ export function validatePartitionDerived(value,sourceHash,version = 1) {
   return value;
 }
 
-/** Reference builder only: full valid legacy/current ledger in memory. */
-export async function buildPartitionDerived(ledger,sourceHash,store,options = {}) {
-  const {signal,version = 1} = partitionOptions(options,['signal','version']); valueVersion(version);
-  const codec = createPartitionValueCodec(store,{version}), {tree} = codec, io = createPartitionObjectIO(store);
+/** Complete independent financial oracle. Entries contain decoded logical
+ * values, so v5 verification does not depend on a particular tree topology. */
+export function partitionDerivedEntries(ledger,{version = 1} = {}) {
+  valueVersion(version);
   const index = createCanonicalMonthIndex(ledger), effective = [], membership = [], summaries = [];
   let ordinal = 0n;
   for (const activity of index.effectiveActivities()) {
     if (version === 2 && Object.values(activity).some(value => value === undefined)) {
-      throw Object.assign(new Error('A linked refund has an undefined derived field. Preserve this copy and add an explicit category correction to its original activity before copying to v4.'),{code:'unsupported-derived-projection'});
+      throw Object.assign(new Error('A linked refund has an undefined derived field. Preserve this copy and add an explicit category correction to its original activity before copying to a compact canonical profile.'),{code:'unsupported-derived-projection'});
     }
-    const ref = await codec.encode(activity,{signal});
-    effective.push([activity.activityId,ref]);
+    effective.push([activity.activityId,activity]);
     if (activity.active) {
       const date = activity.activityKind === 'refund' ? activity.postedDate : activity.effectiveDate;
       const month = date === null ? '@undated' : date.slice(0,7);
@@ -380,14 +380,24 @@ export async function buildPartitionDerived(ledger,sourceHash,store,options = {}
     ordinal++;
   }
   for (const summary of index.monthlySummaries()) {
-    // V4 index counters are decimal strings, independent of JS safe-integer math.
     summary.availability.eligibleActivityCount = String(summary.availability.eligibleActivityCount);
-    summaries.push([`${summary.accountId}/${summary.month}/${summary.currency}`,await codec.encode(summary,{signal})]);
+    summaries.push([`${summary.accountId}/${summary.month}/${summary.currency}`,summary]);
   }
-  return io.write({format:PARTITIONED_CANONICAL_FORMAT + '-derived',version,source:sourceHash,
-    effectiveActivities:await tree.build(partitionSort(effective),{signal}),
-    monthActivities:await tree.build(partitionSort(membership),{signal}),
-    summaries:await tree.build(partitionSort(summaries),{signal})},{signal});
+  return {effectiveActivities:partitionSort(effective),monthActivities:partitionSort(membership),summaries:partitionSort(summaries)};
+}
+
+/** Reference bulk builder retained for the original and compact v4 profiles. */
+export async function buildPartitionDerived(ledger,sourceHash,store,options = {}) {
+  const {signal,version = 1} = partitionOptions(options,['signal','version']); valueVersion(version);
+  const codec = createPartitionValueCodec(store,{version}), {tree} = codec, io = createPartitionObjectIO(store);
+  const roots = {};
+  for (const [name,entries] of Object.entries(partitionDerivedEntries(ledger,{version}))) {
+    async function* encoded() {
+      for (const [key,value] of entries) yield [key,name === 'monthActivities' ? value : await codec.encode(value,{signal})];
+    }
+    roots[name] = await tree.build(encoded(),{signal});
+  }
+  return io.write({format:PARTITIONED_CANONICAL_FORMAT + '-derived',version,source:sourceHash,...roots},{signal});
 }
 
 /** Isolated v4 encoder. It does not publish, migrate, or change the app default. */
@@ -433,4 +443,58 @@ export async function buildCompactPartitionedCanonicalLedger(ledger,store,option
   const rootHash = await createPartitionObjectIO(store).write({format:PARTITIONED_CANONICAL_FORMAT,version:4,
     syntheticOnly:true,source,derived,valueCodec:COMPACT_PARTITION_CODEC},{signal});
   return {rootHash,sourceHash:source,derivedHash:derived};
+}
+
+/** V5 uses the same exact source/value shapes as compact v4. The caller owns
+ * a fully verified base and complete ledger; this replaces tree reconstruction,
+ * not full-ledger validation, oracle evaluation or preparation memory. */
+export async function updatePartitionedCanonicalLedger(ledger,store,options = {}) {
+  const {signal,baseRootHash = null,baseLedger = null} = partitionOptions(options,['signal','baseRootHash','baseLedger']);
+  partitionAbort(signal);
+  const snapshot = snapshotJson(ledger), previous = baseLedger === null ? null : snapshotJson(baseLedger);
+  validateLedger(snapshot);
+  const codec = createPartitionValueCodec(store,{version:2}), {tree} = codec, io = createPartitionObjectIO(store);
+  let baseSource = null, baseDerived = null;
+  if (baseRootHash !== null) {
+    const root = validatePartitionRoot(await io.read(baseRootHash,{signal}));
+    if (root.version !== 5 || previous === null) partitionFail('canonical-profile-mismatch');
+    baseSource = validatePartitionSource(await io.read(root.source,{signal}),2);
+    baseDerived = validatePartitionDerived(await io.read(root.derived,{signal}),root.source,2);
+  } else if (previous !== null) partitionFail('canonical-base-required');
+  let empty = null;
+  const emptyRoot = async () => empty ??= await tree.build([],{signal});
+  const equal = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
+  async function update(root,before,after,encoded = false) {
+    const old = new Map(before), next = new Map(after), changes = [];
+    for (const key of old.keys()) if (!next.has(key)) changes.push({type:'delete',key});
+    for (const [key,value] of next) if (!old.has(key) || !equal(old.get(key),value)) {
+      changes.push({type:'set',key,value:encoded ? await codec.encode(value,{signal}) : value});
+    }
+    changes.sort((a,b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+    return tree.updateMany(root ?? await emptyRoot(),changes,{signal});
+  }
+  const collections = [], oldCollections = new Map();
+  if (baseSource) for await (const entry of tree.entries(baseSource.collections,{signal})) oldCollections.set(...entry);
+  const metadata = {...snapshot}, oldMetadata = previous === null ? null : {...previous};
+  for (const [name,idField] of Object.entries(PARTITION_COLLECTIONS)) {
+    delete metadata[name]; if (oldMetadata) delete oldMetadata[name];
+    if (!Object.hasOwn(snapshot,name)) continue;
+    const before = previous?.[name] ?? [], after = snapshot[name], old = oldCollections.get(name);
+    collections.push([name,{idField,
+      byId:await update(old?.byId,before.map(record => [record[idField],record]),after.map(record => [record[idField],record]),true),
+      order:await update(old?.order,before.map((record,i) => [partitionOrdinal(i),record[idField]]),after.map((record,i) => [partitionOrdinal(i),record[idField]])),
+      count:String(after.length)}]);
+  }
+  const sourceHash = await io.write({format:PARTITIONED_CANONICAL_FORMAT+'-source',version:2,
+    metadata:baseSource && equal(metadata,oldMetadata) ? baseSource.metadata : await codec.encode(metadata,{signal}),
+    collections:await update(baseSource?.collections,[...oldCollections],collections),
+    eventFrontier:String(snapshot.events.length),positionEventFrontier:String(snapshot.positionEvents?.length ?? 0)},{signal});
+  const beforeDerived = previous ? partitionDerivedEntries(previous,{version:2}) : {}, afterDerived = partitionDerivedEntries(snapshot,{version:2}), roots = {};
+  for (const [name,entries] of Object.entries(afterDerived)) {
+    roots[name] = await update(baseDerived?.[name],beforeDerived[name] ?? [],entries,name !== 'monthActivities');
+  }
+  const derivedHash = await io.write({format:PARTITIONED_CANONICAL_FORMAT+'-derived',version:2,source:sourceHash,...roots},{signal});
+  const rootHash = await io.write({format:PARTITIONED_CANONICAL_FORMAT,version:5,syntheticOnly:true,
+    source:sourceHash,derived:derivedHash,valueCodec:COMPACT_PARTITION_CODEC},{signal});
+  return {rootHash,sourceHash,derivedHash};
 }

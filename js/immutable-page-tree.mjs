@@ -240,17 +240,17 @@ export function createImmutablePageTree(store, options = {}) {
     }
     catch (error) { if (error.code === 'node-byte-limit') return false; throw error; }
   }
-  async function pack(kind, items, signal) {
+  async function pack(kind, items, signal, emit = write) {
     const result = [];
     let buffer = [];
     for (const item of items) {
       if (buffer.length && !fits(kind, [...buffer, item])) {
-        result.push(await write(nodeFor(kind, buffer), signal)); buffer = [];
+        result.push(await emit(nodeFor(kind, buffer), signal)); buffer = [];
       }
       buffer.push(item);
       if (!fits(kind, buffer)) fail('node-byte-limit', 'A single entry cannot fit in a page.');
     }
-    if (buffer.length) result.push(await write(nodeFor(kind, buffer), signal));
+    if (buffer.length) result.push(await emit(nodeFor(kind, buffer), signal));
     return result;
   }
   async function finishRoot(refs, signal) {
@@ -306,44 +306,135 @@ export function createImmutablePageTree(store, options = {}) {
     throw new Error('Unreachable builder state.');
   }
   async function descend(root, k, signal) {
-    const path = [], ancestors = new Set();
+    const ancestors = new Set();
     let hash = root, expected = null;
     while (true) {
       if (ancestors.has(hash)) fail('cycle', 'A page refers to an ancestor.');
       ancestors.add(hash);
       const node = await read(hash, expected, signal);
-      if (node.kind === 'leaf') return {hash, node, path};
+      if (node.kind === 'leaf') return node;
       let index = node.children.findIndex(child => child.max >= k);
       if (index < 0) index = node.children.length - 1;
-      path.push({node, index}); expected = node.children[index]; hash = expected.hash;
+      expected = node.children[index]; hash = expected.hash;
     }
   }
   async function get(root, inputKey, opts = {}) {
     const k = key(inputKey), {signal} = settings(opts, ['signal']); rootHash(root);
-    const {node} = await descend(root, k, signal);
+    const node = await descend(root, k, signal);
     return node.entries.find(entry => entry[0] === k)?.[1];
   }
-  async function change(root, inputKey, value, remove, opts) {
-    const k = key(inputKey), {signal} = settings(opts, ['signal']); rootHash(root);
-    const snapshot = remove ? null : copy(value); // Before an untrusted async store can run.
-    if (!remove && !fits('leaf', [[k, snapshot]])) fail('node-byte-limit', 'A single entry cannot fit in a page.');
-    const {node, path} = await descend(root, k, signal);
-    const entries = node.entries, at = entries.findIndex(entry => entry[0] >= k), exists = at >= 0 && entries[at][0] === k;
-    if (remove && !exists) return root;
-    if (!remove && exists && json(entries[at][1], maxNodeBytes) === json(snapshot, maxNodeBytes)) return root;
-    if (remove) entries.splice(at, 1);
-    else if (exists) entries[at] = [k, snapshot];
-    else entries.splice(at < 0 ? entries.length : at, 0, [k, snapshot]);
-    let refs = await pack('leaf', entries, signal);
-    while (path.length) {
-      const {node: parent, index} = path.pop();
-      parent.children.splice(index, 1, ...refs);
-      refs = await pack('branch', parent.children, signal);
+  /** Apply an array of {type:'set', key, value}/{type:'delete', key} commands.
+   * Every command is validated and snapshotted before the first await. Commands
+   * must have strictly ordered, unique keys; callers coalesce repeated edits
+   * into a final diff before calling. Duplicate/unordered commands are rejected.
+   * Unchanged final values and missing deletes do not write pages.
+   *
+   * Edits share one visit per affected subtree. Root collapse may also read a
+   * surviving unary chain. Untouched references are reused, not verified here:
+   * callers still need verify() for a full structural audit.
+   * Private drafts cost O(batch input + changed pages), not O(all old records).
+   * They are not a verification cache. Only final-root reachable drafts reach
+   * store.write, once each, after root collapse. Failed/cancelled calls can leave
+   * an incomplete immutable closure; they never change or publish the old root.
+   */
+  async function updateMany(root, commands, opts = {}) {
+    const {signal} = settings(opts, ['signal']); rootHash(root); abort(signal);
+    if (!Array.isArray(commands) || Object.getOwnPropertySymbols(commands).length ||
+        Object.keys(commands).length !== commands.length) fail('invalid-input', 'Updates need a dense array of commands.');
+    const changes = [];
+    let previous = null;
+    for (let i = 0; i < commands.length; i++) {
+      const descriptor = Object.getOwnPropertyDescriptor(commands, String(i));
+      if (!descriptor || !Object.hasOwn(descriptor, 'value')) fail('invalid-input', 'Update commands cannot be accessors.');
+      const command = copy(descriptor.value);
+      const remove = command?.type === 'delete';
+      fields(command, remove ? ['type', 'key'] : ['type', 'key', 'value'], 'invalid-command');
+      if (!remove && command.type !== 'set') fail('invalid-command', 'Expected a set or delete command.');
+      key(command.key);
+      if (previous !== null && previous >= command.key) fail('invalid-order', 'Update keys must be strictly ordered without duplicates.');
+      previous = command.key;
+      if (!remove && !fits('leaf', [[command.key, command.value]])) fail('node-byte-limit', 'A single entry cannot fit in a page.');
+      changes.push(command);
     }
-    return finishRoot(refs, signal);
+    // Hashes have fixed serialized length. Draft references use a placeholder
+    // only for packing; identity in this private WeakMap distinguishes them from
+    // stored references. A placeholder is never passed to the content store.
+    const drafts = new WeakMap(), active = new Set();
+    function draft(node) {
+      const ref = refFor('0'.repeat(64), node);
+      drafts.set(ref, node);
+      return ref;
+    }
+    async function visit(hash, expected, start, end) {
+      if (active.has(hash)) fail('cycle', 'A page refers to an ancestor.');
+      active.add(hash);
+      const node = await read(hash, expected, signal), original = expected ?? refFor(hash, node);
+      let items = [], changed = false;
+      if (node.kind === 'leaf') {
+        let at = 0;
+        for (let i = start; i < end; i++) {
+          const command = changes[i];
+          while (at < node.entries.length && node.entries[at][0] < command.key) items.push(node.entries[at++]);
+          const existing = node.entries[at]?.[0] === command.key ? node.entries[at++] : null;
+          if (command.type === 'delete') { if (existing) changed = true; }
+          else if (existing && json(existing[1], maxNodeBytes) === json(command.value, maxNodeBytes)) items.push(existing);
+          else { items.push([command.key, command.value]); changed = true; }
+        }
+        while (at < node.entries.length) items.push(node.entries[at++]);
+      } else {
+        let at = start;
+        for (let i = 0; i < node.children.length; i++) {
+          const child = node.children[i], first = at;
+          while (at < end && (i === node.children.length - 1 || changes[at].key <= child.max)) at++;
+          if (first === at) items.push(child);
+          else {
+            const replacement = await visit(child.hash, child, first, at);
+            if (replacement.length !== 1 || replacement[0] !== child) changed = true;
+            for (const ref of replacement) items.push(ref);
+          }
+        }
+      }
+      active.delete(hash);
+      return changed ? pack(node.kind, items, signal, draft) : [original];
+    }
+    let refs = await visit(root, null, 0, changes.length);
+    if (refs.length === 1 && refs[0].hash === root && !drafts.has(refs[0])) return root;
+    while (refs.length > 1) {
+      const next = await pack('branch', refs, signal, draft);
+      if (next.length >= refs.length) fail('node-byte-limit', 'A branch cannot fit two references.');
+      refs = next;
+    }
+    let final = refs[0] ?? draft(nodeFor('leaf', []));
+    while (BigInt(final.height) > 0n) {
+      const node = drafts.get(final) ?? await read(final.hash, final, signal);
+      if (node.children.length !== 1) break;
+      final = node.children[0];
+    }
+    async function flush(ref) {
+      if (!drafts.has(ref)) { abort(signal); return ref; }
+      const stack = [{ref, node:drafts.get(ref), index:0}];
+      let saved;
+      while (stack.length) {
+        abort(signal);
+        const frame = stack.at(-1);
+        if (frame.node.kind === 'branch' && frame.index < frame.node.children.length) {
+          const child = frame.node.children[frame.index++], node = drafts.get(child);
+          if (node) stack.push({ref:child, node, index:0});
+        } else {
+          saved = await write(frame.node, signal);
+          drafts.delete(frame.ref); stack.pop();
+          if (stack.length) {
+            const parent = stack.at(-1);
+            parent.node.children[parent.index - 1] = saved;
+          }
+        }
+      }
+      return saved;
+    }
+    return (await flush(final)).hash;
   }
-  const set = (root, k, value, opts = {}) => change(root, k, value, false, opts);
-  const del = (root, k, opts = {}) => change(root, k, null, true, opts);
+  const set = (root, k, value, opts = {}) => updateMany(root, [{type:'set', key:k, value}], opts);
+  const del = (root, k, opts = {}) => updateMany(root, [{type:'delete', key:k}], opts);
   function query(opts, allowed = ['gte', 'lt', 'signal']) {
     const {gte = null, lt = null, signal} = settings(opts, allowed);
     if (gte !== null) key(gte);
@@ -446,6 +537,6 @@ export function createImmutablePageTree(store, options = {}) {
     for await (const {node} of checkedWalk(rootHash(root), signal)) { info ??= metadata(node); nodes++; }
     return {...info, nodes: String(nodes)};
   }
-  return Object.freeze({build, get, set, delete: del, entries, page, inspect, verify, walk,
+  return Object.freeze({build, get, set, delete: del, updateMany, entries, page, inspect, verify, walk,
     limits: Object.freeze({maxNodeBytes, maxEntries, maxChildren, maxKeyBytes})});
 }

@@ -36,7 +36,8 @@ function frame(type, header, body = new Uint8Array()) {
 // test fixtures; the production module uses neither Buffer nor this inventory.
 function oracle(objects = [top], root = rootFor(objects[0]), terminalOverride = {}) {
   const rootFrame = frame(1, root);
-  const frames = [rootFrame, ...objects.map(item => frame(2, { hash: item.hash, byteLength: item.bytes.length }, item.bytes))];
+  const frames = [rootFrame, ...objects.map(item => frame(2, { hash: item.hash, byteLength: item.bytes.length,
+    ...(item.descriptor ? {descriptor:item.descriptor} : {}) }, item.bytes))];
   let chain = digest(domain("start"), magic);
   for (const item of frames) {
     const frameHash = digest(domain("frame"), item.prefix, item.header, digest(item.body));
@@ -518,4 +519,30 @@ test('physical4 is an explicit archive3 profile with authenticated typed object 
   const {profile,sourceEvidence,...old}=root;
   await assert.rejects(collect(encodeFramedBackup({root:old,objects:[top]})),{code:'unsupported-root-version'});
   await assert.rejects(collect(encodeFramedBackup({root,objects:[{...item,descriptor:{kind:'data-object',identity:'invented-not-hash'}}]})),{code:'invalid-descriptor'});
+});
+
+test('canonical5-physical4 keeps transport3 and requires its exact typed profile on encode and decode',async()=>{
+  const item={...top,descriptor:{kind:'data-object',identity:top.hash}};
+  const root={...rootFor(),profile:'canonical5-physical4',canonical:{version:5,sha256:top.hash},sourceEvidence:null,protocol:{version:4,sha256:top.hash}};
+  const encoded=await collect(encodeFramedBackup({root,objects:[item]}));
+  assert.deepEqual(encoded,oracle([item],root).all);
+  const target=stage();await restore(chunks(encoded,1),target);
+  assert.equal(target.state.root.profile,'canonical5-physical4');
+  assert.equal(target.state.root.canonical.version,5);assert.equal(FRAMED_BACKUP_VERSION,3);
+  for(const [changed,code] of [
+    [{...root,profile:'canonical6-physical4'},'unsupported-root-profile'],
+    [{...root,profile:'canonical4-physical4'},'unsupported-root-version'],
+    [{...root,canonical:{version:4,sha256:top.hash}},'unsupported-root-version'],
+    [{...root,protocol:{version:3,sha256:top.hash}},'unsupported-root-version'],
+    [{...root,catalog:{version:3,sha256:top.hash}},'invalid-root'],
+    [Object.fromEntries(Object.entries(root).filter(([key])=>key!=='sourceEvidence')),'invalid-root'],
+    [Object.fromEntries(Object.entries(root).filter(([key])=>!['profile','sourceEvidence'].includes(key))),'unsupported-root-version']
+  ]) {
+    await assert.rejects(collect(encodeFramedBackup({root:changed,objects:[item]})),{code});
+    const refused=stage();
+    await assert.rejects(restore([oracle([item],changed).all],refused),reason(code));
+    assert.equal(refused.state.begins,0);assert.equal(refused.state.writes,0);
+  }
+  await assert.rejects(restore([oracle([top],root).all]),reason('invalid-header'));
+  await assert.rejects(collect(encodeFramedBackup({root,objects:[top]})),{code:'invalid-header'});
 });

@@ -9,7 +9,9 @@ format. Automated synthetic checks are recorded in [project status](PROJECT_STAT
 Live Drive/device and performance acceptance remain open. No real records, owner
 Drive actions, merge, deployment or production activation are authorized.
 
-The first integration still materializes the complete ledger for financial
+The v5 replacement slice extends this same adapter with coalesced tree updates.
+New synthetic copies use v5; existing v4 copies retain their profile. The
+application still materializes the complete ledger for financial
 validation and app editing. It does not establish bounded whole-ledger memory
 or selective cold opening. Per-record v1 and fragmented v3 copies keep their
 existing interpretation and are never silently migrated. Grouped v2 is refused.
@@ -40,10 +42,10 @@ The original v4 root is canonical JSON with exactly five fields:
 }
 ```
 
-The application writes an explicit v4 extension with the additional field
+The retained compact v4 writer uses an explicit extension with the additional field
 `"valueCodec": "compact-json-v1"`. This tag requires source and derived version 2.
 An untagged root requires source and derived version 1. Unknown tags, mixed
-codec versions, extra root fields and canonical root versions 5/6/7 are refused.
+codec versions, extra root fields and unsupported root versions are refused.
 Original five-field v4 hashes and semantics remain unchanged. Original v4 readers
 reject the extra root field before reading the new codec. The old app's connection
 and bootstrap guards refuse visible nonempty v4 folders before creating a legacy
@@ -54,7 +56,9 @@ Codec 2 may store an exact JSON value inline when it fits 4,096 UTF-8 bytes and
 24 nesting levels. Larger values retain paged fallback. Source fields and absent
 properties remain exact. Inline handles are deeply frozen, and cursors bind the
 specific value. The application uses locator catalog 3, physical root protocol 4
-and framed archive 3 with the explicit `canonical4-physical4` profile.
+and framed archive 3. V4 uses the explicit `canonical4-physical4` profile; v5
+uses `canonical5-physical4`, canonical descriptor version 5, physical protocol 4
+and `catalog: null`. Source-evidence meaning is unchanged.
 
 It has no per-record, partition or object inventory. The original measured root is 236
 bytes regardless of fixture size. The source root contains a metadata value
@@ -174,8 +178,9 @@ Query results include the pinned root and verification states:
   passed. It is not a storage-transaction or retained-history proof.
 - `derived: "not-semantically-validated"` is the cold query default.
 - `derived: "semantic-verified"` requires complete source validation, exact
-  deterministic derived rebuilding, and reading all referenced derived pages and
-  nested values to verify their actual availability and contents.
+  deterministic derived rebuilding for v4 or exact ordered logical key/value
+  comparison against the complete financial oracle for v5. Both read every
+  referenced derived page and nested value to verify availability and contents.
 - `derived: "invalid"` means the reconstructed source passed but derived content
   differed. Queries keep that warning. An audit does not repair remote bytes.
 
@@ -185,13 +190,53 @@ Hash/shape verification alone is insufficient.
 
 `fullAudit` is a reference audit for bounded fixtures. It retains the entire
 reconstructed ledger, calls the existing full-ledger validator and retains a
-temporary expected derived store. It reads some nodes more than once. The default
+temporary expected derived store for v4 or complete expected logical entries
+for v5. It reads some nodes more than once. The default
 `maxRecords` is 100,000 across source collections. `maxValues` and
 `maxStringCodeUnits`, by default 1,000,000 and 4,000,000, apply to **each value
 expansion**, including each record, not to total retained audit memory. These are
 operation budgets which callers can set explicitly, not storage capacity claims.
 A budget failure during source assembly cannot validate a partial ledger. Only
 one audit may run per reader at a time.
+
+## Coalesced v5 saves and compatibility
+
+The v5 root has exactly `format`, `version: 5`, `syntheticOnly: true`, `source`,
+`derived`, and `valueCodec: "compact-json-v1"`. Source and derived stay version 2
+with their existing exact fields. No future relation roots are stored. The
+registered verifier is `canonical-partitions-v5`; v4 keeps its original verifier
+and deterministic derived-root requirement. Different valid derived tree shapes
+can pass v5 only when every ordered key and fully decoded value matches the full
+oracle. Counts, omissions, extra membership and missing nested bytes are checked.
+The existing unsupported linked-refund/undefined-field case remains refused.
+
+`updatePartitionedCanonicalLedger` compares the owned complete input with its
+verified base. It uses one ordered, unique `updateMany` batch per changed by-ID,
+order or derived tree and reuses unchanged record descriptors and roots. Fresh
+builds use the same writer with an empty base. Before publication the application
+independently audits the final root through prepared/base reads and submits only
+new final-reachable data objects absent from the retained locator. This filters
+unpublished preparation only. Historical objects and protocol evidence remain.
+
+Initialization marker 2 pins `canonicalProfile: "partitions-v5"`. Interrupted
+marker-1 initializers remain v4, including their typed genesis verifier. The
+shared empty-root sentinel does not authorize changing profiles. Saves and cold
+reconnect never convert an existing copy. Explicit supported v1/v3 migration
+creates a fresh v5 copy and retains independently verified legacy evidence;
+v4-to-v5 migration is not implemented. Original/compact v4, legacy writers and
+retention remain supported separately.
+
+Locator catalog 3 and physical protocol 4 remain unchanged. Locator batches
+update all three indexes once and create only the final new-page closure. Full
+base/candidate mapping, history, metadata, receipt, ownership, exact-base,
+readback and recovery checks remain. Ordinary saves use `PhysicalRootBinding`;
+initialization and restore still publish through their separate guarded routes.
+
+This slice reduces tree construction and uploaded paths. It does not provide
+selective app loading, bounded whole-database memory or incremental financial
+validation. The workspace still supplies a complete ledger; full oracle and
+history work, preparation Maps, descriptor arrays and restore inventories remain.
+Live Drive/device acceptance and production authorization are separate gates.
 
 ## Position and reconciliation remain unimplemented here
 
@@ -289,11 +334,13 @@ capacity and production review.
 
 ## Application compatibility and failure behavior
 
-The workspace and seeder request `partitions-v4` for new copies. Existing v1/v3
-copies use their original path. An explicit backup-guide migration creates a
-fresh destination, preserves exact old portable history as chunked evidence,
+The workspace and seeder request `partitions-v5` for new copies. Existing v4
+copies retain their original v4 profile and writer; existing v1/v3 copies also
+use their original path. An explicit backup-guide migration from v1/v3 creates
+a fresh v5 destination, preserves exact old portable history as chunked evidence,
 and verifies the new current ledger equals the latest old ledger. Legacy archive
-validation remains materializing. Existing source folders are unchanged.
+validation remains materializing. Existing source folders are unchanged; this
+slice does not migrate v4 copies to v5.
 
 Every retained v4 commit validates its ledger and immutable transition. Original
 source rows, financial activities and prior events cannot be rewritten. Monthly

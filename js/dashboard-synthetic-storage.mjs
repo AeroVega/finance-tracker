@@ -246,6 +246,7 @@ export class DashboardSyntheticStorage {
   }
 
   async connect({ requireEmpty = false, requireExisting = false, canonicalLayout = null } = {}) {
+    if (canonicalLayout !== null && !["partitions-v5","fragments-v3"].includes(canonicalLayout)) throw storageError("unsupported-canonical-layout", "New copies require an explicit supported canonical layout.");
     if (this.busy) throw new Error("A storage operation is already in progress.");
     this.busy = true;
     try {
@@ -310,7 +311,7 @@ export class DashboardSyntheticStorage {
       if (requireEmpty) await requireEmptySyntheticFolder(preflightAdapter);
       const paged = await inspectPagedCanonicalCopy(preflightAdapter);
       const inspected = paged || await inspectPr25Folder(preflightAdapter);
-      const pagedCanonical = Boolean(paged || (!inspected.manifestFileId && canonicalLayout === "partitions-v4"));
+      const pagedCanonical = Boolean(paged || (!inspected.manifestFileId && canonicalLayout === "partitions-v5"));
       if (requireExisting && !inspected.manifestFileId) {
         throw storageError("existing-copy-required", "No existing synthetic copy was found. Reconnect does not initialize a new folder.");
       }
@@ -398,7 +399,7 @@ export class DashboardSyntheticStorage {
   }
 
   async saveSyntheticSnapshot(transactions) {
-    if (this.lifecycle?.pagedCanonical) throw storageError("canonical-workspace-required", "Use the canonical workspace to save this v4 copy.");
+    if (this.lifecycle?.pagedCanonical) throw storageError("canonical-workspace-required", "Use the canonical workspace to save this paged copy.");
     if (!this.lifecycle || this.lifecycle.state !== "ready") throw new Error("Synthetic storage is not ready.");
     if (!transactions.every((row) => row?.syntheticOnly === true)) {
       throw Object.assign(new Error("CSV-imported or other non-synthetic rows are never written to Drive in PR #24."), { code: "synthetic-data-required" });

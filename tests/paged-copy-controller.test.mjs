@@ -74,7 +74,7 @@ for(const [label,page,selector] of [
     assert.equal(h.get('legacy-tools').hidden,true);assert.equal(h.get('v4-copy-tools').hidden,false);
     await h.click('v4-connect');h.state.folders.push('invented-navigation-backup');await h.click('v4-backup');
     assert.equal(h.calls.backup.length,1);assert.equal(h.calls.backup[0].sourceAdapter.folderId,'invented-source');
-    assert.match(h.get('v4-result').textContent,/Verified v4 backup/);
+    assert.match(h.get('v4-result').textContent,/Verified paged backup/);
   });
 }
 
@@ -101,7 +101,7 @@ test('copy handlers disable competing actions through completion and release des
   await h.click('v4-backup');assert.equal(h.calls.backup.length,1);
   h.state.pending.resolve();await pending;assert.equal(h.calls.targetRelease,1);assert.match(h.get('v4-result').textContent,/ownership-lost/);
   assert.equal(h.get('v4-backup').disabled,false);h.state.pending=null;h.state.fail=null;h.state.folders.push('invented-retry-target');await h.click('v4-backup');
-  assert.match(h.get('v4-result').textContent,/Verified v4 backup/);assert.equal(h.calls.backup.length,2);
+  assert.match(h.get('v4-result').textContent,/Verified paged backup/);assert.equal(h.calls.backup.length,2);
 });
 
 test('saved file restore works source-offline and forwards the actual selected stream',async()=>{

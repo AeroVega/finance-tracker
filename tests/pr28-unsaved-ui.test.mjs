@@ -6,7 +6,7 @@ import * as canonical from '../js/canonical-import.mjs';
 import { canonicalizeJcs } from '../js/transaction-protocol.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
 import {CanonicalLedgerStore as ActualCanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
-import {EMPTY_CANONICAL_BYTES,emptyCanonicalRootHash} from '../js/paged-canonical-format.mjs';
+import {EMPTY_CANONICAL_BYTES,emptyCanonicalRootHash,PAGED_CANONICAL_VERIFIER} from '../js/paged-canonical-format.mjs';
 import {verifyPartitionedCanonicalCommit} from '../js/canonical-paged-storage.mjs';
 
 const moduleUrl = new URL('../prototype/pr28-import.mjs', import.meta.url);
@@ -56,7 +56,7 @@ async function controller({ guided = false, actualPaged = false } = {}) {
     constructor(options) { this.options = options; this.lifecycle = null; storage = this; }
     async prepare() {}
     async connect(options) {
-      if(actualPaged)assert.equal(options.canonicalLayout,'partitions-v4');
+      if(actualPaged)assert.equal(options.canonicalLayout,'partitions-v5');
       calls.connects++; await state.onConnect?.();
       this.lifecycle = { state: 'ready', acceptingWrites: true, started: true, coordinator: { canWrite: true },
         async recover() { calls.recoveries++; this.state = 'ready'; this.acceptingWrites = true; }
@@ -64,9 +64,10 @@ async function controller({ guided = false, actualPaged = false } = {}) {
       if(actualPaged)Object.assign(this.lifecycle,{pagedCanonical:true,folderId:'invented-folder',
         readManifest:async()=>structuredClone(manifest),
         assertCurrentManifest:async expected=>assert.deepEqual(expected,manifest),
-        readPartitionedSnapshot:async()=>({manifest:structuredClone(manifest),rootHash:manifest.root,store:{read:async hash=>{if(!objects.has(hash))throw new Error('missing bytes');return objects.get(hash).slice();}}}),
-        async savePartitionedRoot({expectedBase,rootHash,objects:descriptors,preparationStore,semanticVersion}){
+        readPartitionedSnapshot:async()=>({manifest:structuredClone(manifest),rootHash:manifest.root,semanticVersion:PAGED_CANONICAL_VERIFIER,store:{read:async hash=>{if(!objects.has(hash))throw new Error('missing bytes');return objects.get(hash).slice();}}}),
+        async savePartitionedRoot({expectedBase,rootHash,objects:descriptors,preparationStore,semanticVersion,prepare}){
           assert.deepEqual(expectedBase,manifest);calls.saves++;await state.onSave?.();
+          if(prepare)({rootHash,objects:descriptors,preparationStore}=await prepare({rootHash:manifest.root,semanticVersion,store:{read:async hash=>{assert.ok(objects.has(hash));return objects.get(hash).slice();}}}));
           for(const d of descriptors)objects.set(d.sha256,await preparationStore.read(d.sha256));
           const next={...manifest,root:rootHash,revision:String(BigInt(manifest.revision)+1n)};
           await verifyPartitionedCanonicalCommit({manifest:next,commit:{root:rootHash,previousRoot:manifest.root,revision:next.revision,semanticVersion,operation:'synthetic-canonical-import',changeEvidenceRoot:null},readObject:async q=>objects.get(q.sha256)});manifest=next;
@@ -493,9 +494,9 @@ test('failed-save fence survives retained base, recovery with declined reopen an
 });
 
 
-test('guided import actual v4 genesis, explicit save and reconnect use the real paged canonical store',async()=>{
+test('guided import actual v5 genesis, explicit save and reconnect use the real paged canonical store',async()=>{
   const h=await controller({guided:true,actualPaged:true});await h.click('connect');
-  assert.equal(h.page.inspect().store.layout,'partitions-v4');
+  assert.equal(h.page.inspect().store.layout,'partitions-v5');
   await h.page.withAcceptanceWorkbench(driver=>driver.requireFresh());
   await h.stage();const proposed=structuredClone(h.page.inspect().ledger);assert.equal(h.calls.saves,0);
   await h.click('save');assert.equal(h.calls.saves,1);assert.equal(h.page.inspect().dirty,false);

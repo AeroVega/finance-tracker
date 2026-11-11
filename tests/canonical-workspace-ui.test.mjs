@@ -565,7 +565,7 @@ test('main workspace can explicitly save the exact local preview into a fresh sy
   assert.equal(h.modelSession.mode, 'preview');
   assert.equal(h.get('save-preview').disabled, false);
   await h.click('save-preview');
-  assert.deepEqual(h.state.connects, [{requireEmpty:true,canonicalLayout:'partitions-v4'}]);
+  assert.deepEqual(h.state.connects, [{requireEmpty:true,canonicalLayout:'partitions-v5'}]);
   assert.equal(h.state.writes, 1);
   assert.equal(h.modelSession.mode, 'saved');
   assert.equal(h.modelSession.dirty, false);
@@ -1114,7 +1114,7 @@ test('Storage distinguishes the active saved format from preview and experimenta
   assert.match(h.get('storage-format').textContent, /No saved format currently verified/);
   await h.click('preview-year');
   assert.match(h.get('storage-format').textContent, /Local preview, no saved format yet/);
-  assert.match(h.get('storage-format').textContent, /new folder will use canonical v4/);
+  assert.match(h.get('storage-format').textContent, /new folder will use canonical v5/);
   await h.click('open-ledger');
   assert.match(h.get('storage-format').textContent, /Last verified saved format: per-record v1/);
   await h.click('release-ledger');
@@ -1123,7 +1123,7 @@ test('Storage distinguishes the active saved format from preview and experimenta
   await h.click('save-preview');
   assert.match(h.get('storage-format').textContent, /Last verified saved format: fragmented v3/);
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /canonical v4 with the explicit compact-json-v1 value codec/);
+  assert.match(html, /canonical v5 with the explicit compact-json-v1 value codec/);
   assert.match(html, /Opening a copy still verifies and loads the complete canonical ledger/);
   assert.match(html, /Existing folders are not silently converted/);
 });

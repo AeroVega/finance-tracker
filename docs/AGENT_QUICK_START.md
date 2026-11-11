@@ -14,9 +14,9 @@ Do not read every historical PR report before starting a task.
 ## Current state (November 11, 2026)
 
 - PR #37 is an open draft against `main`. Check its head and [project status](PROJECT_STATUS.md) for publication, validation and deployment evidence.
-- New synthetic stores use canonical v4. Seeder, workspace, import, recovery, backup/restore and explicit fresh-copy migration invoke the integrated path. Existing per-record v1 and fragmented v3 remain compatible; standalone grouped v2 is rejected.
-- The app uses the tagged compact v4 codec, locator catalog 3 and physical root protocol 4. These are distinct subsystem versions, defined in [the glossary](STORAGE_TERMINOLOGY.md).
-- Full ledger/history loading, full semantic validation and deterministic tree rebuilding remain. Do not describe this milestone as bounded whole-database memory, selective cold opening or incremental canonical validation.
+- The local v5 slice uses the existing paged store and lifecycle. New synthetic copies and explicit v1/v3 fresh-copy migration output use canonical v5. Existing v4 copies keep their profile and writer; no v4-to-v5 migration exists. Standalone grouped v2 is rejected.
+- Canonical v5 keeps compact source/derived version 2, locator catalog 3 and physical root protocol 4. Framed transport 3 uses the explicit `canonical5-physical4` profile. See [the glossary](STORAGE_TERMINOLOGY.md) for version meanings.
+- Canonical and locator changes are coalesced, with only final-reachable new pages prepared for upload. Full financial and retained-history/physical checks, whole-ledger workspace cloning/materialization and preparation memory remain. Bounded whole-database memory, selective app loading and incremental semantic validation are unfinished; see [project status](PROJECT_STATUS.md) for the performance gate.
 - Financial position and reconciled coverage were merged in PR36. Historical monthly-summary migration, supported owner-file ingestion and production controls remain open.
 - Production financial-data persistence is **NO-GO**. Use invented fixtures only. No real records, private workbook, live owner Drive operations, production activation, merge or deployment are authorized by the PR37 storage scope.
 
@@ -34,9 +34,9 @@ If sources disagree, prefer the newest dated evidence for status, the focused co
 
 ## Vocabulary and evidence
 
-- **Canonical layout version**: financial-record representation. V4 is the new-copy default; v1 and fragmented v3 remain compatible. Opening a legacy copy does not migrate it.
+- **Canonical layout version**: financial-record representation. The [format contract](PARTITIONED_CANONICAL_STORAGE.md) defines new-copy defaults and supported profiles. Opening an existing copy does not migrate it.
 - **Locator catalog version**: physical storage index/root format, separate from canonical layout.
-- **Root protocol and archive versions**: publication/recovery and portability formats. The app uses protocol 4 and framed archive 3 with its explicit v4 profile; original prototype formats retain their separate interpretation.
+- **Root protocol and archive versions**: publication/recovery and portability formats. Canonical v4/v5 use physical protocol 4 and framed transport 3 with distinct explicit archive profiles. Older formats retain their separate interpretation.
 - **Implemented** means code exists. **Verified** means the stated check passed on the named revision. **Owner-accepted** means the owner performed the stated acceptance. **Deployed** means a deployment completed and its served SHA was checked. None implies another.
 - Hash integrity proves bytes under a root, not completeness or financial correctness of unread records.
 

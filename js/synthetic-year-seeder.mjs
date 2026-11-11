@@ -16,8 +16,8 @@ const pristine = manifest => manifest.syntheticOnly === true && manifest.role ==
  * be verified; a failed/empty copy requires a new empty destination.
  */
 export class SyntheticYearSeeder {
-  constructor({ createRecipe = createSyntheticFinancialYear, onProgress = () => {}, layout = "partitions-v4" } = {}) {
-    if (!["partitions-v4","fragments-v3"].includes(layout)) fail("unsupported-canonical-layout");
+  constructor({ createRecipe = createSyntheticFinancialYear, onProgress = () => {}, layout = "partitions-v5" } = {}) {
+    if (!["partitions-v4","partitions-v5","fragments-v3"].includes(layout)) fail("unsupported-canonical-layout");
     this.layout = layout;
     this.createRecipe = createRecipe;
     this.onProgress = onProgress;
@@ -49,7 +49,7 @@ export class SyntheticYearSeeder {
       this.onProgress('preparing');
       const recipe = await this.preview();
       this.onProgress('checking');
-      const store = new CanonicalLedgerStore({ lifecycle, layout: lifecycle.pagedCanonical ? "partitions-v4" : "fragments-v3" });
+      const store = new CanonicalLedgerStore({ lifecycle, layout: lifecycle.pagedCanonical ? "partitions-v5" : "fragments-v3" });
       const saved = await store.load();
       if (Object.keys(store.base.snapshot || {}).some(path => !path.startsWith(CANONICAL_PREFIX) && !isMonthIndexPath(path))) fail('unrecognized-seed-copy');
       if (saved) {

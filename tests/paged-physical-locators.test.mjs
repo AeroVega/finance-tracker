@@ -442,7 +442,7 @@ test('bulk build and merge publish only final bounded index pages',async()=>{
  const adapter=new SyntheticAdapter(),tree=adapter.tree(),values=await fixtures(adapter,129);adapter.reset();
  const root=await tree.build(values);assert.equal(adapter.stats.writes,10,'two leaves and one branch per index plus one root');
  assert.equal((await tree.verify(root)).entryCount,'129');const next=await adapter.object(9999);adapter.reset();
- const merged=await tree.setMany(root,[next]);assert.equal(adapter.stats.writes,10,'one complete merge, no per-entry COW roots');
+ const merged=await tree.setMany(root,[next]);assert.equal(adapter.stats.writes,9,'coalesced changed paths reuse one untouched file-index leaf');
  assert.equal((await tree.verify(merged)).entryCount,'130');assert.deepEqual((await tree.inspect(merged)).previous,root);
  assert.deepEqual(await collect(tree.entries(merged)),sort([...values,next]));
 });

@@ -1,5 +1,10 @@
 # Paged storage and recovery milestone
 
+Historical record of the isolated prototype checkpoint. Its application-status
+and adoption-gate wording is superseded by [project status](PROJECT_STATUS.md)
+and the [current canonical contract](PARTITIONED_CANONICAL_STORAGE.md). The
+original scope, design rationale and validation evidence below remain historical.
+
 ## Scope and status
 
 **User-confirmed:** the storage plan includes schema changes, monthly summaries
