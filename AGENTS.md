@@ -1,6 +1,6 @@
 # Contributor and Agent Instructions
 
-Read `README.md`, this file, and relevant `docs/` files before changing the project.
+Read [the agent quick start](docs/AGENT_QUICK_START.md), `README.md`, this file, and only the relevant `docs/` contracts before changing the project.
 
 ## Agent skills
 
