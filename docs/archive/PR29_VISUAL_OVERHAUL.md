@@ -1,6 +1,6 @@
 # PR29 visual overhaul
 
-**Later update, November 8, 2026:** the owner subsequently authorized safe prototype cleanup. The isolated modern-stack runtime is now retired, with its [architecture record preserved](archive/MODERN_UI_EXPLORATION.md). The statements below describe PR29 as verified at that time. See [the current inventory](PROTOTYPE_CLEANUP.md).
+**Later update, November 8, 2026:** the owner subsequently authorized safe prototype cleanup. The isolated modern-stack runtime is now retired, with its [architecture record preserved](MODERN_UI_EXPLORATION.md). The statements below describe PR29 as verified at that time. See [the current inventory](../PROTOTYPE_CLEANUP.md).
 
 ## Scope and status
 
@@ -24,7 +24,7 @@ PR29 incorporates current `main` through a history-preserving merge. The integra
 
 ## PR28 lessons carried forward
 
-Source: [the recorded workflow problems and follow-up criteria](PR28_CANONICAL_IMPORT.md#owner-testing-lessons-november-8-2026), [storage performance evidence](PR28_STORAGE_PERFORMANCE.md), and [the synthetic implementation contract](PR28_IMPLEMENTATION_SCOPE.md).
+Source: [the recorded workflow problems and follow-up criteria](../PR28_CANONICAL_IMPORT.md#owner-testing-lessons-november-8-2026), [storage performance evidence](../PR28_STORAGE_PERFORMANCE.md), and [the synthetic implementation contract](../PR28_IMPLEMENTATION_SCOPE.md).
 
 | Recorded lesson | PR29 response and preserved contract |
 | --- | --- |
