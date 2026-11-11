@@ -93,14 +93,15 @@ export class CanonicalWorkspaceSession {
     this.savedEventCount = ledger.events.length;
   }
 
-  correct({ activityId, type, activityKind, categoryId, amountText, rationale }) {
+  correct({ activityId, type, activityKind, categoryId, amountText, lifecycleStatus, postedDate, rationale }) {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
-    if (!['classification', 'category-correction', 'bank-correction'].includes(type)) fail('unsupported-workspace-correction');
+    if (!['classification', 'category-correction', 'bank-correction', 'posting-status-correction'].includes(type)) fail('unsupported-workspace-correction');
     const command = { activityId, type, commandId: crypto.randomUUID(), evidence: { rationale: rationale.trim() } };
     if (type === 'classification') command.activityKind = activityKind;
     if (type === 'category-correction') command.categoryId = typeof categoryId === 'string' ? categoryId.trim() : categoryId;
     if (type === 'bank-correction') command.amountText = typeof amountText === 'string' ? amountText.trim() : amountText;
+    if (type === 'posting-status-correction') { command.lifecycleStatus = lifecycleStatus; command.postedDate = postedDate; }
     const next = applyFinancialEvent(this.ledger, command);
     this.stageCheckpoint();
     this.ledger = next;

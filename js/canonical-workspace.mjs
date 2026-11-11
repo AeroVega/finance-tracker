@@ -60,6 +60,8 @@ const messages = {
   'correction-rationale-required': 'Explain the evidence or reason for this correction.',
   'classification-amount-conflict': 'That classification conflicts with the amount. Income must not be negative and spending must not be positive.',
   'category-required': 'Enter a category for this transaction.',
+  'invalid-posting-status-correction': 'Choose Posted with a valid posting date, or Pending or Unknown without a posting date. Explain the evidence for the change.',
+  'posting-status-unchanged': 'The posting status and date are unchanged. Choose a different value or another correction.',
   'invalid-amount': 'Enter an exact decimal amount, for example -125.50.',
   'reopen-before-editing': 'Reopen verified saved records before editing. Your local changes have not been discarded.',
   'authorization-cancelled': 'Google authorization was cancelled. No saved records were replaced.',
@@ -139,8 +141,11 @@ function refresh() {
   if (reviewQueueButton) reviewQueueButton.disabled = busy;
   $('transactions').setAttribute('aria-busy', String(busy));
   for (const id of ['account-filter', 'month-filter', 'transaction-search', 'review-only']) $(id).disabled = busy || !session.ledger;
-  for (const id of ['correction-type', 'classification', 'category', 'amount', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
-  $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim();
+  for (const id of ['correction-type', 'classification', 'category', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
+  const postingCorrection = $('correction-type').value === 'posting-status-correction';
+  $('posting-date').disabled = !editable || !postingCorrection || $('posting-status').value !== 'posted';
+  $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim() ||
+    (postingCorrection && $('posting-status').value === 'posted' && !isCalendarDate($('posting-date').value));
   $('previous-page').disabled = busy || !view || view.page === 0;
   $('next-page').disabled = busy || !view || view.page + 1 >= view.pages;
   const timing = $('operation-timing');
@@ -161,6 +166,11 @@ function refresh() {
   $('draft-storage-link').hidden = session.mode !== 'preview' || session.unverified || busy;
   $('data-mode').dataset.mode = session.mode;
   $('data-mode').textContent = session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
+  $('storage-format').textContent = session.mode === 'preview'
+    ? 'Local preview, no saved format yet. Saving to a new folder will use fragmented v3.'
+    : session.ledger && session.store?.base
+      ? `Last verified saved format: ${session.store.layout === 'fragments-v3' ? 'fragmented v3' : 'per-record v1'}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
+      : 'No saved format currently verified. New synthetic copies use fragmented v3.';
 }
 async function run(message, operation, formStatus = null) {
   if (busy) return;
@@ -491,6 +501,8 @@ function showDetail(activityId, {navigate = true} = {}) {
     entry.append(node('strong', label(event.eventType)), node('p', event.recordedAt, 'review-meta'));
     if (event.eventType === 'classification') entry.append(node('p', `${label(event.priorActivityKind)} → ${label(event.activityKind)}`));
     if (event.eventType === 'category-correction') entry.append(node('p', `${event.priorCategoryId || 'No category'} → ${event.categoryId}`));
+    if (event.eventType === 'posting-status-correction') entry.append(node('p',
+      `${label(event.priorValues.lifecycleStatus)} (${event.priorValues.postedDate || 'no posting date'}) → ${label(event.proposedValues.lifecycleStatus)} (${event.proposedValues.postedDate || 'no posting date'})`));
     if (event.eventType === 'transfer-link') {
       const source = getWorkspaceActivity(session.ledger, event.activityId);
       const target = getWorkspaceActivity(session.ledger, event.counterpartyActivityId);
@@ -506,6 +518,9 @@ function showDetail(activityId, {navigate = true} = {}) {
   $('classification').value = ['income', 'spending', 'transfer', 'unclassified'].includes(activity.activityKind) ? activity.activityKind : 'unclassified';
   $('category').value = activity.categoryId || '';
   $('amount').value = activity.amountText || '';
+  $('posting-status').value = ['posted', 'pending', 'unknown'].includes(activity.lifecycleStatus) ? activity.lifecycleStatus : 'unknown';
+  $('posting-date').value = activity.postedDate || '';
+  if (activity.lifecycleStatus === 'unknown') $('correction-type').value = 'posting-status-correction';
   $('correction-rationale').value = '';
   correctionFields(); refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
 }
@@ -514,6 +529,11 @@ function correctionFields() {
   $('classification-field').hidden = type !== 'classification';
   $('category-field').hidden = type !== 'category-correction';
   $('amount-field').hidden = type !== 'bank-correction';
+  $('posting-status-field').hidden = type !== 'posting-status-correction';
+  const postingDate = type === 'posting-status-correction' && $('posting-status').value === 'posted';
+  $('posting-date-field').hidden = !postingDate;
+  $('posting-date').required = postingDate;
+  refresh();
 }
 action('preview-position', 'Preparing invented balances and reconciliation evidence locally.', async () => {
   if (!confirmReplace()) return;
@@ -649,7 +669,8 @@ action('revert-all-changes', 'Reverting all staged changes to the last verified 
   announce('All staged changes reverted to the last verified baseline. No saved records were changed.', 'success');
 });
 action('stage-correction', 'Checking your correction locally.', async () => {
-  session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value, rationale: $('correction-rationale').value });
+  session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value,
+    lifecycleStatus: $('posting-status').value, postedDate: $('posting-status').value === 'posted' ? $('posting-date').value : null, rationale: $('correction-rationale').value });
   render(); showDetail(selectedActivity);
   announce(session.mode === 'preview' ? 'Correction added to this local preview only. Source evidence is unchanged.' : 'Correction staged locally. Source evidence is unchanged. Choose Save changes to persist it.', 'success');
 });
@@ -663,6 +684,8 @@ $('close-detail').addEventListener('click', () => {
   selectedActivity = null; refresh();
 });
 $('correction-type').addEventListener('change', correctionFields);
+$('posting-status').addEventListener('change', correctionFields);
+$('posting-date').addEventListener('input', refresh);
 $('correction-rationale').addEventListener('input', refresh);
 $('transfer-counterparty').addEventListener('change', refresh);
 $('transfer-link-rationale').addEventListener('input', refresh);

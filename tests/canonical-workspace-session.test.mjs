@@ -422,3 +422,25 @@ test('invalid or read-only account creation cannot change the canonical draft', 
   assert.throws(()=>h.session.addAccount({ institutionId:'sofi',accountType:'mortgage',displayName:'Invented',currency:'USD' }),{code:'reopen-before-editing'});
   assert.deepEqual(h.session.ledger,original);
 });
+
+for (const layout of ['records-v1', 'fragments-v3']) test(`${layout} explicit posting corrections save, reopen, undo and preserve original evidence`, async () => {
+  const h = setup(layout); await h.session.open();
+  const activity = getEffectiveActivities(h.session.ledger).find(a => a.lifecycleStatus === 'unknown');
+  const before = structuredClone(h.session.ledger);
+  const command = {activityId:activity.activityId,type:'posting-status-correction',lifecycleStatus:'posted',
+    postedDate:activity.effectiveDate,rationale:'Invented statement confirms posting'};
+  h.session.correct(command);
+  assert.equal(h.session.dirty,true); assert.equal(h.calls.writes,0);
+  h.session.undoLastStagedChange();
+  assert.deepEqual(h.session.ledger,before); assert.equal(h.session.dirty,false);
+  h.session.correct(command);
+  const proposal=structuredClone(h.session.ledger);
+  await h.session.save(); await h.session.reopen();
+  assert.deepEqual(h.session.ledger,proposal); assert.equal(h.calls.writes,1);
+  assert.deepEqual(h.session.ledger.activities,before.activities);
+  assert.deepEqual(h.session.ledger.observations,before.observations);
+  const effective=getEffectiveActivities(h.session.ledger).find(a=>a.activityId===activity.activityId);
+  assert.equal(effective.lifecycleStatus,'posted');assert.equal(effective.postedDate,activity.effectiveDate);
+  h.session.correct({...command,lifecycleStatus:'unknown',postedDate:null,rationale:'Invented confirmation withdrawn'});
+  h.session.revertAllStagedChanges();assert.deepEqual(h.session.ledger,proposal);
+});

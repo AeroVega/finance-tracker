@@ -9,10 +9,18 @@ const equal = (a, b) => canonicalizeJcs(a) === canonicalizeJcs(b);
 /** Version-2 synthetic engine. Legacy history is never rewritten implicitly. */
 export class CatalogTransactionEngine extends DriveTransactionEngine {
   #historyVerifier = createCatalogHistoryVerifier();
+  #rememberReadback = null;
 
   invalidateHistory() { this.#historyVerifier.clear(); }
   async verifyHistory(manifest) {
     return this.#historyVerifier.verify(this.adapter, manifest, this.crypto);
+  }
+  #withWriteReadbacks(operation) {
+    return this.#historyVerifier.withWriteReadbacks(async remember => {
+      this.#rememberReadback = remember;
+      try { return await operation(remember); }
+      finally { this.#rememberReadback = null; }
+    });
   }
   enqueue(operation) {
     return super.enqueue(async () => {
@@ -42,7 +50,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
       name: "ft-journal-" + event.eventId + ".json" }, async () => {
       if (!this.isOnline()) throw storageError("offline", "Journal writes require an online session.");
       await this.assertWritable();
-    }, this.crypto);
+    }, this.crypto, this.#rememberReadback);
     events.push(event);
     additions.push({ kind: "journal-event", identity: event.eventId, transactionId, sequence: event.sequence, ...location });
     return event;
@@ -53,7 +61,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
     // before either recovery or hashing yields to code that can reuse them.
     if (Array.isArray(objects)) objects = objects.map(object => object && ({ ...object,
       content: object.content instanceof Uint8Array ? copyOwnedBytes(object.content) : object.content }));
-    return this.enqueue(async () => {
+    return this.enqueue(() => this.#withWriteReadbacks(async remember => {
       await this.guard();
       // Folder enumeration catches even a start event created by a prior page
       // which died before publishing any new catalog pointer.
@@ -94,7 +102,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
             const fileId = await this.adapter.allocateFileId();
             await add("object-stage-planned", { logicalPath: item.logicalPath, fileId, sha256: item.sha256 });
             const location = await writeVerified(this.adapter, { fileId, content: item.bytes, kind: "snapshot-object", transactionId,
-              name: "ft-object-" + item.sha256 + ".bin" }, () => this.guard(), this.crypto);
+              name: "ft-object-" + item.sha256 + ".bin" }, () => this.guard(), this.crypto, remember);
             additions.push({ kind: "data-object", identity: item.sha256, ...location });
             await add("object-staged", { fileId, sha256: item.sha256 });
           }
@@ -107,12 +115,12 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
         const commitFileId = await this.adapter.allocateFileId();
         await add("commit-stage-planned", { commitId, fileId: commitFileId });
         const commit = await writeVerified(this.adapter, { fileId: commitFileId, content: record, kind: "commit-record", transactionId,
-          name: "ft-commit-" + commitId + ".json" }, () => this.guard(), this.crypto);
+          name: "ft-commit-" + commitId + ".json" }, () => this.guard(), this.crypto, remember);
         additions.push({ kind: "commit-record", identity: commitId, ...commit });
         await add("commit-staged", { commitId, recordHash: commit.sha256 });
         const next = { ...current, revision: record.revision, commitId, parentCommitId: current.commitId,
           commitRecordHash: commit.sha256, snapshot, catalogFinalizationPending: transactionId };
-        const staged = await writeCatalog(this.adapter, { manifest: next, previousCatalog: catalog, additions }, () => this.guard(), this.crypto);
+        const staged = await writeCatalog(this.adapter, { manifest: next, previousCatalog: catalog, additions }, () => this.guard(), this.crypto, remember);
         next.locatorCatalog = staged.pointer;
         await this.verifyHistory(next);
         // This event cannot index itself. It and the terminal events are added
@@ -130,7 +138,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
         throw new DriveTransactionError("transaction-unresolved", "Preserve the synthetic transaction evidence and reconnect for recovery.",
           { transactionId, cause: error.code || error.name });
       }
-    });
+    }));
   }
 
   async finalize(manifestFileId, manifest, catalog, additions) {
@@ -138,7 +146,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
       previousCatalog: catalog, previousCatalogHash: manifest.locatorCatalog.sha256, additions });
     const missing = additions.filter((entry) => !catalog.entries[entry.kind + ":" + entry.identity]);
     if (!missing.length && manifest.catalogFinalizationPending === null) return manifest;
-    const staged = await writeCatalog(this.adapter, { manifest, previousCatalog: catalog, additions }, () => this.recoveryGuard(), this.crypto);
+    const staged = await writeCatalog(this.adapter, { manifest, previousCatalog: catalog, additions }, () => this.recoveryGuard(), this.crypto, this.#rememberReadback);
     const next = { ...manifest, locatorCatalog: staged.pointer, catalogFinalizationPending: null };
     await this.verifyHistory(next);
     await this.publishExact(manifestFileId, manifest, next);

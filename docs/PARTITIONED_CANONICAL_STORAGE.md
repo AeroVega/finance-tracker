@@ -237,7 +237,9 @@ migration, no automatic repair save and no history pruning.
 
 ## Verification
 
-Run `node --test tests/canonical-partitions.test.mjs` with the tree tests. The
+Run `FINANCE_EXTENDED_STORAGE_TESTS=1 node --test tests/canonical-partitions.test.mjs`
+with the tree tests for all recorded growth sizes. Ordinary local runs retain
+the 24- and 144-activity comparisons; see [test commands](TESTING.md). The
 fixtures cover current and legacy graph conversion, exact source/order roundtrip,
 optional position history, corrections/refunds/transfers, different currencies,
 missing coverage, inactive review decisions, large memberships and strings,

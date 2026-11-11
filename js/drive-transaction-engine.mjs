@@ -150,34 +150,38 @@ export class GoogleDriveTransactionAdapter {
     return all;
   }
 
+  /** Fresh complete enumeration; never retain or reuse this metadata snapshot. */
+  async readMetadataSnapshot() {
+    const metadata = new Map();
+    for (const file of await this.listChildren()) {
+      if (typeof file?.id !== "string" || !file.id.trim() || metadata.has(file.id)) {
+        fail("invalid-metadata-batch", "The complete folder listing has malformed or duplicate file identities.");
+      }
+      metadata.set(file.id, structuredClone(file));
+    }
+    return metadata;
+  }
+
   /** Fresh metadata for this verification only; enumeration is not atomic. */
   async readMetadataBatch(fileIds) {
     if (!Array.isArray(fileIds) || fileIds.some((id) => typeof id !== "string" || !id.trim()) ||
         new Set(fileIds).size !== fileIds.length) {
       fail("invalid-metadata-batch", "Batch metadata reads require distinct nonempty file IDs.");
     }
-    const requested = new Set(fileIds);
     const metadata = new Map();
-    const seen = new Set();
     if (!fileIds.length) return metadata;
-    // Complete every page before admitting any media reads. Missing, moved or
-    // trashed retained files must fail closed, never trigger a guessed locator.
-    for (const file of await this.listChildren()) {
-      if (typeof file?.id !== "string" || !file.id.trim() || seen.has(file.id)) {
-        fail("invalid-metadata-batch", "The complete folder listing has malformed or duplicate file identities.");
-      }
-      seen.add(file.id);
-      if (!requested.has(file.id)) continue;
+    const all = await (this.readMetadataSnapshot ? this.readMetadataSnapshot()
+      : GoogleDriveTransactionAdapter.prototype.readMetadataSnapshot.call(this));
+    for (const id of fileIds) {
+      const file = all.get(id);
+      if (!file) fail("incomplete-metadata-batch", "The complete folder listing did not contain every retained file.");
       if (file.trashed !== false || !Array.isArray(file.parents) || !file.parents.includes(this.folderId)) {
-        fail("object-location-mismatch", "A retained file is trashed or outside the selected database folder.", { fileId: file.id });
+        fail("object-location-mismatch", "A retained file is trashed or outside the selected database folder.", { fileId: id });
       }
       if (typeof file.version !== "string" || !/^[0-9]+$/.test(file.version)) {
-        fail("invalid-metadata-batch", "A retained file has no valid Drive version.", { fileId: file.id });
+        fail("invalid-metadata-batch", "A retained file has no valid Drive version.", { fileId: id });
       }
-      metadata.set(file.id, structuredClone(file));
-    }
-    if (metadata.size !== requested.size) {
-      fail("incomplete-metadata-batch", "The complete folder listing did not contain every retained file.");
+      metadata.set(id, file);
     }
     return metadata;
   }

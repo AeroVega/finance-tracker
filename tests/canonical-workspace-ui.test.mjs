@@ -1036,3 +1036,94 @@ test('a completed ledger open respects navigation chosen while verification was 
   assert.equal(h.modelSession.mode, 'saved');
   assert.equal(h.state.writes, 0);
 });
+
+test('unknown posting status opens the usable editor and explicit evidence clears only that review reason', async () => {
+  const h=await workspacePage();await h.click('open-ledger');
+  await h.detail('INVENTED BROKERAGE FEE');
+  assert.equal(h.get('correction-type').value,'posting-status-correction');
+  assert.equal(h.get('posting-status-field').hidden,false);
+  assert.equal(h.get('posting-status').value,'unknown');
+  assert.equal(h.get('posting-date-field').hidden,true);
+  assert.equal(h.get('posting-date').value,'');
+  h.get('correction-rationale').value='Invented January statement confirms the fee posted';
+  await h.get('correction-rationale').emit('input');
+  await h.choose('posting-status','posted');
+  assert.equal(h.get('posting-date-field').hidden,false);
+  assert.equal(h.get('posting-date').required,true);
+  assert.equal(h.get('stage-correction').disabled,true);
+  h.get('posting-date').value='2025-02-30';await h.get('posting-date').emit('input');
+  assert.equal(h.get('stage-correction').disabled,true);
+  h.get('posting-date').value='2025-01-26';await h.get('posting-date').emit('input');
+  assert.equal(h.get('stage-correction').disabled,false);
+  await h.click('stage-correction');
+  assert.match(h.get('detail-description').textContent,/posted/);
+  assert.doesNotMatch(h.get('detail-description').textContent,/Posting status unknown/);
+  assert.match(h.get('detail-description').textContent,/Not classified/);
+  assert.match(text(h.get('detail-history')),/unknown \(no posting date\).*posted \(2025-01-26\)/);
+  assert.match(text(h.get('detail-history')),/Invented January statement/);
+  assert.equal(h.state.writes,0);
+  assert.deepEqual(h.modelSession.ledger.activities,recipe.ledger.activities);
+  assert.deepEqual(h.modelSession.ledger.observations,recipe.ledger.observations);
+  await h.choose('correction-type','classification');await h.choose('classification','spending');
+  h.get('correction-rationale').value='Invented fee is an expense';await h.get('correction-rationale').emit('input');
+  await h.click('stage-correction');
+  assert.doesNotMatch(h.get('detail-description').textContent,/Needs review/);
+  const proposal=structuredClone(h.modelSession.ledger);
+  await h.click('save-ledger');assert.equal(h.state.writes,1);
+  assert.deepEqual(await h.storedLedger(),proposal);
+  await h.click('reopen-ledger');await h.detail('INVENTED BROKERAGE FEE');
+  assert.equal(h.get('posting-status').value,'posted');assert.equal(h.get('posting-date').value,'2025-01-26');
+  assert.doesNotMatch(h.get('detail-description').textContent,/Needs review/);
+});
+
+test('posting editor preserves unfinished fields across navigation and rejects no-op without staging', async () => {
+  const h=await workspacePage();await h.click('preview-year');await h.detail('INVENTED BROKERAGE FEE');
+  h.get('correction-rationale').value='Invented unchanged unknown status';await h.get('correction-rationale').emit('input');
+  const before=structuredClone(h.modelSession.ledger);
+  await h.click('stage-correction');
+  assert.match(h.get('action-status').textContent,/unchanged/);assert.deepEqual(h.modelSession.ledger,before);
+  await h.choose('posting-status','posted');h.get('posting-date').value='2025-01-26';await h.get('posting-date').emit('input');
+  h.get('correction-rationale').value='Invented date waiting for review';await h.get('correction-rationale').emit('input');
+  await h.navigate('#overview');await h.back();
+  assert.equal(h.get('posting-status').value,'posted');assert.equal(h.get('posting-date').value,'2025-01-26');
+  assert.equal(h.get('correction-rationale').value,'Invented date waiting for review');
+  assert.deepEqual(h.modelSession.ledger,before);assert.equal(h.state.writes,0);
+  await h.click('close-detail');assert.deepEqual(h.modelSession.ledger,before);
+});
+
+test('pending or unknown corrections clear effective posting date and never submit a hidden date', async () => {
+  const h=await workspacePage();await h.click('preview-year');await h.detail('INVENTED BROKERAGE FEE');
+  await h.choose('posting-status','posted');h.get('posting-date').value='2025-01-26';await h.get('posting-date').emit('input');
+  h.get('correction-rationale').value='Invented confirmation';await h.get('correction-rationale').emit('input');await h.click('stage-correction');
+  for(const status of ['pending','unknown']) {
+    await h.choose('posting-status',status);
+    assert.equal(h.get('posting-date-field').hidden,true);assert.equal(h.get('posting-date').disabled,true);
+    assert.equal(h.get('posting-date').required,false);
+    h.get('correction-rationale').value='Invented status corrected to '+status;await h.get('correction-rationale').emit('input');
+    await h.click('stage-correction');
+    assert.deepEqual(h.modelSession.ledger.events.at(-1).proposedValues,{lifecycleStatus:status,postedDate:null});
+    assert.equal(h.get('posting-date').value,'');
+  }
+  assert.match(h.get('detail-description').textContent,/Posting status unknown/);
+  await h.click('undo-last-change');assert.equal(h.get('posting-status').value,'pending');
+  assert.equal(h.state.writes,0);
+});
+
+test('Storage distinguishes the active saved format from preview and experimental formats', async () => {
+  const h = await workspacePage();
+  assert.match(h.get('storage-format').textContent, /No saved format currently verified/);
+  await h.click('preview-year');
+  assert.match(h.get('storage-format').textContent, /Local preview, no saved format yet/);
+  assert.match(h.get('storage-format').textContent, /new folder will use fragmented v3/);
+  await h.click('open-ledger');
+  assert.match(h.get('storage-format').textContent, /Last verified saved format: per-record v1/);
+  await h.click('release-ledger');
+  assert.match(h.get('storage-format').textContent, /No saved format currently verified/);
+  await h.click('preview-year');
+  await h.click('save-preview');
+  assert.match(h.get('storage-format').textContent, /Last verified saved format: fragmented v3/);
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /paged v4 format is an experimental module, not an app storage option yet/);
+  assert.match(html, /opening a copy still verifies and loads the complete canonical ledger/);
+  assert.match(html, /Existing folders are not silently converted/);
+});

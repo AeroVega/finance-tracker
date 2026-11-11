@@ -116,12 +116,13 @@ function isPendingPostedTransition(oldRow, newRow) {
 
 export function reconcileImport({
   institutionId, accountId, sourceFormat, fileFingerprint, rows,
-  existingActivities = [], existingObservations = [], existingCompositeEvidence = [], completedRuns = [],
+  existingActivities = [], existingObservations = [], existingCompositeEvidence = [], completedRuns = [], manualPostingActivityIds = [],
   idFactory = () => globalThis.crypto.randomUUID(),
 }) {
   if (!accountId) throw new TypeError("explicit-account-mapping-required");
   if (!recognizeFormat(sourceFormat)) throw new TypeError("unsupported-source-format");
   if (!Array.isArray(rows)) throw new TypeError("rows-must-be-array");
+  const manualPosting = new Set(manualPostingActivityIds);
 
   const prior = completedRuns.find((run) => run.status === "processed" &&
     run.accountId === accountId && run.institutionId === institutionId &&
@@ -341,6 +342,11 @@ export function reconcileImport({
           } else {
             disposition = "review"; reasonCode = "source-id-conflict";
           }
+        } else if (manualPosting.has(match.activityId) && ['posted','pending','reversed','corrected'].includes(incoming.lifecycleStatus) &&
+            incoming.lifecycleStatus !== match.lifecycleStatus) {
+          // Re-imported source evidence cannot silently undo an explicit user
+          // status correction. Identity review and status confirmation differ.
+          disposition = 'review'; reasonCode = 'user-confirmed-posting-conflict';
         } else if (match.lifecycleStatus === 'posted' && incoming.lifecycleStatus === 'posted' &&
             (match.effectiveDate !== incoming.effectiveDate || (match.postedDate ?? null) !== (incoming.postedDate ?? null) || (match.settlementDate ?? null) !== (incoming.settlementDate ?? null))) {
           disposition = 'review'; reasonCode = 'source-id-date-conflict';

@@ -80,4 +80,6 @@ The application continues to use canonical per-record v1 and fragmented v3. New 
 
 Financial position and reconciled coverage were merged in PR36. Historical monthly migration, supported owner-file ingestion and production controls remain open. Production financial-data persistence is **NO-GO** pending the separate implementation, privacy/OAuth/cost/recovery review, live synthetic acceptance and explicit owner authorization.
 
+The owner also requested [app testing fixes](docs/APP_TESTING_FEEDBACK.md) for PR37: reduce save requests, make posting-status corrections auditable and usable in the editor, and explain the active format accurately. New user-facing features must work through the app when delivered. Preserve original evidence, explicit save/reopen, full verification and recovery. This does not expand the real-data, live Drive, merge or deployment permissions above.
+
 For older owner decisions and completed milestones, consult the dated scope/evidence documents linked from [the documentation index](docs/README.md). Do not treat historical authorization text as permission to expand the current task.

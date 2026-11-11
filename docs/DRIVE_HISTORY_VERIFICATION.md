@@ -6,6 +6,8 @@
 
 **Implemented:** a catalog engine can keep private, in-memory verified bytes between operations in the same session. Every verification still reads the current catalog, validates every retained locator, verifies journal chains and complete commit ancestry, and checks the manifest against its commit. Nothing changes in stored records, archive formats, journal order, publication order, or session ownership checks.
 
+**Follow-up, November 11, 2026:** [active save request reductions](ACTIVE_SAVE_REQUESTS.md) add transaction-local exact GET receipts, shared metadata brackets and a separately guarded session-marker read cache on the application path. Full history verification and cold export/reconnect boundaries remain. That report separates current measurements from the historical results below.
+
 ## What permits reuse
 
 1. A successful verification downloaded the exact file bytes, verified their SHA-256, checked their location and typed identity, and completed all history checks. Upload content and successful create responses cannot populate this cache.

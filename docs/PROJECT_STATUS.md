@@ -1,5 +1,16 @@
 # Project status
 
+## App testing follow-up, November 11, 2026
+
+**Implemented and locally verified:** the [app feedback fixes](APP_TESTING_FEEDBACK.md)
+add auditable posting-status corrections, reduce the measured two-edit save from
+209 to 132 synthetic HTTP requests, and explain the active v3 format. The final
+combined extended suite passed 1,507/1,507 tests on Node 24.22.1. Independent
+review passed. [Test scheduling](TESTING.md) avoids duplicate CI execution while
+retaining the extended storage gate. Live Google latency and device acceptance
+for these changes remain open. This follow-up does not deploy or merge PR37;
+production remains **NO-GO** and the larger storage integration is unfinished.
+
 ## Storage and safety update, November 11, 2026
 
 **Verified:** [PR36](https://github.com/AeroVega/finance-tracker/pull/36) is merged

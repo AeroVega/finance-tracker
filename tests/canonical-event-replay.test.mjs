@@ -23,6 +23,7 @@ function reference(ledger,activity,visited=new Set()) {
       if(e.confirmedPostedDate)result.postedDate=e.confirmedPostedDate;
     }
     if(e.eventType==='lifecycle-transition'){result.lifecycleStatus=e.to;result.effectiveDate=e.effectiveDate;result.postedDate=e.postedDate;result.settlementDate=e.settlementDate;}
+    if(e.eventType==='posting-status-correction'){result.lifecycleStatus=e.proposedValues.lifecycleStatus;result.postedDate=e.proposedValues.postedDate;}
   }
   return result;
 }
@@ -36,6 +37,8 @@ test('chronological projection matches scan replay through mixed prospective and
   const apply=change=>{const before=structuredClone(ledger);ledger=applyFinancialEvent(ledger,{commandId:`invented-mixed-${++command}`,...change},options);assert.deepEqual(ledger.events.slice(0,-1),before.events);assertView(ledger);};
   apply({type:'classification',activityId:purchase,activityKind:'spending',categoryId:'initial'});
   apply({type:'refund-link',activityId:refund,originalActivityId:purchase,evidence:{reason:'Invented partial refund'}});
+  apply({type:'posting-status-correction',activityId:refund,lifecycleStatus:'pending',postedDate:null,evidence:{rationale:'Invented pending refund'}});
+  apply({type:'posting-status-correction',activityId:refund,lifecycleStatus:'posted',postedDate:'2026-02-03',evidence:{rationale:'Invented posted refund'}});
   apply({type:'category-correction',activityId:purchase,categoryId:'purchase-new'});
   apply({type:'classification',activityId:refund,activityKind:'refund',categoryId:null});
   apply({type:'category-correction',activityId:purchase,categoryId:'purchase-later'});

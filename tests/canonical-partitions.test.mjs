@@ -297,9 +297,10 @@ test('failed expansion, missing nested source and cancellation never validate a 
   assert.equal(reader.verification().derived,'not-semantically-validated');
 });
 
-test('growing invented fixtures keep roots fixed and read selected detail pages without full source loading',async t => {
+const growthSizes = process.env.FINANCE_EXTENDED_STORAGE_TESTS === '1' ? [24,144,576] : [24,144];
+test(`growing invented fixtures keep roots fixed and read selected detail pages without full source loading: ${growthSizes.join(',')} activities`,async t => {
   const measurements = [];
-  for (const size of [24,144,576]) {
+  for (const size of growthSizes) {
     const {ledger} = replayFixture(size,Array.from({length:size},(_,i) => replayRow(i,{effectiveDate:`2026-${String(i % 12 + 1).padStart(2,'0')}-15`})));
     const store = memoryStore(), built = await buildPartitionedCanonicalLedger(ledger,store);
     const totalObjects = store.objects.size; store.reset();

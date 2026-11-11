@@ -59,8 +59,20 @@ export function createDriveSessionAdapter(options) {
   let lastReadRecord;
   let lastReadFileId = null;
   let hasRead = false;
+  let evidence = null;
+  let generation = 0;
+  const clear = () => { generation++; evidence = null; };
+  const binding = file => JSON.stringify([file.id, file.name, file.mimeType,
+    [...file.parents].sort(), file.appProperties[SESSION_MARKER_PROPERTY], file.version]);
+  const validVersion = file => typeof file.version === "string" && /^[0-9]+$/.test(file.version);
 
   async function read() {
+    try { return await readCurrent(); }
+    catch (cause) { clear(); throw cause; }
+  }
+
+  async function readCurrent() {
+    const epoch = generation;
     const files = await listFolderChildren({
       // listFolderChildren accepts a bearer-token string, unlike this adapter's
       // other Drive requests which resolve the provider inside authHeaders().
@@ -69,6 +81,13 @@ export function createDriveSessionAdapter(options) {
       responseLimits,
       fetchImpl
     });
+    const ids = new Set();
+    for (const file of files) {
+      if (typeof file?.id !== "string" || !file.id || ids.has(file.id)) {
+        throw error("ambiguous-session-record", "Folder enumeration contains invalid or duplicate file identities.");
+      }
+      ids.add(file.id);
+    }
     const candidates = files.filter((file) =>
       file && (file.name === SESSION_MARKER_NAME ||
         (file.appProperties && file.appProperties[SESSION_MARKER_PROPERTY] === "v1"))
@@ -77,6 +96,7 @@ export function createDriveSessionAdapter(options) {
       throw error("ambiguous-session-record", "More than one session marker exists in the selected folder. Resolve the duplicate markers before writing.");
     }
     if (candidates.length === 0) {
+      clear();
       lastReadRecord = null;
       lastReadFileId = null;
       hasRead = true;
@@ -84,7 +104,7 @@ export function createDriveSessionAdapter(options) {
     }
 
     const file = candidates[0];
-    if (file.name !== SESSION_MARKER_NAME ||
+    if (file.trashed === true || file.name !== SESSION_MARKER_NAME ||
         file.mimeType !== "application/json" ||
         !Array.isArray(file.parents) || !file.parents.includes(folderId) ||
         !file.appProperties ||
@@ -92,6 +112,16 @@ export function createDriveSessionAdapter(options) {
       throw error("ambiguous-session-record", "The session marker metadata is malformed or belongs to another folder.");
     }
 
+    // Every ownership check still enumerates the complete folder. Only an
+    // unchanged server version and binding can reuse one privately held record.
+    // Its first media GET was bracketed by matching metadata. No write payload
+    // or POST/PATCH response can establish this evidence.
+    if (validVersion(file) && evidence?.binding === binding(file)) {
+      lastReadRecord = structuredClone(evidence.record);
+      lastReadFileId = file.id;
+      hasRead = true;
+      return structuredClone(lastReadRecord);
+    }
     let response;
     try {
       response = await fetchImpl(
@@ -113,10 +143,31 @@ export function createDriveSessionAdapter(options) {
       if (cause.code !== "invalid-json-object") throw cause;
       throw error("ambiguous-session-record", "The session marker content is not valid JSON.");
     }
-    lastReadRecord = record;
+    if (validVersion(file)) {
+      let closingResponse;
+      try {
+        closingResponse = await fetchImpl(DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(file.id) +
+          "?fields=id,name,mimeType,parents,appProperties,version,trashed",
+          { method: "GET", cache: "no-store", headers: authHeaders(accessToken) });
+      } catch { throw error("network-error", "The session marker version could not be confirmed."); }
+      if (!closingResponse?.ok) {
+        await discardDriveResponse(closingResponse);
+        throw error("drive-read-failed", "The session marker version could not be confirmed.");
+      }
+      const closing = await readBoundedDriveJson(closingResponse, { kind: "metadata", limits: responseLimits });
+      if (closing?.trashed !== false || !Array.isArray(closing.parents) || !closing.appProperties ||
+          !validVersion(closing) || binding(closing) !== binding(file)) {
+        throw error("ownership-unknown", "The session marker changed while its content was being verified.");
+      }
+      if (epoch === generation) evidence = { binding: binding(file), record: structuredClone(record) };
+    } else {
+      // Legacy/custom providers without versions remain on complete media reads.
+      evidence = null;
+    }
+    lastReadRecord = structuredClone(record);
     lastReadFileId = file.id;
     hasRead = true;
-    return record;
+    return structuredClone(record);
   }
 
   async function generateId() {
@@ -153,16 +204,24 @@ export function createDriveSessionAdapter(options) {
   }
 
   async function write(record) {
+    try { return await writeCurrent(record); }
+    catch (cause) { clear(); throw cause; }
+  }
+
+  async function writeCurrent(record) {
     assertResponseSize(new TextEncoder().encode(JSON.stringify(record)).length, { kind: "session-marker", limits: responseLimits });
     if (!hasRead) throw error("read-before-write-required", "Read the session marker before attempting to write.");
     const previousRecord = lastReadRecord;
     const previousFileId = lastReadFileId;
     const observed = await read();
     if (!((observed === null && previousRecord === null) || sameRecord(observed, previousRecord)) ||
-        (observed === null) !== (previousFileId === null)) {
+        (observed === null) !== (previousFileId === null) || lastReadFileId !== previousFileId) {
       throw error("ownership-unknown", "The session marker changed since it was last inspected. The write was refused.");
     }
 
+    // Force exact remote media verification after our own mutation, including
+    // ambiguous responses. A later read must not trust the submitted record.
+    clear();
     if (observed === null) {
       const fileId = await generateId();
       const boundary = "finance_tracker_session_" + fileId.replace(/[^a-zA-Z0-9]/g, "");
@@ -225,5 +284,5 @@ export function createDriveSessionAdapter(options) {
     await readBackExpected(record);
   }
 
-  return Object.freeze({ read, write });
+  return Object.freeze({ read, write, clear });
 }

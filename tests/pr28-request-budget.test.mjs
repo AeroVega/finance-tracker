@@ -13,8 +13,8 @@ import { setupHttpCanonicalWorkbench as setup, loadCanonicalFixtureBytes as load
 const BEFORE_REQUESTS = 4633;
 const BEFORE_SMALL_COMMITS = [201, 279, 357, 435, 513, 591, 669, 747, 825, 903];
 
-function assertConcurrency(http) {
-  assert.ok(http.peakConcurrency > 1, 'independent immutable reads should overlap');
+function assertConcurrency(http, { requireParallel = true } = {}) {
+  if (requireParallel) assert.ok(http.peakConcurrency > 1, 'independent immutable reads should overlap');
   assert.ok(http.peakConcurrency <= 4, 'immutable read concurrency must remain bounded');
   assert.equal(http.peakMutations, 1, 'durable mutations must remain sequential');
   assert.equal(http.active, 0, 'no background HTTP requests may outlive the operation');
@@ -101,12 +101,11 @@ test('repeated small saves use version-checked history within a fixed request bu
     }
   }
   t.diagnostic(JSON.stringify({ before: BEFORE_SMALL_COMMITS, after: counts }));
-  // Segmented roots add two guarded segment writes and fresh version brackets.
-  // Monthly index/summary objects add another guarded data write. The measured
-  // 221–223 requests remain independent of these ten retained saves.
-  for (let i = 0; i < counts.length; i++) assert.ok(counts[i] <= 240, `save ${i + 1} used ${counts[i]} requests`);
+  // Exact GET readbacks and fresh version checks avoid rereading new immutable
+  // objects. Ten small saves plus warm reopen use 138–139 requests apiece.
+  for (let i = 0; i < counts.length; i++) assert.ok(counts[i] <= 150, `save ${i + 1} used ${counts[i]} requests`);
   for (let i = 1; i < counts.length; i++) assert.ok(counts[i] - counts[i - 1] <= 2, 'retained-history growth exceeded the per-save budget');
-  assertConcurrency(h.http);
+  assertConcurrency(h.http, { requireParallel: false });
   const mutations = h.http.mutations;
   h.http.files.get(firstIndexId).bytes[0] ^= 1;
   h.http.files.get(firstIndexId).metadata.version = "2"; // Drive versions change with every server-side mutation.
@@ -163,7 +162,10 @@ test('fresh batch metadata follows every HTTP listing page and returns detached 
   assert.deepEqual(again.get(ids[0]).parents, [h.http.folderId], 'each call gets a new complete listing');
   h.http.phase = 'paginated-reopen';
   assert.deepEqual(await h.driver.reopen(), ledger, 'real lifecycle supports paginated metadata and session scans');
-  assertConcurrency(h.http);
+  assertConcurrency(h.http, { requireParallel: false });
+  h.lifecycle.engine.invalidateHistory();
+  assert.deepEqual(await h.driver.reopen(), ledger);
+  assertConcurrency(h.http); // A cold read still overlaps up to four downloads.
   await h.lifecycle.release();
 });
 

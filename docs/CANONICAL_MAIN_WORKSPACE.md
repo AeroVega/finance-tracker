@@ -12,6 +12,8 @@
 
 Transfer links are append-only canonical financial events. The effective view exposes the same transfer-group identity and reciprocal counterpart activity on both sides; original activities and source observations remain unchanged. Transfer links do not change income, spending or cash totals.
 
+**Implemented, synthetic-only:** [Posting-status corrections](POSTING_STATUS_CORRECTIONS.md) add an explicit Posted/Pending/Unknown editor with posting-date and rationale validation. They preserve source evidence, use append-only history and require the existing explicit save. Unclassified activities still need classification; confirming posting does not prove complete coverage. Use the updated app after saving these events because older builds refuse them.
+
 The existing `DashboardSyntheticStorage`, `CanonicalLedgerStore`, canonical financial-event and reporting engines remain responsible for ownership, exact-base checks, durable writes, integrity, append-only history, recovery and financial meaning. There is no automatic migration, automatic save or complete-history assertion. Existing per-record v1 copies remain readable and retain their layout. Existing fragmented-v3 copies using the earlier logical envelope remain readable and upgrade to the current v3 group schema only on an explicit save. Standalone grouped-v2 copies are rejected outright by both the application store and backup validator. New canonical stores and fresh preview saves default to fragmented v3, whose version-3 logical group schema is distinct from deprecated v2 and whose physical objects are bounded fragments.
 
 ## Financial-position follow-up

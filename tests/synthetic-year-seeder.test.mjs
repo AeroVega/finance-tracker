@@ -136,6 +136,10 @@ test('year UI is opt-in, has recovery and release, and cannot ingest user CSVs',
   assert.doesNotMatch(html, /type="file"/);
   assert.doesNotMatch(html, /storage-layout|chunks-v2/);
   assert.match(html, /fragmented version 3/i);
+  assert.match(html, /paged v4 format is an experimental module, not an app storage option yet/);
+  assert.match(html, /opening a copy still verifies and loads the complete canonical ledger/);
+  assert.match(html, /href="\.\.\/index.html#storage">main workspace/);
+  assert.doesNotMatch(html, /four-row preview|into 15 payload objects/);
   assert.doesNotMatch(js, /storage-layout|chunks-v2|serializePackedCanonicalLedger/);
   for (const id of ['upload','reconnect','verify','recover','stale','release']) assert.match(html, new RegExp('id="' + id + '"[^>]*disabled'));
   assert.match(js, /if \(busy\) return/);

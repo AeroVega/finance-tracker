@@ -301,3 +301,49 @@ test('segment reuse shares the existing byte budget and explicit clears force re
   await h.verifier.verify(h.adapter, h.manifest);
   assert.ok(h.reads.includes(root.segmentTip.fileId));
 });
+
+test('transaction readbacks outside the next catalog-cache budget still require a closing version bracket', async () => {
+  const { writeVerified } = await import('../js/catalog-storage.mjs');
+  const h = await setup();
+  const root = await h.adapter.readJson(h.manifest.locatorCatalog.fileId);
+  const newest = await h.adapter.readJson(root.segmentTip.fileId);
+  const older = newest.previousSegment;
+  assert.ok(older);
+  const file = h.adapter.files.get(older.fileId), bytes = file.bytes.slice();
+  const create = h.adapter.createImmutable.bind(h.adapter);
+  h.adapter.createImmutable = async input => input.fileId === older.fileId ? { readback: {
+    metadata: await h.adapter.readMetadata(older.fileId), bytes: await h.adapter.readBytes(older.fileId)
+  } } : create(input);
+  const batch = h.adapter.readMetadataBatch.bind(h.adapter);
+  let mutated = false;
+  h.adapter.readMetadataBatch = async ids => {
+    if (ids.includes(root.segmentTip.fileId) && !mutated) { mutated = true; file.bytes[0] ^= 1; bump(file); }
+    return batch(ids);
+  };
+  const verifier = createCatalogHistoryVerifier({ maxEntries: 1 });
+  await verifier.withWriteReadbacks(async remember => {
+    await writeVerified(h.adapter, { fileId: older.fileId, content: bytes, kind: 'locator-catalog-segment',
+      transactionId: file.metadata.appProperties.financeTrackerTransaction }, async () => {}, globalThis.crypto, remember);
+    await assert.rejects(verifier.verify(h.adapter, h.manifest), { code: 'immutable-version-mismatch' });
+  });
+  assert.equal(mutated, true);
+  await assert.rejects(verifyCatalogHistory(h.adapter, h.manifest), { code: 'immutable-hash-mismatch' });
+});
+
+test('write receipt versions are detached before hashing can yield to adapter mutation', async () => {
+  const { writeVerified } = await import('../js/catalog-storage.mjs');
+  const h = await setup(), entry = target(h), file = h.adapter.files.get(entry.fileId), original = file.bytes.slice();
+  const metadata = structuredClone(file.metadata);
+  h.adapter.createImmutable = async () => ({ readback: { metadata, bytes: original } });
+  let digests = 0;
+  const cryptoImpl = { subtle: { async digest(...args) {
+    if (++digests === 2) { file.bytes[0] ^= 1; bump(file); metadata.version = file.metadata.version; }
+    return globalThis.crypto.subtle.digest(...args);
+  } } };
+  const verifier = createCatalogHistoryVerifier();
+  await verifier.withWriteReadbacks(async remember => {
+    await writeVerified(h.adapter, { fileId: entry.fileId, content: original, kind: 'snapshot-object',
+      transactionId: metadata.appProperties.financeTrackerTransaction }, async () => {}, cryptoImpl, remember);
+    await assert.rejects(verifier.verify(h.adapter, h.manifest, cryptoImpl), { code: 'immutable-hash-mismatch' });
+  });
+});

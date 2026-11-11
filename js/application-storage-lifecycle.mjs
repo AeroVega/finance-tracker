@@ -96,7 +96,10 @@ export class ApplicationStorageLifecycle {
   }
 
   publish(state, message, code = null) {
-    if (state !== "ready") this.engine?.invalidateHistory?.();
+    if (state !== "ready") {
+      this.engine?.invalidateHistory?.();
+      this.sessionAdapter?.clear?.();
+    }
     this.state = state;
     this.onStatus({ state, message, code });
   }
@@ -372,6 +375,7 @@ export class ApplicationStorageLifecycle {
       await this.coordinator.assertCanWrite({ online: this.isOnline() });
     } catch (error) {
       this.engine?.invalidateHistory?.();
+      this.sessionAdapter?.clear?.();
       throw error;
     }
   }

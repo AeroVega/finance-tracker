@@ -11,6 +11,8 @@ Production financial-data persistence remains **NO-GO**. Code, tests, owner acce
 | [Project status](PROJECT_STATUS.md) | Dated implementation, PR/CI/deployment facts and evidence limits. |
 | [Next steps](NEXT_STEPS.md) | Alpha dependency order and measurable completion gates. |
 | [Storage scaling audit](STORAGE_SCALING_AND_PRODUCTION_READINESS.md) | Capacity findings, measurements and remaining safeguards. |
+| [App testing follow-up](APP_TESTING_FEEDBACK.md) | Posting-status editor, save request reduction and remaining acceptance. |
+| [Test commands](TESTING.md) | Focused, ordinary and required extended checks. |
 | [Incremental storage foundation](SCALABLE_STORAGE_FOUNDATION.md) | Active-path PR37 changes and limits. |
 | [Paged storage milestone](PAGED_STORAGE_MILESTONE.md) | Isolated follow-up modules and adoption gates; not active application behavior. |
 | [Roadmap](ROADMAP.md), [product definition](PRODUCT_DEFINITION.md) and [open decisions](PRODUCT_OPEN_DECISIONS.md) | Product scope and unresolved owner choices. |

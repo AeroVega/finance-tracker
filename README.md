@@ -10,6 +10,14 @@ A second-generation personal finance tracker built around trustworthy data, tran
 
 ## Project status
 
+The [app testing follow-up](docs/APP_TESTING_FEEDBACK.md) addresses the owner's
+PR37 exploration. New user-facing behavior must work through the application;
+isolated storage experiments are not evidence that the app uses a new format.
+The main workspace now supports auditable posting-status corrections, reduces
+save requests through fresh version-checked byte reuse, and explains the active
+v3 format and unfinished selective-loading work. This does not change production
+NO-GO.
+
 **Storage draft, November 11, 2026:** the owner-authorized
 [incremental storage foundation](docs/SCALABLE_STORAGE_FOUNDATION.md) adds segmented
 catalogs, verified/rebuildable monthly reports, bounded Drive responses and direct
