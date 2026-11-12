@@ -27,6 +27,19 @@ updated diagnostic has not yet been built or deployed. A mismatch classification
 does not by itself establish why Drive returned different metadata or prove
 whether recovery is needed.
 
+On build `9db2acf`, the owner reported (**User-confirmed**) that the only changed
+field was Drive `version`. The application now treats version-only changes as
+revalidation triggers in immutable reads, locator reads, manifest reads and
+verification closure. It retries a stable metadata bracket, and at verification
+closure rereads exact immutable bytes and checks their stored size and SHA-256.
+(**Implemented in the working tree; JavaScript syntax and diff checks passed;
+automated tests not run; not deployed.**) Other
+metadata changes, missing objects, hash mismatches and unsettled versions still
+stop publication. Google documents [`version`](https://developers.google.com/workspace/drive/api/reference/rest/v3/files)
+as advancing for any server-side change, including invisible changes; it is
+therefore a freshness signal, not a content hash. Rechecks are bounded and do
+not provide provider-side compare-and-swap.
+
 ## Combined PR37 storage and PR38 interface, November 12, 2026
 
 **Implemented:** merge PR37 head `8e340b3` into PR38 head `75e295e`, preserving

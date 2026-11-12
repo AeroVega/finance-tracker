@@ -46,11 +46,11 @@ token=await p.beginVerification();
 for(let i=0;i<145;i++){const id='invented-evict-'+i;await p.readMetadata(id);await p.readBytes(id,{maxBytes:65536});}
 const sessionStart=media();await p.verifyImmutableObject(queries[1]);assert.equal(media(),sessionStart,'closed fact avoids evicted bytes in a new operation');
 await p.verifyImmutableObject(queries[518]);assert.equal(media(),sessionStart+1,'session fact overflow falls back to real bytes');
-drive.files.get(queries[1].fileId).metadata.version='2';await assert.rejects(p.closeVerification(token),{code:'verification-metadata-changed'});
-token=await p.beginVerification();const afterFailure=media();await p.verifyImmutableObject(queries[2]);assert.equal(media(),afterFailure+1,'failed closure clears all promoted facts');await p.closeVerification(token);
+drive.files.get(queries[1].fileId).metadata.version='2';const beforeReverify=media();await p.closeVerification(token);assert.equal(media(),beforeReverify+1,'version-only change triggers exact-byte revalidation');
+token=await p.beginVerification();const afterRevalidation=media();await p.verifyImmutableObject(queries[2]);assert.equal(media(),afterRevalidation+1,'unverified bytes still require a real read');await p.closeVerification(token);
 // New scope cannot reuse proof0 after byte0 is evicted again.
 p.invalidateReadCache();token=await p.beginVerification();const beforeScope=media();await p.verifyImmutableObject(queries[0]);assert.equal(media(),beforeScope+1);
-drive.files.get(queries[0].fileId).metadata.version='2';await p.verifyImmutableObject(queries[0]);await assert.rejects(p.closeVerification(token),{code:'verification-metadata-changed'});
+drive.files.get(queries[0].fileId).metadata.version='2';await p.verifyImmutableObject(queries[0]);const beforeCloseReverify=media();await p.closeVerification(token);assert.equal(media(),beforeCloseReverify+1,'changed version is rehashed before accepting the scope');
 
 
 });

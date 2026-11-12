@@ -6,6 +6,15 @@ const enc=new TextEncoder(),dec=new TextDecoder();
 const encode=x=>enc.encode(canonicalizeJcs(x));
 const fail=(code,message,details)=>{throw Object.assign(new Error(message),{code,...(details?{details}: {})});};
 const same=(a,b)=>canonicalizeJcs(a)===canonicalizeJcs(b);
+const withoutVersion=value=>{const copy={...value};delete copy.version;return copy;};
+const sameExceptVersion=(a,b)=>same(withoutVersion(a),withoutVersion(b));
+const changedMetadataFields=(expected,actual)=>{
+  const fields=[];
+  for(const field of ['id','name','mimeType','parents','appProperties','size','version','trashed'])
+    if(Object.hasOwn(actual,field)!==Object.hasOwn(expected,field)||
+       Object.hasOwn(actual,field)&&!same(actual[field],expected[field]))fields.push(field);
+  return fields;
+};
 const intrinsicByteLength=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype),'byteLength').get;
 function ownedBytes(raw,maximum) {
   let length;try{length=intrinsicByteLength.call(raw);}catch{fail('invalid-bytes','Expected an owned Uint8Array.');}
@@ -34,7 +43,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
   // complete opening/closing verification bracket. Manifest bytes have a
   // separate single-entry cache gated by strict fresh metadata on every read.
   const cache = new Map(), metadata = new Map(); let cacheBytes=0;
-  const cacheBudget=8*1024*1024;
+  const cacheBudget=8*1024*1024,maxVersionRevalidations=32;
   let scope=null, generation=0, manifestCache=null;
   const proofEntryBudget=512, proofByteBudget=1024*1024, selectedFolderId=adapter.folderId;
   const decodedNodes=new Map();let decodedBytes=0,decodeEpoch=0;
@@ -64,6 +73,33 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
         typeof m.version!=='string' || !/^[1-9][0-9]*$/.test(m.version) || typeof m.size!=='string' || !/^(0|[1-9][0-9]*)$/.test(m.size)) poison('metadata-mismatch','Physical metadata identity, size or version is invalid.',owner);
     return m;
   };
+  const reverifyVersionChange=async(id,expected,owner)=>{
+    for(let attempt=0;attempt<3;attempt++) {
+      if(attempt)await new Promise(resolve=>setTimeout(resolve,100*attempt));
+      liveRead(owner);
+      const before=validateMetadata(await adapter.readMetadata(id,{maxBytes:16384}),id,owner);liveRead(owner);
+      if(!sameExceptVersion(before,expected))fail('verification-metadata-changed','Physical evidence binding changed during revalidation.',{
+        reason:'metadata-changed',fields:changedMetadataFields(expected,before)
+      });
+      const hash=before.appProperties?.financeTrackerHash;
+      if(typeof hash!=='string'||!/^[0-9a-f]{64}$/.test(hash))fail('verification-metadata-changed','Immutable content hash is unavailable for revalidation.',{
+        reason:'content-proof-unavailable'
+      });
+      const bytes=ownedBytes(await adapter.readBytes(id,{maxBytes:65536}),65536);liveRead(owner);
+      const contentMatches=String(bytes.length)===before.size&&await partitionDigest(bytes)===hash;
+      const after=validateMetadata(await adapter.readMetadata(id,{maxBytes:16384}),id,owner);liveRead(owner);
+      if(!sameExceptVersion(after,expected))fail('verification-metadata-changed','Physical evidence binding changed during revalidation.',{
+        reason:'metadata-changed',fields:changedMetadataFields(expected,after)
+      });
+      if(same(before,after)) {
+        if(!contentMatches)fail('hash-mismatch','Physical evidence bytes failed immutable hash revalidation.');
+        return after;
+      }
+    }
+    fail('verification-metadata-changed','Drive version kept changing during bounded content revalidation.',{
+      reason:'metadata-unstable',fields:['version']
+    });
+  };
   const checkScope = async () => {
     if(!scope)return;
     const current=scope,owner=capture();
@@ -79,10 +115,17 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
         if(!fresh.has(id))fail('verification-metadata-changed','Physical evidence changed during verification.',{reason:'object-missing'});
         const actual=validateMetadata(fresh.get(id),id,owner);
         if(!same(actual,expected)) {
-          const fields=[];
-          for(const field of ['id','name','mimeType','parents','appProperties','size','version','trashed'])
-            if(Object.hasOwn(actual,field)!==Object.hasOwn(expected,field)||
-               Object.hasOwn(actual,field)&&!same(actual[field],expected[field]))fields.push(field);
+          const fields=changedMetadataFields(expected,actual);
+          if(fields.length===1&&fields[0]==='version') {
+            if(current.versionRevalidations>=maxVersionRevalidations)fail('verification-metadata-changed','Too many version-only changes required content revalidation.',{
+              reason:'revalidation-limit',fields:['version']
+            });
+            current.versionRevalidations++;
+            const reverified=await reverifyVersionChange(id,actual,owner);
+            fresh.set(id,reverified);current.used.set(id,structuredClone(reverified));
+            current.proofs.clear();current.proofBytes=0;
+            continue;
+          }
           fail('verification-metadata-changed','Physical evidence changed during verification.',{reason:'metadata-changed',fields});
         }
       }
@@ -91,7 +134,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       if(current.failed)throw current.failed;
       if(adapter.folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed before closure.');
       promoteFacts(current);
-      current.opening=fresh;current.used.clear();metadata.clear();resetProofs(current);
+      current.opening=fresh;current.used.clear();metadata.clear();resetProofs(current);current.versionRevalidations=0;
     })();
     current.phaseClose=closing;
     try {await closing;}
@@ -121,7 +164,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       if(openedAt!==generation) fail('verification-scope-closed','Verification was invalidated while opening.');
       if(scope) fail('verification-scope-open','Verification scopes cannot overlap.');
       metadata.clear();
-      scope={token,opening,used:new Map(),closed:false,closing:false,phaseClosing:false,phaseClose:null,pending:new Set(),phase:0,proofs:new Map(),proofBytes:0}; return token;
+      scope={token,opening,used:new Map(),closed:false,closing:false,phaseClosing:false,phaseClose:null,pending:new Set(),phase:0,proofs:new Map(),proofBytes:0,versionRevalidations:0}; return token;
       }catch(error){if(currentOwner(owner))clearFacts();throw error;}
     },
     async closeVerification(token) {
@@ -212,13 +255,28 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
             if(BigInt(m.size)>BigInt(maximum))fail('byte-limit','Immutable body exceeds its requested bound.');
             return m;
           };
-          const before=validate(await physical.readMetadata(fileId,{maxBytes:16384,signal}));live();
-          const fingerprint=canonicalizeJcs(before),key=canonicalizeJcs([selectedFolderId,fileId,kind,before.appProperties.financeTrackerTransaction,sha256]);
+          let before=validate(await physical.readMetadata(fileId,{maxBytes:16384,signal}));live();
+          let fingerprint=canonicalizeJcs(before);
+          const key=canonicalizeJcs([selectedFolderId,fileId,kind,before.appProperties.financeTrackerTransaction,sha256]);
+          let bytes,stable=false;
           if(current && (current.proofs.get(key)===fingerprint || sessionFacts.get(key)===fingerprint))return {byteLength:Number(before.size)};
-          const bytes=ownedBytes(await physical.readBytes(fileId,{kind,maxBytes:maximum,signal}),maximum);live();
-          if(String(bytes.length)!==before.size||await partitionDigest(bytes)!==sha256)fail('hash-mismatch','Immutable body failed exact hash/size verification.');
-          live();const after=validate(await physical.readMetadata(fileId,{maxBytes:16384,signal}));live();
-          if(fingerprint!==canonicalizeJcs(after))fail('version-mismatch','Immutable metadata changed while reading its bytes.');
+          for(let attempt=0;attempt<3;attempt++) {
+            if(attempt)await new Promise(resolve=>setTimeout(resolve,100*attempt));
+            live();before=validate(await physical.readMetadata(fileId,{maxBytes:16384,signal}));live();
+            fingerprint=canonicalizeJcs(before);
+            bytes=ownedBytes(await physical.readBytes(fileId,{kind,maxBytes:maximum,signal}),maximum);live();
+            const contentMatches=String(bytes.length)===before.size&&await partitionDigest(bytes)===sha256;
+            live();const after=validate(await physical.readMetadata(fileId,{maxBytes:16384,signal}));live();
+            if(fingerprint!==canonicalizeJcs(after)) {
+              if(sameExceptVersion(before,after))continue;
+              fail('verification-metadata-changed','Immutable metadata binding changed while reading its bytes.',{
+                reason:'metadata-changed',fields:changedMetadataFields(before,after)
+              });
+            }
+            if(!contentMatches)fail('hash-mismatch','Immutable body failed exact hash/size verification.');
+            before=after;stable=true;break;
+          }
+          if(!stable)fail('version-mismatch','Drive version did not settle across bounded immutable-byte revalidation.');
           // This is the only mint site. No caller supplies a proof or bytes.
           const cost=encode(key).length+encode(fingerprint).length;
           if(current && current.proofs.size<proofEntryBudget && current.proofBytes+cost<=proofByteBudget) {
@@ -246,27 +304,41 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       };
       const maximum=Math.min(opts.maxBytes ?? 16384,16384);
       if(!Number.isSafeInteger(maximum)||maximum<=0)fail('invalid-response-limits','A finite manifest byte budget is required.');
-      const beforeRaw=await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384});liveRead(owner,opts.signal);
-      const before=validate(beforeRaw);
+      let before=validate(await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384}));liveRead(owner,opts.signal);
       if(opts.signal?.aborted)throw new DOMException('Manifest read cancelled.','AbortError');
       liveRead(owner,opts.signal);
-      const fingerprint=canonicalizeJcs(before);
+      let fingerprint=canonicalizeJcs(before);
       if(manifestCache?.fingerprint===fingerprint) {
         if(manifestCache.bytes.length>maximum)fail('drive-response-too-large','Manifest exceeds the requested byte budget.');
         return manifestCache.bytes.slice();
       }
-      const bytes=ownedBytes(await adapter.readBytes(manifestFileId,{...opts,kind:'manifest',maxBytes:maximum}),maximum);
-      liveRead(owner,opts.signal);
-      const afterRaw=await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384});liveRead(owner,opts.signal);
-      const after=validate(afterRaw);
-      if(opts.signal?.aborted)throw new DOMException('Manifest read cancelled.','AbortError');
-      const metadataChanged=fingerprint!==canonicalizeJcs(after), contentSizeMismatch=before.size!==String(bytes.length);
-      if(metadataChanged||contentSizeMismatch)fail('manifest-version-mismatch','Manifest changed while being read.',{
-        reason:metadataChanged?(contentSizeMismatch?'metadata-and-size-mismatch':'metadata-changed'):'content-size-mismatch'
-      });
-      liveRead(owner,opts.signal);
-      manifestCache={fingerprint,bytes:bytes.slice()};
-      return bytes;
+      for(let attempt=0;attempt<3;attempt++) {
+        if(attempt) {
+          await new Promise(resolve=>setTimeout(resolve,100*attempt));liveRead(owner,opts.signal);
+          before=validate(await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384}));liveRead(owner,opts.signal);
+          fingerprint=canonicalizeJcs(before);
+        }
+        const bytes=ownedBytes(await adapter.readBytes(manifestFileId,{...opts,kind:'manifest',maxBytes:maximum}),maximum);liveRead(owner,opts.signal);
+        const after=validate(await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384}));liveRead(owner,opts.signal);
+        if(opts.signal?.aborted)throw new DOMException('Manifest read cancelled.','AbortError');
+        const metadataChanged=fingerprint!==canonicalizeJcs(after), contentSizeMismatch=before.size!==String(bytes.length);
+        if(!metadataChanged&&!contentSizeMismatch) {
+          manifestCache={fingerprint,bytes:bytes.slice()};
+          return bytes;
+        }
+        const fields=changedMetadataFields(before,after);
+        if(metadataChanged&&fields.length===1&&fields[0]==='version') {
+          before=after;
+          if(attempt<2)continue;
+          fail('manifest-version-mismatch','Drive version did not settle across bounded manifest-read retries.',{
+            reason:'metadata-unstable',fields:['version']
+          });
+        }
+        fail('manifest-version-mismatch','Manifest changed while being read.',{
+          reason:metadataChanged?(contentSizeMismatch?'metadata-and-size-mismatch':'metadata-changed'):'content-size-mismatch'
+        });
+      }
+      fail('manifest-version-mismatch','Manifest did not pass bounded stable-read verification.',{reason:'metadata-unstable'});
       } catch(error) {if(currentOwner(owner)){clearFacts();if(owner.current)owner.current.failed=error;manifestCache=null;cache.clear();metadata.clear();cacheBytes=0;}throw error;}
     },
     writeManifest: async (bytes, opts={}) => {
@@ -293,7 +365,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
         live();metadata.clear();
         if(current) {
           const opening=await adapter.readMetadataSnapshot();live();
-          current.opening=opening;current.used.clear();resetProofs(current);current.phaseClosing=false;
+          current.opening=opening;current.used.clear();resetProofs(current);current.phaseClosing=false;current.versionRevalidations=0;
         }
         return result;
       } catch(error) {

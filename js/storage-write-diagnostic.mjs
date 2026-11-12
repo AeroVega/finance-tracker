@@ -53,11 +53,11 @@ export function storageWriteDiagnostic(error) {
       const result = {code:candidate};
       if(candidate==='manifest-version-mismatch') {
         const reason=read(detail,'reason');
-        if(['metadata-changed','content-size-mismatch','metadata-and-size-mismatch'].includes(reason))result.reason=reason;
+        if(['metadata-changed','content-size-mismatch','metadata-and-size-mismatch','metadata-unstable'].includes(reason))result.reason=reason;
       }
       if(candidate==='verification-metadata-changed') {
         const reason=read(detail,'reason');
-        if(['object-missing','metadata-changed'].includes(reason))result.reason=reason;
+        if(['object-missing','metadata-changed','content-proof-unavailable','metadata-unstable','revalidation-limit'].includes(reason))result.reason=reason;
         const fields=read(detail,'fields');
         const allowedFields=['id','name','mimeType','parents','appProperties','size','version','trashed'];
         if(Array.isArray(fields)) {
