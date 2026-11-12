@@ -43,7 +43,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
   // complete opening/closing verification bracket. Manifest bytes have a
   // separate single-entry cache gated by strict fresh metadata on every read.
   const cache = new Map(), metadata = new Map(); let cacheBytes=0;
-  const cacheBudget=8*1024*1024,maxVersionRevalidations=32;
+  const cacheBudget=8*1024*1024,maxVersionRevalidations=512,maxVersionRevalidationBytes=16*1024*1024;
   let scope=null, generation=0, manifestCache=null;
   const proofEntryBudget=512, proofByteBudget=1024*1024, selectedFolderId=adapter.folderId;
   const decodedNodes=new Map();let decodedBytes=0,decodeEpoch=0;
@@ -73,7 +73,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
         typeof m.version!=='string' || !/^[1-9][0-9]*$/.test(m.version) || typeof m.size!=='string' || !/^(0|[1-9][0-9]*)$/.test(m.size)) poison('metadata-mismatch','Physical metadata identity, size or version is invalid.',owner);
     return m;
   };
-  const reverifyVersionChange=async(id,expected,owner)=>{
+  const reverifyVersionChange=async(id,expected,owner,current)=>{
     for(let attempt=0;attempt<3;attempt++) {
       if(attempt)await new Promise(resolve=>setTimeout(resolve,100*attempt));
       liveRead(owner);
@@ -85,6 +85,12 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       if(typeof hash!=='string'||!/^[0-9a-f]{64}$/.test(hash))fail('verification-metadata-changed','Immutable content hash is unavailable for revalidation.',{
         reason:'content-proof-unavailable'
       });
+      const byteLength=Number(before.size);
+      if(!Number.isSafeInteger(byteLength)||byteLength<0||byteLength>65536||current.versionRevalidationBytes+byteLength>maxVersionRevalidationBytes)
+        fail('verification-metadata-changed','Version-only content revalidation exceeded its byte budget.',{
+          reason:'revalidation-limit',revalidatedObjects:current.versionRevalidations,revalidatedBytes:current.versionRevalidationBytes
+        });
+      current.versionRevalidationBytes+=byteLength;
       const bytes=ownedBytes(await adapter.readBytes(id,{maxBytes:65536}),65536);liveRead(owner);
       const contentMatches=String(bytes.length)===before.size&&await partitionDigest(bytes)===hash;
       const after=validateMetadata(await adapter.readMetadata(id,{maxBytes:16384}),id,owner);liveRead(owner);
@@ -118,10 +124,11 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
           const fields=changedMetadataFields(expected,actual);
           if(fields.length===1&&fields[0]==='version') {
             if(current.versionRevalidations>=maxVersionRevalidations)fail('verification-metadata-changed','Too many version-only changes required content revalidation.',{
-              reason:'revalidation-limit',fields:['version']
+              reason:'revalidation-limit',fields:['version'],revalidatedObjects:current.versionRevalidations,
+              revalidatedBytes:current.versionRevalidationBytes
             });
             current.versionRevalidations++;
-            const reverified=await reverifyVersionChange(id,actual,owner);
+            const reverified=await reverifyVersionChange(id,actual,owner,current);
             fresh.set(id,reverified);current.used.set(id,structuredClone(reverified));
             current.proofs.clear();current.proofBytes=0;
             continue;
@@ -134,7 +141,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       if(current.failed)throw current.failed;
       if(adapter.folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed before closure.');
       promoteFacts(current);
-      current.opening=fresh;current.used.clear();metadata.clear();resetProofs(current);current.versionRevalidations=0;
+      current.opening=fresh;current.used.clear();metadata.clear();resetProofs(current);current.versionRevalidations=0;current.versionRevalidationBytes=0;
     })();
     current.phaseClose=closing;
     try {await closing;}
@@ -164,7 +171,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       if(openedAt!==generation) fail('verification-scope-closed','Verification was invalidated while opening.');
       if(scope) fail('verification-scope-open','Verification scopes cannot overlap.');
       metadata.clear();
-      scope={token,opening,used:new Map(),closed:false,closing:false,phaseClosing:false,phaseClose:null,pending:new Set(),phase:0,proofs:new Map(),proofBytes:0,versionRevalidations:0}; return token;
+      scope={token,opening,used:new Map(),closed:false,closing:false,phaseClosing:false,phaseClose:null,pending:new Set(),phase:0,proofs:new Map(),proofBytes:0,versionRevalidations:0,versionRevalidationBytes:0}; return token;
       }catch(error){if(currentOwner(owner))clearFacts();throw error;}
     },
     async closeVerification(token) {
@@ -365,7 +372,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
         live();metadata.clear();
         if(current) {
           const opening=await adapter.readMetadataSnapshot();live();
-          current.opening=opening;current.used.clear();resetProofs(current);current.phaseClosing=false;current.versionRevalidations=0;
+          current.opening=opening;current.used.clear();resetProofs(current);current.phaseClosing=false;current.versionRevalidations=0;current.versionRevalidationBytes=0;
         }
         return result;
       } catch(error) {

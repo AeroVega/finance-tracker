@@ -54,9 +54,10 @@ Selected Drive errors include only bounded numeric HTTP statuses and retry
 counts. Manifest-read mismatches distinguish metadata changes from reported
 size disagreement using a fixed reason enum. A version-only verification
 change triggers exact-byte revalidation; remaining metadata mismatches may list
-only fixed field names and a fixed reason. Unknown reports may include an
-allowlisted exception class. No messages, IDs, hashes, metadata values, request
-bodies or financial records are exposed.
+only fixed field names and a fixed reason. A bounded revalidation-limit report
+may include the number of files and bytes already rechecked. Unknown reports
+may include an allowlisted exception class. No messages, IDs, hashes, metadata
+values, request bodies or financial records are exposed.
 
 **Checked:** changed JavaScript modules pass `node --check`; `git diff --check`
 passes. Automated tests were not run. This is a local source change only; it

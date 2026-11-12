@@ -64,6 +64,9 @@ export function storageWriteDiagnostic(error) {
           const safeFields=[...new Set(fields.filter(field=>allowedFields.includes(field)))];
           if(safeFields.length)result.fields=safeFields;
         }
+        const revalidatedObjects=read(detail,'revalidatedObjects'),revalidatedBytes=read(detail,'revalidatedBytes');
+        if(Number.isSafeInteger(revalidatedObjects)&&revalidatedObjects>=0&&revalidatedObjects<=512)result.revalidatedObjects=revalidatedObjects;
+        if(Number.isSafeInteger(revalidatedBytes)&&revalidatedBytes>=0&&revalidatedBytes<=16*1024*1024)result.revalidatedBytes=revalidatedBytes;
       }
       const httpStatus = status(read(detail, 'status') ?? read(detail, 'httpStatus'));
       const lastHttpStatus = status(read(detail, 'lastStatus'));

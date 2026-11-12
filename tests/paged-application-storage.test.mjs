@@ -124,7 +124,7 @@ test('eight MiB byte eviction never removes the complete scope metadata witnesse
  const physical=createPhysicalDriveAdapter(adapter,{manifestFileId:'unused',assertWritable:async()=>{}}), token=await physical.beginVerification();
  for(const id of files.keys()){await physical.readMetadata(id,{maxBytes:16384});await physical.readBytes(id,{maxBytes:65536});}
  assert.equal(reads,129);await physical.readMetadata('invented-cache-0',{maxBytes:16384});await physical.readBytes('invented-cache-0',{maxBytes:65536});assert.equal(reads,130,'first body was evicted');
- files.get('invented-cache-1').metadata.version='2';const beforeReverify=reads;await physical.closeVerification(token);assert.equal(reads,beforeReverify+1,'version-only change triggers exact-byte revalidation');
+ for(let n=1;n<=33;n++)files.get(`invented-cache-${n}`).metadata.version='2';const beforeReverify=reads;await physical.closeVerification(token);assert.equal(reads,beforeReverify+33,'more than32 version-only changes trigger exact-byte revalidation');
 });
 
 test('scope invalidation while opening or draining cannot return a successful proof',async()=>{

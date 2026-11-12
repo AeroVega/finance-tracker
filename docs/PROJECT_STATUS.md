@@ -38,7 +38,9 @@ metadata changes, missing objects, hash mismatches and unsettled versions still
 stop publication. Google documents [`version`](https://developers.google.com/workspace/drive/api/reference/rest/v3/files)
 as advancing for any server-side change, including invisible changes; it is
 therefore a freshness signal, not a content hash. Rechecks are bounded and do
-not provide provider-side compare-and-swap.
+not provide provider-side compare-and-swap. Verification closure allows up to
+512 version-changed files and 16 MiB of re-read content per phase; a higher
+count/byte limit remains an explicit stop with bounded counts in diagnostics.
 
 ## Combined PR37 storage and PR38 interface, November 12, 2026
 
