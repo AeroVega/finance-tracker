@@ -1,5 +1,19 @@
 # Project status
 
+## Staged-save performance, November 12, 2026
+
+The owner completed a live synthetic-year seed, then reported a single staged
+change taking over two minutes to save. The PR38 follow-up removes redundant
+readbacks, repeated staging ownership requests and an automatic second reopen;
+it bounds independent immutable uploads to four and prevents full snapshot scans
+from flushing the 8 MiB byte cache. Publication still verifies remote ownership,
+exact base, financial history and durable bytes. No storage-format change or
+real-data operation is included.
+
+See [the measured comparison and limitations](PR38_SAVE_PERFORMANCE.md) before
+interpreting this as a live speed guarantee. Physical Safari/Drive validation
+remains the next owner check; ten-second saves are not established.
+
 ## Safe diagnostic code follow-up, November 12, 2026
 
 **Implemented in the local `feat/apple-pwa-ui` working tree:** synthetic-year

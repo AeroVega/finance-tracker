@@ -232,6 +232,9 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
         const sha256=await partitionDigest(bytes);liveRead(owner,opts.signal);
         if(evidence.size!==String(bytes.length)||evidence.appProperties?.financeTrackerHash!==sha256)poison('hash-mismatch','Physical bytes do not match metadata before cache admission.',owner);
         if (hit) {cache.delete(id); cacheBytes-=hit.bytes.length;}
+        // A full snapshot scan must not evict the working set one page at a time.
+        // New writes still enter through createImmutable; structural reads keep LRU admission.
+        if(evidence.appProperties?.financeTrackerKind==='snapshot-object'&&cacheBytes+bytes.length>cacheBudget)return bytes;
         while(cacheBytes+bytes.length>cacheBudget && cache.size) {const key=cache.keys().next().value; cacheBytes-=cache.get(key).bytes.length; cache.delete(key);}
         cache.set(id,{fingerprint,bytes:bytes.slice()}); cacheBytes+=bytes.length;
       }
@@ -298,7 +301,41 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       if(current){current.pending.add(operation);operation.then(()=>current.pending.delete(operation),()=>current.pending.delete(operation));}
       return operation;
     },
-    createImmutable: input => adapter.createImmutable(input),
+    createImmutable: input => {
+      const owner=capture(),current=owner.current;
+      const operation=(async()=>{
+      liveRead(owner,input.signal);
+      if(current?.closing||current?.phaseClosing)fail('verification-scope-closed','Verification is closing.');
+      // Own the request before awaiting the adapter; a caller must not change
+      // the binding against which its detached GET receipt is checked.
+      const expected={fileId:input.fileId,name:input.name,kind:input.kind,transactionId:input.transactionId,
+        sha256:input.expectedSha256,maxBytes:Math.min(input.maxBytes??65536,65536)};
+      const result=await adapter.createImmutable(input);
+      liveRead(owner,input.signal);
+      if(!result?.readback)return result; // Generic adapters retain independent readback.
+      const m=structuredClone(result.readback.metadata);
+      const bytes=ownedBytes(result.readback.bytes,expected.maxBytes);
+      validateMetadata(m,expected.fileId,owner);
+      if(m.name!==expected.name||m.mimeType!=='application/octet-stream'||
+         m.appProperties?.financeTrackerKind!==expected.kind||
+         m.appProperties?.financeTrackerTransaction!==expected.transactionId||
+         m.appProperties?.financeTrackerHash!==expected.sha256||m.size!==String(bytes.length)||
+         await partitionDigest(bytes)!==expected.sha256)
+        poison('hash-mismatch','Immutable create readback does not match its requested binding.',owner);
+      liveRead(owner,input.signal);
+      // These are the adapter's exact-ID GET bytes, never the upload or POST
+      // response. The normal scope closure still checks their metadata witness.
+      // Downstream readers independently check their typed reference and hash.
+      if(current)current.used.set(expected.fileId,structuredClone(m));
+      const hit=cache.get(expected.fileId);
+      if(hit){cache.delete(expected.fileId);cacheBytes-=hit.bytes.length;}
+      while(cacheBytes+bytes.length>cacheBudget&&cache.size){const key=cache.keys().next().value;cacheBytes-=cache.get(key).bytes.length;cache.delete(key);}
+      cache.set(expected.fileId,{fingerprint:canonicalizeJcs(m),bytes:bytes.slice()});cacheBytes+=bytes.length;
+      return result;
+      })();
+      if(current){current.pending.add(operation);operation.then(()=>current.pending.delete(operation),()=>current.pending.delete(operation));}
+      return operation;
+    },
     readManifest: async (opts = {}) => {
       const owner=capture();
       try {
@@ -359,7 +396,8 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       manifestCache=null;
       try {
         live();await checkScope();live();phase=current?.phase;
-        await assertWritable();live();
+        // checkScope has just verified ownership; the dispatch callback below
+        // checks it again immediately before each durable attempt.
         publisherEntered=true;
         const result=await adapter.publishManifest(manifestFileId,JSON.parse(dec.decode(bytes)),{...opts,beforeMutation:async()=>{
           try {live();await assertWritable();live();await opts.beforeMutation?.();live();}

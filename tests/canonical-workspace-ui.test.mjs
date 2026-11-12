@@ -47,12 +47,14 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       if (state.saveGate) await state.saveGate.promise;
       if (state.failSave) throw Object.assign(new Error('Private provider detail'), {code:'base-conflict'});
       state.writes++;
-      await saveRoot(transaction);
+      const result = await saveRoot(transaction);
+      if (state.readbackGate) await state.readbackGate.promise;
       if (state.loseResponse) {
         lifecycle.state = 'recovery-required'; lifecycle.acceptingWrites = false;
         storage.options.onStatus({state:lifecycle.state});
         throw Object.assign(new Error('Private lost commit response'), {code:'transaction-unresolved'});
       }
+      return result;
     },
     async recover() {
       state.recovers++; if (state.recoveryGate) await state.recoveryGate.promise; lifecycle.state = 'ready'; lifecycle.acceptingWrites = true;

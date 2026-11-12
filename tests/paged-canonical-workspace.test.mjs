@@ -25,6 +25,7 @@ async function fixture() {
       const next={...manifest,root:rootHash,revision:commit.revision};
       await verifyPartitionedCanonicalCommit({manifest:next,commit,readObject:async q=>objects.get(q.sha256)});
       manifest=next;commits.push(commit);
+      return {status:'committed',manifest:structuredClone(manifest)};
     }};
   return {lifecycle,objects,commits,ledger:replayFixture(2).ledger};
 }
@@ -164,4 +165,28 @@ test('empty sentinel audits do not evict either materialized ledger or hide miss
   const genesis={root:empty,previousRoot:null,revision:'0',semanticVersion:PAGED_CANONICAL_VERIFIER,operation:'genesis',changeEvidenceRoot:null};
   await assert.rejects(verify({manifest:{root:empty},commit:genesis,readObject:async()=>{throw new Error('missing sentinel bytes');}}),/missing sentinel bytes/);
   plans.endVerification(next);
+});
+
+test('successful save adopts its audited exact committed root without a second full reopen',async()=>{
+  const h=await fixture(),store=new CanonicalLedgerStore({lifecycle:h.lifecycle});await store.load();
+  h.lifecycle.readPartitionedSnapshot=async()=>{throw new Error('Redundant reopen after verified publication');};
+  const saved=await store.save(h.ledger);assert.deepEqual(saved,h.ledger);assert.equal(store.reader,null);
+  saved.activities.length=0;assert.equal(store.ledger.activities.length,h.ledger.activities.length);
+});
+
+test('prepared financial state is not adopted for an unconfirmed or different committed root',async()=>{
+  for(const mode of ['root','pending','status','copy','revision']){
+    const h=await fixture(),store=new CanonicalLedgerStore({lifecycle:h.lifecycle});await store.load();
+    const save=h.lifecycle.savePartitionedRoot.bind(h.lifecycle);
+    h.lifecycle.savePartitionedRoot=async input=>{
+      const result=await save(input);
+      if(mode==='root')result.manifest.root='0'.repeat(64);
+      if(mode==='pending')result.manifest.pending={state:'ready'};
+      if(mode==='status')result.status='unconfirmed';
+      if(mode==='copy')result.manifest.copyId='invented-other-copy';
+      if(mode==='revision')result.manifest.revision='999';
+      return result;
+    };
+    await assert.rejects(store.save(h.ledger),{code:'canonical-readback-mismatch'});assert.equal(store.base,null);
+  }
 });

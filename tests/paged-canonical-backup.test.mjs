@@ -178,11 +178,14 @@ test('concurrent public provenance audits cannot share proof state or borrow ano
    readObject:async q=>{if(q.sha256===evidence.manifestSha256)throw Object.assign(new Error('Invented missing bytes'),{code:'missing-in-second-store'});return input.readObject(q);}})]);
  assert.equal(result[0].status,'fulfilled');assert.equal(result[1].status,'rejected');assert.equal(result[1].reason.code,'missing-in-second-store');
 });
-test('target evidence version changes at the final publication boundary prevent manifest creation',async()=>{
+test('target evidence hash-binding changes at the final publication boundary prevent manifest creation',async()=>{
  const f=await fixture(),chunks=await archive(f.options),dest=target('invented-target-version');
  await assert.rejects(restore(chunks,dest,{beforePublish:async()=>{
    const file=[...dest.drive.files.values()].find(item=>item.metadata.appProperties?.financeTrackerKind==='snapshot-object');
-   assert.ok(file);file.metadata.version=String(Number(file.metadata.version)+1);
+   assert.ok(file);
+   // Identical-byte version drift is benign; a changed immutable hash is not.
+   file.metadata.appProperties.financeTrackerHash='0'.repeat(64);
+   file.metadata.version=String(Number(file.metadata.version)+1);
  }}),{code:'verification-metadata-changed'});
  assert.equal(published(dest.drive).length,0);
 });

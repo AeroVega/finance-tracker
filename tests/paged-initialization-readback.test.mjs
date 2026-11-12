@@ -56,9 +56,16 @@ for (const [mode, reason] of [['never-stable','version-mismatch'], ['corrupt','h
   test(`new-page revalidation refuses ${mode} without rewriting or deleting evidence`, async () => {
     const h = fixture(mode);
     await assert.rejects(h.app.start(), error => {
-      assert.equal(error.code, 'write-unresolved');
-      assert.equal(error.details.readbackError.code, reason);
-      assert.equal(storageWriteDiagnostic(error).readback, reason);
+      if(mode==='offline') {
+        // A settled version-only read completes; the next mutation is refused
+        // before dispatch by its offline guard, not by immutable readback.
+        assert.equal(error.code,'guard-scope');
+        assert.equal(error.details.guardError.code,'offline');
+      } else {
+        assert.equal(error.code, 'write-unresolved');
+        assert.equal(error.details.readbackError.code, reason);
+        assert.equal(storageWriteDiagnostic(error).readback, reason);
+      }
       return true;
     });
     assert.equal(h.writes, 4);

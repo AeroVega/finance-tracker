@@ -56,10 +56,12 @@ function sameRecord(left, right) {
  * adapter.write(record) must durably replace the record or reject. It must not
  * claim atomic compare-and-swap semantics.
  *
- * Every storage mutation must be gated by assertCanWrite()/withWrite(). The
+ * Publication requires fresh assertCanWrite()/withWrite() verification. Within
+ * an admitted write, immutable staging may use the live local lease guard. The
  * coordinator is not a server-enforced lock and cannot prevent all races.
  */
 export class SessionCoordinator {
+  #admittedWrites=0;
   constructor(options) {
     const settings = options || {};
     if (!settings.adapter ||
@@ -381,6 +383,19 @@ export class SessionCoordinator {
     return this.heartbeatStop;
   }
 
+  assertCanStage({online=true}={}) {
+    // Immutable staging cannot change the authoritative root. Within an already
+    // remotely verified write, use the live local lease; publication still
+    // performs a fresh remote ownership check. Heartbeat failures invalidate it.
+    if(!online){this.ownership="unknown";fail("offline","Offline writes are prohibited.");}
+    if(!this.canWrite||this.#admittedWrites<1||this.releaseFinalizing)
+      fail("not-owner","Immutable staging requires an active verified write.");
+    const now=this.now();
+    if(this.session.expiresAt<=now||now-this.session.heartbeatAt>=this.staleAfterMs||this.session.heartbeatAt>now+this.clockSkewMs){
+      this.ownership="unknown";fail("stale-session","The local session lease expired. Reconnect before writing.");
+    }
+  }
+
   async assertCanWrite(options) {
     // Offline invalidation must remain immediate, including during an in-flight
     // heartbeat. Online inspections share the marker queue so our own heartbeat
@@ -416,7 +431,8 @@ export class SessionCoordinator {
       this.activeWrites++;
       try {
         await this.assertCanWrite(options);
-        return await operation();
+        this.#admittedWrites++;
+        try{return await operation();}finally{this.#admittedWrites--;}
       } finally {
         this.activeWrites--;
       }

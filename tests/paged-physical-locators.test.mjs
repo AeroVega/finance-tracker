@@ -231,7 +231,7 @@ test('journal transaction metadata, changing versions, sizes and physical target
   await assert.rejects(tree.verify(root), {code:'metadata-mismatch'}); f.metadata.appProperties.financeTrackerTransaction = e.transactionId;
   f.bytes[0] ^= 1; await assert.rejects(tree.get(root, {kind:e.kind, sha256:e.sha256}), {code:'hash-mismatch'}); f.bytes[0] ^= 1;
   const read = adapter.readBytes.bind(adapter); adapter.readBytes = async (id, opts) => { const b = await read(id, opts); adapter.files.get(id).metadata.version = '2'; return b; };
-  await assert.rejects(adapter.tree().inspect(root), {code:'version-mismatch'});
+  await adapter.tree().inspect(root); // A version-only change settles on the bounded exact-byte retry.
   adapter.readBytes = read; f.metadata.size = '0'; await assert.rejects(tree.verify(root), {code:'hash-mismatch'});
 });
 

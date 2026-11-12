@@ -92,7 +92,7 @@ export class PagedApplicationStorage {
   #physical; #selectedManifest; #plans; #planEntries; #beginSemantic; #endSemantic;
   #generation=Object.freeze({});
   #current=null; #closures=new WeakMap(); #results=new WeakMap(); #snapshots=new WeakMap();
-  constructor({adapter,assertWritable,verificationPlans,manifestFileId,onReadFailure = () => {},cryptoImpl = globalThis.crypto}) {
+  constructor({adapter,assertWritable,assertStaging=assertWritable,verificationPlans,manifestFileId,onReadFailure = () => {},cryptoImpl = globalThis.crypto}) {
     Object.defineProperty(this,'adapter',{value:adapter,enumerable:true});
     Object.defineProperty(this,'physical',{enumerable:true,get:()=>this.#physical});
     Object.defineProperty(this,'manifestFileId',{enumerable:true,get:()=>this.#selectedManifest,set:value=>{
@@ -100,6 +100,7 @@ export class PagedApplicationStorage {
       this.#selectedManifest=value;
     }});
     Object.defineProperty(this,'assertWritable',{value:async()=>{await assertWritable();}});
+    Object.defineProperty(this,'assertStaging',{value:async()=>{await assertStaging();}});
     this.verificationPlans=verificationPlans;this.#plans=verificationPlans;
     this.#planEntries=[...Map.prototype.entries.call(verificationPlans)];
     this.#beginSemantic=verificationPlans.beginVerification;this.#endSemantic=verificationPlans.endVerification;
@@ -149,7 +150,7 @@ export class PagedApplicationStorage {
   binding(manifestFileId=this.manifestFileId) {
     this.#checkPlans();this.manifestFileId=manifestFileId;
     if(!this.#physical)this.#physical=createPhysicalDriveAdapter(this.adapter,{manifestFileId,assertWritable:this.assertWritable});
-    if(!this.engine)this.engine=new PhysicalRootBinding({adapter:this.physical,assertWritable:this.assertWritable,
+    if(!this.engine)this.engine=new PhysicalRootBinding({adapter:this.physical,assertWritable:this.assertWritable,assertStaging:this.assertStaging,
       verificationPlans:this.#plans,verifySourceEvidence:this.#plans.verifySourceEvidence,
       captureOperationGuard:()=>{const context=this.#current;return ()=>this.#assertOpen(context);}});
     return this.engine;

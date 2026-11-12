@@ -94,7 +94,7 @@ for(const boundary of ['inner-owner','inner-beforeMutation'])for(const retry of 
    if(retry){await beforeMutation();mutations++;}
   }};
   const physical=createPhysicalDriveAdapter(adapter,{manifestFileId:'invented-manifest',assertWritable:async()=>{
-   if(++owners===(retry?4:3)&&boundary==='inner-owner')await delay();
+   if(++owners===(retry?3:2)&&boundary==='inner-owner')await delay();
   }}),decoder=getOwnedLocatorDecoder(physical);
   await physical.beginVerification();
   const old=physical.writeManifest(enc.encode('{}'),{beforeMutation:async()=>{

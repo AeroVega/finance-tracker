@@ -11,7 +11,7 @@ const bytes=new TextEncoder().encode('invented physical body'),sha256=await part
 function fixture(){let m={id:'invented-file',name:'invented-name',parents:['invented-folder'],trashed:false,version:'1',size:String(bytes.length),appProperties:{financeTrackerKind:'snapshot-object',financeTrackerHash:sha256,financeTrackerTransaction:'invented-tx'}};let gate=null,reads=0,owner=async()=>{};const adapter={folderId:'invented-folder',readMetadataSnapshot:async()=>new Map([[m.id,structuredClone(m)]]),readMetadata:async()=>structuredClone(m),readBytes:async()=>{reads++;if(gate)await gate;return bytes.slice();},publishManifest:async()=>{}};const p=createPhysicalDriveAdapter(adapter,{manifestFileId:'unused',assertWritable:()=>owner()});return {p,adapter,get m(){return m;},set m(x){m=x;},get reads(){return reads;},set gate(x){gate=x;},set owner(x){owner=x;}};}
 const q={fileId:'invented-file',sha256,kind:'snapshot-object',transactionId:'invented-tx'};
 let cases=0;
-for(const mutate of [m=>{m.id='invented-wrong';},m=>{m.name='renamed';},m=>{m.parents=['wrong-folder'];},m=>{m.trashed=true;},m=>{delete m.trashed;},m=>{m.version='2';},m=>{m.size='1';},m=>{m.appProperties.financeTrackerKind='commit-record';},m=>{m.appProperties.financeTrackerHash='0'.repeat(64);},m=>{m.appProperties.financeTrackerTransaction='wrong-tx';}]){const f=fixture(),t=await f.p.beginVerification();await f.p.verifyImmutableObject(q);mutate(f.m);await f.p.verifyImmutableObject(q);await assert.rejects(f.p.closeVerification(t));cases++;}
+for(const mutate of [m=>{m.id='invented-wrong';},m=>{m.name='renamed';},m=>{m.parents=['wrong-folder'];},m=>{m.trashed=true;},m=>{delete m.trashed;},m=>{m.size='1';},m=>{m.appProperties.financeTrackerKind='commit-record';},m=>{m.appProperties.financeTrackerHash='0'.repeat(64);},m=>{m.appProperties.financeTrackerTransaction='wrong-tx';}]){const f=fixture(),t=await f.p.beginVerification();await f.p.verifyImmutableObject(q);mutate(f.m);await f.p.verifyImmutableObject(q);await assert.rejects(f.p.closeVerification(t));cases++;}
 for(const change of [{kind:'commit-record'},{sha256:'0'.repeat(64)},{transactionId:'wrong-tx'},{maxBytes:1},{fileId:'wrong-file'}]){const f=fixture(),t=await f.p.beginVerification();await f.p.verifyImmutableObject(q);await assert.rejects(f.p.verifyImmutableObject({...q,...change}));await assert.rejects(f.p.closeVerification(t));cases++;}
 // Late old epoch cannot mint into replacement phase, even if caller mutates request.
 {const f=fixture(),t=await f.p.beginVerification();let release;f.gate=new Promise(r=>release=r);let arg={...q};const pending=f.p.verifyImmutableObject(arg);arg.sha256='0'.repeat(64);await new Promise(r=>setTimeout(r,0));f.p.invalidateReadCache();const newer=await f.p.beginVerification();release();await assert.rejects(pending,{code:'verification-scope-closed'});f.gate=null;const start=f.reads;await f.p.verifyImmutableObject(q);assert.ok(f.reads>=start);await f.p.closeVerification(newer);cases++;}
@@ -19,7 +19,7 @@ for(const change of [{kind:'commit-record'},{sha256:'0'.repeat(64)},{transaction
 {const f=fixture(),t=await f.p.beginVerification(),controller=new AbortController();let release;f.gate=new Promise(r=>release=r);const pending=f.p.verifyImmutableObject({...q,signal:controller.signal});await new Promise(r=>setTimeout(r,0));controller.abort();release();await assert.rejects(pending,{name:'AbortError'});await assert.rejects(f.p.verifyImmutableObject(q));await assert.rejects(f.p.closeVerification(t));cases++;}
 // Concurrent final closure drains even an unawaited body verification.
 {const f=fixture(),t=await f.p.beginVerification();let release;f.gate=new Promise(r=>release=r);const pending=f.p.verifyImmutableObject(q);await new Promise(r=>setTimeout(r,0));let settled=false;const closure=f.p.closeVerification(t).then(()=>settled=true);await new Promise(r=>setTimeout(r,10));assert.equal(settled,false);release();await pending;await closure;assert.equal(settled,true);cases++;}
-assert.equal(cases,18);
+assert.equal(cases,17);
 
 });
 
@@ -37,7 +37,7 @@ const media=()=>drive.requests.filter(r=>r.category==='media').length;
 let token=await p.beginVerification();for(const q of queries){assert.equal((await p.verifyImmutableObject(q)).byteLength,17000);assert.equal((await p.verifyImmutableObject({...q,transactionId:'invented-tx'})).byteLength,17000);}
 const first=media();for(const q of queries.slice(0,512))await p.verifyImmutableObject(q);assert.equal(media(),first,'proof hits beyond8MiB do not reread bytes');
 // Push the unproved suffix out of the8MiB byte cache with distinct arbitrary reads.
-for(let i=0;i<145;i++){const id='invented-evict-'+i,bytes=new Uint8Array(60000).fill(i),sha256=await partitionDigest(bytes);drive.files.set(id,{bytes,metadata:{id,name:id,parents:[drive.folderId],appProperties:{financeTrackerKind:'snapshot-object',financeTrackerHash:sha256,financeTrackerTransaction:'invented-tx'},trashed:false,version:'1',size:'60000'}});await p.readMetadata(id);await p.readBytes(id,{maxBytes:65536});}
+for(let i=0;i<145;i++){const id='invented-evict-'+i,bytes=new Uint8Array(60000).fill(i),sha256=await partitionDigest(bytes);drive.files.set(id,{bytes,metadata:{id,name:id,parents:[drive.folderId],appProperties:{financeTrackerKind:'protocol-object',financeTrackerHash:sha256,financeTrackerTransaction:'invented-tx'},trashed:false,version:'1',size:'60000'}});await p.readMetadata(id);await p.readBytes(id,{maxBytes:65536});}
 const beforeOverflow=media();await p.verifyImmutableObject(queries[0]);await p.verifyImmutableObject({...queries[511],transactionId:'invented-tx'});assert.equal(media(),beforeOverflow,'omitted and explicit transaction aliases preserve512 distinct facts');await p.verifyImmutableObject(queries[519]);assert.equal(media(),beforeOverflow+1,'proof overflow really falls back after byte eviction');
 const beforeBytes=media();await p.readMetadata(queries[0].fileId);const actual=await p.readBytes(queries[0].fileId,{maxBytes:65536});assert.equal(media(),beforeBytes+1,'byte request cannot fabricate body from proof');assert.equal(await partitionDigest(actual),queries[0].sha256);
 await p.closeVerification(token);
@@ -47,7 +47,7 @@ for(let i=0;i<145;i++){const id='invented-evict-'+i;await p.readMetadata(id);awa
 const sessionStart=media();await p.verifyImmutableObject(queries[1]);assert.equal(media(),sessionStart,'closed fact avoids evicted bytes in a new operation');
 await p.verifyImmutableObject(queries[518]);assert.equal(media(),sessionStart+1,'session fact overflow falls back to real bytes');
 drive.files.get(queries[1].fileId).metadata.version='2';const beforeReverify=media();await p.closeVerification(token);assert.equal(media(),beforeReverify+1,'version-only change triggers exact-byte revalidation');
-token=await p.beginVerification();const afterRevalidation=media();await p.verifyImmutableObject(queries[2]);assert.equal(media(),afterRevalidation+1,'unverified bytes still require a real read');await p.closeVerification(token);
+token=await p.beginVerification();const afterRevalidation=media();await p.verifyImmutableObject(queries[2]);assert.equal(media(),afterRevalidation,'unchanged closed proof survives another object version revalidation');await p.closeVerification(token);
 // New scope cannot reuse proof0 after byte0 is evicted again.
 p.invalidateReadCache();token=await p.beginVerification();const beforeScope=media();await p.verifyImmutableObject(queries[0]);assert.equal(media(),beforeScope+1);
 drive.files.get(queries[0].fileId).metadata.version='2';await p.verifyImmutableObject(queries[0]);const beforeCloseReverify=media();await p.closeVerification(token);assert.equal(media(),beforeCloseReverify+1,'changed version is rehashed before accepting the scope');
@@ -89,7 +89,7 @@ test('only factory-owned fixed forwarding views preserve the private verifier',a
 test('manifest publication rejects invalidation during final ownership await',async()=>{
  let physical,owners=0,published=0;
  const adapter={folderId:'invented-folder',readMetadataSnapshot:async()=>new Map(),publishManifest:async()=>{published++;}};
- physical=createPhysicalDriveAdapter(adapter,{manifestFileId:'unused',assertWritable:async()=>{if(++owners===2)physical.invalidateReadCache();}});
+ physical=createPhysicalDriveAdapter(adapter,{manifestFileId:'unused',assertWritable:async()=>{if(++owners===1)physical.invalidateReadCache();}});
  await physical.beginVerification();
  await assert.rejects(physical.writeManifest(new TextEncoder().encode('{}'),{}),{code:'verification-scope-closed'});
  assert.equal(published,0);

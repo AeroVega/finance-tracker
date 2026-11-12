@@ -7,11 +7,15 @@ const attempts = value => Number.isSafeInteger(value) && value >= 1 && value <= 
 function read(value, key) { try { return value?.[key]; } catch { return undefined; } }
 function findCode(error, target) {
   const seen = new Set(), queue = [{value:error, depth:0}];
+  let fallback;
   while (queue.length && seen.size < 12) {
     const {value:current, depth} = queue.shift();
     if (!current || seen.has(current)) continue;
     seen.add(current);
-    if (safeDiagnosticCode(read(current, 'code')) === target) return current;
+    if (safeDiagnosticCode(read(current, 'code')) === target) {
+      if (read(current, 'details')) return current;
+      fallback ??= current;
+    }
     if (depth < 4) {
       const cause = read(current, 'cause');
       if (cause) queue.push({value:cause, depth:depth + 1});
@@ -22,6 +26,7 @@ function findCode(error, target) {
       }
     }
   }
+  return fallback;
 }
 
 export function storageWriteDiagnostic(error) {

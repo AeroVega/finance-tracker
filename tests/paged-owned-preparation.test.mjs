@@ -14,15 +14,15 @@ function application(drive) {
   setIntervalImpl:()=>1,clearIntervalImpl:()=>{},lifecycleTarget:null});
 }
 
-test('canonical save uses its transaction baseline and only opens the post-save application snapshot',async()=>{
+test('canonical save uses its transaction audit without reopening the same application snapshot',async()=>{
  const drive=new HttpCatalogDrive(),app=application(drive);await app.start();
  try {
   const store=new CanonicalLedgerStore({lifecycle:app});await store.load();
   const read=app.readPartitionedSnapshot.bind(app);let snapshots=0;
   app.readPartitionedSnapshot=(...args)=>{snapshots++;return read(...args);};
   const ledger=replayFixture(2).ledger;assert.deepEqual(await store.save(ledger),ledger);
-  assert.equal(snapshots,1,'the owned transaction already verifies the exact base; only final readback opens a snapshot');
-  const writes=drive.mutations;await store.save(ledger);assert.equal(drive.mutations,writes);assert.equal(snapshots,1);
+  assert.equal(snapshots,0,'the owned transaction verifies both exact base and final published root');
+  const writes=drive.mutations;await store.save(ledger);assert.equal(drive.mutations,writes);assert.equal(snapshots,0);
  }finally{await app.release();}
 });
 

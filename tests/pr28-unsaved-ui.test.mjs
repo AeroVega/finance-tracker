@@ -73,6 +73,7 @@ async function controller({ guided = false, actualPaged = false } = {}) {
           for(const d of descriptors)objects.set(d.sha256,await preparationStore.read(d.sha256));
           const next={...manifest,root:rootHash,revision:String(BigInt(manifest.revision)+1n)};
           await verifyPartitionedCanonicalCommit({manifest:next,commit:{root:rootHash,previousRoot:manifest.root,revision:next.revision,semanticVersion,operation:'synthetic-canonical-import',changeEvidenceRoot:null},readObject:async q=>objects.get(q.sha256)});manifest=next;
+          return {status:'committed',manifest:structuredClone(manifest)};
         }});
     }
     async recoverStaleSession() { await this.lifecycle.recover(); }

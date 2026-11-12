@@ -16,8 +16,9 @@ async function setup(layout = 'partitions-v5', fresh = false) {
   lifecycle.readPartitionedSnapshot=async()=>{calls.reads++;return read();};
   lifecycle.savePartitionedRoot=async args=>{
     if(calls.fail)throw Object.assign(new Error('private failure'),{code:'base-conflict'});
-    await save(args);calls.writes++;
+    const result=await save(args);calls.writes++;
     if(calls.loseResponse)throw Object.assign(new Error('lost response'),{code:'transaction-unresolved'});
+    return result;
   };
   const storage = {lifecycle:null,accessToken:'invented-token',
     async connect(options){calls.connects.push(options);this.lifecycle=lifecycle;},
