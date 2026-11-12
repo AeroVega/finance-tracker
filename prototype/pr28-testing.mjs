@@ -1,3 +1,4 @@
+import { clearDiagnostic, showDiagnostic } from "../js/app-diagnostics.mjs";
 import { LIVE_CHECKS, LIVE_IDS, blankLive, safeLiveMetrics, createLiveRunner, prepareInterruption, verifyInterruption } from './pr28-live-checks.mjs';
 import { PLAN_VERSION, CHECKS, AUTOMATED_IDS, AUTOMATED_LABELS, STATUS_LABELS, BROWSER_LABELS, blankResults, safeStatuses, safeAutomated, verifiedSource, createSafeReport } from './pr28-testing-plan.mjs';
 import { runFixtureChecks } from './pr28-testing-checks.mjs';
@@ -104,6 +105,7 @@ $('reset-checklist').addEventListener('click', () => {
   $('interruption-result').dataset.result = 'not-run';
   $('interruption-result').textContent = 'Recorded interruption results reset. Saved data, staged changes and any prepared Pause are unchanged. No preparation result is recorded now.';
   $('interruption-verification').dataset.result = 'not-run';
+  clearDiagnostic($('interruption-verification')); clearDiagnostic($('interruption-result'));
   $('interruption-verification').textContent = 'Not checked after reset. Reconnect/recover if needed, then verify the selected interruption folder.';
   manual = blankResults(); automated = safeAutomated(); live = blankLive(); liveState = 'not-run'; renderLive(); selected = 0; date = new Date().toISOString().slice(0, 10);
   $('source-confirmed').checked = false; $('test-browser').value = BROWSER_LABELS[0];
@@ -285,6 +287,7 @@ async function mountWorkbench() {
       if (status.saveState === 'paused') {
         if (interruptionTimer?.id === 'pause') { stopInterruptionTimer(); report(); }
         $('interruption-result').textContent = 'PAUSED after the first durable write. This is not a verified save. Copy your safe report, fully close this tab, reopen this page and reconnect to this same interruption folder.';
+        clearDiagnostic($('interruption-result'));
         $('interruption-result').dataset.result = 'running';
       }
       refreshLiveControls();
@@ -293,8 +296,10 @@ async function mountWorkbench() {
       if (!workbenchReady || checking || livePreparing || liveRunner.isRunning()) return;
       if (!confirm('Prepare the selected fresh empty synthetic interruption folder? This saves four invented rows and stages one classification. Use a separate folder, not the completed live-check source.')) return;
       preparedInterruption = null; livePreparing = true; startInterruptionTimer('preparation'); interruption.preparation = 'running'; interruption.verification = 'not-run'; refreshLiveControls(); report();
+      clearDiagnostic($('interruption-result'));
       $('interruption-result').dataset.result = 'running';
       $('interruption-result').textContent = 'Preparing the baseline, saving and independently reopening it. One checkpoint can take several minutes. Keep this tab open.';
+      clearDiagnostic($('interruption-verification'));
       $('interruption-verification').textContent = 'Not checked. After the pause and whole-tab close, reconnect here and verify recovery.';
       $('interruption-verification').dataset.result = 'not-run';
       try {
@@ -302,26 +307,28 @@ async function mountWorkbench() {
         interruption.preparation = 'passed';
         $('interruption-result').dataset.result = 'passed';
         $('interruption-result').textContent = 'Baseline saved and independently reopened. Exactly one classification is staged, unsaved. Next: press 2. Save and pause this prepared test right here.';
-      } catch {
+      } catch (error) {
         interruption.preparation = 'failed'; $('interruption-result').dataset.result = 'failed';
-        $('interruption-result').textContent = 'Preparation did not complete. The folder may be nonempty, disconnected or have an uncertain save. Do not repeat an uncertain save. Reconnect/recover and inspect saved records; use a fresh empty synthetic folder for new preparation.';
+        $('interruption-result').textContent = showDiagnostic(error, { surface: 'developer-tool', target: $('interruption-result') });
       } finally { stopInterruptionTimer(); livePreparing = false; refreshLiveControls(); report(); }
     });
     $('pause-prepared-interruption').addEventListener('click', async () => {
       if (!preparedInterruption || checking || livePreparing || liveRunner.isRunning() || !workbenchStatus.connected || !workbenchStatus.dirty) return;
       if (!confirm('Pause this exact prepared interruption save after its first durable write? Wait for PAUSED, then fully close this tab. Reopen the page and reconnect to the same interruption folder.')) return;
       livePreparing = true; startInterruptionTimer('pause'); refreshLiveControls();
+      clearDiagnostic($('interruption-result'));
       $('interruption-result').dataset.result = 'running'; $('interruption-result').textContent = 'Saving until the first durable write. Keep this tab open until PAUSED appears.';
       try { await workbench.pausePreparedInterruption(preparedInterruption); }
-      catch {
+      catch (error) {
         preparedInterruption = null; interruption.preparation = 'failed'; $('interruption-result').dataset.result = 'failed';
-        $('interruption-result').textContent = 'The prepared pause did not complete or this folder/graph changed. Do not record a pause as passed. Reconnect, recover if offered and inspect the saved state before another attempt.';
+        $('interruption-result').textContent = showDiagnostic(error, { surface: 'developer-tool', target: $('interruption-result') });
       } finally { stopInterruptionTimer(); livePreparing = false; refreshLiveControls(); report(); }
     });
     $('verify-interruption').addEventListener('click', async () => {
       if (!workbenchReady || checking || livePreparing || liveRunner.isRunning()) return;
       if (!confirm('Verify the recovered interruption recipe in this selected folder? If its exact saved baseline is found, save the one missing classification, reopen and check the full graph and totals. Modified or older recipes will not be rewritten.')) return;
       livePreparing = true; startInterruptionTimer('verification'); interruption.verification = 'running'; refreshLiveControls(); report();
+      clearDiagnostic($('interruption-verification'));
       $('interruption-verification').dataset.result = 'running';
       $('interruption-verification').textContent = 'Independently reopening and checking the entire recovered recipe. If the classification is absent, one checkpoint will be saved and reopened. This can take several minutes.';
       try {
@@ -330,14 +337,15 @@ async function mountWorkbench() {
         $('interruption-verification').textContent = (result === 'baseline-retried' ? 'Exact baseline recovered. The one missing classification was saved once and independently reopened.' : 'Exact single-classification graph recovered and independently reopened. No save was repeated.') + ' Complete graph verified; exactly 1 audit event; January spending 100.00, incomplete. Mark your human observation separately, then release this session.';
       } catch (error) {
         interruption.verification = 'failed'; $('interruption-verification').dataset.result = 'failed';
-        $('interruption-verification').textContent = error?.message === 'interruption-recipe-unrecognized' ? 'This is not the exact interruption recipe prepared by this version. No classification was staged or saved. Older or modified test folders are unsupported, not necessarily corrupt. Preserve this folder and use a new empty synthetic folder for a new interruption rehearsal.' : 'Verification did not pass. A modified or older interruption recipe is unsupported and is not rewritten; that refusal does not mean corruption. A connection, recovery or save failure also stops this check. Reconnect/recover if offered and inspect saved records. Never repeat an uncertain save or use the completed live-check source here.';
+        $('interruption-verification').textContent = showDiagnostic(error, { surface: 'developer-tool', target: $('interruption-verification') });
       } finally { stopInterruptionTimer(); livePreparing = false; refreshLiveControls(); report(); }
     });
     refreshLiveControls();
-  } catch {
+  } catch (error) {
     // No retries that could initialize a second module/session. Reload explicitly.
     const warning = node('p', 'The workbench could not be loaded. No manual test is marked passed. Reload when the deployment is available; keep this checklist report first.'); warning.className = 'notice'; warning.setAttribute('role', 'alert');
     $('workbench').replaceChildren(warning);
+    warning.textContent = showDiagnostic(error, { surface: 'developer-tool', target: warning });
   }
 }
 void mountWorkbench();

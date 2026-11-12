@@ -1,3 +1,4 @@
+import { clearDiagnostic, showDiagnostic } from "../js/app-diagnostics.mjs";
 import { GOOGLE_CONFIG } from "../js/google-config.js";
 import { validateGoogleConfig } from "../js/google-config-validation.mjs";
 import { createDriveSessionAdapter } from "../js/drive-session-adapter.mjs";
@@ -21,6 +22,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 function status(id, message, kind = "info") {
+  if (kind !== "error") clearDiagnostic($(id));
   const node = $(id);
   node.textContent = message;
   node.dataset.kind = kind;
@@ -177,7 +179,7 @@ async function verifyFolder(item) {
     status("connection-status", "Selected synthetic folder: " + state.folderName + ". Ready to inspect the session marker.", "success");
     setActions();
   } catch (error) {
-    status("connection-status", error instanceof Error ? error.message : "Could not verify the selected folder.", "error");
+    status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error");
   }
 }
 function describeInspection(result) {
@@ -236,7 +238,7 @@ async function runAction(buttonId, statusId, working, action) {
   try {
     await action();
   } catch (error) {
-    status(statusId, error instanceof Error ? error.message : "The operation failed.", "error");
+    status(statusId, showDiagnostic(error, { surface: "developer-tool", target: $(statusId) }), "error");
     if (error && error.code === "authorization-required") {
       state.accessToken = "";
       state.adapter = null;
@@ -264,7 +266,7 @@ $("connect-google").addEventListener("click", async () => {
     status("connection-status", "Google authorization succeeded. Choose the dedicated synthetic test folder.", "success");
   } catch (error) {
     setText("auth-state", "Not connected");
-    status("connection-status", error instanceof Error ? error.message : "Could not connect to Google.", "error");
+    status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error");
   } finally {
     $("connect-google").disabled = false;
     setActions();
@@ -272,7 +274,7 @@ $("connect-google").addEventListener("click", async () => {
 });
 $("select-folder").addEventListener("click", () => {
   try { openPicker(); }
-  catch (error) { status("connection-status", error instanceof Error ? error.message : "Could not open Google Picker.", "error"); }
+  catch (error) { status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error"); }
 });
 $("inspect-session").addEventListener("click", () => runAction(
   "inspect-session", "inspect-status", "Reading the complete Drive folder listing and session marker…",
@@ -309,14 +311,14 @@ $("heartbeat-start").addEventListener("click", () => {
     state.heartbeatStop = state.coordinator.startHeartbeat({
       onError: (error) => {
         state.heartbeatStop = null;
-        status("heartbeat-status", "Heartbeat stopped; writes are disabled: " + error.message, "error");
+        status("heartbeat-status", showDiagnostic(error, { surface: "developer-tool", target: $("heartbeat-status") }), "error");
         setText("owner-state", "Ownership unknown");
         setActions();
       }
     });
     status("heartbeat-status", "Automatic heartbeat started. The coordinator will refresh and verify the Drive marker approximately every 40 seconds.", "success");
   } catch (error) {
-    status("heartbeat-status", error instanceof Error ? error.message : "Could not start heartbeat.", "error");
+    status("heartbeat-status", showDiagnostic(error, { surface: "developer-tool", target: $("heartbeat-status") }), "error");
   }
   setActions();
 });
@@ -384,5 +386,5 @@ loadGoogleLibraries().then(() => {
   $("connect-google").disabled = false;
   status("connection-status", "Google services are ready. Connect with Google to begin.");
 }).catch((error) => {
-  status("connection-status", error instanceof Error ? error.message : "Google services could not load.", "error");
+  status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error");
 });

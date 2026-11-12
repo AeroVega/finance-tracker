@@ -1,3 +1,4 @@
+import { createDiagnostic, diagnosticMessage } from './app-diagnostics.mjs';
 import {PagedApplicationStorage,isObsoletePagedVerificationFailure,currentPagedVerificationFailure} from './paged-application-storage.mjs';
 import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "./drive-transaction-engine.mjs";
 import { createDriveSessionAdapter } from "./drive-session-adapter.mjs";
@@ -14,6 +15,12 @@ export class ApplicationStorageError extends Error {
     this.name = "ApplicationStorageError";
     this.code = code;
   }
+}
+
+// Internal control flow keeps its existing code semantics; presentation is
+// independently allowlisted by publish(). A hostile getter must not skip cleanup.
+function failureCode(error) {
+  try { const code = error?.code; return typeof code === 'string' ? code : undefined; } catch { return undefined; }
 }
 
 function fail(code, message) {
@@ -106,7 +113,8 @@ export class ApplicationStorageLifecycle {
       this.sessionAdapter?.clear?.();
     }
     this.state = state;
-    this.onStatus({ state, message, code });
+    const safe = code ? createDiagnostic({code}) : null;
+    this.onStatus({ state, message: safe ? diagnosticMessage({code: safe.code}) : message, code: safe?.code || null });
   }
 
   createComponents() {
@@ -177,7 +185,7 @@ export class ApplicationStorageLifecycle {
       onError: (error) => {
         this.acceptingWrites = false;
         this.heartbeatStop = null;
-        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", error?.code || "ownership-unknown");
+        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", failureCode(error) || "ownership-unknown");
       }
     });
   }
@@ -231,11 +239,11 @@ export class ApplicationStorageLifecycle {
         if (this.coordinator?.canWrite) this.startHeartbeat();
         this.attachLifecycleListeners();
       }
-      const state = !this.isOnline() ? "offline" : error?.code === "stale-session" ? "stale-session" :
-        error?.code === "session-active" ? "session-active" :
+      const state = !this.isOnline() ? "offline" : failureCode(error) === "stale-session" ? "stale-session" :
+        failureCode(error) === "session-active" ? "session-active" :
         this.coordinator?.canWrite || this.engine?.recoveryRequired ? "recovery-required" :
         acquired ? "ownership-unknown" : "connection-error";
-      this.publish(state, error?.message || "Storage connection could not be verified.", error?.code || "unknown");
+      this.publish(state, "Storage connection could not be verified.", failureCode(error) || "unknown");
       throw error;
     }
   }
@@ -265,9 +273,9 @@ export class ApplicationStorageLifecycle {
         this.started = true;
         this.startHeartbeat();
         this.attachLifecycleListeners();
-        this.publish("recovery-required", error?.message || "Session was acquired, but transaction recovery is unresolved.", error?.code || "recovery-required");
+        this.publish("recovery-required", "Session was acquired, but transaction recovery is unresolved.", failureCode(error) || "recovery-required");
       } else {
-        this.publish("connection-error", error?.message || "Session recovery could not be verified.", error?.code || "unknown");
+        this.publish("connection-error", "Session recovery could not be verified.", failureCode(error) || "unknown");
       }
       throw error;
     }
@@ -297,10 +305,10 @@ export class ApplicationStorageLifecycle {
       this.acceptingWrites = false;
       if (this.coordinator?.canWrite && this.engine?.recoveryRequired) {
         this.startHeartbeat();
-        this.publish("recovery-required", error?.message || "Transaction recovery remains unresolved.", error?.code || "recovery-required");
+        this.publish("recovery-required", "Transaction recovery remains unresolved.", failureCode(error) || "recovery-required");
       } else {
-        const state = error?.code === "stale-session" ? "stale-session" : "ownership-unknown";
-        this.publish(state, error?.message || "The previous session could not be revalidated.", error?.code || "unknown");
+        const state = failureCode(error) === "stale-session" ? "stale-session" : "ownership-unknown";
+        this.publish(state, "The previous session could not be revalidated.", failureCode(error) || "unknown");
       }
     }
   }
@@ -361,7 +369,7 @@ export class ApplicationStorageLifecycle {
     } catch (error) {
       const outdated=isObsoletePagedVerificationFailure(error);
       if(this.pagedCanonical)this.engine.discardSnapshot(closure,generation);
-      if (error?.code !== "base-conflict"&&!outdated) this.pauseAfterReadFailure(error);
+      if (failureCode(error) !== "base-conflict"&&!outdated) this.pauseAfterReadFailure(error);
       throw error;
     }
   }
@@ -397,8 +405,8 @@ export class ApplicationStorageLifecycle {
   pauseAfterReadFailure(error) {
     this.acceptingWrites = false;
     if (this.engine) this.engine.recoveryRequired = true;
-    this.publish(error?.code === "authorization-required" ? "authorization-required" : "recovery-required",
-      "Storage could not be verified. Reconnect and recover before continuing.", error?.code || "read-unverified");
+    this.publish(failureCode(error) === "authorization-required" ? "authorization-required" : "recovery-required",
+      "Storage could not be verified. Reconnect and recover before continuing.", failureCode(error) || "read-unverified");
   }
 
   async readObjectVerified(logicalPath) {
@@ -463,12 +471,12 @@ export class ApplicationStorageLifecycle {
       const outdated=isObsoletePagedVerificationFailure(error);
       if(this.pagedCanonical)this.engine.discardTransaction(result);
       if(outdated)throw error;
-      if (error?.code === "transaction-unresolved" || this.engine.recoveryRequired) {
+      if (failureCode(error) === "transaction-unresolved" || this.engine.recoveryRequired) {
         this.acceptingWrites = false;
-        this.publish("recovery-required", "A save needs recovery before more changes can be made.", error?.code || "recovery-required");
-      } else if (error?.code === "offline" || error?.code === "ownership-lost" || error?.code === "ownership-unknown") {
+        this.publish("recovery-required", "A save needs recovery before more changes can be made.", failureCode(error) || "recovery-required");
+      } else if (failureCode(error) === "offline" || failureCode(error) === "ownership-lost" || failureCode(error) === "ownership-unknown") {
         this.acceptingWrites = false;
-        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", error.code);
+        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", failureCode(error));
       }
       throw error;
     }
@@ -499,7 +507,7 @@ export class ApplicationStorageLifecycle {
       }
       return result;
     } catch (error) {
-      this.publish("recovery-required", "Recovery remains unresolved. No further writes are allowed.", error?.code || "recovery-required");
+      this.publish("recovery-required", "Recovery remains unresolved. No further writes are allowed.", failureCode(error) || "recovery-required");
       throw error;
     }
   }
@@ -535,10 +543,10 @@ export class ApplicationStorageLifecycle {
       this.diagnostic("release-complete", { reason });
       return { ...result, reason };
     } catch (error) {
-      if (this.engine?.recoveryRequired || error?.code === "recovery-required") {
+      if (this.engine?.recoveryRequired || failureCode(error) === "recovery-required") {
         this.publish("recovery-required", "A save needs recovery before more changes can be made.", "recovery-required");
       } else {
-        this.publish("release-unconfirmed", "Session release could not be verified. Do not switch devices yet.", error?.code || "release-unconfirmed");
+        this.publish("release-unconfirmed", "Session release could not be verified. Do not switch devices yet.", failureCode(error) || "release-unconfirmed");
       }
       this.diagnostic("release-refused", { reason });
       throw error;

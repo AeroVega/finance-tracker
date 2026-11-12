@@ -1,41 +1,11 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent, summarizeLedger, getEffectiveActivities, applyReviewDecision, reverseReviewDecision } from "../js/canonical-import.mjs";
-import { parseProviderCsv } from "../js/provider-csv.mjs";
-import { CanonicalLedgerStore, CANONICAL_INDEX, serializeCanonicalLedger, validateCanonicalSnapshot } from "../js/canonical-ledger-storage.mjs";
-import { setupCatalog, MemoryCatalogDrive } from "./helpers/catalog-drive.mjs";
-import { CatalogTransactionEngine } from "../js/catalog-transaction-engine.mjs";
-import { verifyCatalogHistory, readVerified } from "../js/catalog-storage.mjs";
-import { resolveSnapshotLocators } from "../js/drive-locator-catalog.mjs";
-import { exportCatalogArchive, verifyCatalogArchive, restoreCatalogArchive } from "../js/catalog-backup.mjs";
-import { validateSyntheticApplicationSnapshot } from "../js/synthetic-application-structure.mjs";
-
-const now = "2026-11-06T12:00:00.000Z";
-const gate = (operation) => operation();
-const guard = async () => {};
-
-// The production adapter consumes ApplicationStorageLifecycle. This fixture
-// uses the same catalog engine and verified object readers, without OAuth or
-// network calls; existing lifecycle/session tests exercise their own boundary.
-function lifecycleFor({ adapter, manifestFileId, engine }) {
-  return {
-    manifestFileId,
-    async readManifest() {
-      const manifest = await adapter.readJson(manifestFileId);
-      await verifyCatalogHistory(adapter, manifest);
-      return manifest;
-    },
-    async readObject(path) {
-      const manifest = await this.readManifest();
-      const { catalog } = await verifyCatalogHistory(adapter, manifest);
-      const reference = resolveSnapshotLocators(manifest.snapshot, catalog)[path];
-      if (!reference) throw Object.assign(new Error("Missing logical object"), { code: "object-not-found" });
-      return readVerified(adapter, { ...reference, kind: "snapshot-object" });
-    },
-    transact: (transaction) => engine.transact(transaction)
-  };
-}
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent, summarizeLedger, getEffectiveActivities, applyReviewDecision, reverseReviewDecision} from '../js/canonical-import.mjs';
+import {parseProviderCsv} from '../js/provider-csv.mjs';
+import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
+import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
+const now = '2026-11-06T12:00:00.000Z';
 
 async function importedLedger() {
   let ledger = createLedger({ now });
@@ -53,29 +23,28 @@ async function importedLedger() {
 }
 
 test("canonical data uses existing commits, partitions records, and reopens without changing financial meaning", async () => {
-  const setup = await setupCatalog();
-  const lifecycle = lifecycleFor(setup);
+  const setup = await createPagedFixture();
+  const lifecycle = setup.lifecycle;
   const store = new CanonicalLedgerStore({ lifecycle });
   assert.equal(await store.load(), null);
   const ledger = await importedLedger();
   assert.deepEqual(await store.save(ledger), ledger);
   const manifest = await lifecycle.readManifest();
-  assert.equal(manifest.revision, 1);
-  assert.ok(Object.keys(manifest.snapshot).length > 6);
-  assert.ok(Object.hasOwn(manifest.snapshot, CANONICAL_INDEX));
+  assert.equal(manifest.revision, '1');
+  assert.equal(JSON.parse(new TextDecoder().decode(setup.objects.get(manifest.root))).version, 5);
   const reopened = new CanonicalLedgerStore({ lifecycle });
   const actual = await reopened.load();
   assert.deepEqual(actual, ledger);
   assert.deepEqual(summarizeLedger(actual, { start: "2026-01-01", end: "2026-01-31", currency: "USD" }),
     summarizeLedger(ledger, { start: "2026-01-01", end: "2026-01-31", currency: "USD" }));
-  const mutations = setup.adapter.mutations;
+  const mutations = setup.commits.length;
   await reopened.save(actual);
-  assert.equal(setup.adapter.mutations, mutations, "unchanged save is not another financial commit");
+  assert.equal(setup.commits.length, mutations, "unchanged save is not another financial commit");
 });
 
 test("stale reviews and uncertain saves cannot silently overwrite newer canonical data", async () => {
-  const setup = await setupCatalog();
-  const lifecycle = lifecycleFor(setup);
+  const setup = await createPagedFixture();
+  const lifecycle = setup.lifecycle;
   const first = new CanonicalLedgerStore({ lifecycle });
   const stale = new CanonicalLedgerStore({ lifecycle });
   await first.load(); await stale.load();
@@ -86,15 +55,15 @@ test("stale reviews and uncertain saves cannot silently overwrite newer canonica
   const current = await first.load();
   const corrected = applyFinancialEvent(current, { type: "bank-correction", commandId: "invented-correction",
     activityId: current.activities[0].activityId, amountText: "-10.00", evidence: "Invented bank correction evidence" }, { now });
-  const baseline = setup.adapter.mutations;
-  setup.adapter.stopAfter = baseline + 1;
+  const baseline = setup.commits.length;
+  lifecycle.savePartitionedRoot = async () => { throw Object.assign(new Error('uncertain write'), {code:'transaction-unresolved'}); };
   await assert.rejects(first.save(corrected), { code: "transaction-unresolved" });
   await assert.rejects(first.save(corrected), { code: "verified-base-required" });
 });
 
 test("category rules and unresolved retries survive canonical object ordering and reopen", async () => {
-  const setup = await setupCatalog();
-  const store = new CanonicalLedgerStore({ lifecycle: lifecycleFor(setup) });
+  const setup = await createPagedFixture();
+  const store = new CanonicalLedgerStore({ lifecycle: setup.lifecycle });
   await store.load();
   let ledger = await importedLedger();
   ledger = applyFinancialEvent(ledger, { type: "category-correction", commandId: "invented-category-correction",
@@ -121,13 +90,13 @@ test("category rules and unresolved retries survive canonical object ordering an
 });
 
 test("saved source evidence, activities, and audit events cannot be removed or rewritten", async () => {
-  const setup = await setupCatalog();
-  const store = new CanonicalLedgerStore({ lifecycle: lifecycleFor(setup) });
+  const setup = await createPagedFixture();
+  const store = new CanonicalLedgerStore({ lifecycle: setup.lifecycle });
   await store.load();
   const ledger = await importedLedger();
   await store.save(ledger);
   const removed = structuredClone(ledger); removed.events = [];
-  await assert.rejects(store.save(removed), { code: "history-order-change-refused" });
+  await assert.rejects(store.save(removed), { code: "history-removal-refused" });
   const reordered = structuredClone(ledger); reordered.events.reverse();
   await assert.rejects(store.save(reordered), { code: "history-order-change-refused" });
   const rewritten = structuredClone(ledger); rewritten.activities[0].sourceDescription = "Different source";
@@ -143,11 +112,11 @@ test("saved source evidence, activities, and audit events cannot be removed or r
   const complete = structuredClone(ledger); complete.imports[0].coverageReconciled = true;
   await assert.rejects(store.save(complete), /completeness/);
   const production = structuredClone(ledger); production.syntheticOnly = false;
-  assert.throws(() => serializeCanonicalLedger(production));
+  await assert.rejects(store.save(production));
 });
 
 test("corrected source overlaps remain reviewable and preserve totals through save and independent reopen", async () => {
-  const setup = await setupCatalog(), lifecycle = lifecycleFor(setup);
+  const setup = await createPagedFixture(), lifecycle = setup.lifecycle;
   let store = new CanonicalLedgerStore({ lifecycle });
   await store.load();
   let ledger = registerAccount(createLedger({ now }), { institutionId: "wells-fargo", displayName: "Invented corrected checking", currency: "USD", accountType: "checking" }, { now });
@@ -196,9 +165,9 @@ test("corrected source overlaps remain reviewable and preserve totals through sa
   assert.equal(summarizeLedger(ledger, { start: "2026-01-01", end: "2026-01-31", currency: "USD" }).spending, "90.00");
 });
 
-test("full review, reversal, prospective rule, correction, and refund history survives save, export, and restore", async () => {
-  const setup = await setupCatalog();
-  const store = new CanonicalLedgerStore({ lifecycle: lifecycleFor(setup) });
+test("full review, reversal, prospective rule, correction, and refund history survives v5 save and independent reopen", async () => {
+  const setup = await createPagedFixture();
+  const store = new CanonicalLedgerStore({ lifecycle: setup.lifecycle });
   await store.load();
   let ledger = registerAccount(createLedger({ now }), { institutionId: "wells-fargo", displayName: "Invented full-flow checking", currency: "USD", accountType: "checking" }, { now });
   const accountId = ledger.accounts[0].accountId;
@@ -246,72 +215,8 @@ test("full review, reversal, prospective rule, correction, and refund history su
   assert.deepEqual(await store.load(), ledger);
   assert.equal(summarizeLedger(ledger, { start: "2026-01-01", end: "2026-01-31", currency: "USD" }).spending, "106.00");
   assert.equal(summarizeLedger(ledger, { start: "2026-02-01", end: "2026-02-28", currency: "USD" }).spending, "-40.00");
-  const archive = await exportCatalogArchive({ adapter: setup.adapter, manifestFileId: setup.manifestFileId,
-    withSourceLock: gate, validateStructure: validateSyntheticApplicationSnapshot, now });
-  const targetAdapter = new MemoryCatalogDrive("invented-full-flow-restore");
-  const restored = await restoreCatalogArchive({ archive, targetAdapter, withTargetLock: gate, assertTargetWritable: guard, validateStructure: validateSyntheticApplicationSnapshot });
-  const engine = new CatalogTransactionEngine({ adapter: targetAdapter, assertWritable: guard, isOnline: () => true });
-  const target = new CanonicalLedgerStore({ lifecycle: lifecycleFor({ adapter: targetAdapter, engine, manifestFileId: restored.manifestFileId }) });
+  const target = new CanonicalLedgerStore({lifecycle: setup.lifecycle});
   assert.deepEqual(await target.load(), ledger);
   assert.equal(getEffectiveActivities(await target.load()).find(a => a.activityId === futureId).categoryId, "invented-coffee");
   assert.equal(getEffectiveActivities(await target.load()).find(a => a.activityId === refundId).categoryId, "invented-refund-override");
-});
-
-test("every durable boundary recovers either the entire canonical import or the unchanged previous state", async (t) => {
-  const ledger = await importedLedger();
-  const baseline = await setupCatalog();
-  const baseStore = new CanonicalLedgerStore({ lifecycle: lifecycleFor(baseline) });
-  await baseStore.load(); await baseStore.save(ledger);
-  const boundaries = baseline.adapter.mutations;
-  assert.ok(boundaries > 14, "per-record objects exercise the existing multi-object protocol");
-  for (let boundary = 1; boundary <= boundaries; boundary++) {
-    await t.test("canonical import termination after mutation " + boundary, async () => {
-      const setup = await setupCatalog();
-      const store = new CanonicalLedgerStore({ lifecycle: lifecycleFor(setup) });
-      await store.load();
-      setup.adapter.stopAfter = boundary;
-      await assert.rejects(store.save(ledger), { code: "transaction-unresolved" });
-      setup.adapter.reboot();
-      const engine = new CatalogTransactionEngine({ adapter: setup.adapter, assertWritable: guard, isOnline: () => true });
-      await engine.recover({ manifestFileId: setup.manifestFileId });
-      const fresh = new CanonicalLedgerStore({ lifecycle: lifecycleFor({ ...setup, engine }) });
-      const recovered = await fresh.load();
-      if (recovered !== null) assert.deepEqual(recovered, ledger);
-      if (recovered === null) await fresh.save(ledger);
-      assert.deepEqual(await fresh.load(), ledger);
-      const mutations = setup.adapter.mutations;
-      await fresh.save(ledger);
-      assert.equal(setup.adapter.mutations, mutations);
-    });
-  }
-});
-
-test("existing portable export and restore preserve canonical records, events, and qualified totals", async () => {
-  const setup = await setupCatalog();
-  const dashboardPath = "synthetic/dashboard-transactions.json";
-  const dashboard = { format: "finance-tracker-dashboard-snapshot", syntheticOnly: true,
-    transactions: [{ id: "invented-backup", date: "2026-01-01", description: "Invented coexisting dashboard", amount: 1, syntheticOnly: true }] };
-  await setup.engine.transact({ manifestFileId: setup.manifestFileId, expectedBase: await setup.adapter.readJson(setup.manifestFileId),
-    transactionId: crypto.randomUUID(), objects: [{ logicalPath: dashboardPath, content: JSON.stringify(dashboard) }],
-    commitRecord: { operationType: "synthetic-dashboard", schemaVersion: 1 } });
-  const store = new CanonicalLedgerStore({ lifecycle: lifecycleFor(setup) });
-  await store.load();
-  const ledger = await importedLedger();
-  await store.save(ledger);
-  const archive = await exportCatalogArchive({ adapter: setup.adapter, manifestFileId: setup.manifestFileId,
-    withSourceLock: gate, validateStructure: validateSyntheticApplicationSnapshot, now });
-  await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });
-  const targetAdapter = new MemoryCatalogDrive("invented-canonical-restore");
-  const restored = await restoreCatalogArchive({ archive, targetAdapter, withTargetLock: gate,
-    assertTargetWritable: guard, validateStructure: validateSyntheticApplicationSnapshot });
-  const engine = new CatalogTransactionEngine({ adapter: targetAdapter, assertWritable: guard, isOnline: () => true });
-  const target = new CanonicalLedgerStore({ lifecycle: lifecycleFor({ adapter: targetAdapter, engine, manifestFileId: restored.manifestFileId }) });
-  assert.deepEqual(await target.load(), ledger);
-  assert.notEqual(restored.manifest.copyId, archive.sourceCopyId);
-  assert.equal(restored.manifest.commitId, archive.manifest.commitId);
-  const restoredLifecycle = lifecycleFor({ adapter: targetAdapter, engine, manifestFileId: restored.manifestFileId });
-  assert.deepEqual(JSON.parse(new TextDecoder().decode(await restoredLifecycle.readObject(dashboardPath))), dashboard);
-  const objects = Object.fromEntries([...serializeCanonicalLedger(ledger)].map(([path, value]) => [path, new TextEncoder().encode(value)]));
-  delete objects[Object.keys(objects).find((path) => path.includes("/activities/"))];
-  assert.throws(() => validateCanonicalSnapshot({ objects }), { code: "canonical-record-missing" });
 });

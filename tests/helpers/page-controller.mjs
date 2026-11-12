@@ -1,3 +1,4 @@
+import { showDiagnostic, clearDiagnostic, diagnosticMessage } from '../../js/app-diagnostics.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
@@ -53,12 +54,14 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
     if (observed.clipboardFailure) throw new Error('Invented clipboard refusal');
     observed.copied.push(value);
   } } };
+  const document = { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body'),
+    addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); } };
+  imports = {showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
   const executable = script.replace(/^import \{([^}]+)\} from '[^']+';$/gm, (_, names) => {
     for (const name of names.split(',').map(name => name.trim())) assert.ok(name in imports, `Missing import ${name}`);
     return '';
   });
-  const context = { ...imports, document: { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body'),
-    addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); } },
+  const context = { ...imports, document,
     window, navigator, confirm: window.confirm, crypto, structuredClone, URL, Blob, TextEncoder, TextDecoder, Uint8Array,
     sessionStorage: { getItem: key => session.get(key) ?? null, setItem(key, value) { if (observed.storageFailure) throw new Error('Invented storage refusal'); session.set(key, value); }, removeItem: key => session.delete(key) },
     setInterval(callback) { intervals.add(callback); return callback; }, clearInterval: callback => intervals.delete(callback),
@@ -67,6 +70,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   await new Promise(setImmediate);
   return {
     get, observed, session, navigator, intervals, location, window,
+    diagnostics: () => document.body.children.filter(node => node.className === 'app-diagnostics' && !node.hidden),
     async navigate(hash) { history.pushState(null, "", hash); for (const callback of listeners.get("hashchange") || []) await callback(); },
     async back() { if (historyIndex > 0) { location.hash = historyEntries[--historyIndex]; for (const callback of listeners.get("popstate") || []) await callback(); } },
     async forward() { if (historyIndex < historyEntries.length - 1) { location.hash = historyEntries[++historyIndex]; for (const callback of listeners.get("popstate") || []) await callback(); } },

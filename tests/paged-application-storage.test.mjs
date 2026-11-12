@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ApplicationStorageLifecycle} from '../js/application-storage-lifecycle.mjs';
 import {initializePagedCanonicalCopy,PAGED_INITIALIZATION_FORMAT,PAGED_MANIFEST_KIND,PAGED_MANIFEST_NAME,createPhysicalDriveAdapter} from '../js/paged-application-storage.mjs';
-import {EMPTY_CANONICAL_BYTES,PAGED_CANONICAL_VERIFIER,LEGACY_PAGED_CANONICAL_VERIFIER} from '../js/paged-canonical-format.mjs';
+import {EMPTY_CANONICAL_BYTES,PAGED_CANONICAL_VERIFIER} from '../js/paged-canonical-format.mjs';
 import {partitionDigest} from '../js/canonical-partitions.mjs';
 import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
 const plans = new Map([[PAGED_CANONICAL_VERIFIER,async ({manifest,readObject}) => { assert.deepEqual(await readObject({kind:'data-object',sha256:manifest.root}),EMPTY_CANONICAL_BYTES); }]]);
@@ -183,7 +183,7 @@ test('pointer mutation rechecks exact selected manifest after asynchronous token
 });
 
 
-for(const version of [1,2])test(`interrupted initialization marker ${version} pins its own canonical profile through save and cold reconnect`,async()=>{
+for(const version of [1,2])test(`interrupted initialization marker ${version} recovers v5 or refuses obsolete profiles without writing`,async()=>{
  const {canonicalPartitionVerificationPlans}=await import('../js/canonical-paged-storage.mjs');
  const {CanonicalLedgerStore}=await import('../js/canonical-ledger-storage.mjs');
  const {replayFixture}=await import('./helpers/ledger-replay-fixtures.mjs');
@@ -199,18 +199,22 @@ for(const version of [1,2])test(`interrupted initialization marker ${version} pi
   const {canonicalizeJcs}=await import('../js/transaction-protocol.mjs');marker.version=1;delete marker.canonicalProfile;
   file.bytes=new TextEncoder().encode(canonicalizeJcs(marker));file.metadata.size=String(file.bytes.length);file.metadata.version='2';file.metadata.appProperties.financeTrackerHash=await partitionDigest(file.bytes);
  }
+ if(version===1) {
+  const before=structuredClone(drive.files),mutations=drive.mutations;
+  await assert.rejects(app.recover());assert.equal(drive.mutations,mutations);assert.deepEqual(drive.files,before);return;
+ }
  await app.recover();const snapshot=await app.readPartitionedSnapshot();
- assert.equal(snapshot.semanticVersion,version===1?LEGACY_PAGED_CANONICAL_VERIFIER:PAGED_CANONICAL_VERIFIER);await app.assertCurrentManifest(snapshot.manifest);
+ assert.equal(snapshot.semanticVersion,PAGED_CANONICAL_VERIFIER);await app.assertCurrentManifest(snapshot.manifest);
  const store=new CanonicalLedgerStore({lifecycle:app});assert.equal(await store.load(),null);await store.save(replayFixture(2).ledger);
- assert.equal(store.layout,version===1?'partitions-v4':'partitions-v5');const root=store.base.root;await app.release();
+ assert.equal(store.layout,'partitions-v5');const root=store.base.root;await app.release();
  const reopened=make();await reopened.start();const cold=new CanonicalLedgerStore({lifecycle:reopened});await cold.load();assert.equal(cold.base.root,root);assert.equal(cold.layout,store.layout);await reopened.release();
 });
 
-test('v4-only verifier registration refuses a v5 copy before any financial write',async()=>{
+test('missing v5 verifier registration refuses a copy before any financial write',async()=>{
  const {canonicalPartitionVerificationPlans}=await import('../js/canonical-paged-storage.mjs');
  const drive=new HttpCatalogDrive(),source=lifecycle(drive);await source.start();await source.release();
  const financial=()=>new Map([...drive.files].filter(([,file])=>file.metadata.appProperties?.financeTrackerSession!=='v1'));
- const before=structuredClone(financial()),registry=canonicalPartitionVerificationPlans(),legacy=new Map([[LEGACY_PAGED_CANONICAL_VERIFIER,registry.get(LEGACY_PAGED_CANONICAL_VERIFIER)]]);
+ const before=structuredClone(financial()),legacy=new Map([['unsupported-invented-verifier',async()=>assert.fail('unknown verifier must not run')]]);
  const old=new ApplicationStorageLifecycle({syntheticOnly:true,folderName:'Invented synthetic old reader',folderId:drive.folderId,
   accessToken:()=> 'invented-test-token',fetchImpl:drive.fetch,makeManifest:()=>{},pagedCanonical:true,verificationPlans:legacy,
   initializeManifest:({adapter,guard})=>initializePagedCanonicalCopy({adapter,guard}),adapterOptions:{visibilityDelayMs:0,visibilityMaxDelayMs:0},

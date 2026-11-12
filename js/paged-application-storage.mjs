@@ -1,7 +1,7 @@
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {partitionDigest} from './canonical-partitions.mjs';
-import {EMPTY_CANONICAL_BYTES, PAGED_CANONICAL_VERIFIER, LEGACY_PAGED_CANONICAL_VERIFIER, canonicalProfileForVerifier} from './paged-canonical-format.mjs';
-import {PhysicalRootBinding, createPhysicalRootManifest, createPortableLogicalCommit, PORTABLE_COMMIT_FORMAT, PHYSICAL_MANIFEST_FORMAT} from './physical-root-binding.mjs';
+import {EMPTY_CANONICAL_BYTES, PAGED_CANONICAL_VERIFIER, canonicalProfileForVerifier} from './paged-canonical-format.mjs';
+import {PhysicalRootBinding, validatePhysicalRootManifest, createPhysicalRootManifest, createPortableLogicalCommit, PORTABLE_COMMIT_FORMAT, PHYSICAL_MANIFEST_FORMAT} from './physical-root-binding.mjs';
 import {createPagedPhysicalLocators} from './paged-physical-locators.mjs';
 const enc = new TextEncoder(), dec = new TextDecoder();
 const encode = x => enc.encode(canonicalizeJcs(x));
@@ -20,6 +20,12 @@ function obsolete(error) {
 
 
 
+function validateInitialization(m,folderId) {
+  const keys = ['format','version','syntheticOnly','folderId','databaseId','copyId','transactionId','rootFileId','commitFileId','canonicalProfile'];
+  if (Object.keys(m).length !== keys.length || keys.some(k => !Object.hasOwn(m,k)) || m.version!==2 || m.canonicalProfile!=='partitions-v5' || m.folderId !== folderId ||
+      ['folderId','databaseId','copyId','transactionId','rootFileId','commitFileId'].some(k => typeof m[k] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(m[k])) || m.rootFileId === m.commitFileId) fail('invalid-initialization', 'Initialization identity is invalid.');
+}
+
 export async function inspectPagedCanonicalCopy(adapter) {
   const files = await adapter.listChildren();
   const selected = files.filter(f => f.name === PAGED_MANIFEST_NAME);
@@ -30,6 +36,19 @@ export async function inspectPagedCanonicalCopy(adapter) {
   if (file.appProperties?.financeTrackerKind !== PAGED_MANIFEST_KIND) fail('invalid-manifest-metadata', 'Paged manifest metadata is invalid.');
   const manifest = await adapter.readJson(file.id, {kind:'manifest',maxBytes:16384});
   if (![PHYSICAL_MANIFEST_FORMAT,PAGED_INITIALIZATION_FORMAT].includes(manifest.format) || manifest.syntheticOnly !== true) fail('unsupported-manifest', 'Unrecognized paged copy.');
+  if (manifest.format === PAGED_INITIALIZATION_FORMAT) {
+    if (manifest.version !== 2 || manifest.canonicalProfile !== 'partitions-v5') fail('unsupported-canonical-profile','Only canonical v5 is supported. This folder was left untouched.');
+    validateInitialization(manifest,adapter.folderId);
+  } else {
+    validatePhysicalRootManifest(manifest);
+    if (manifest.storageBinding.folderId !== adapter.folderId) fail('copy-mismatch','The manifest belongs to a different folder.');
+    const readonly = async () => fail('read-only-inspection','Folder inspection cannot write.');
+    const physical = createPhysicalDriveAdapter(adapter,{manifestFileId:file.id,assertWritable:readonly});
+    const tree = createPagedPhysicalLocators(physical,{databaseId:manifest.databaseId,copyId:manifest.copyId,folderId:adapter.folderId,assertWritable:readonly});
+    const head = JSON.parse(dec.decode(await tree.readObject(manifest.locatorRoot,{kind:'commit-record',sha256:manifest.headCommit?.sha256})));
+    if (manifest.headCommit.format !== PORTABLE_COMMIT_FORMAT || manifest.headCommit.version !== 4 || head.format !== PORTABLE_COMMIT_FORMAT || head.version !== 4) fail('unsupported-commit','Only portable physical protocol 4 commits are supported.');
+    canonicalProfileForVerifier(head.semanticVersion);
+  }
   return {manifestFileId:file.id,manifest};
 }
 
@@ -50,13 +69,11 @@ export async function initializePagedCanonicalCopy({adapter, guard, cryptoImpl =
   }
   if (found.manifest.format === PHYSICAL_MANIFEST_FORMAT) return found.manifestFileId;
   const m = found.manifest;
-  const keys = ['format','version','syntheticOnly','folderId','databaseId','copyId','transactionId','rootFileId','commitFileId',...(m.version===2?['canonicalProfile']:[])];
-  if (Object.keys(m).length !== keys.length || keys.some(k => !Object.hasOwn(m,k)) || ![1,2].includes(m.version) || (m.version===2&&m.canonicalProfile!=='partitions-v5') || m.folderId !== adapter.folderId ||
-      ['folderId','databaseId','copyId','transactionId','rootFileId','commitFileId'].some(k => typeof m[k] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(m[k])) || m.rootFileId === m.commitFileId) fail('invalid-initialization', 'Initialization identity is invalid.');
+  validateInitialization(m,adapter.folderId);
   const exactGuard = async () => { await guard(); if (!same(JSON.parse(dec.decode(await physical.readManifest())),m)) fail('base-conflict','Initialization marker changed.'); };
   const physical = createPhysicalDriveAdapter(adapter,{manifestFileId:found.manifestFileId,assertWritable:guard});
   const root = await partitionDigest(EMPTY_CANONICAL_BYTES);
-  const commit = createPortableLogicalCommit({databaseId:m.databaseId,parent:null,revision:'0',previousRoot:null,root,transactionId:m.transactionId,operation:'genesis',semanticVersion:m.version===1?LEGACY_PAGED_CANONICAL_VERIFIER:PAGED_CANONICAL_VERIFIER});
+  const commit = createPortableLogicalCommit({databaseId:m.databaseId,parent:null,revision:'0',previousRoot:null,root,transactionId:m.transactionId,operation:'genesis',semanticVersion:PAGED_CANONICAL_VERIFIER});
   const commitBytes = encode(commit), commitHash = await partitionDigest(commitBytes), entries=[];
   for (const [fileId,kind,bytes,sha256] of [[m.rootFileId,'data-object',EMPTY_CANONICAL_BYTES,root],[m.commitFileId,'commit-record',commitBytes,commitHash]]) {
     await exactGuard();

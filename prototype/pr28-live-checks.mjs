@@ -282,7 +282,7 @@ export function createLiveRunner({ withWorkbench, loadBytes = fixtureBytes, onUp
 // closed. Only its random ledger identity varies. No records, Drive IDs or hashes
 // are saved in browser storage. Exact comparison rejects older/modified recipes.
 async function interruptionRecipe(ledgerId, loadBytes) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ledgerId || '')) throw new Error('interruption-recipe-unrecognized');
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ledgerId || '')) throw Object.assign(new Error('interruption-recipe-unrecognized'), { code: 'interruption-recipe-unrecognized' });
   const ids = [ledgerId];
   for (let index = 1; index < 32; index++) {
     const hash = await sha256Hex('pr28-interruption-v2:' + ledgerId + ':' + index);
@@ -323,7 +323,7 @@ export async function verifyInterruption(withWorkbench, loadBytes = fixtureBytes
     const recovered = await driver.reopen();
     interruptionPhase(onPhase, 'recipe-compare');
     const { baseline, classified } = await interruptionRecipe(recovered?.ledgerId, loadBytes);
-    if (!same(recovered, baseline) && !same(recovered, classified)) throw new Error('interruption-recipe-unrecognized');
+    if (!same(recovered, baseline) && !same(recovered, classified)) throw Object.assign(new Error('interruption-recipe-unrecognized'), { code: 'interruption-recipe-unrecognized' });
     const retried = same(recovered, baseline);
     if (retried) {
       driver.stage(classified); interruptionPhase(onPhase, 'retry-save');

@@ -187,12 +187,11 @@ export class CanonicalWorkspaceSession {
         const lifecycle = this.storage.lifecycle;
         if (!this.ready() || !lifecycle) fail('reconnect-required');
         const genesis = await lifecycle.readManifest();
-        if (genesis.syntheticOnly !== true || (lifecycle.pagedCanonical
-          ? genesis.revision !== '0' || genesis.pending !== null || genesis.role !== 'primary'
-          : genesis.revision !== 0 || genesis.catalogFinalizationPending !== null || Object.keys(genesis.snapshot || {}).length !== 0)) {
+        if (!lifecycle.pagedCanonical || genesis.syntheticOnly !== true ||
+          genesis.revision !== '0' || genesis.pending !== null || genesis.role !== 'primary') {
           fail('new-empty-folder-required');
         }
-        store = new CanonicalLedgerStore({ lifecycle, layout: lifecycle.pagedCanonical ? 'partitions-v5' : 'fragments-v3' });
+        store = new CanonicalLedgerStore({ lifecycle });
         const existing = await store.load();
         if (existing !== null || !store.base || canonicalizeJcs(store.base) !== canonicalizeJcs(genesis)) {
           fail('new-empty-folder-required');

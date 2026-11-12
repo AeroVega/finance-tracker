@@ -1,10 +1,10 @@
 import {canonicalizeJcs} from './transaction-protocol.mjs';
-import {buildCompactPartitionedCanonicalLedger,updatePartitionedCanonicalLedger,partitionDigest,createPartitionObjectIO} from './canonical-partitions.mjs';
+import {updatePartitionedCanonicalLedger,partitionDigest,createPartitionObjectIO} from './canonical-partitions.mjs';
 import {createCanonicalPartitionReader} from './canonical-partition-reader.mjs';
 import {createCanonicalMonthIndex} from './canonical-month-index.mjs';
 import {validateLedger} from './canonical-import.mjs';
 import {assertCanonicalLedgerTransition} from './canonical-history.mjs';
-import {PAGED_CANONICAL_LAYOUT,PAGED_CANONICAL_VERIFIER,LEGACY_PAGED_CANONICAL_VERIFIER,canonicalProfileForVerifier,isEmptyCanonicalRoot} from './paged-canonical-format.mjs';
+import {PAGED_CANONICAL_LAYOUT,PAGED_CANONICAL_VERIFIER,canonicalProfileForVerifier,isEmptyCanonicalRoot} from './paged-canonical-format.mjs';
 
 const fail = code => { throw Object.assign(new Error(code),{code}); };
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
@@ -23,7 +23,7 @@ export async function readVerifiedPartitionedLedger(store,rootHash,{signal} = {}
 
 /** Each retained logical edge must preserve immutable evidence. Individually
  * valid historical snapshots alone cannot establish append-only history. */
-async function verifyCanonicalCommit({manifest,commit,readObject,readBaseObject,signal,verifyMigrationEvidence},auditLedger) {
+async function verifyCanonicalCommit({manifest,commit,readObject,readBaseObject,signal},auditLedger) {
   const profile=canonicalProfileForVerifier(commit.semanticVersion);
   if (commit.root !== manifest.root) fail('canonical-commit-mismatch');
   const store = {read:(hash,options) => readObject({kind:'data-object',sha256:hash},options)};
@@ -31,24 +31,25 @@ async function verifyCanonicalCommit({manifest,commit,readObject,readBaseObject,
   if(current.ledger!==null&&current.version!==profile.version)fail('canonical-profile-mismatch');
   if (commit.revision === '0') {
     if (commit.previousRoot !== null) fail('canonical-genesis-mismatch');
-    if (commit.operation === profile.migrationOperation) {
-      if (!current.ledger || !commit.changeEvidenceRoot || typeof verifyMigrationEvidence !== 'function') fail('migration-verifier-required');
-      await verifyMigrationEvidence({manifest,commit,currentLedger:current.ledger,readObject,signal});
+    if (commit.operation === 'migrate-legacy-v5') {
+      if (!current.ledger || !commit.changeEvidenceRoot) fail('migration-evidence-required');
+      // Existing v5 copies may retain archived pre-v5 provenance. This is a
+      // read-only evidence audit, never a migration or legacy folder writer.
+      const {verifyCanonicalMigrationEvidence}=await import('./legacy-canonical-evidence.mjs');
+      await verifyCanonicalMigrationEvidence({manifest,commit,currentLedger:current.ledger,readObject,signal});
     } else if (commit.operation !== 'genesis' || current.ledger !== null || commit.changeEvidenceRoot !== null) fail('canonical-genesis-mismatch');
     return;
   }
   if (commit.operation !== 'synthetic-canonical-import' || commit.changeEvidenceRoot !== null || commit.previousRoot === null) fail('canonical-commit-mismatch');
-  if (commit.previousRoot !== null) {
-    const previousStore = {read:(hash,options) => (readBaseObject ?? readObject)({kind:'data-object',sha256:hash},options)};
-    const previous = await auditLedger(previousStore,commit.previousRoot,{signal});
-    if(previous.ledger!==null&&previous.version!==profile.version)fail('canonical-profile-mismatch');
-    if(commit.parent) {
-      const parentStore={read:(hash,options)=>(readBaseObject??readObject)({kind:'commit-record',sha256:hash},options)};
-      const parent=await createPartitionObjectIO(parentStore).read(commit.parent.sha256,{signal});
-      if(parent.semanticVersion!==profile.verifier)fail('canonical-profile-mismatch');
-    }
-    assertCanonicalLedgerTransition(previous.ledger,current.ledger);
-  } else if (commit.revision !== '0') fail('canonical-genesis-mismatch');
+  const previousStore = {read:(hash,options) => (readBaseObject ?? readObject)({kind:'data-object',sha256:hash},options)};
+  const previous = await auditLedger(previousStore,commit.previousRoot,{signal});
+  if(previous.ledger!==null&&previous.version!==profile.version)fail('canonical-profile-mismatch');
+  if(commit.parent) {
+    const parentStore={read:(hash,options)=>(readBaseObject??readObject)({kind:'commit-record',sha256:hash},options)};
+    const parent=await createPartitionObjectIO(parentStore).read(commit.parent.sha256,{signal});
+    if(parent.semanticVersion!==profile.verifier)fail('canonical-profile-mismatch');
+  }
+  assertCanonicalLedgerTransition(previous.ledger,current.ledger);
 }
 export function verifyPartitionedCanonicalCommit(input) {
   return verifyCanonicalCommit(input,readVerifiedPartitionedLedger);
@@ -58,7 +59,7 @@ export function verifyPartitionedCanonicalCommit(input) {
  * physical verification scope. It still verifies every referenced body's bytes
  * and freshly closes metadata witnesses before publication/authority. No proof
  * or cached ledger can be supplied by the caller, and no result escapes here. */
-export function canonicalPartitionVerificationPlans({verifyMigrationEvidence} = {}) {
+export function canonicalPartitionVerificationPlans() {
   let active=null;
   const audited=new Map();
   const verifiedEdges=new Map();
@@ -78,21 +79,20 @@ export function canonicalPartitionVerificationPlans({verifyMigrationEvidence} = 
     }
     return result;
   };
-  const verify=async (input,verifier)=>{
+  const verify=async input=>{
     const owner=active;
     // A successful immutable edge proof avoids repeating complete ledger
     // materialization at each physical publication phase. The physical engine
     // still visits every retained body and verifies every binding on each pass.
-    // Migration evidence depends on the destination identity and stays fresh.
     try {
       // Own the proof's complete input before its first asynchronous read. A
       // caller mutation must not make the audited edge differ from its key.
       input={...input,manifest:structuredClone(input.manifest),commit:JSON.parse(canonicalizeJcs(input.commit))};
       if(input.signal?.aborted)throw new DOMException('Verification cancelled.','AbortError');
-      if(input.commit.semanticVersion!==verifier||input.commit.root!==input.manifest.root)fail('canonical-commit-mismatch');
-      const key=owner&&!['migrate-legacy-v4','migrate-legacy-v5'].includes(input.commit.operation)?canonicalizeJcs(input.commit):null;
+      if(input.commit.semanticVersion!==PAGED_CANONICAL_VERIFIER||input.commit.root!==input.manifest.root)fail('canonical-commit-mismatch');
+      const key=owner&&input.commit.operation!=='migrate-legacy-v5'?canonicalizeJcs(input.commit):null;
       if(key&&verifiedEdges.has(key))return;
-      await verifyCanonicalCommit({...input,verifyMigrationEvidence},(store,hash,options)=>auditLedger(store,hash,options,owner));
+      await verifyCanonicalCommit(input,(store,hash,options)=>auditLedger(store,hash,options,owner));
       if(input.signal?.aborted)throw new DOMException('Verification cancelled.','AbortError');
       if(key&&active===owner){verifiedEdges.set(key,true);while(verifiedEdges.size>128)verifiedEdges.delete(verifiedEdges.keys().next().value);}
     } catch(error) {
@@ -100,7 +100,7 @@ export function canonicalPartitionVerificationPlans({verifyMigrationEvidence} = 
       throw error;
     }
   };
-  const plans=new Map([LEGACY_PAGED_CANONICAL_VERIFIER,PAGED_CANONICAL_VERIFIER].map(verifier=>[verifier,input=>verify(input,verifier)]));
+  const plans=new Map([[PAGED_CANONICAL_VERIFIER,verify]]);
   Object.defineProperties(plans,{
     beginVerification:{value:()=>{if(active)fail('semantic-scope-open');audited.clear();verifiedEdges.clear();active=Object.freeze({});return active;}},
     endVerification:{value:owner=>{if(owner!==active)return;active=null;audited.clear();verifiedEdges.clear();}}
@@ -108,7 +108,7 @@ export function canonicalPartitionVerificationPlans({verifyMigrationEvidence} = 
   return plans;
 }
 
-/** Existing application adapter dispatches canonical v4 and v5. The physical lifecycle owns
+/** Existing application adapter uses canonical v5. The physical lifecycle owns
  * session checks, publication, retained-history verification and recovery. */
 export class PagedCanonicalLedgerStore {
   constructor({lifecycle,cryptoImpl = globalThis.crypto}) {
@@ -154,9 +154,7 @@ export class PagedCanonicalLedgerStore {
             read:async(hash,options)=>prepared.has(hash)?prepared.get(hash).slice():store.read(hash,options),
             write:async raw=>{const owned=new Uint8Array(raw),hash=await partitionDigest(owned);prepared.set(hash,owned);return hash;}
           };
-          const {rootHash}=profile.version===5
-            ?await updatePartitionedCanonicalLedger(ledger,preparationStore,{baseRootHash:baseLedger===null?null:baseRootHash,baseLedger})
-            :await buildCompactPartitionedCanonicalLedger(ledger,preparationStore);
+          const {rootHash}=await updatePartitionedCanonicalLedger(ledger,preparationStore,{baseRootHash:baseLedger===null?null:baseRootHash,baseLedger});
           // Keep the complete independent financial audit and exact requested
           // ledger check. Only final-reachable prepared bytes become descriptors;
           // the authoritative transaction excludes already-retained objects.

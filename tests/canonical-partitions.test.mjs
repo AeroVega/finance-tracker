@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPartitionedCanonicalLedger,createPartitionValueCodec,createPartitionObjectIO,
+import {updatePartitionedCanonicalLedger,createPartitionValueCodec,createPartitionObjectIO,
   partitionDigest,partitionOrdinal,PARTITION_VALUE_CHARS} from '../js/canonical-partitions.mjs';
 import {createCanonicalPartitionReader} from '../js/canonical-partition-reader.mjs';
 import {createCanonicalMonthIndex} from '../js/canonical-month-index.mjs';
@@ -9,7 +9,6 @@ import {applyFinancialEvent,applyFinancialEvents,prepareCanonicalImport,applyRev
   reverseReviewDecision,registerAccount,validateLedger,summarizeLedger} from '../js/canonical-import.mjs';
 import {applyPositionEvent} from '../js/financial-position.mjs';
 import {createSyntheticFinancialPosition} from '../js/synthetic-financial-position.mjs';
-import {serializeCanonicalLedger,serializeFragmentedCanonicalLedger,CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
 import {replayFixture,replayRow,replayInput} from './helpers/ledger-replay-fixtures.mjs';
 
 function memoryStore() {
@@ -19,7 +18,7 @@ function memoryStore() {
     async write(bytes) { writes++; const hash = await partitionDigest(bytes); objects.set(hash,bytes.slice()); return hash; }};
 }
 async function builtReader(ledger) {
-  const store = memoryStore(), built = await buildPartitionedCanonicalLedger(ledger,store);
+  const store = memoryStore(), built = await updatePartitionedCanonicalLedger(ledger,store);
   const reader = await createCanonicalPartitionReader(store,built.rootHash);
   return {store,built,reader};
 }
@@ -41,16 +40,13 @@ function exactCountSummary(value) {
   const result = structuredClone(value); result.availability.eligibleActivityCount = String(result.availability.eligibleActivityCount); return result;
 }
 
-test('v1 and fragmented v3 graph conversion preserve metadata, collection/event order and optional position history',async () => {
+test('v5 round trips preserve metadata, collection/event order and optional position history',async () => {
   const old = replayFixture(12).ledger, current = (await createSyntheticFinancialPosition()).ledger;
   old.activities.reverse(); old.observations.reverse();
   // JSON evidence keys must remain own data without prototype mutation.
   old.inventedEvidence = JSON.parse('{"__proto__":{"invented":true},"constructor":"own","empty":[],"absentIsDifferent":null}');
-  for (const ledger of [old,current]) for (const serialize of [serializeCanonicalLedger,serializeFragmentedCanonicalLedger]) {
-    const legacy = serialize(ledger), lifecycle = {async readManifest() { return {syntheticOnly:true,snapshot:Object.fromEntries([...legacy.keys()].map(path => [path,'invented-hash']))}; },
-      async readObject(path) { return new TextEncoder().encode(legacy.get(path)); },async transact() { assert.fail('read-only conversion must not save legacy data'); }};
-    const loaded = await new CanonicalLedgerStore({lifecycle}).load();
-    const {reader,store} = await builtReader(loaded); store.reset();
+  for (const ledger of [old,current]) {
+    const {reader,store} = await builtReader(ledger); store.reset();
     const audited = await reader.fullAudit();
     assert.deepEqual(audited.ledger,ledger); assert.equal(validateLedger(audited.ledger),true);
     assert.equal(audited.verification.source,'full-ledger-validated'); assert.equal(audited.verification.derived,'semantic-verified');
@@ -68,7 +64,7 @@ test('paged month membership and exact summaries match canonical corrections, re
     replayRow(1,{effectiveDate:'2026-01-01',postedDate:'2026-02-01',amountText:'0.01'}),
     replayRow(2,{lifecycleStatus:'pending'}), replayRow(3,{lifecycleStatus:'unknown',currency:'EUR'}),
     replayRow(4,{amountText:null}), replayRow(5,{valid:false,errorCode:'invented-bad-date',effectiveDate:null}),
-    replayRow(6,{amountText:'1.00'})],'invented-v4-cross-year');
+    replayRow(6,{amountText:'1.00'})],'invented-v5-cross-year');
   input.coverageByAccount[ledger.accounts[0].accountId] = {start:'2025-12-15',end:'2026-12-31',provenance:'source-confirmed'};
   ledger = prepareCanonicalImport(ledger,input,options).ledger;
   ledger = applyFinancialEvents(ledger,[
@@ -186,7 +182,7 @@ test('root/query-bound cursors, private handles, cancellation and unsupported po
   const first = await reader.pageMonthActivities({accountId,month:'2026-01'},{limit:3}); assert.ok(first.cursor);
   await assert.rejects(reader.pageMonthActivities({accountId,month:'2026-02'},{cursor:first.cursor}),/cursor-mismatch/);
   const changed = structuredClone(ledger); changed.accounts[0].displayName += ' changed';
-  const next = await buildPartitionedCanonicalLedger(changed,store), other = await createCanonicalPartitionReader(store,next.rootHash);
+  const next = await updatePartitionedCanonicalLedger(changed,store), other = await createCanonicalPartitionReader(store,next.rootHash);
   await assert.rejects(other.pageMonthActivities({accountId,month:'2026-01'},{cursor:first.cursor}),/cursor-mismatch/);
   const ordered = await reader.pageCollection('activities',{limit:1});
   await assert.rejects(other.pageCollection('activities',{cursor:ordered.cursor}),/cursor-mismatch/);
@@ -199,7 +195,7 @@ test('root/query-bound cursors, private handles, cancellation and unsupported po
   const controller = new AbortController(); controller.abort();
   for (const operation of [() => reader.fullAudit({signal:controller.signal}),() => reader.pageCollection('events',{signal:controller.signal}),
     () => reader.pageMonthActivities({accountId,month:'2026-01'},{signal:controller.signal}),
-    () => reader.materialize(first.entries[0].value,{signal:controller.signal}),() => buildPartitionedCanonicalLedger(ledger,store,{signal:controller.signal})]) {
+    () => reader.materialize(first.entries[0].value,{signal:controller.signal}),() => updatePartitionedCanonicalLedger(ledger,store,{signal:controller.signal})]) {
     await assert.rejects(operation(),{name:'AbortError'});
   }
   assert.throws(() => reader.position({asOf:'2026-01-31'}),/not-implemented/);
@@ -238,9 +234,13 @@ test('corrupt bytes, malformed versions, unsupported collections and forged sour
   const originalBytes = store.objects.get(root.source); store.objects.set(root.source,new TextEncoder().encode('{}'));
   await assert.rejects(createCanonicalPartitionReader(store,built.rootHash),/hash-mismatch/); store.objects.set(root.source,originalBytes);
   await assert.rejects(createCanonicalPartitionReader(store,await io.write({...root,version:99})),/unsupported/);
-  for (const kind of ['unknown-collection','frontier','order','count']) {
+  for (const kind of ['unknown-collection','hidden-position-history','frontier','order','count']) {
     const forged = structuredClone(source);
     if (kind === 'unknown-collection') forged.collections = await tree.set(forged.collections,'futureCollection',await tree.get(source.collections,'activities'));
+    else if (kind === 'hidden-position-history') {
+      const codec=createPartitionValueCodec(store), metadata=await codec.materialize(source.metadata);
+      forged.metadata=await codec.encode({...metadata,positionEvents:[]});
+    }
     else if (kind === 'frontier') forged.eventFrontier = '9007199254740993';
     else {
       const descriptor = await tree.get(forged.collections,'activities');
@@ -250,7 +250,7 @@ test('corrupt bytes, malformed versions, unsupported collections and forged sour
     }
     const sourceHash = await io.write(forged), derivedHash = await io.write({...derived,source:sourceHash});
     const reader = await createCanonicalPartitionReader(store,await io.write({...root,source:sourceHash,derived:derivedHash}));
-    await assert.rejects(reader.fullAudit(),/unsupported|frontier|order|budget|count/);
+    await assert.rejects(reader.fullAudit(),/unsupported|frontier|order|budget|count|metadata/);
     assert.notEqual(reader.verification().derived,'semantic-verified');
   }
 });
@@ -267,7 +267,7 @@ test('strict owned codec rejects non-JSON values and works without SharedArrayBu
   const descriptor = Object.getOwnPropertyDescriptor(globalThis,'SharedArrayBuffer');
   try {
     Object.defineProperty(globalThis,'SharedArrayBuffer',{value:undefined,configurable:true,writable:true});
-    const {ledger} = replayFixture(1), built = await buildPartitionedCanonicalLedger(ledger,store);
+    const {ledger} = replayFixture(1), built = await updatePartitionedCanonicalLedger(ledger,store);
     assert.equal((await (await createCanonicalPartitionReader(store,built.rootHash)).fullAudit()).verification.derived,'semantic-verified');
   } finally { Object.defineProperty(globalThis,'SharedArrayBuffer',descriptor); }
 });
@@ -287,7 +287,8 @@ test('root IO owns Buffer bytes across hashing and enforces intrinsic byte bound
 });
 
 test('failed expansion, missing nested source and cancellation never validate a partial ledger',async () => {
-  const {ledger} = replayFixture(4), {reader,store,built} = await builtReader(ledger);
+  const {ledger} = replayFixture(4); ledger.inventedEvidence = 'x'.repeat(6000);
+  const {reader,store,built} = await builtReader(ledger);
   await assert.rejects(reader.fullAudit({maxValues:1}),/materialization-budget/);
   assert.equal(reader.verification().source,'not-semantically-validated');
   const io = createPartitionObjectIO(store), root = await io.read(built.rootHash), source = await io.read(root.source);
@@ -302,7 +303,7 @@ test(`growing invented fixtures keep roots fixed and read selected detail pages 
   const measurements = [];
   for (const size of growthSizes) {
     const {ledger} = replayFixture(size,Array.from({length:size},(_,i) => replayRow(i,{effectiveDate:`2026-${String(i % 12 + 1).padStart(2,'0')}-15`})));
-    const store = memoryStore(), built = await buildPartitionedCanonicalLedger(ledger,store);
+    const store = memoryStore(), built = await updatePartitionedCanonicalLedger(ledger,store);
     const totalObjects = store.objects.size; store.reset();
     const reader = await createCanonicalPartitionReader(store,built.rootHash);
     const openReads = store.metrics().reads; assert.equal(openReads,3);
@@ -319,11 +320,65 @@ test(`growing invented fixtures keep roots fixed and read selected detail pages 
     const summary = await reader.getMonthlySummary({accountId:ledger.accounts[0].accountId,month:'2026-01',currency:'USD'});
     await reader.materialize(summary.value); const expandedSummaryReads = store.metrics().reads;
     const root = JSON.parse(new TextDecoder().decode(store.objects.get(built.rootHash)));
-    assert.deepEqual(Object.keys(root).sort(),['derived','format','source','syntheticOnly','version']);
+    assert.deepEqual(Object.keys(root).sort(),['derived','format','source','syntheticOnly','valueCodec','version']);
     for (const bytes of store.objects.values()) assert.ok(bytes.length <= 65536);
     const totalBytes = [...store.objects.values()].reduce((sum,bytes) => sum + bytes.length,0);
     measurements.push({activities:size,totalObjects,totalBytes,rootBytes,openReads,selectedReads,recordReads,expandedRecordReads,expandedSummaryReads});
   }
   assert.equal(new Set(measurements.map(value => value.rootBytes)).size,1);
   t.diagnostic(JSON.stringify(measurements));
+});
+
+test('full audit uses one checked traversal per collection and derived tree',async () => {
+  const {ledger} = replayFixture(24), {store,built,reader} = await builtReader(ledger);
+  const io = createPartitionObjectIO(store), tree = createImmutablePageTree(store);
+  const root = await io.read(built.rootHash), source = await io.read(root.source), derived = await io.read(root.derived);
+  const roots = [source.collections,...['effectiveActivities','monthActivities','summaries'].map(name => derived[name])];
+  for await (const [,descriptor] of tree.entries(source.collections)) roots.push(descriptor.byId,descriptor.order);
+  let visits = 0;
+  for (const hash of roots) visits += Number((await tree.verify(hash)).nodes);
+  store.reset(); const result = await reader.fullAudit();
+  assert.deepEqual(result.ledger,ledger); assert.equal(result.verification.derived,'semantic-verified');
+  assert.equal(store.metrics().reads,visits,'inline fixture reads each tree page only once per tree');
+  assert.equal(store.metrics().writes,0);
+});
+
+test('source count mismatches stay fatal and derived count mismatches stay invalid',async () => {
+  const {ledger} = replayFixture(4), {store,built} = await builtReader(ledger);
+  const io = createPartitionObjectIO(store), tree = createImmutablePageTree(store);
+  const root = await io.read(built.rootHash), source = await io.read(root.source), derived = await io.read(root.derived);
+  const descriptor = await tree.get(source.collections,'activities');
+  const sourceHash = await io.write({...source,collections:await tree.set(source.collections,'activities',{...descriptor,count:'3'})});
+  const badSource = await createCanonicalPartitionReader(store,await io.write({...root,source:sourceHash,derived:await io.write({...derived,source:sourceHash})}));
+  await assert.rejects(badSource.fullAudit(),{name:'TypeError',message:'partition-collection-count-mismatch'});
+  assert.equal(badSource.verification().source,'not-semantically-validated');
+  assert.equal(badSource.verification().derived,'not-semantically-validated');
+  const missing = await tree.delete(derived.effectiveActivities,ledger.activities[0].activityId);
+  const badDerived = await createCanonicalPartitionReader(store,await io.write({...root,derived:await io.write({...derived,effectiveActivities:missing})}));
+  const result = await badDerived.fullAudit();
+  assert.deepEqual(result.ledger,ledger);
+  assert.equal(result.verification.source,'full-ledger-validated'); assert.equal(result.verification.derived,'invalid');
+});
+
+test('derived semantic or count mismatches cannot hide corrupt trailing pages',async () => {
+  const {ledger} = replayFixture(140), {store,built} = await builtReader(ledger);
+  const io = createPartitionObjectIO(store), tree = createImmutablePageTree(store), codec = createPartitionValueCodec(store);
+  const root = await io.read(built.rootHash), derived = await io.read(root.derived);
+  const [firstId,firstRef] = (await tree.page(derived.effectiveActivities,{limit:1})).entries[0];
+  for (const kind of ['semantic','count']) {
+    let effective;
+    if (kind === 'semantic') {
+      const value = await codec.materialize(firstRef); value.sourceDescription = 'INVENTED wrong derived value';
+      effective = await tree.set(derived.effectiveActivities,firstId,await codec.encode(value));
+    } else effective = await tree.delete(derived.effectiveActivities,firstId);
+    let last;
+    for await (const page of tree.walk(effective)) last = page;
+    assert.notEqual(last.hash,effective,'fixture has a trailing child page');
+    const reader = await createCanonicalPartitionReader(store,await io.write({...root,derived:await io.write({...derived,effectiveActivities:effective})}));
+    const saved = store.objects.get(last.hash); store.objects.set(last.hash,new TextEncoder().encode('{}'));
+    try { await assert.rejects(reader.fullAudit(),{code:'hash-mismatch'}); }
+    finally { store.objects.set(last.hash,saved); }
+    assert.equal(reader.verification().source,'full-ledger-validated');
+    assert.equal(reader.verification().derived,'not-semantically-validated');
+  }
 });

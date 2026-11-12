@@ -52,7 +52,7 @@ test('inline byte, Unicode byte, depth and scalar boundaries preserve exact fail
   }
   await rejectsEveryEntry({kind:'json',value:nested(25)},error('partition-input-depth-limit'));
   assert.equal((await codec.encode(nested(25))).kind,'array');
-  for (const version of [1,2]) {
+  for (const version of [2]) {
     const scalar = {kind:'scalar',value:'x'.repeat(1024)};
     assert.deepEqual(validatePartitionValue(scalar,version),scalar);
     await rejectsEveryEntry({...scalar,value:scalar.value+'x'},error('oversized-partition-scalar'),version);
@@ -106,7 +106,7 @@ test('descriptor kinds, fields, hashes, counts and versions retain exact checks'
     [{kind:'string',root:hash,count:'2',codeUnits:'1024'},'invalid-partition-string'],
   ];
   for (const [ref,message] of invalid) await rejectsEveryEntry(ref,error(message));
-  await rejectsEveryEntry({kind:'json',value:{}},error('invalid-partition-value'),1);
+  assert.throws(() => validatePartitionValue({kind:'json',value:{}},1),error('unsupported-partition-value-version'));
   assert.throws(() => validatePartitionValue({kind:'scalar',value:0},3),error('unsupported-partition-value-version'));
 });
 
@@ -159,7 +159,7 @@ test('materialization depth budget is retained across paged descriptors',async (
 
 test('paged reads own descriptors before a store await and returned pages cannot change later reads',async () => {
   for (const method of ['page','materialize']) {
-    const store = memoryStore(), codec = createPartitionValueCodec(store), value = {invented:[1,2]};
+    const store = memoryStore(), codec = createPartitionValueCodec(store), value = {invented:[1,2],padding:"x".repeat(5000)};
     const ref = await codec.encode(value), original = {...ref};
     let resume, entered;
     const started = new Promise(resolve => { entered = resolve; });

@@ -4,19 +4,29 @@ import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
 import { CanonicalWorkspaceSession } from '../js/canonical-workspace-session.mjs';
 import { getEffectiveActivities } from '../js/canonical-import.mjs';
+import {replayFixture} from './helpers/ledger-replay-fixtures.mjs';
 import { setupHttpCanonicalWorkbench } from './helpers/pr28-http-workbench.mjs';
 import { readCatalog, createCatalogHistoryVerifier, verifyCatalogHistory } from '../js/catalog-storage.mjs';
+import {setupCatalog} from './helpers/catalog-drive.mjs';
+import {createPagedPhysicalLocators} from '../js/paged-physical-locators.mjs';
+
+async function entries(h) {
+ const manifest=h.http.json(h.manifestFileId),tree=createPagedPhysicalLocators(h.lifecycle.transactionAdapter,{databaseId:manifest.databaseId,copyId:manifest.copyId,folderId:h.lifecycle.folderId});
+ const result=[];for await(const entry of tree.entries(manifest.locatorRoot))result.push(entry);return result;
+}
+async function verify(h){await h.lifecycle.engine.readSnapshot();await h.lifecycle.engine.finishSnapshot();}
 
 const recipe = await createSyntheticFinancialYear();
-async function setup() {
+async function setup({fullYear=false}={}) {
+  const initialLedger=fullYear?recipe.ledger:replayFixture(2).ledger;
   const h = await setupHttpCanonicalWorkbench();
   const store = new CanonicalLedgerStore({ lifecycle: h.lifecycle });
   await store.load();
-  await store.save(recipe.ledger);
+  await store.save(initialLedger);
   const session = new CanonicalWorkspaceSession({ storage: { lifecycle: h.lifecycle } });
   await session.loadVerified();
-  const activity = getEffectiveActivities(session.ledger).find(a => a.sourceDescription === 'INVENTED BROKERAGE FEE');
-  return { ...h, session, activity };
+  const activity = getEffectiveActivities(session.ledger).find(a => a.sourceDescription === 'INVENTED BROKERAGE FEE')??getEffectiveActivities(session.ledger)[0];
+  return { ...h, session, activity, initialLedger };
 }
 function stage(h, revision = 0) {
   h.session.correct({ activityId: h.activity.activityId, type: 'classification', activityKind: 'spending', rationale: 'Invented correction ' + revision });
@@ -26,39 +36,41 @@ function stage(h, revision = 0) {
 const bump = file => { file.metadata.version = String(BigInt(file.metadata.version) + 1n); };
 
 test('active two-edit workspace saves reuse GET bytes with fresh checks as retained revisions grow', async t => {
-  const h = await setup(), counts = [];
+  const h = await setup({fullYear:true}), counts = [];
   let retained = 0;
   for (let revision = 0; revision < 6; revision++) {
     const expected = stage(h, revision);
     h.http.phase = 'save-' + revision;
     await h.session.save();
     assert.deepEqual(h.session.ledger, expected);
-    assert.deepEqual(h.session.ledger.observations, recipe.ledger.observations);
+    assert.deepEqual(h.session.ledger.observations, h.initialLedger.observations);
     const metrics = h.http.summary(h.http.phase);
-    assert.ok(metrics.requests <= 140, JSON.stringify(metrics));
+    // V5 has physical publication/receipt checks rather than the catalog
+    // writer's request budget. Six retained full-year saves measure 285..337.
+    assert.ok(metrics.requests <= 350, JSON.stringify(metrics));
     assert.equal(metrics.peakMutations, 1);
     assert.ok(metrics.peakConcurrency <= 4);
     counts.push(metrics.requests);
     h.http.phase = 'reopen';
     await h.session.reopen();
     assert.deepEqual(h.session.ledger, expected);
-    const catalog = await readCatalog(h.lifecycle.transactionAdapter, h.http.json(h.manifestFileId));
-    assert.ok(Object.keys(catalog.entries).length > retained);
-    retained = Object.keys(catalog.entries).length;
+    const retainedEntries = await entries(h);
+    assert.ok(retainedEntries.length > retained);
+    retained = retainedEntries.length;
   }
   await h.driver.verifyPortable();
   t.diagnostic(JSON.stringify({ activities: recipe.ledger.activities.length, saves: counts, retained }));
 });
 
-test('fresh closing metadata checks catalog roots, segments and retained entries even on cache hits', async t => {
-  for (const kind of ['locator-catalog', 'locator-catalog-segment', 'snapshot-object', 'journal-event']) {
+test('fresh closing metadata checks locator roots, pages and retained entries even on cache hits', async t => {
+  for (const kind of ['locator-catalog', 'locator-catalog-page', 'snapshot-object', 'protocol-object']) {
     for (const mode of ['version', 'folder', 'hash', 'missing', 'missing-trash-state']) await t.test(kind + ' ' + mode, async () => {
       const h = await setup();
       const adapter = h.lifecycle.transactionAdapter, manifest = h.http.json(h.manifestFileId);
-      const catalog = await readCatalog(adapter, manifest);
-      const root = h.http.json(manifest.locatorCatalog.fileId);
-      const id = kind === 'locator-catalog' ? manifest.locatorCatalog.fileId : kind === 'locator-catalog-segment' ? root.segmentTip.fileId
-        : Object.values(catalog.entries).find(entry => entry.kind === (kind === 'snapshot-object' ? 'data-object' : kind)).fileId;
+      const retainedEntries=await entries(h);
+      const root=h.http.json(manifest.locatorRoot.fileId);
+      const id=kind==='locator-catalog'?manifest.locatorRoot.fileId:kind==='locator-catalog-page'?root.objects.fileId
+        :retainedEntries.find(entry=>entry.kind===(kind==='snapshot-object'?'data-object':kind)).fileId;
       const snapshot = adapter.readMetadataSnapshot.bind(adapter);
       let calls = 0;
       adapter.readMetadataSnapshot = async () => {
@@ -74,14 +86,14 @@ test('fresh closing metadata checks catalog roots, segments and retained entries
         return metadata;
       };
       const before = h.http.mutations;
-      await assert.rejects(h.lifecycle.engine.verifyHistory(manifest));
+      await assert.rejects(verify(h));
       assert.equal(h.http.mutations, before);
     });
   }
 });
 
 test('new write readbacks cannot hide corruption or rebinding before publication', async t => {
-  for (const kind of ['snapshot-object', 'journal-event', 'commit-record', 'locator-catalog-segment', 'locator-catalog']) {
+  for (const kind of ['snapshot-object', 'protocol-object', 'commit-record', 'locator-catalog-page', 'locator-catalog']) {
     await t.test(kind, async () => {
       const h = await setup(), adapter = h.lifecycle.transactionAdapter;
       const expected = stage(h);
@@ -97,7 +109,7 @@ test('new write readbacks cannot hide corruption or rebinding before publication
       assert.equal(changed, true);
       assert.deepEqual(h.session.ledger, expected, 'the draft survives failed verification');
       assert.equal(h.session.dirty, true);
-      assert.equal(h.http.json(h.manifestFileId).revision, 1, 'corruption blocks financial publication');
+      assert.equal(h.http.json(h.manifestFileId).revision, '1', 'corruption blocks financial publication');
       assert.equal(h.lifecycle.acceptingWrites, false);
     });
   }
@@ -119,17 +131,17 @@ test('private write readbacks detach adapter receipts and are discarded after a 
   assert.deepEqual(h.session.ledger, expected);
   h.lifecycle.engine.invalidateHistory();
   h.http.phase = 'cold';
-  await h.lifecycle.engine.verifyHistory(h.http.json(h.manifestFileId));
+  await verify(h);
   assert.ok(h.http.summary('cold').categories.media > 30, 'cleared evidence and completed scopes cannot supply bytes');
 });
 
 
 test('raw bytes cannot forge an opaque write receipt, and closed scopes reject late admission', async () => {
-  const h = await setup(), adapter = h.lifecycle.transactionAdapter, manifest = h.http.json(h.manifestFileId);
+  const h=await setupCatalog(),{manifest}=await h.engine.transact(h.transaction),adapter=h.adapter;
   const catalog = await readCatalog(adapter, manifest);
   const entry = Object.values(catalog.entries).find(entry => entry.kind === 'data-object');
-  const file = h.http.files.get(entry.fileId), original = file.bytes.slice();
-  file.bytes[0] ^= 1; bump(file);
+  const file = adapter.files.get(entry.fileId), original = file.bytes.slice();
+  file.bytes[0] ^= 1; file.metadata.version='1'; bump(file);
   const verifier = createCatalogHistoryVerifier();
   let closed;
   await verifier.withWriteReadbacks(async remember => {
@@ -142,7 +154,9 @@ test('raw bytes cannot forge an opaque write receipt, and closed scopes reject l
 });
 
 test('every active save mutation interruption preserves the draft and recovers one whole ledger', async t => {
-  for (let boundary = 1; boundary <= 25; boundary++) await t.test('mutation ' + boundary, async () => {
+  const reference=await setup();stage(reference);const before=reference.http.mutations;await reference.session.save();const boundaries=reference.http.mutations-before;
+  t.diagnostic('v5 durable mutation boundaries: '+boundaries);
+  for (let boundary = 1; boundary <= boundaries; boundary++) await t.test('mutation ' + boundary, async () => {
     const h = await setup();
     const original = structuredClone(h.session.ledger), expected = stage(h);
     // The fake provider cannot become visible until reboot. Keep all eight
@@ -157,10 +171,10 @@ test('every active save mutation interruption preserves the draft and recovers o
     await h.lifecycle.recover();
     const reopened = await new CanonicalLedgerStore({ lifecycle: h.lifecycle }).load();
     const manifest = h.http.json(h.manifestFileId);
-    assert.equal(manifest.catalogFinalizationPending, null);
-    assert.ok([1, 2].includes(manifest.revision));
-    assert.deepEqual(reopened, manifest.revision === 1 ? original : expected);
-    assert.deepEqual(reopened.observations, recipe.ledger.observations);
+    assert.equal(manifest.pending, null);
+    assert.ok(['1', '2'].includes(manifest.revision));
+    assert.deepEqual(reopened, manifest.revision === '1' ? original : expected);
+    assert.deepEqual(reopened.observations, h.initialLedger.observations);
     assert.deepEqual(h.session.ledger, expected, 'recovery must not erase the local draft');
   });
 });

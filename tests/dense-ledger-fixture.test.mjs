@@ -25,13 +25,12 @@ test('dense invented year uses supported imports and audited commands across fou
 });
 test('dense fixture rejects accidental unbounded size requests',()=>assert.throws(()=>denseLedgerFixture(100),/unsupported-fixture-years/));
 
-test('dense five-year history serializes into bounded physical v3 fragments',async()=>{
-  const {serializeFragmentedCanonicalLedger,CANONICAL_INDEX}=await import('../js/canonical-ledger-storage.mjs');
-  const {FRAGMENT_OBJECT_BYTES}=await import('../js/canonical-fragments.mjs');
-  const {ledger}=denseLedgerFixture(5);
-  const physical=serializeFragmentedCanonicalLedger(ledger);
-  assert.ok(physical.size>0);
-  assert.ok([...physical.values()].every(text=>Buffer.byteLength(text)<=FRAGMENT_OBJECT_BYTES));
-  const root=JSON.parse(physical.get(CANONICAL_INDEX));
-  assert.ok(Object.values(root.fragments).some(item=>item.parts>1), 'large logical objects must be split into multiple physical fragments');
+test('dense five-year history writes bounded v5 pages',async()=>{
+  const {updatePartitionedCanonicalLedger,partitionDigest}=await import('../js/canonical-partitions.mjs');
+  const {PAGE_TREE_MAX_BYTES}=await import('../js/immutable-page-tree.mjs');
+  const {ledger}=denseLedgerFixture(5),objects=new Map();
+  const store={read:async hash=>objects.get(hash),write:async bytes=>{const hash=await partitionDigest(bytes);objects.set(hash,bytes);return hash;}};
+  const result=await updatePartitionedCanonicalLedger(ledger,store);
+  assert.equal(JSON.parse(new TextDecoder().decode(objects.get(result.rootHash))).version,5);
+  assert.ok([...objects.values()].every(bytes=>bytes.length<=PAGE_TREE_MAX_BYTES));
 });

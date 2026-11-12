@@ -1,3 +1,5 @@
+import { sessionClaimDiagnostic } from "./session-claim-diagnostic.mjs";
+
 export const SESSION_FORMAT = "finance-tracker-session";
 export const SESSION_VERSION = 1;
 export const DEFAULT_SESSION_TTL_MS = 120_000;
@@ -10,8 +12,10 @@ export class SessionCoordinationError extends Error {
   }
 }
 
-function fail(code, message) {
-  throw new SessionCoordinationError(code, message);
+function fail(code, message, sessionCheck) {
+  const error = new SessionCoordinationError(code, message);
+  if (sessionCheck) error.sessionCheck = sessionCheck;
+  throw error;
 }
 
 function validRecord(record) {
@@ -148,13 +152,14 @@ export class SessionCoordinator {
     let actual;
     try {
       actual = await this.adapter.read();
-    } catch {
+    } catch (cause) {
       this.ownership = "unknown";
-      fail(failureCode, "Session ownership could not be verified after the write. All writes are disabled.");
+      fail(failureCode, "Session ownership could not be verified after the write. All writes are disabled.",
+        sessionClaimDiagnostic(cause)?.check || "coordinator-read-failed");
     }
     if (!sameRecord(actual, expected)) {
       this.ownership = "unknown";
-      fail(failureCode, "The session record changed or could not be verified. All writes are disabled.");
+      fail(failureCode, "The session record changed or could not be verified. All writes are disabled.", "coordinator-record-changed");
     }
   }
 
@@ -200,7 +205,8 @@ export class SessionCoordinator {
       this.ownership = "unknown";
       assertCurrent();
       const detail = typeof cause?.code === "string" && /^[a-z][a-z0-9-]{0,95}$/.test(cause.code) ? " (" + cause.code + ")" : "";
-      fail("ownership-unknown", "The session claim could not be confirmed" + detail + ". Preserve the folder and marker. Do not retry creation or switch devices.");
+      fail("ownership-unknown", "The session claim could not be confirmed" + detail + ". Preserve the folder and marker. Do not retry creation or switch devices.",
+        sessionClaimDiagnostic(cause)?.check);
     }
     await this.verifyWrittenRecord(record, "ownership-unknown");
     assertCurrent();

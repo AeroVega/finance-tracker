@@ -5,8 +5,10 @@ import { SessionCoordinationError } from "./session-coordination.mjs";
 export const SESSION_MARKER_NAME = "finance-tracker-active-session.json";
 export const SESSION_MARKER_PROPERTY = "financeTrackerSession";
 
-function error(code, message) {
-  return new SessionCoordinationError(code, message);
+function error(code, message, sessionCheck) {
+  const failure = new SessionCoordinationError(code, message);
+  if (sessionCheck) failure.sessionCheck = sessionCheck;
+  return failure;
 }
 
 function authHeaders(accessToken) {
@@ -80,6 +82,8 @@ export function createDriveSessionAdapter(options) {
     signal.throwIfAborted();
     return fetchImpl(url, {...init, signal});
   };
+  // Private failed-bracket observations are never ownership evidence.
+  const changedVersionRecords = new WeakMap();
   let writtenFileId = null;
   let operationGeneration = 0;
   const assertCurrent = epoch => {
@@ -139,7 +143,7 @@ export function createDriveSessionAdapter(options) {
 
     const file = candidates[0];
     if (writtenFileId && file.id !== writtenFileId) {
-      throw error("ownership-unknown", "A different session marker replaced the written marker.");
+      throw error("ownership-unknown", "A different session marker replaced the written marker.", "marker-id-changed");
     }
     if (file.trashed === true || file.name !== SESSION_MARKER_NAME ||
         file.mimeType !== "application/json" ||
@@ -192,9 +196,22 @@ export function createDriveSessionAdapter(options) {
         throw error("drive-read-failed", "The session marker version could not be confirmed.");
       }
       const closing = await readBoundedDriveJson(closingResponse, { kind: "metadata", limits: responseLimits });
-      if (closing?.trashed !== false || !Array.isArray(closing.parents) || !closing.appProperties ||
-          !validVersion(closing) || binding(closing) !== binding(file)) {
-        throw error("ownership-unknown", "The session marker changed while its content was being verified.");
+      // Keep every original bracket requirement; report only which fixed check
+      // failed, never either metadata value. These are failures, not retry hints.
+      const sessionCheck = closing?.trashed !== false ? "closing-trashed-unconfirmed" :
+        !Array.isArray(closing.parents) ? "closing-parents-missing" :
+        !closing.appProperties ? "closing-properties-missing" :
+        !validVersion(closing) ? "closing-version-invalid" :
+        closing.id !== file.id ? "closing-id-changed" :
+        closing.name !== file.name ? "closing-name-changed" :
+        closing.mimeType !== file.mimeType ? "closing-mime-changed" :
+        JSON.stringify([...closing.parents].sort()) !== JSON.stringify([...file.parents].sort()) ? "closing-parents-changed" :
+        closing.appProperties[SESSION_MARKER_PROPERTY] !== file.appProperties[SESSION_MARKER_PROPERTY] ? "closing-session-property-changed" :
+        closing.version !== file.version ? "closing-version-changed" : null;
+      if (sessionCheck) {
+        const failure = error("ownership-unknown", "The session marker changed while its content was being verified.", sessionCheck);
+        if (sessionCheck === "closing-version-changed") changedVersionRecords.set(failure, record);
+        throw failure;
       }
       if (epoch === generation) evidence = { binding: binding(file), record: structuredClone(record) };
     } else {
@@ -239,14 +256,21 @@ export function createDriveSessionAdapter(options) {
       let actual;
       try { actual = await read(epoch, signal); }
       catch (cause) {
-        if (cause.code !== "session-marker-not-visible") throw cause;
+        if (cause.code !== "session-marker-not-visible") {
+          // A version-only disagreement after our own mutation may be metadata
+          // settling. Never accept that read or retry a mutation. Re-enumerate
+          // all candidates and obtain a fresh media/metadata bracket instead.
+          const observed = changedVersionRecords.get(cause);
+          if (!observed || (!sameRecord(observed, expected) && !sameRecord(observed, previous)) ||
+              attempt === delays.length) throw cause;
+        }
       }
       assertCurrent(epoch);
       if (sameRecord(actual, expected)) return;
       // Only absence or the exact pre-write record can be delayed visibility.
       // A changed owner, malformed marker or incomplete listing is not retried.
       if (actual !== undefined && actual !== null && !sameRecord(actual, previous)) {
-        throw error("ownership-unknown", "The session marker changed during write verification.");
+        throw error("ownership-unknown", "The session marker changed during write verification.", "readback-record-changed");
       }
       if (attempt === delays.length) {
         throw error("session-marker-not-visible", "Session write visibility was not verified within the retry budget. Preserve the folder and marker; do not retry creation.");
@@ -270,7 +294,7 @@ export function createDriveSessionAdapter(options) {
     const observed = await read(epoch, signal);
     if (!((observed === null && previousRecord === null) || sameRecord(observed, previousRecord)) ||
         (observed === null) !== (previousFileId === null) || lastReadFileId !== previousFileId) {
-      throw error("ownership-unknown", "The session marker changed since it was last inspected. The write was refused.");
+      throw error("ownership-unknown", "The session marker changed since it was last inspected. The write was refused.", "prewrite-record-changed");
     }
 
     // Force exact remote media verification after our own mutation, including

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCanonicalMonthIndex,serializeCanonicalMonthIndex,readCanonicalMonthIndex,MONTH_INDEX_ROOT,MONTH_INDEX_PREFIX,canonicalMonthSourceHash} from '../js/canonical-month-index.mjs';
-import {serializeCanonicalLedger,serializeFragmentedCanonicalLedger,validateCanonicalSnapshot,CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
+import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
+import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
 import {createWorkspaceView,createWorkspaceViewReader} from '../js/canonical-workspace-model.mjs';
 import {applyFinancialEvent,applyFinancialEvents,prepareCanonicalImport,applyReviewDecision,reverseReviewDecision,summarizeLedger} from '../js/canonical-import.mjs';
 import {canonicalizeJcs,sha256Hex} from '../js/transaction-protocol.mjs';
@@ -82,42 +83,31 @@ test('owned index and workspace reject source mismatch and isolate caller/result
   assert.deepEqual(reader.monthlySummaries(),createCanonicalMonthIndex(ledger).monthlySummaries());
 });
 
-function memoryLifecycle() {
-  const contents = new Map(); let revision = 0, mutations = 0;
-  const manifest = () => ({syntheticOnly:true,revision,snapshot:Object.fromEntries([...contents.keys()].map(path => [path,'test-hash']))});
-  return {contents,get mutations() { return mutations; },manifestFileId:'invented-manifest',
-    readManifest:async () => manifest(),readObject:async path => new TextEncoder().encode(contents.get(path)),
-    async transact(transaction) { assert.deepEqual(transaction.expectedBase,manifest()); for (const value of transaction.objects) contents.set(value.logicalPath,value.content); revision++; mutations++; },
-    replace(path,text) { contents.set(path,text); revision++; }};
+async function sourceObjects(ledger) {
+  const physical = await createPagedFixture(), store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
+  await store.load(); await store.save(ledger);
+  return new Map([...physical.objects].map(([hash,bytes])=>[hash,new TextDecoder().decode(bytes)]));
 }
 
-test('saved monthly groups reopen, repair semantic corruption explicitly, and retain canonical detail', async () => {
-  const lifecycle = memoryLifecycle(), store = new CanonicalLedgerStore({lifecycle});
+test('v5 monthly reports reopen exactly, no-op saves do not publish, and corrupted objects fail closed', async () => {
+  const physical = await createPagedFixture(), store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
   await store.load(); await store.save(fixture.ledger);
   assert.equal(store.monthIndexStatus,'verified');
-  assert.ok(lifecycle.contents.has(MONTH_INDEX_ROOT));
-  const before = lifecycle.mutations;
-  await store.save(fixture.ledger); assert.equal(lifecycle.mutations,before);
-  const root = JSON.parse(lifecycle.contents.get(MONTH_INDEX_ROOT)), path = root.groups[0].path;
-  const group = JSON.parse(lifecycle.contents.get(path)); group.summaries[0].income = '999999.00';
-  lifecycle.replace(path,canonicalizeJcs(group));
-  const reopened = new CanonicalLedgerStore({lifecycle});
+  const before = physical.commits.length;
+  await store.save(fixture.ledger); assert.equal(physical.commits.length,before);
+  const reopened = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
   assert.deepEqual(await reopened.load(),fixture.ledger);
-  assert.equal(reopened.monthIndexStatus,'rebuilt-invalid');
-  assert.equal(lifecycle.mutations,before);
   assert.deepEqual(reopened.monthIndex.report(annual).report,summarizeLedger(fixture.ledger,annual));
-  await reopened.save(fixture.ledger);
-  assert.equal(reopened.monthIndexStatus,'verified');
-  assert.equal(lifecycle.mutations,before + 1);
-  const bytes = Object.fromEntries([...lifecycle.contents].map(([path,text]) => [path,new TextEncoder().encode(text)]));
-  assert.equal(validateSyntheticApplicationSnapshot({objects:bytes}),true);
-  assert.equal(validateCanonicalSnapshot({objects:bytes}),true,'canonical source validation ignores optional derived objects');
-  const oldBackupAllowlist = Object.keys(bytes).every(path => path.startsWith('synthetic/canonical-v1/') || path === 'synthetic/dashboard-transactions.json');
-  assert.equal(oldBackupAllowlist,false,'old backup readers refuse unknown sidecars instead of silently dropping them');
+  const original = physical.objects.get(physical.manifest.root);
+  physical.objects.set(physical.manifest.root,new TextEncoder().encode('corrupted invented root'));
+  await assert.rejects(new CanonicalLedgerStore({lifecycle:physical.lifecycle}).load());
+  assert.equal(physical.commits.length,before);
+  physical.objects.set(physical.manifest.root,original);
+  assert.deepEqual(await reopened.load(),fixture.ledger);
 });
 
 test('missing, stale, wrong-version, reordered, wrong-partition and self-rehashed corrupt indexes rebuild', async () => {
-  const ledger = fixture.ledger, index = createCanonicalMonthIndex(ledger), source = serializeCanonicalLedger(ledger);
+  const ledger = fixture.ledger, index = createCanonicalMonthIndex(ledger), source = await sourceObjects(ledger);
   const good = await serializeCanonicalMonthIndex(index,source);
   const read = objects => readCanonicalMonthIndex({ledger,sourceObjects:source,readText:async path => objects.get(path) ?? null});
   assert.equal((await read(good)).status,'verified');
@@ -144,18 +134,6 @@ test('missing, stale, wrong-version, reordered, wrong-partition and self-rehashe
   await assert.rejects(readCanonicalMonthIndex({ledger,sourceObjects:source,readText:async () => { throw new TypeError('network failed'); }}),/network failed/);
 });
 
-test('records-v1 and fragmented-v3 legacy snapshots reopen without sidecars and create them only on explicit save', async () => {
-  for (const serialize of [serializeCanonicalLedger,serializeFragmentedCanonicalLedger]) {
-    const lifecycle = memoryLifecycle();
-    for (const [path,text] of serialize(fixture.ledger)) lifecycle.contents.set(path,text);
-    const store = new CanonicalLedgerStore({lifecycle});
-    assert.deepEqual(await store.load(),fixture.ledger);
-    assert.equal(store.monthIndexStatus,'rebuilt-missing'); assert.equal(lifecycle.mutations,0);
-    await store.save(fixture.ledger); assert.equal(store.monthIndexStatus,'verified');
-    assert.deepEqual(await store.load(),fixture.ledger);
-  }
-});
-
 test('a dense valid month summarizes without replay or visiting activity detail after indexing', () => {
   let {ledger,options} = replayFixture(1000);
   ledger = applyFinancialEvents(ledger,ledger.activities.map((activity,i) => ({type:'classification',activityId:activity.activityId,activityKind:'spending',commandId:`invented-${i}`})),options);
@@ -169,11 +147,11 @@ test('a dense valid month summarizes without replay or visiting activity detail 
 
 test('one corrected month replaces only its summary group and the source binding', async () => {
   let {ledger,options} = createLargeWorkspaceFixture({perAccount:28,corrections:0,unresolvedPerAccount:0});
-  const source = serializeCanonicalLedger(ledger);
+  const source = await sourceObjects(ledger);
   const before = await serializeCanonicalMonthIndex(createCanonicalMonthIndex(ledger),source);
   ledger = applyFinancialEvent(ledger,{type:'bank-correction',activityId:ledger.activities[0].activityId,
     amountText:'12.00',commandId:'invented-summary-correction',evidence:{reason:'Invented corrected amount'}},options);
-  const correctedSource = serializeCanonicalLedger(ledger);
+  const correctedSource = await sourceObjects(ledger);
   const after = await serializeCanonicalMonthIndex(createCanonicalMonthIndex(ledger),correctedSource);
   const changed = [...after].filter(([path,text]) => before.get(path) !== text).map(([path]) => path).sort();
   assert.deepEqual(changed,[MONTH_INDEX_PREFIX + 'groups/000000.json',MONTH_INDEX_ROOT]);

@@ -1,18 +1,25 @@
 # Bounded fragmented canonical storage
 
-## Current policy: v3 only for grouped-storage successors
+This document preserves PR30/PR32 fragmented-storage evidence and its historical
+contracts. The current application supports canonical v5 only and refuses older
+copies. Use [current test commands](TESTING.md) and the
+[v5 contract](PARTITIONED_CANONICAL_STORAGE.md) for current work. Commands below
+require the corresponding historical checkout; removed fixtures are not current
+regression requirements.
 
-**Current decision (PR32):** fragmented v3 is the default for new canonical stores and fresh synthetic copies. Its logical inventory is a distinct version-3 group index; bounded physical fragments are a transport/storage concern. It does not use the deprecated grouped-v2 schema.
+## Historical PR32 policy, superseded
+
+**Historical decision (PR32):** fragmented v3 is the default for new canonical stores and fresh synthetic copies. Its logical inventory is a distinct version-3 group index; bounded physical fragments are a transport/storage concern. It does not use the deprecated grouped-v2 schema.
 
 Standalone grouped storage v2 is deprecated and rejected outright by both the canonical store and snapshot/backup validator. The application no longer exports a v2 writer or offers a v2 layout option. Existing per-record v1 copies remain readable and retain their v1 layout. Existing fragmented-v3 copies created with the earlier logical v2 envelope remain readable and are upgraded to the current v3 group schema only when the owner explicitly saves; reads never rewrite a folder. A v2 fixture builder exists only in tests to prove standalone-v2 rejection and read compatibility for older fragmented-v3 copies.
 
-Do not reintroduce grouped-v2 support or make v3 opt-in. Preserve the existing transaction engine, fragment bounds, verified read-back, immutable history, ownership and recovery checks. This policy does not authorize live Drive actions, production persistence, merge or deployment.
+The PR32 policy prohibited reintroducing grouped-v2 support or making v3 opt-in. Preserve the existing transaction engine, fragment bounds, verified read-back, immutable history, ownership and recovery checks. This policy does not authorize live Drive actions, production persistence, merge or deployment.
 
 ---
 
 ## Historical scope and selection (superseded)
 
-**Historical experiment, superseded by the current policy above:** `fragments-v3` was originally an explicit choice beside grouped `chunks-v2`. That grouped-v2 option and its standalone format are now deprecated. Version-1 per-record copies remain compatible; new stores use v3. No real financial records, live Drive use, production activation, merge or deployment is part of this implementation.
+**Historical experiment, superseded by the PR32 policy above:** `fragments-v3` was originally an explicit choice beside grouped `chunks-v2`. That grouped-v2 option and its standalone format are now deprecated. Version-1 per-record copies remain compatible; new stores use v3. No real financial records, live Drive use, production activation, merge or deployment is part of this implementation.
 
 ## Format
 
@@ -46,7 +53,7 @@ Base64 adds about one third to encoded payload size, plus envelope and inventory
 
 The interruption test writes a new correction whose evidence spans several fragments. It injects a failure at every durable mutation and requires recovery to return either the complete old ledger or the complete new ledger, followed by a safe retry. No partial logical record is accepted.
 
-Run `node --test tests/canonical-fragmented-storage.test.mjs tests/canonical-packed-storage.test.mjs tests/synthetic-year-seeder.test.mjs` for the focused regression set. Run a larger storage regression separately with `FRAGMENT_TEST_YEARS=5 node --max-old-space-size=768 --test tests/canonical-fragmented-storage.test.mjs`, then use `FRAGMENT_TEST_YEARS=10` in a fresh process. Do not run these alongside other memory-heavy work. Run `node tests/benchmark-fragmented-storage.mjs` for the one-, five- and ten-year exact-output adapter measurement. It runs each size in a fresh process with a 768 MiB JavaScript heap limit. The benchmark uses an invented in-memory lifecycle, not Google or catalog HTTP. Separate small fixtures exercise the actual catalog transaction, archive and recovery engines.
+Historical PR30/PR32 reproduction commands, not runnable requirements for the current v5 checkout: `node --test tests/canonical-fragmented-storage.test.mjs tests/canonical-packed-storage.test.mjs tests/synthetic-year-seeder.test.mjs` for the focused regression set. Run a larger storage regression separately with `FRAGMENT_TEST_YEARS=5 node --max-old-space-size=768 --test tests/canonical-fragmented-storage.test.mjs`, then use `FRAGMENT_TEST_YEARS=10` in a fresh process. Do not run these alongside other memory-heavy work. Run `node tests/benchmark-fragmented-storage.mjs` for the one-, five- and ten-year exact-output adapter measurement. It runs each size in a fresh process with a 768 MiB JavaScript heap limit. The benchmark uses an invented in-memory lifecycle, not Google or catalog HTTP. Separate small fixtures exercise the actual catalog transaction, archive and recovery engines.
 
 ## Local dense measurement, November 8, 2026
 
@@ -62,8 +69,8 @@ Root inventories were 9,225, 44,261 and 88,211 bytes respectively. Save plus int
 
 Earlier concurrent dense runs were killed by resource pressure. The successful measurements above used serial fresh processes. This is evidence of exact storage representation at these sizes, not evidence that a phone or browser can safely hold a ten-year copy. No hard browser-memory admission threshold is established.
 
-The default regression suite includes one dense year and a separate 4,000-peer category rule. The latter has both an import observation inventory and one prospective-rule event individually larger than 128 KiB. Both save and reopen exactly with v3. The larger five- and ten-year cases remain available through the explicit test environment option above rather than adding them to every full-suite run.
+The PR30/PR32 regression suite included one dense year and a separate 4,000-peer category rule. The latter has both an import observation inventory and one prospective-rule event individually larger than 128 KiB. Both save and reopen exactly with v3. At those revisions, the larger five- and ten-year cases were available through the explicit test environment option above rather than adding them to every full-suite run.
 
 **Verified on Node 24.22.1 and 26.13.0:** the final focused command passed 80/80 tests on each version, with no failures or skips. It used `--max-old-space-size=768 --test-concurrency=1`. This includes all 32 durable boundaries of the oversized fragmented correction. Syntax checks and `git diff --check` passed. Independent code review found no outstanding integrity defect. The reviewer independently reran the final one-year and 4,000-peer target cases, passing 2/2.
 
-The earlier local Chromium check covered the now-retired v2/v3 selector and is historical evidence only. The current synthetic-year page has no format selector and writes v3. The current UI regression suite exercises the v3 path with an invented storage stub; physical Safari/mobile interaction and memory, live Google authorization and live upload acceptance remain **Open**. The [final full-repository integration](archive/PR30_PERFORMANCE_INTEGRATION.md) passed 914/914 tests on both Node versions, separately from these focused results.
+The earlier local Chromium check covered the now-retired v2/v3 selector and is historical evidence only. At the PR32 checkpoint, the synthetic-year page had no format selector and wrote v3. Its UI regression suite exercised the v3 path with an invented storage stub; physical Safari/mobile interaction and memory, live Google authorization and live upload acceptance remain **Open**. The [final full-repository integration](archive/PR30_PERFORMANCE_INTEGRATION.md) passed 914/914 tests on both Node versions, separately from these focused results.

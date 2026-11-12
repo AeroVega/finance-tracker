@@ -15,7 +15,7 @@ const encoder = new TextEncoder();
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const top = encoder.encode('{"kind":"invented-backup-growth-root","version":3}');
 const root = { databaseId: "synthetic-growth-database", sourceCopyId: "synthetic-growth-copy", revision: "0",
-  canonical: null, catalog: { version: 3, sha256: hash(top) }, protocol: null };
+  profile:"canonical5-physical4",sourceEvidence:null,canonical: {version:5,sha256:hash(top)}, catalog: null, protocol: {version:4,sha256:hash(top)} };
 const frameBytes = 16384;
 function payload(index) {
   const bytes = new Uint8Array(frameBytes).fill(index % 251);
@@ -52,8 +52,8 @@ for (const size of sizes) {
       }
     };
     async function* objects() {
-      yield { hash: hash(top), bytes: top };
-      for (let i = 1; i < size; i++) { const bytes = payload(i); yield { hash: hash(bytes), bytes }; }
+      yield { hash: hash(top), bytes: top, descriptor:{kind:"data-object",identity:hash(top)} };
+      for (let i = 1; i < size; i++) { const bytes = payload(i); yield { hash: hash(bytes), bytes, descriptor:{kind:"data-object",identity:hash(bytes)} }; }
     }
     async function* stream() {
       for await (const chunk of encodeFramedBackup({ root, objects: objects(), limits: { maxObjectBytes: frameBytes } })) {
@@ -62,7 +62,7 @@ for (const size of sizes) {
     }
     const result = await restoreFramedBackup({ source: stream(), staging, limits: { maxObjectBytes: frameBytes },
       verifyStructure: async ({ store, root: pinned }) => {
-        assert.deepEqual(await store.read(pinned.catalog.sha256), top);
+        assert.deepEqual(await store.read(pinned.canonical.sha256), top);
         // Independent deterministic exact-content oracle for this invented
         // benchmark schema, one expected/restored object at a time.
         for (let i = 1; i < size; i++) {

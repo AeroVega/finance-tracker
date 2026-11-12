@@ -1,14 +1,15 @@
+import { showDiagnostic, clearDiagnostic } from './app-diagnostics.mjs';
 (() => {
   "use strict";
 
   const state = { transactions: [], syntheticTransactions: [], importedFingerprints: new Set(), sourceFiles: [] };
-  let syntheticStorage = null;
-  let syntheticMutationPending = false;
+  let pendingImports = 0;
   const $ = (id) => document.getElementById(id);
   const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
   const dateFormatter = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
 
   function setStatus(message, kind = "info") {
+    if (kind !== "error") clearDiagnostic($("import-status"));
     const node = $("import-status");
     node.textContent = message;
     node.dataset.kind = kind;
@@ -35,7 +36,7 @@
         row = []; cell = "";
       } else cell += ch;
     }
-    if (quoted) throw new Error("The CSV has an unfinished quoted field.");
+    if (quoted) throw Object.assign(new Error("csv-unfinished-quote"), {code: "csv-unfinished-quote"});
     if (cell.length || row.length) {
       row.push(cell);
       if (row.some((value) => value.trim() !== "")) rows.push(row);
@@ -84,7 +85,7 @@
       const headers = rows[i].map(normalizeHeader);
       if (headers.includes("rundate") && headers.includes("action") && headers.includes("amount")) return { index: i, headers, fidelity: true };
     }
-    throw new Error("Couldn't find a supported header row. Expected Date, Description, Amount; Wells Fargo, SoFi, and Fidelity layouts are recognized when their documented headers are present.");
+    throw Object.assign(new Error("csv-unsupported-header"), {code: "csv-unsupported-header"});
   }
 
   function field(row, headers, ...names) {
@@ -155,6 +156,7 @@
     if (!file.name.toLowerCase().endsWith(".csv") && file.type !== "text/csv") {
       setStatus("Choose a CSV file.", "error"); return;
     }
+    pendingImports++;
     try {
       const text = await file.text();
       const fingerprintValue = await fingerprint(text, file.name);
@@ -176,8 +178,9 @@
       const investmentText = parsed.isInvestmentActivity ? " Fidelity investment activity is listed separately and excluded from these simple cash-flow totals." : "";
       setStatus(`${parsed.provider}: imported ${accepted.length} row(s).${rejectedText}${investmentText} CSV rows remain local and are never uploaded to Drive on this page. Exact-file retry protection lasts only until this page is closed.`, "success");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "The file couldn't be parsed.", "error");
+      setStatus(showDiagnostic(error, {surface: 'local-preview', target: $('import-status')}), "error");
     } finally {
+      pendingImports--;
       $("csv-file").value = "";
     }
   }
@@ -200,11 +203,7 @@
     if ($("filter-count")) $("filter-count").textContent = visible.length ? `Showing ${matches.length} of ${visible.length} transaction(s)` : "No transactions to search.";
     if ($("search-empty")) $("search-empty").hidden = visible.length === 0 || matches.length > 0;
     $("transaction-count").textContent = String(visible.length);
-    const storageSessionUnready = Boolean(syntheticStorage?.lifecycle && syntheticStorage.lifecycle.state !== "ready");
-    $("clear-data").disabled = syntheticMutationPending || visible.length === 0 || storageSessionUnready;
-    $("save-data").disabled = syntheticMutationPending || syntheticStorage?.lifecycle?.state !== "ready";
-    $("load-sample").disabled = syntheticMutationPending;
-    $("release-synthetic-storage").disabled = syntheticMutationPending || syntheticStorage?.lifecycle?.state !== "ready";
+    $("clear-data").disabled = visible.length === 0;
     $("empty-state").hidden = visible.length > 0;
     $("transaction-table-wrap").hidden = matches.length === 0;
     const body = $("transaction-rows");
@@ -228,175 +227,37 @@
     });
   }
 
-  async function loadSample() {
-    if (syntheticMutationPending) return;
-    syntheticMutationPending = true;
+  function loadSample() {
+    const sample = [
+      { date: "2026-10-15", description: "Sample paycheck", amount: 2450, eligibleForCashFlow: true, provider: "Sample data", id: "sample-1", syntheticOnly: true },
+      { date: "2026-10-14", description: "Sample grocery store", amount: -82.43, eligibleForCashFlow: true, provider: "Sample data", id: "sample-2", syntheticOnly: true },
+      { date: "2026-10-12", description: "Sample electricity bill", amount: -64.18, eligibleForCashFlow: true, provider: "Sample data", id: "sample-3", syntheticOnly: true },
+      { date: "2026-10-10", description: "Sample savings transfer", amount: -300, eligibleForCashFlow: true, provider: "Sample data", id: "sample-4", syntheticOnly: true }
+    ];
+    state.syntheticTransactions = sample;
     render();
-    try {
-      const sample = [
-        { date: "2026-10-15", description: "Sample paycheck", amount: 2450, eligibleForCashFlow: true, provider: "Sample data", id: "sample-1", syntheticOnly: true },
-        { date: "2026-10-14", description: "Sample grocery store", amount: -82.43, eligibleForCashFlow: true, provider: "Sample data", id: "sample-2", syntheticOnly: true },
-        { date: "2026-10-12", description: "Sample electricity bill", amount: -64.18, eligibleForCashFlow: true, provider: "Sample data", id: "sample-3", syntheticOnly: true },
-        { date: "2026-10-10", description: "Sample savings transfer", amount: -300, eligibleForCashFlow: true, provider: "Sample data", id: "sample-4", syntheticOnly: true }
-      ];
-      if (syntheticStorage?.lifecycle?.state === "ready") {
-        const previous = state.syntheticTransactions;
-        try {
-          await syntheticStorage.saveSyntheticSnapshot(sample);
-          setStatus("Loaded and verified four invented sample rows in the dedicated synthetic Drive folder.", "success");
-        } catch (error) {
-          state.syntheticTransactions = previous;
-          render();
-          setStatus(error instanceof Error ? error.message : "Synthetic sample data could not be saved.", "error");
-        }
-      } else {
-        state.syntheticTransactions = sample;
-        render();
-        setStatus("Loaded four invented sample rows in this page only. Connect a dedicated synthetic Drive folder to test persistence.", "success");
-      }
-    } finally {
-      syntheticMutationPending = false;
-      render();
-    }
+    setStatus("Loaded four invented sample rows in this tab only. Nothing is uploaded or saved.", "success");
   }
 
   // Warn before leaving an ephemeral CSV preview or interrupting an operation.
   // The browser controls whether this prompt appears; it is not a save mechanism.
   globalThis.addEventListener?.("beforeunload", (event) => {
-    if (!state.transactions.length && !syntheticMutationPending) return;
+    if (!state.transactions.length && !pendingImports) return;
     event.preventDefault();
     event.returnValue = "";
   });
   $("transaction-search")?.addEventListener("input", render);
   $("csv-file").addEventListener("change", (event) => importFile(event.target.files?.[0]));
-  const connectStorageButton = $("connect-synthetic-storage");
-  connectStorageButton.disabled = true;
-  void Promise.all([import("./dashboard-synthetic-storage.mjs"), import("./storage-diagnostics.mjs")]).then(async ([{ DashboardSyntheticStorage, createDashboardReleaseHandler }, { createStorageDiagnostics }]) => {
-    const diagnostics = createStorageDiagnostics();
-    const recordDiagnostic = (entry) => {
-      diagnostics.record(entry);
-      $("storage-diagnostics").textContent = diagnostics.format($("build-sha")?.textContent);
-    };
-    $("storage-diagnostics-panel").addEventListener("toggle", () => {
-      $("storage-diagnostics").textContent = diagnostics.format($("build-sha")?.textContent);
-    });
-    $("release-synthetic-storage").addEventListener("click", createDashboardReleaseHandler({
-      getStorage: () => syntheticStorage,
-      setPending: (pending) => { $("release-synthetic-storage").disabled = pending || syntheticMutationPending || syntheticStorage?.lifecycle?.state !== "ready"; },
-      onDiagnostic: recordDiagnostic,
-      onError: (error) => {
-        $("storage-status").textContent = error instanceof Error ? error.message : "Storage release could not be verified.";
-        $("storage-status").dataset.kind = "error";
-      }
-    }));
-    syntheticStorage = new DashboardSyntheticStorage({
-      onDiagnostic: recordDiagnostic,
-      onStatus: ({ state: lifecycleState, message, kind }) => {
-        recordDiagnostic({ event: "status", state: lifecycleState });
-        $("storage-status").textContent = message;
-        $("storage-status").dataset.kind = kind || "info";
-        $("recover-stale-storage").hidden = lifecycleState !== "stale-session";
-        $("release-synthetic-storage").disabled = syntheticMutationPending || lifecycleState !== "ready";
-        if (["ready", "connecting", "recovering", "reconnecting", "recovering-session", "releasing"].includes(lifecycleState)) connectStorageButton.disabled = true;
-        else connectStorageButton.disabled = false;
-        render();
-      },
-      onSnapshot: (rows) => {
-        state.syntheticTransactions = rows;
-        render();
-      }
-    });
-    await syntheticStorage.prepare();
-    connectStorageButton.disabled = false;
-    $("storage-status").textContent = "Google services ready. Connect only a dedicated synthetic folder; CSV imports remain local.";
-  }).catch((error) => {
-    $("storage-status").textContent = error instanceof Error ? error.message : "Google services could not be prepared.";
-    $("storage-status").dataset.kind = "error";
-  });
-  connectStorageButton.addEventListener("click", async () => {
-    connectStorageButton.disabled = true;
-    $("storage-status").textContent = "Connecting and verifying synthetic storage…";
-    try {
-      const result = await syntheticStorage.connect();
-      $("release-synthetic-storage").disabled = syntheticMutationPending;
-      $("storage-status").textContent = "Connected to " + result.folderName + ". " + result.snapshot.length + " synthetic row(s) restored. CSV imports remain local.";
-      $("storage-status").dataset.kind = "success";
-      connectStorageButton.disabled = true;
-    } catch (error) {
-      $("storage-status").textContent = error instanceof Error ? error.message : "Synthetic storage connection failed.";
-      $("storage-status").dataset.kind = "error";
-      connectStorageButton.disabled = false;
-    }
-  });
-  $("recover-stale-storage").addEventListener("click", async () => {
-    if (!window.confirm("Drive reports that the previous session is conclusively stale. Confirm takeover and transaction recovery? Do not continue if another device may still be active.")) return;
-    $("recover-stale-storage").disabled = true;
-    try {
-      const rows = await syntheticStorage.recoverStaleSession();
-      $("storage-status").textContent = "Stale session recovered. " + rows.length + " synthetic row(s) verified.";
-      $("storage-status").dataset.kind = "success";
-      $("recover-stale-storage").hidden = true;
-      $("recover-stale-storage").disabled = false;
-      $("release-synthetic-storage").disabled = syntheticMutationPending;
-      connectStorageButton.disabled = true;
-    } catch (error) {
-      $("storage-status").textContent = error instanceof Error ? error.message : "Stale-session recovery failed.";
-      $("storage-status").dataset.kind = "error";
-      $("recover-stale-storage").disabled = false;
-    }
-  });
   $("load-sample").addEventListener("click", loadSample);
-  $("save-data").addEventListener("click", async () => {
-    if (syntheticMutationPending) return;
-    if (syntheticStorage?.lifecycle?.state !== "ready") {
-      setStatus("Connect and verify the dedicated synthetic Drive session before saving. CSV imports remain local.", "error");
-      return;
-    }
-    syntheticMutationPending = true;
-    const snapshot = state.syntheticTransactions.slice();
+  $("clear-data").addEventListener("click", () => {
+    // Clear only rows already loaded. File reads in progress may finish later
+    // and add their rows, provenance and retry fingerprints normally.
+    state.transactions = [];
+    state.syntheticTransactions = [];
+    state.sourceFiles = [];
+    state.importedFingerprints.clear();
+    setStatus("Loaded session data cleared. Pending file reads, if any, may still finish. Nothing was uploaded or saved.", "success");
     render();
-    try {
-      await syntheticStorage.saveSyntheticSnapshot(snapshot);
-      setStatus(`Saved and verified ${snapshot.length} synthetic row(s) in the dedicated Drive folder. CSV imports remain local and were not uploaded.`, "success");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Synthetic data could not be saved and verified.", "error");
-    } finally {
-      syntheticMutationPending = false;
-      render();
-    }
-  });
-  $("clear-data").addEventListener("click", async () => {
-    if (syntheticMutationPending) return;
-    if (syntheticStorage?.lifecycle && syntheticStorage.lifecycle.state !== "ready") {
-      setStatus("The existing synthetic storage session is not ready. Resolve its recovery or ownership state before clearing; no rows were removed.", "error");
-      return;
-    }
-    syntheticMutationPending = true;
-    // Capture identities, not mutable array references. Imports remain usable
-    // during remote I/O; a successful clear removes only the original selection.
-    const selectedRows = new Set(state.transactions);
-    const selectedSources = new Set(state.sourceFiles);
-    const selectedFingerprints = new Set(state.importedFingerprints);
-    const selectedSynthetic = state.syntheticTransactions;
-    render();
-    try {
-      const remote = syntheticStorage?.lifecycle?.state === "ready";
-      if (remote) await syntheticStorage.clearSyntheticSnapshot();
-      // No local imports are removed until the remote outcome is verified.
-      state.transactions = state.transactions.filter((row) => !selectedRows.has(row));
-      state.sourceFiles = state.sourceFiles.filter((source) => !selectedSources.has(source));
-      state.importedFingerprints = new Set([...state.importedFingerprints].filter((value) => !selectedFingerprints.has(value)));
-      if (state.syntheticTransactions === selectedSynthetic) state.syntheticTransactions = [];
-      setStatus(remote
-        ? "Previously selected data cleared and the synthetic Drive snapshot verified. Newer CSV imports, if any, were kept."
-        : "Previously selected session data cleared. Nothing was saved to disk.", "success");
-    } catch (error) {
-      // Do not roll back captured arrays over imports that arrived while waiting.
-      setStatus(error instanceof Error ? error.message : "Synthetic Drive snapshot could not be cleared. Local imports were kept.", "error");
-    } finally {
-      syntheticMutationPending = false;
-      render();
-    }
   });
   render();
 })();

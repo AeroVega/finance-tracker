@@ -4,7 +4,7 @@ import {monthBounds} from './financial-position-contract.mjs';
 import {PARTITION_COLLECTIONS,createPartitionObjectIO,createPartitionValueCodec,validatePartitionRoot,
   validatePartitionSource,validatePartitionDerived,validatePartitionCollection,
   partitionFields,partitionOptions,partitionAbort,partitionFail,partitionCount,partitionOrdinal,
-  partitionLimit,partitionDigest,buildPartitionDerived,partitionDerivedEntries} from './canonical-partitions.mjs';
+  partitionLimit,partitionDerivedEntries} from './canonical-partitions.mjs';
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const checkId = id => { if (typeof id !== 'string' || !ID.test(id)) partitionFail('invalid-partition-record-id'); };
@@ -18,7 +18,7 @@ export async function createCanonicalPartitionReader(store,rootHash,options = {}
   const {signal} = partitionOptions(options,['signal']);
   const io = createPartitionObjectIO(store);
   const root = validatePartitionRoot(await io.read(rootHash,{signal}));
-  const version = Object.hasOwn(root,'valueCodec') ? 2 : 1;
+  const version = 2;
   const codec = createPartitionValueCodec(store,{version}), {tree} = codec;
   const source = validatePartitionSource(await io.read(root.source,{signal}),version);
   const derived = validatePartitionDerived(await io.read(root.derived,{signal}),root.source,version);
@@ -140,32 +140,32 @@ export async function createCanonicalPartitionReader(store,rootHash,options = {}
     const expansion = {signal,maxValues,maxStringCodeUnits};
     const ledger = await codec.materialize(source.metadata,expansion);
     if (Object.keys(PARTITION_COLLECTIONS).some(name => Object.hasOwn(ledger,name))) partitionFail('partition-metadata-contains-collection');
-    await tree.verify(source.collections,{signal});
     let recordCount = 0n;
-    for await (const [name,descriptor] of tree.entries(source.collections,{signal})) {
+    for await (const [name,descriptor] of tree.checkedEntries(source.collections,{signal})) {
       validatePartitionCollection(name,descriptor);
       recordCount += partitionCount(descriptor.count);
       if (recordCount > BigInt(maxRecords)) partitionFail('partition-audit-record-budget');
-      for (const hash of [descriptor.byId,descriptor.order]) {
-        const info = await tree.verify(hash,{signal});
-        if (info.count !== descriptor.count) partitionFail('partition-collection-count-mismatch');
-      }
       // This audit already materializes the complete ledger. Read each by-ID
       // page once instead of repeatedly parsing the same packed page for every
       // ordered record. The independent order tree still proves exact order,
       // membership and cardinality; this does not relax semantic validation.
       const records = [], seen = new Set(), byId = new Map(); let ordinal = 0n;
-      for await (const [id,ref] of tree.entries(descriptor.byId,{signal})) {
-        checkId(id);
-        const record = await codec.materialize(ref,expansion);
-        if (!record || record[descriptor.idField] !== id || byId.has(id)) partitionFail('partition-record-identity-mismatch');
-        byId.set(id,record);
-      }
-      for await (const [key,id] of tree.entries(descriptor.order,{signal})) {
-        if (key !== partitionOrdinal(ordinal++) || seen.has(id)) partitionFail('partition-collection-order-mismatch');
-        checkId(id); seen.add(id);
-        if (!byId.has(id)) partitionFail('partition-order-target-missing');
-        records.push(byId.get(id));
+      try {
+        for await (const [id,ref] of tree.checkedEntries(descriptor.byId,{signal,expectedCount:descriptor.count})) {
+          checkId(id);
+          const record = await codec.materialize(ref,expansion);
+          if (!record || record[descriptor.idField] !== id || byId.has(id)) partitionFail('partition-record-identity-mismatch');
+          byId.set(id,record);
+        }
+        for await (const [key,id] of tree.checkedEntries(descriptor.order,{signal,expectedCount:descriptor.count})) {
+          if (key !== partitionOrdinal(ordinal++) || seen.has(id)) partitionFail('partition-collection-order-mismatch');
+          checkId(id); seen.add(id);
+          if (!byId.has(id)) partitionFail('partition-order-target-missing');
+          records.push(byId.get(id));
+        }
+      } catch (error) {
+        if (error?.code === 'expected-count-mismatch') partitionFail('partition-collection-count-mismatch');
+        throw error;
       }
       // Equal cardinality + unique ordered targets rules out hidden by-ID rows.
       if (String(ordinal) !== descriptor.count) partitionFail('partition-collection-count-mismatch');
@@ -173,34 +173,25 @@ export async function createCanonicalPartitionReader(store,rootHash,options = {}
     }
     if (!Array.isArray(ledger.events) || source.eventFrontier !== String(ledger.events.length) || source.positionEventFrontier !== String(ledger.positionEvents?.length ?? 0)) partitionFail('partition-frontier-mismatch');
     validateLedger(ledger); sourceState = 'full-ledger-validated';
-    if (root.version === 4) {
-      // Original/compact v4 retains its deterministic derived-root contract.
-      const expectedObjects = new Map();
-      const expectedStore = {async read(hash) { const bytes = expectedObjects.get(hash); if (!bytes) partitionFail('missing-audit-object'); return bytes.slice(); },
-        async write(bytes) { const hash = await partitionDigest(bytes); expectedObjects.set(hash,bytes.slice()); return hash; }};
-      const expectedHash = await buildPartitionDerived(ledger,root.source,expectedStore,{signal,version});
-      if (expectedHash !== root.derived) {
-        derivedState = 'invalid';
-        return {ledger,verification:verification()};
-      }
-    }
-    const expected = root.version === 5 ? partitionDerivedEntries(ledger,{version}) : null;
+    const expected = partitionDerivedEntries(ledger,{version});
     // Verify actual availability and every decoded logical entry in both
     // directions. V5 permits any valid topology, never omitted or extra rows.
     for (const name of ['effectiveActivities','monthActivities','summaries']) {
-      const info = await tree.verify(derived[name],{signal});
-      if (expected && info.count !== String(expected[name].length)) {
-        derivedState = 'invalid'; return {ledger,verification:verification()};
-      }
-      let ordinal = 0;
-      for await (const [key,value] of tree.entries(derived[name],{signal})) {
-        const decoded = name === 'monthActivities' ? (checkId(value),value) : await codec.materialize(value,expansion);
-        if (expected && (expected[name][ordinal]?.[0] !== key || canonicalizeJcs(expected[name][ordinal][1]) !== canonicalizeJcs(decoded))) {
-          derivedState = 'invalid'; return {ledger,verification:verification()};
+      let ordinal = 0, invalid = false;
+      try {
+        for await (const [key,value] of tree.checkedEntries(derived[name],{signal,expectedCount:String(expected[name].length)})) {
+          // A semantic disagreement cannot hide corrupt trailing pages. Drain
+          // their structural checks without decoding unused financial values.
+          if (invalid) continue;
+          const decoded = name === 'monthActivities' ? (checkId(value),value) : await codec.materialize(value,expansion);
+          if (expected[name][ordinal]?.[0] !== key || canonicalizeJcs(expected[name][ordinal][1]) !== canonicalizeJcs(decoded)) invalid = true;
+          ordinal++;
         }
-        ordinal++;
+      } catch (error) {
+        if (error?.code !== 'expected-count-mismatch') throw error;
+        invalid = true;
       }
-      if (expected && ordinal !== expected[name].length) { derivedState = 'invalid'; return {ledger,verification:verification()}; }
+      if (invalid || ordinal !== expected[name].length) { derivedState = 'invalid'; return {ledger,verification:verification()}; }
     }
     derivedState = 'semantic-verified';
     return {ledger,verification:verification()};

@@ -19,10 +19,10 @@ const json = value => {
   return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + json(value[key])).join(",") + "}";
 };
 const bytes = value => utf8.encode(json(value));
-const object = value => { const data = typeof value === "string" ? utf8.encode(value) : bytes(value); return { hash: hash(data), bytes: data }; };
+const object = value => { const data = typeof value === "string" ? utf8.encode(value) : bytes(value); return { hash: hash(data), bytes: data, descriptor:{kind:"data-object",identity:hash(data)} }; };
 const top = object({ synthetic: true, value: "bounded fixture" });
 const rootFor = (item = top) => ({ databaseId: "synthetic-☃", sourceCopyId: "synthetic-source",
-  revision: "90071992547409931234567890", canonical: { version: 4, sha256: item.hash }, catalog: null, protocol: null });
+  revision: "90071992547409931234567890", profile:"canonical5-physical4",sourceEvidence:null,canonical: { version: 5, sha256: item.hash }, catalog: null, protocol: {version:4,sha256:item.hash} });
 const options = objects => ({ root: rootFor(objects[0]), objects });
 const magic = Buffer.from([70, 84, 66, 83, 13, 10, 3, 0]);
 const domain = name => Buffer.from("finance-tracker-framed-backup:v3:" + name + "\0");
@@ -160,7 +160,7 @@ test("repeated identical content frames are committed and stored idempotently", 
 
 test("source/root mutation cannot change a header or already admitted body", async () => {
   const root = rootFor(), sourceBytes = new Uint8Array(top.bytes);
-  const generator = encodeFramedBackup({ root, objects: [{ hash: top.hash, bytes: sourceBytes }] });
+  const generator = encodeFramedBackup({ root, objects: [{ ...top, bytes: sourceBytes }] });
   const parts = [(await generator.next()).value];
   root.databaseId = "changed-after-root-snapshot";
   // root prefix, root header, object prefix: body is already copied and hashed.
@@ -171,7 +171,7 @@ test("source/root mutation cannot change a header or already admitted body", asy
 });
 
 test("caller supplied content IDs and finite frame limits are enforced", async () => {
-  await assert.rejects(collect(encodeFramedBackup(options([{ hash: "a".repeat(64), bytes: top.bytes }]))), { code: "object-hash-mismatch" });
+  await assert.rejects(collect(encodeFramedBackup(options([{ ...top, hash: "a".repeat(64), bytes: top.bytes }]))), { code: "object-hash-mismatch" });
   await assert.rejects(collect(encodeFramedBackup({ ...options([top]), limits: { maxObjectBytes: 1 } })), { code: "object-byte-limit" });
   await assert.rejects(collect(encodeFramedBackup({ ...options([top]), limits: { maxObjectBytes: Infinity } })), { code: "invalid-limits" });
   await assert.rejects(collect(encodeFramedBackup({ ...options([top]), limits: { maxHeaderBytes: 0 } })), { code: "invalid-limits" });
@@ -188,7 +188,7 @@ test("decorated typed arrays cannot spoof byte limits or virtual chunk methods",
     slice() { throw new Error("virtual slice"); }
   }
   const tooLarge = new Decorated(4096);
-  await assert.rejects(collect(encodeFramedBackup({ ...options([top]), objects: [{ hash: "a".repeat(64), bytes: tooLarge }],
+  await assert.rejects(collect(encodeFramedBackup({ ...options([top]), objects: [{ ...top, hash: "a".repeat(64), bytes: tooLarge }],
     limits: { maxObjectBytes: 64 } })), { code: "object-byte-limit" });
   const data = oracle().all;
   const result = await restore([new Decorated(data)]);
@@ -216,7 +216,7 @@ test("oversized header prefix rejects before reading or allocating the declared 
 test("unknown stream/root versions and unexpected fields cannot be adopted", async () => {
   const badMagic = Buffer.from(oracle().all); badMagic[6] = 4;
   await assert.rejects(restore([badMagic]), reason("unsupported-stream-version"));
-  const invalidRoot = rootFor(); invalidRoot.canonical.version = 5;
+  const invalidRoot = rootFor(); invalidRoot.canonical.version = 6;
   await assert.rejects(restore([oracle([top], invalidRoot).all]), reason("unsupported-root-version"));
   await assert.rejects(restore([oracle([top], { ...rootFor(), complete: true }).all]), reason("invalid-header"));
 });
@@ -473,14 +473,14 @@ test("real immutable tree walk restores into a read-only structural verifier", a
   // This is a deliberately invented catalog schema whose entire semantics are
   // checked below, not the future production catalog-v3/history contract.
   const wrapper = object({ kind: "synthetic-test-catalog", version: 3, treeHash });
-  const root = { ...rootFor(), canonical: null, catalog: { version: 3, sha256: wrapper.hash } };
-  async function* objects() { yield wrapper; yield* tree.walk(treeHash); }
+  const root = rootFor(wrapper);
+  async function* objects() { yield wrapper; for await(const page of tree.walk(treeHash))yield {...page,descriptor:{kind:"data-object",identity:page.hash}}; }
   const target = stage();
   const result = await restoreFramedBackup({
     source: encodeFramedBackup({ root, objects: objects(), limits: { maxObjectBytes: 1024 } }), staging: target,
     limits: { maxObjectBytes: 1024 },
     verifyStructure: async ({ root: pinned, store }) => {
-      const catalog = JSON.parse(new TextDecoder().decode(await store.read(pinned.catalog.sha256, { maxBytes: 1024 })));
+      const catalog = JSON.parse(new TextDecoder().decode(await store.read(pinned.canonical.sha256, { maxBytes: 1024 })));
       assert.equal(catalog.kind, "synthetic-test-catalog"); assert.equal(catalog.version, 3);
       const restored = createImmutablePageTree(store, { maxNodeBytes: 1024, maxChildren: 3, maxEntries: 3 });
       let nodes = 0;
@@ -503,7 +503,7 @@ test("real immutable tree walk restores into a read-only structural verifier", a
 
 test('physical4 is an explicit archive3 profile with authenticated typed object headers',async()=>{
   const item={...top,descriptor:{kind:'data-object',identity:top.hash}};
-  const root={...rootFor(),profile:'canonical4-physical4',sourceEvidence:{version:1,sha256:top.hash},protocol:{version:4,sha256:top.hash}};
+  const root={...rootFor(),profile:'canonical5-physical4',canonical:{version:5,sha256:top.hash},sourceEvidence:{version:1,sha256:top.hash},protocol:{version:4,sha256:top.hash}};
   const data=await collect(encodeFramedBackup({root,objects:[item]}));
   let observed;
   const target=stage(),write=target.write.bind(target);
@@ -517,7 +517,7 @@ test('physical4 is an explicit archive3 profile with authenticated typed object 
   await assert.rejects(collect(encodeFramedBackup({root:{...root,profile:'unknown'},objects:[item]})),{code:'unsupported-root-profile'});
   await assert.rejects(collect(encodeFramedBackup({root:{...root,protocol:{version:3,sha256:top.hash}},objects:[item]})),{code:'unsupported-root-version'});
   const {profile,sourceEvidence,...old}=root;
-  await assert.rejects(collect(encodeFramedBackup({root:old,objects:[top]})),{code:'unsupported-root-version'});
+  await assert.rejects(collect(encodeFramedBackup({root:old,objects:[top]})),{code:'unsupported-root-profile'});
   await assert.rejects(collect(encodeFramedBackup({root,objects:[{...item,descriptor:{kind:'data-object',identity:'invented-not-hash'}}]})),{code:'invalid-descriptor'});
 });
 
@@ -531,18 +531,27 @@ test('canonical5-physical4 keeps transport3 and requires its exact typed profile
   assert.equal(target.state.root.canonical.version,5);assert.equal(FRAMED_BACKUP_VERSION,3);
   for(const [changed,code] of [
     [{...root,profile:'canonical6-physical4'},'unsupported-root-profile'],
-    [{...root,profile:'canonical4-physical4'},'unsupported-root-version'],
+    [{...root,profile:'canonical4-physical4'},'unsupported-root-profile'],
     [{...root,canonical:{version:4,sha256:top.hash}},'unsupported-root-version'],
     [{...root,protocol:{version:3,sha256:top.hash}},'unsupported-root-version'],
     [{...root,catalog:{version:3,sha256:top.hash}},'invalid-root'],
     [Object.fromEntries(Object.entries(root).filter(([key])=>key!=='sourceEvidence')),'invalid-root'],
-    [Object.fromEntries(Object.entries(root).filter(([key])=>!['profile','sourceEvidence'].includes(key))),'unsupported-root-version']
+    [Object.fromEntries(Object.entries(root).filter(([key])=>!['profile','sourceEvidence'].includes(key))),'unsupported-root-profile']
   ]) {
     await assert.rejects(collect(encodeFramedBackup({root:changed,objects:[item]})),{code});
     const refused=stage();
     await assert.rejects(restore([oracle([item],changed).all],refused),reason(code));
     assert.equal(refused.state.begins,0);assert.equal(refused.state.writes,0);
   }
-  await assert.rejects(restore([oracle([top],root).all]),reason('invalid-header'));
-  await assert.rejects(collect(encodeFramedBackup({root,objects:[top]})),{code:'invalid-header'});
+  const {descriptor,...untyped}=top;
+  await assert.rejects(restore([oracle([untyped],root).all]),reason('invalid-header'));
+  await assert.rejects(collect(encodeFramedBackup({root,objects:[untyped]})),{code:'invalid-header'});
+});
+
+test('old unprofiled canonical4 protocol3 roots are rejected before any staging',async()=>{
+ const {profile,sourceEvidence,...base}=rootFor();
+ const root={...base,canonical:{version:4,sha256:top.hash},protocol:{version:3,sha256:top.hash}};
+ await assert.rejects(collect(encodeFramedBackup({root,objects:[top]})),{code:'unsupported-root-profile'});
+ const target=stage();await assert.rejects(restore([oracle([top],root).all],target),reason('unsupported-root-profile'));
+ assert.equal(target.state.begins,0);assert.equal(target.state.writes,0);
 });

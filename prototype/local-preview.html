@@ -7,9 +7,7 @@
   <meta name="description" content="A private, local CSV preview and synthetic development workspace for Finance Tracker.">
   <title>Local CSV diagnostic · Finance Tracker</title>
   <link rel="stylesheet" href="../styles.css">
-  <script async src="https://accounts.google.com/gsi/client"></script>
-  <script async src="https://apis.google.com/js/api.js"></script>
-  <script src="../js/app.js" defer></script>
+  <script type="module" src="../js/app.js"></script>
   <script src="../js/build-info.js" defer></script>
   <script src="../js/workspace-navigation.js" defer></script>
 </head>
@@ -23,7 +21,7 @@
         <a href="#overview"><span aria-hidden="true">◫</span> Overview</a>
         <a href="#import"><span aria-hidden="true">↓</span> Import CSV</a>
         <a href="#transactions"><span aria-hidden="true">↔</span> Transactions</a>
-        <a href="#storage"><span aria-hidden="true">▤</span> Synthetic storage</a>
+        <a href="#storage"><span aria-hidden="true">▤</span> Saving data</a>
       </nav>
       <div class="sidebar-tools"><a href="../index.html">Canonical workspace</a><p class="nav-label">Development</p><a href="synthetic-year.html">Seed a synthetic year <span aria-hidden="true">↗&#xfe0e;</span></a><a href="acceptance.html">Acceptance tests <span aria-hidden="true">↗&#xfe0e;</span></a><a href="./">All test tools <span aria-hidden="true">↗&#xfe0e;</span></a></div>
       <div class="workspace-note"><span class="status-dot" aria-hidden="true"></span><strong>Development workspace</strong><p>Local CSV preview and invented fixtures. Production financial storage is disabled.</p></div>
@@ -56,13 +54,13 @@
         <p id="import-status" class="status-message" role="status" aria-live="polite">No file imported yet.</p>
         <div class="import-help">
           <p><a href="synthetic-year.html">Upload a full invented year to a new synthetic Drive folder</a> for canonical engine testing.</p><details class="sample-details"><summary>File format and import limits</summary><p>Use columns named <code>Date</code>, <code>Description</code>, and <code>Amount</code>. Negative amounts are money out; positive amounts are money in. Supported provider layouts are recognized when their documented headers are present.</p><p>This local preview detects repeat imports of the same file in this tab only. It does not reconcile overlapping exports, pending transactions, transfers or corrections.</p></details>
-          <details class="sample-details"><summary>Try invented sample data</summary><p>Load four invented rows without choosing a file. If synthetic Drive is connected, this action saves and verifies only the sample rows there.</p><button id="load-sample" class="secondary-button" type="button">Load sample transactions</button></details>
+          <details class="sample-details"><summary>Try invented sample data</summary><p>Load four invented rows without choosing a file. Samples stay in this tab and are never uploaded or saved.</p><button id="load-sample" class="secondary-button" type="button">Load sample transactions</button></details>
         </div>
       </section>
 
       <section class="panel transactions-panel" id="transactions" aria-labelledby="transactions-heading">
-        <div class="panel-heading"><div><p class="eyebrow">02 / INSPECT RECORDS</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><div class="ledger-actions"><button id="save-data" class="secondary-button" type="button" disabled>Save sample to Drive</button><button id="clear-data" class="text-button" type="button" disabled>Clear loaded data</button></div></div>
-        <p class="panel-copy">CSV rows remain local. Save applies only to invented sample rows. Clear removes loaded rows and, when connected, clears the synthetic Drive snapshot.</p>
+        <div class="panel-heading"><div><p class="eyebrow">02 / INSPECT RECORDS</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><div class="ledger-actions"><button id="clear-data" class="text-button" type="button" disabled>Clear loaded data</button></div></div>
+        <p class="panel-copy">CSV and sample rows remain local. Clear removes loaded rows from this tab only; file reads already in progress may still finish.</p>
         <div class="ledger-filter"><label for="transaction-search">Find a transaction<input id="transaction-search" type="search" placeholder="Search description, date or provider" autocomplete="off"></label><p id="filter-count" role="status" aria-live="polite">No transactions to search.</p></div>
         <p id="ledger-status" class="status-message" aria-live="off"></p>
         <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true">↳</div><h3>Your records start here</h3><p>Import a CSV above or try the invented sample. No accounts are connected automatically.</p><a href="#import">Choose your first file <span aria-hidden="true">↑</span></a></div>
@@ -71,11 +69,8 @@
       </section>
 
       <section class="panel storage-panel" id="storage" aria-labelledby="storage-heading">
-        <div class="panel-heading"><div><p class="eyebrow">OPTIONAL / DEVELOPMENT STORAGE</p><h2 id="storage-heading">Synthetic Drive storage</h2></div><span class="tag violet">Invented fixtures only</span></div>
-        <p class="panel-copy">Use a dedicated folder with “synthetic” in its name. Only invented sample rows can be saved here. CSV imports always remain local and are never uploaded.</p>
-        <div class="storage-actions"><button id="connect-synthetic-storage" class="secondary-button" type="button">Connect synthetic Drive folder</button><button id="release-synthetic-storage" class="secondary-button" type="button" disabled>Release storage session</button><button id="recover-stale-storage" class="secondary-button" type="button" hidden>Confirm stale-session recovery</button></div>
-        <p id="storage-status" class="status-message" role="status" aria-live="polite">Not connected. CSV imports continue to work locally.</p>
-        <details id="storage-diagnostics-panel" class="sample-details"><summary>Storage diagnostics</summary><p>Recent lifecycle events only; no tokens, file IDs, folder names or transaction data. This trace is never uploaded or saved. Share it with the visible error and source commit when reporting a problem.</p><pre id="storage-diagnostics">No storage events recorded.</pre></details>
+        <div class="panel-heading"><div><p class="eyebrow">CANONICAL V5 WORKSPACE</p><h2 id="storage-heading">Saving synthetic data</h2></div><span class="tag violet">Separate workspace</span></div>
+        <p class="panel-copy">This diagnostic page has no storage connection. CSV imports and sample rows stay in this tab and are lost on reload. For explicit save and reopen of invented canonical v5 data, use the <a href="../index.html#storage">main v5 workspace</a>. Local preview rows are not transferred.</p>
       </section>
 
       <footer><p>Development workspace · CSV imports local · Production financial storage disabled</p><p>Source commit <code id="build-sha">development (not deployed)</code></p><a href="./">All prototype tools</a></footer>

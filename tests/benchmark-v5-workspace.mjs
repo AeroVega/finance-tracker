@@ -1,6 +1,6 @@
-/** Historical filename; defaults now exercise canonical v5. Actual app controllers and synthetic HTTP, never a live provider. Run with
- * node --max-old-space-size=768 tests/benchmark-v4-workspace.mjs.
- * Optional V4_BENCH_REVISIONS adds amount corrections to retained history. */
+/** Canonical v5 workspace benchmark. Actual app controllers and synthetic HTTP, never a live provider. Run with
+ * node --max-old-space-size=768 tests/benchmark-v5-workspace.mjs.
+ * Optional V5_BENCH_REVISIONS adds amount corrections to retained history. */
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -12,12 +12,11 @@ import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {getEffectiveActivities,summarizeLedger} from '../js/canonical-import.mjs';
 import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
-import {initializeCatalogCopy} from '../js/catalog-storage.mjs';
 import {denseLedgerFixture} from './helpers/dense-ledger-fixture.mjs';
 
-const legacy=process.env.V4_BENCH_LAYOUT==='v3',dense=process.env.V4_BENCH_DENSE==='1',coldReopen=process.env.V4_BENCH_COLD_REOPEN==='1';
+const dense=process.env.V5_BENCH_DENSE==='1',coldReopen=process.env.V5_BENCH_COLD_REOPEN==='1';
 function sourceFingerprint() {
-  const paths=['tests/benchmark-v4-workspace.mjs'];
+  const paths=['tests/benchmark-v5-workspace.mjs'];
   function visit(path){for(const entry of readdirSync(new URL('../'+path+'/',import.meta.url),{withFileTypes:true})){
     const child=path+'/'+entry.name;if(entry.isDirectory())visit(child);else if(entry.isFile()&&entry.name.endsWith('.mjs'))paths.push(child);
   }}
@@ -28,18 +27,18 @@ function sourceFingerprint() {
 const initialFingerprint=sourceFingerprint();
 console.log(JSON.stringify({runtime:{node:process.version,v8:process.versions.v8,platform:process.platform,arch:process.arch,execArgv:process.execArgv},
   sourceFingerprint:initialFingerprint,
-  configuration:{layout:legacy?'fragments-v3':'partitions-v5',dense,coldReopen,retainedCorrections:Number(process.env.V4_BENCH_REVISIONS??0),syntheticHttpDelayMs:0,
-    physicalByteCacheBytes:(legacy?16:8)*1024*1024,
-    physicalBodyFactEntries:legacy?0:512,physicalBodyFactSerializedBytes:legacy?0:1024*1024,
-    locatorDecodedNodeEntries:legacy?0:128,locatorDecodedSerializedBytes:legacy?0:2*1024*1024,heartbeat:'real lifecycle timer for both formats'},
-  concurrentLoad:process.env.V4_BENCH_CONCURRENCY_NOTE??'Other local workloads were not controlled; wall time is not an isolated CPU comparison.',
+  configuration:{layout:'partitions-v5',dense,coldReopen,retainedCorrections:Number(process.env.V5_BENCH_REVISIONS??0),syntheticHttpDelayMs:0,
+    physicalByteCacheBytes:8*1024*1024,
+    physicalBodyFactEntries:512,physicalBodyFactSerializedBytes:1024*1024,
+    locatorDecodedNodeEntries:128,locatorDecodedSerializedBytes:2*1024*1024,heartbeat:'real lifecycle timer'},
+  concurrentLoad:process.env.V5_BENCH_CONCURRENCY_NOTE??'Other local workloads were not controlled; wall time is not an isolated CPU comparison.',
   coldReopenNote:'Optional cold-adapter reopen creates a fresh lifecycle and storage caches after release. It is in the same process, not a new browser/device or a clean process-memory peak.',
   cacheNote:'Serialized key/metadata/node budgets are not bounds on JavaScript heap RAM. Canonical semantic results remain scoped to a single verification operation.',
   memoryNote:'RSS/heap/external/arrayBuffers are per-phase boundary snapshots, not phase peaks. OS max RSS is cumulative for this whole process, in KiB on Linux. HTTP fixture files and request logs are included.'}));
 const http=new HttpCatalogDrive();
-const app=new ApplicationStorageLifecycle({syntheticOnly:true,pagedCanonical:!legacy,catalogProtocol:legacy,verificationPlans:legacy?undefined:canonicalPartitionVerificationPlans(),
+const app=new ApplicationStorageLifecycle({syntheticOnly:true,pagedCanonical:true,verificationPlans:canonicalPartitionVerificationPlans(),
   folderName:'invented synthetic benchmark',folderId:http.folderId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,
-  makeManifest:()=>{},initializeManifest:async({adapter,guard})=>legacy?(await initializeCatalogCopy({adapter,guard})).manifestFileId:initializePagedCanonicalCopy({adapter,guard}),
+  makeManifest:()=>{},initializeManifest:async({adapter,guard})=>initializePagedCanonicalCopy({adapter,guard}),
   adapterOptions:{visibilityDelayMs:0,visibilityMaxDelayMs:0},lifecycleTarget:null});
 let coldApp=null,appReleased=false;
 let commandSequence=0;
@@ -61,7 +60,7 @@ try {
   await phase('initialize',()=>app.start());
   const store=new CanonicalLedgerStore({lifecycle:app});await phase('empty-open',()=>store.load());
   const {ledger}=dense?denseLedgerFixture(1):await createSyntheticFinancialYear();
-  console.log(JSON.stringify({fixture:dense?'dense-one-year':'standard-one-year',layout:legacy?'fragments-v3':'partitions-v5',activities:ledger.activities.length,events:ledger.events.length,jsonBytes:new TextEncoder().encode(JSON.stringify(ledger)).length}));
+  console.log(JSON.stringify({fixture:dense?'dense-one-year':'standard-one-year',layout:'partitions-v5',activities:ledger.activities.length,events:ledger.events.length,jsonBytes:new TextEncoder().encode(JSON.stringify(ledger)).length}));
   await phase('seed-'+ledger.activities.length+'-activities',()=>store.save(ledger));
   console.log(JSON.stringify({storedSnapshotBytes:[...http.files.values()].filter(file=>file.metadata.appProperties?.financeTrackerKind==='snapshot-object').reduce((sum,file)=>sum+file.bytes.length,0)}));
   const session=new CanonicalWorkspaceSession({storage:{lifecycle:app}});
@@ -71,7 +70,7 @@ try {
   stageCorrection(session,{activityId:activity.activityId,type:'category-correction',categoryId:'invented-fees',rationale:'Invented benchmark category'});
   await phase('save-two-staged-edits',()=>session.save());
   await phase('no-op-save',()=>session.store.save(session.ledger));
-  const revisions=Number(process.env.V4_BENCH_REVISIONS??0);assert.ok(Number.isSafeInteger(revisions)&&revisions>=0);
+  const revisions=Number(process.env.V5_BENCH_REVISIONS??0);assert.ok(Number.isSafeInteger(revisions)&&revisions>=0);
   for(let index=0;index<revisions;index++) {
     stageCorrection(session,{activityId:activity.activityId,type:'bank-correction',amountText:String(-100-index),rationale:'Invented retained revision'});
     await phase('retained-save-'+(index+1),()=>session.save());
@@ -84,8 +83,8 @@ try {
   if(coldReopen) {
     await app.release();
     appReleased=true;
-    coldApp=new ApplicationStorageLifecycle({syntheticOnly:true,pagedCanonical:!legacy,catalogProtocol:legacy,
-      verificationPlans:legacy?undefined:canonicalPartitionVerificationPlans(),folderName:'Invented synthetic cold reopen',folderId:http.folderId,
+    coldApp=new ApplicationStorageLifecycle({syntheticOnly:true,pagedCanonical:true,
+      verificationPlans:canonicalPartitionVerificationPlans(),folderName:'Invented synthetic cold reopen',folderId:http.folderId,
       manifestFileId:app.manifestFileId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,makeManifest:()=>{},
       adapterOptions:{visibilityDelayMs:0,visibilityMaxDelayMs:0},lifecycleTarget:null});
     await phase('cold-adapter-reopen',async()=>{await coldApp.start();const coldStore=new CanonicalLedgerStore({lifecycle:coldApp});assert.deepEqual(await coldStore.load(),expected);});

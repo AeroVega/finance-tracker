@@ -6,11 +6,11 @@ import {canonicalPartitionVerificationPlans} from '../js/canonical-paged-storage
 import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
 import {SyntheticYearSeeder} from '../js/synthetic-year-seeder.mjs';
 import {GoogleDriveTransactionAdapter} from '../js/drive-transaction-engine.mjs';
-import {exportPagedCanonicalArchive,restorePagedCanonicalArchive,verifyCanonicalMigrationEvidence,withSourceEvidenceVerification} from '../js/paged-canonical-backup.mjs';
+import {exportPagedCanonicalArchive,restorePagedCanonicalArchive,withSourceEvidenceVerification} from '../js/paged-canonical-backup.mjs';
 import {verifyPagedArchiveInMemory} from '../js/paged-archive-rehearsal.mjs';
 import {replayFixture} from './helpers/ledger-replay-fixtures.mjs';
 import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
-const plans=()=>withSourceEvidenceVerification(canonicalPartitionVerificationPlans({verifyMigrationEvidence:verifyCanonicalMigrationEvidence}));
+const plans=()=>withSourceEvidenceVerification(canonicalPartitionVerificationPlans());
 function app(http,manifestFileId) {return new ApplicationStorageLifecycle({syntheticOnly:true,pagedCanonical:true,verificationPlans:plans(),
   folderName:'Invented synthetic app restore',folderId:http.folderId,manifestFileId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,
   makeManifest:()=>{},initializeManifest:({adapter,guard})=>initializePagedCanonicalCopy({adapter,guard}),

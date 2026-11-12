@@ -1,4 +1,5 @@
-// Physical-only format. Logical canonical records and transaction semantics stay unchanged.
+// Read-only decoder for fragment bytes retained inside existing v5 migration evidence.
+// No live-folder access or legacy writer is exposed.
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 export const FRAGMENT_BYTES = 64 * 1024;
 export const FRAGMENT_OBJECT_BYTES = 128 * 1024;
@@ -37,30 +38,6 @@ export function fragmentInventory(root) {
     for (let ordinal = 0; ordinal < item.parts; ordinal++) paths.push(fragmentPath(path, ordinal));
   }
   return paths;
-}
-export function fragmentCanonicalObjects(logical, previousRoot = null) {
-  if (previousRoot) fragmentInventory(previousRoot);
-  const root = { format: 'finance-tracker-canonical-index', version: 3, syntheticOnly: true, fragments: {} };
-  const objects = new Map();
-  for (const [path, text] of logical) {
-    const bytes = encoder.encode(text);
-    if (!logicalPath(path) || !bytes.length || bytes.length > FRAGMENT_LOGICAL_BYTES) fail();
-    const parts = Math.max(Math.ceil(bytes.length / FRAGMENT_BYTES), previousRoot?.fragments[path]?.parts || 0);
-    root.fragments[path] = { bytes: bytes.length, parts };
-  }
-  // Check the complete admission budget before allocating encoded fragments.
-  fragmentInventory(root);
-  for (const [path, text] of logical) {
-    const bytes = encoder.encode(text), { parts } = root.fragments[path];
-    for (let ordinal = 0; ordinal < parts; ordinal++) {
-      const content = canonicalizeJcs({ format: FORMAT, version: 1, path, ordinal,
-        data: base64(bytes.subarray(ordinal * FRAGMENT_BYTES, (ordinal + 1) * FRAGMENT_BYTES)) });
-      if (encoder.encode(content).length > FRAGMENT_OBJECT_BYTES) fail();
-      objects.set(fragmentPath(path, ordinal), content);
-    }
-  }
-  objects.set(INDEX, canonicalizeJcs(root));
-  return objects;
 }
 export function reassembleCanonicalObjects(root, physical) {
   const expected = new Set([INDEX, ...fragmentInventory(root)]);
