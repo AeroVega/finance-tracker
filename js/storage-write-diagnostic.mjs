@@ -45,12 +45,16 @@ export function storageWriteDiagnostic(error) {
       });
     }
 
-    const candidates = ['drive-request-failed', 'visibility-timeout', 'manifest-readback-mismatch', 'drive-create-failed', 'drive-update-failed'];
+    const candidates = ['drive-request-failed', 'visibility-timeout', 'manifest-readback-mismatch', 'manifest-version-mismatch', 'drive-create-failed', 'drive-update-failed'];
     for (const candidate of candidates) {
       const current = findCode(error, candidate);
       if (!current) continue;
       const detail = read(current, 'details') || {};
       const result = {code:candidate};
+      if(candidate==='manifest-version-mismatch') {
+        const reason=read(detail,'reason');
+        if(['metadata-changed','content-size-mismatch','metadata-and-size-mismatch'].includes(reason))result.reason=reason;
+      }
       const httpStatus = status(read(detail, 'status') ?? read(detail, 'httpStatus'));
       const lastHttpStatus = status(read(detail, 'lastStatus'));
       const checkCount = attempts(read(detail, 'attempts'));

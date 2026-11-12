@@ -21,9 +21,11 @@ The report contains only:
 - For the synthetic-year page, an allowlisted operation phase and a bounded
   count of verified durable writes.
 - For unresolved writes and selected Drive failures, bounded storage details
-  such as HTTP status and attempt count. Ownership failures retain their
-  allowlisted session subcheck. A bounded exception class may be included when
-  no code is recognized.
+  such as HTTP status and attempt count. A manifest-read mismatch may include
+  one fixed reason indicating whether metadata changed across the read, the
+  reported content size disagreed with the bytes read, or both. Ownership
+  failures retain their allowlisted session subcheck. A bounded exception
+  class may be included when no code is recognized.
 
 It contains no credentials, session/folder/file/account identifiers, transaction
 records, amounts, dates, URLs, stacks, raw messages or provider response bodies.
@@ -47,8 +49,10 @@ recognized underlying code where available. Synthetic-year failures include
 the page phase and verified durable-write count. Adapter failures also include
 a fixed boundary label and may preserve the underlying allowlisted failure code.
 Selected Drive errors include only bounded numeric HTTP statuses and retry
-counts. Unknown reports may include an allowlisted exception class. No messages,
-IDs, hashes, request bodies or financial records are exposed.
+counts. Manifest-read mismatches distinguish metadata changes from reported
+size disagreement using a fixed reason enum. Unknown reports may include an
+allowlisted exception class. No messages, IDs, hashes, request bodies or
+financial records are exposed.
 
 **Checked:** changed JavaScript modules pass `node --check`; `git diff --check`
 passes. Automated tests were not run. This is a local source change only; it

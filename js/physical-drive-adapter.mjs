@@ -4,7 +4,7 @@ import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {partitionDigest} from './canonical-partitions.mjs';
 const enc=new TextEncoder(),dec=new TextDecoder();
 const encode=x=>enc.encode(canonicalizeJcs(x));
-const fail=(code,message)=>{throw Object.assign(new Error(message),{code});};
+const fail=(code,message,details)=>{throw Object.assign(new Error(message),{code,...(details?{details}: {})});};
 const same=(a,b)=>canonicalizeJcs(a)===canonicalizeJcs(b);
 const intrinsicByteLength=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype),'byteLength').get;
 function ownedBytes(raw,maximum) {
@@ -252,7 +252,10 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       const afterRaw=await adapter.readMetadata(manifestFileId,{...opts,maxBytes:16384});liveRead(owner,opts.signal);
       const after=validate(afterRaw);
       if(opts.signal?.aborted)throw new DOMException('Manifest read cancelled.','AbortError');
-      if (fingerprint!==canonicalizeJcs(after) || before.size!==String(bytes.length)) fail('manifest-version-mismatch','Manifest changed while being read.');
+      const metadataChanged=fingerprint!==canonicalizeJcs(after), contentSizeMismatch=before.size!==String(bytes.length);
+      if(metadataChanged||contentSizeMismatch)fail('manifest-version-mismatch','Manifest changed while being read.',{
+        reason:metadataChanged?(contentSizeMismatch?'metadata-and-size-mismatch':'metadata-changed'):'content-size-mismatch'
+      });
       liveRead(owner,opts.signal);
       manifestCache={fingerprint,bytes:bytes.slice()};
       return bytes;

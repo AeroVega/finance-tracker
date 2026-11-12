@@ -6,11 +6,16 @@
 reports now retain allowlisted canonical v5 root, locator and Drive transport
 codes through bounded causes, include the page phase and verified durable-write
 count, and distinguish a missing adapter guard from a failure before the guard
-with a bounded operation label and underlying code. The diagnostic remains
-privacy-safe. `node --check` and `git diff --check` pass. Automated tests were not
-run. This does not change the deployed `3a47f10` build or identify the live
-Drive failure; a built/deployed revision and a new safe report are still needed
-to learn its underlying code.
+with a bounded operation label and underlying code. A manifest read mismatch
+also reports a fixed reason for metadata changing across the read, a declared
+size disagreement, or both. The diagnostic remains privacy-safe. The owner
+reported (**User-confirmed**) `manifest-version-mismatch` during `connecting`
+after 8 verified durable writes on build `4d1dfe7`; code inspection (**Verified**)
+shows that this code covers the two manifest read checks, but the report did not
+distinguish them. `node --check` and `git diff --check` pass for the added reason.
+Automated tests were not run. This change is not in the deployed build; the next
+report from a build containing it can distinguish the mismatch category, but will
+not establish the provider-side cause by itself.
 
 ## Combined PR37 storage and PR38 interface, November 12, 2026
 
