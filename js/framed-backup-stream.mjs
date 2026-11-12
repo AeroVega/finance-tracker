@@ -1,6 +1,6 @@
 import { canonicalizeJcs } from "./transaction-protocol.mjs";
 
-// An isolated transport, not the v2 archive reader or a publication protocol.
+// Bounded canonical v5 transport; publication and semantic verification are separate.
 export const FRAMED_BACKUP_VERSION = 3;
 export const FRAMED_BACKUP_LIMITS = Object.freeze({ maxHeaderBytes: 16 * 1024, maxObjectBytes: 1024 * 1024 });
 const MAGIC = Uint8Array.of(70, 84, 66, 83, 13, 10, 3, 0);
@@ -69,11 +69,7 @@ function exactCount(value) {
 
 function snapshotRoot(value, limits) {
   fields(value, ["databaseId", "sourceCopyId", "revision", "canonical", "catalog", "protocol"], ["profile", "sourceEvidence"]);
-  // A distinct descriptor, rather than reinterpreting the existing protocol-3
-  // descriptor. Old readers reject the additional field before staging.
-  const physical = Object.hasOwn(value, "profile");
-  if (physical && !["canonical4-physical4", "canonical5-physical4"].includes(value.profile)) fail("unsupported-root-profile", "Unsupported framed root profile.");
-  const canonicalVersion = physical && value.profile === "canonical5-physical4" ? 5 : 4;
+  if (value.profile !== "canonical5-physical4") fail("unsupported-root-profile", "Only the canonical5-physical4 framed profile is supported.");
   for (const key of ["databaseId", "sourceCopyId", "revision"]) {
     if (typeof value[key] !== "string" || !value[key].length || value[key].length > limits.maxHeaderBytes) {
       fail("invalid-root", "Root identities and revision must be bounded strings.");
@@ -81,27 +77,22 @@ function snapshotRoot(value, limits) {
   }
   exactCount(value.revision);
   const result = { databaseId: value.databaseId, sourceCopyId: value.sourceCopyId, revision: value.revision };
-  if (physical) {
-    result.profile = value.profile;
-    if (!Object.hasOwn(value,"sourceEvidence")) fail("invalid-root", "Physical archives require an explicit source evidence descriptor.");
-    if (value.sourceEvidence === null) result.sourceEvidence = null;
-    else {
-      fields(value.sourceEvidence,["version","sha256"]);
-      if(value.sourceEvidence.version !== 1) fail("unsupported-root-version", "Unsupported physical source evidence.");
-      result.sourceEvidence = Object.freeze({version:1,sha256:identifier(value.sourceEvidence.sha256)});
-    }
-  } else if (Object.hasOwn(value,"sourceEvidence")) fail("invalid-root", "Source evidence requires the physical profile.");
-  for (const [name, version] of [["canonical", canonicalVersion], ["catalog", 3], ["protocol", physical ? 4 : 3]]) {
-    const descriptor = value[name];
-    if (descriptor === null) result[name] = null;
-    else {
-      fields(descriptor, ["version", "sha256"]);
-      if (descriptor.version !== version) fail("unsupported-root-version", "Unsupported root descriptor version.");
-      result[name] = Object.freeze({ version, sha256: identifier(descriptor.sha256) });
-    }
+  result.profile = value.profile;
+  if (!Object.hasOwn(value,"sourceEvidence")) fail("invalid-root", "Physical archives require an explicit source evidence descriptor.");
+  if (value.sourceEvidence === null) result.sourceEvidence = null;
+  else {
+    fields(value.sourceEvidence,["version","sha256"]);
+    if(value.sourceEvidence.version !== 1) fail("unsupported-root-version", "Unsupported physical source evidence.");
+    result.sourceEvidence = Object.freeze({version:1,sha256:identifier(value.sourceEvidence.sha256)});
   }
-  if (physical && (!result.canonical || !result.protocol || result.catalog !== null)) fail("invalid-root", "Physical portable archives require canonical and protocol roots, without copy-local catalogs.");
-  if (!result.canonical && !result.catalog && !result.protocol) fail("invalid-root", "At least one root descriptor is required.");
+  if (value.catalog !== null || value.canonical === null || value.protocol === null) fail("invalid-root", "Physical portable archives require canonical and protocol roots, without copy-local catalogs.");
+  result.catalog = null;
+  for (const [name, version] of [["canonical", 5], ["protocol", 4]]) {
+    const descriptor = value[name];
+    fields(descriptor, ["version", "sha256"]);
+    if (descriptor.version !== version) fail("unsupported-root-version", "Unsupported root descriptor version.");
+    result[name] = Object.freeze({ version, sha256: identifier(descriptor.sha256) });
+  }
   const bytes = encode(result);
   if (bytes.length > limits.maxHeaderBytes) fail("header-byte-limit", "Root metadata exceeds the header byte limit.");
   return { root: Object.freeze(result), bytes };
@@ -241,12 +232,10 @@ function portableDescriptor(value) {
   if (journal && (!Number.isSafeInteger(value.sequence) || value.sequence < 0)) fail("invalid-descriptor", "Invalid journal sequence.");
   return Object.freeze({ ...value });
 }
-function objectHeader(value, limits, physical = false) {
-  fields(value, ["hash", "byteLength", ...(physical ? ["descriptor"] : [])]);
-  if (physical) {
-    portableDescriptor(value.descriptor);
-    if (["data-object", "commit-record"].includes(value.descriptor.kind) && value.descriptor.identity !== value.hash) fail("invalid-descriptor", "Data identity must equal its hash.");
-  }
+function objectHeader(value, limits) {
+  fields(value, ["hash", "byteLength", "descriptor"]);
+  portableDescriptor(value.descriptor);
+  if (["data-object", "commit-record"].includes(value.descriptor.kind) && value.descriptor.identity !== value.hash) fail("invalid-descriptor", "Data identity must equal its hash.");
   identifier(value.hash);
   if (!Number.isSafeInteger(value.byteLength) || value.byteLength < 0 || value.byteLength > limits.maxObjectBytes) {
     fail("object-byte-limit", "Object length exceeds the configured per-object limit.");
@@ -286,14 +275,13 @@ export async function* encodeFramedBackup({ root, objects, limits: inputLimits, 
       checkAbort(signal);
       const next = await source.next();
       if (next.done) break;
-      const physical = Object.hasOwn(metadata.root, "profile");
-      fields(next.value, ["hash", "bytes", ...(physical ? ["descriptor"] : [])]);
+      fields(next.value, ["hash", "bytes", "descriptor"]);
       const hash = identifier(next.value.hash);
       let body = copyBytes(next.value.bytes, limits.maxObjectBytes);
       const bodyDigest = await digest(body);
       if (hex(bodyDigest) !== hash) fail("object-hash-mismatch", "A supplied object ID does not match its exact bytes.");
-      const object = { hash, byteLength: body.length, ...(physical ? { descriptor: portableDescriptor(next.value.descriptor) } : {}) };
-      objectHeader(object, limits, physical);
+      const object = { hash, byteLength: body.length, descriptor: portableDescriptor(next.value.descriptor) };
+      objectHeader(object, limits);
       const header = boundedHeader(object, limits);
       const framePrefix = prefix(OBJECT, header.length);
       chain = await advance(digest, chain, framePrefix, header, bodyDigest);
@@ -430,7 +418,7 @@ export async function restoreFramedBackup({ source, staging, verifyStructure, li
         await begin(Object.freeze({ state: "incomplete", formatVersion: FRAMED_BACKUP_VERSION, root, signal }));
         checkAbort(signal);
       } else if (type === OBJECT) {
-        objectHeader(header, limits, Object.hasOwn(root, "profile"));
+        objectHeader(header, limits);
         canonicalHeader(header, bytes);
         let body = await reader.read(header.byteLength);
         const bodyDigest = await digest(body);

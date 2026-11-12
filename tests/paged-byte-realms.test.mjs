@@ -15,9 +15,9 @@ test('paged readers and archive input reject shared backing memory from another 
   await assert.rejects(createImmutablePageTree({read:async () => view}).verify(hash), {code:'invalid-bytes'});
   await assert.rejects(createPartitionObjectIO({read:async () => view}).read(hash), /invalid-partition-bytes/);
   const root = {databaseId:'invented-database',sourceCopyId:'invented-copy',revision:'0',
-    canonical:{version:4,sha256:hash},catalog:null,protocol:null};
+    profile:'canonical5-physical4',sourceEvidence:null,canonical:{version:5,sha256:hash},catalog:null,protocol:{version:4,sha256:hash}};
   await assert.rejects(async () => {
-    for await (const chunk of encodeFramedBackup({root,objects:[{hash,bytes:view}]})) void chunk;
+    for await (const chunk of encodeFramedBackup({root,objects:[{hash,bytes:view,descriptor:{kind:'data-object',identity:hash}}]})) void chunk;
   }, {code:'invalid-bytes'});
   await assert.rejects(restoreFramedBackup({source:[view],
     staging:{async begin() { assert.fail('shared bytes must not reach staging'); },

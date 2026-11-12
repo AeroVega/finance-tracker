@@ -14,7 +14,7 @@ Do not read every historical PR report before starting a task.
 ## Current state (November 11, 2026)
 
 - PR #37 is an open draft against `main`. Check its head and [project status](PROJECT_STATUS.md) for publication, validation and deployment evidence.
-- The local v5 slice uses the existing paged store and lifecycle. New synthetic copies and explicit v1/v3 fresh-copy migration output use canonical v5. Existing v4 copies keep their profile and writer; no v4-to-v5 migration exists. Standalone grouped v2 is rejected.
+- The local v5 slice uses the existing paged store and lifecycle. The application supports canonical v5 only. Canonical v1/v2/v3/v4 copies and older initialization markers are refused without migration or overwrite. Existing v5 copies created by earlier migrations remain supported through read-only verification of their retained legacy provenance. Existing data must be preserved; use a fresh empty synthetic folder for a new v5 copy.
 - Canonical v5 keeps compact source/derived version 2, locator catalog 3 and physical root protocol 4. Framed transport 3 uses the explicit `canonical5-physical4` profile. See [the glossary](STORAGE_TERMINOLOGY.md) for version meanings.
 - Canonical and locator changes are coalesced, with only final-reachable new pages prepared for upload. Full financial and retained-history/physical checks, whole-ledger workspace cloning/materialization and preparation memory remain. Bounded whole-database memory, selective app loading and incremental semantic validation are unfinished; see [project status](PROJECT_STATUS.md) for the performance gate.
 - Financial position and reconciled coverage were merged in PR36. Historical monthly-summary migration, supported owner-file ingestion and production controls remain open.
@@ -36,7 +36,7 @@ If sources disagree, prefer the newest dated evidence for status, the focused co
 
 - **Canonical layout version**: financial-record representation. The [format contract](PARTITIONED_CANONICAL_STORAGE.md) defines new-copy defaults and supported profiles. Opening an existing copy does not migrate it.
 - **Locator catalog version**: physical storage index/root format, separate from canonical layout.
-- **Root protocol and archive versions**: publication/recovery and portability formats. Canonical v4/v5 use physical protocol 4 and framed transport 3 with distinct explicit archive profiles. Older formats retain their separate interpretation.
+- **Root protocol and archive versions**: publication/recovery and portability formats. Canonical v5 uses physical protocol 4 and framed transport 3 with the explicit `canonical5-physical4` profile. These subsystem versions do not imply canonical v4 support.
 - **Implemented** means code exists. **Verified** means the stated check passed on the named revision. **Owner-accepted** means the owner performed the stated acceptance. **Deployed** means a deployment completed and its served SHA was checked. None implies another.
 - Hash integrity proves bytes under a root, not completeness or financial correctness of unread records.
 

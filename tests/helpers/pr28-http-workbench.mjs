@@ -3,11 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 import { ApplicationStorageLifecycle } from '../../js/application-storage-lifecycle.mjs';
 import { GoogleDriveTransactionAdapter } from '../../js/drive-transaction-engine.mjs';
-import { CatalogTransactionEngine } from '../../js/catalog-transaction-engine.mjs';
-import { initializeCatalogCopy } from '../../js/catalog-storage.mjs';
+import {PagedApplicationStorage,initializePagedCanonicalCopy} from '../../js/paged-application-storage.mjs';
+import {canonicalPartitionVerificationPlans} from '../../js/canonical-paged-storage.mjs';
+import {withSourceEvidenceVerification,exportPagedCanonicalArchive} from '../../js/paged-canonical-backup.mjs';
+import {verifyPagedArchiveInMemory} from '../../js/paged-archive-rehearsal.mjs';
 import { CanonicalLedgerStore } from '../../js/canonical-ledger-storage.mjs';
-import { exportCatalogArchive, verifyCatalogArchive } from '../../js/catalog-backup.mjs';
-import { validateSyntheticApplicationSnapshot } from '../../js/synthetic-application-structure.mjs';
 import { HttpCatalogDrive } from './http-catalog-drive.mjs';
 
 export const loadCanonicalFixtureBytes = path => readFile(new URL('../../prototype/' + path, import.meta.url));
@@ -16,11 +16,13 @@ export async function setupHttpCanonicalWorkbench() {
   const http = new HttpCatalogDrive();
   const adapter = new GoogleDriveTransactionAdapter({ folderId: http.folderId,
     accessToken: () => 'invented-test-token', fetchImpl: http.fetch, cryptoImpl: webcrypto });
-  const { manifestFileId } = await initializeCatalogCopy({ adapter, guard: async () => {}, cryptoImpl: webcrypto });
+  const manifestFileId = await initializePagedCanonicalCopy({ adapter, guard: async () => {}, cryptoImpl: webcrypto });
+  const plans=()=>withSourceEvidenceVerification(canonicalPartitionVerificationPlans());
   const lifecycle = new ApplicationStorageLifecycle({
-    syntheticOnly: true, catalogProtocol: true, folderName: 'Invented synthetic HTTP test',
+    syntheticOnly: true, pagedCanonical: true, verificationPlans: plans(), folderName: 'Invented synthetic HTTP test',
     folderId: http.folderId, manifestFileId, accessToken: () => 'invented-test-token',
     makeManifest: () => ({}), lifecycleTarget: new EventTarget(), fetchImpl: http.fetch,
+    adapterOptions:{visibilityDelayMs:0,visibilityMaxDelayMs:0},
     setIntervalImpl: () => 1, clearIntervalImpl: () => {}, cryptoImpl: webcrypto
   });
   // Replacing only this fallback proves that all canonical reads exercise the
@@ -29,7 +31,7 @@ export async function setupHttpCanonicalWorkbench() {
   http.phase = 'connect';
   await lifecycle.start();
   assert.ok(lifecycle.transactionAdapter instanceof GoogleDriveTransactionAdapter);
-  assert.ok(lifecycle.engine instanceof CatalogTransactionEngine);
+  assert.ok(lifecycle.engine instanceof PagedApplicationStorage);
   let store = new CanonicalLedgerStore({ lifecycle, cryptoImpl: webcrypto });
   let ledger = await store.load();
   let occupied = false, dirty = false;
@@ -40,11 +42,9 @@ export async function setupHttpCanonicalWorkbench() {
     async requireFresh() {
       ready();
       const manifest = await lifecycle.readManifest();
-      assert.equal(manifest.syntheticOnly, true); assert.equal(manifest.revision, 0);
-      assert.deepEqual(manifest.snapshot, {}); assert.equal(manifest.catalogFinalizationPending, null);
-      assert.equal(await store.load(), null); assert.equal(store.base.revision, 0);
-      assert.deepEqual(store.base.snapshot, {}); assert.equal(store.base.syntheticOnly, true);
-      assert.equal(store.base.catalogFinalizationPending, null);
+      assert.equal(manifest.syntheticOnly, true); assert.equal(manifest.revision, '0');
+      assert.equal(manifest.pending, null);
+      assert.equal(await store.load(), null); assert.equal(store.base.revision, '0');
     },
     async identity() {
       ready(); const manifest = await lifecycle.readManifest();
@@ -61,9 +61,10 @@ export async function setupHttpCanonicalWorkbench() {
     },
     async verifyPortable() {
       ready(); calls.archives++;
-      const archive = await exportCatalogArchive({ adapter: lifecycle.transactionAdapter, manifestFileId,
-        withSourceLock: operation => lifecycle.coordinator.withWrite(operation), validateStructure: validateSyntheticApplicationSnapshot });
-      await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });
+      const chunks=[];
+      await exportPagedCanonicalArchive({sourceAdapter:lifecycle.transactionAdapter,sourceManifestFileId:manifestFileId,
+        withSourceLock:operation=>lifecycle.coordinator.withWrite(operation),assertSourceWritable:async()=>{await lifecycle.coordinator.assertCanWrite({online:true});},verificationPlans:plans(),sink:{write:async chunk=>chunks.push(chunk)}});
+      await verifyPagedArchiveInMemory(chunks,{verificationPlans:plans()});
     },
     async revalidate() { ready(); await lifecycle.handleOnline(); ready(); },
     async release() {

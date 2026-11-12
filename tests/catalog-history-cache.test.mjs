@@ -6,8 +6,8 @@ import { CatalogTransactionEngine } from '../js/catalog-transaction-engine.mjs';
 import { setupCatalog } from './helpers/catalog-drive.mjs';
 import { setupHttpCanonicalWorkbench } from './helpers/pr28-http-workbench.mjs';
 import { createLedger, registerAccount } from '../js/canonical-import.mjs';
-import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
-import { validateSyntheticApplicationSnapshot } from '../js/synthetic-application-structure.mjs';
+import {createPagedPhysicalLocators} from '../js/paged-physical-locators.mjs';
+async function pagedEntries(h) {const manifest=h.http.json(h.manifestFileId),tree=createPagedPhysicalLocators(h.lifecycle.transactionAdapter,{databaseId:manifest.databaseId,copyId:manifest.copyId,folderId:h.lifecycle.folderId}),entries=[];for await(const e of tree.entries(manifest.locatorRoot))entries.push(e);return entries;}
 
 async function setup() {
   const h = await setupCatalog();
@@ -171,23 +171,20 @@ test('HTTP lifecycle clears evidence on release/reconnect and backup exports ret
   const h = await setupHttpCanonicalWorkbench();
   const ledger = registerAccount(createLedger(), { institutionId: 'wells-fargo', displayName: 'Invented cache account', currency: 'USD', accountType: 'checking' });
   await h.driver.save(ledger); await h.driver.reopen();
-  const manifest = h.http.json(h.manifestFileId), catalog = await readCatalog(h.lifecycle.transactionAdapter, manifest);
-  const retained = Object.values(catalog.entries).length;
+  const retainedEntries=await pagedEntries(h),retained=retainedEntries.length;
   h.http.phase = 'cached-reopen'; await h.driver.reopen();
   assert.ok(h.http.summary('cached-reopen').categories.media < retained);
   h.http.phase = 'archive';
-  const archive = await exportCatalogArchive({ adapter: h.lifecycle.transactionAdapter, manifestFileId: h.manifestFileId,
-    withSourceLock: operation => h.lifecycle.coordinator.withWrite(operation), validateStructure: validateSyntheticApplicationSnapshot });
-  await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });
+  await h.driver.verifyPortable();
   assert.ok(h.http.summary('archive').categories.media >= retained);
   await h.lifecycle.release();
   h.http.phase = 'reconnect'; await h.lifecycle.start();
   assert.ok(h.http.summary('reconnect').categories.media >= retained);
   assert.deepEqual(await h.driver.reopen(), ledger);
-  const historical = Object.values(catalog.entries).find(entry => entry.kind === 'data-object');
+  const historical = retainedEntries.find(entry => entry.kind === 'data-object');
   // An uncached archive catches corruption even if a test double violates Drive's version contract.
   h.http.files.get(historical.fileId).bytes[0] ^= 1;
-  await assert.rejects(h.driver.verifyPortable(), { code: 'immutable-hash-mismatch' });
+  await assert.rejects(h.driver.verifyPortable(), {code:'hash-mismatch'});
 });
 
 test('warm cache never authorizes a write after ownership loss', async () => {
@@ -230,15 +227,16 @@ test('offline and failed ownership transitions discard warm lifecycle evidence',
     const h = await setupHttpCanonicalWorkbench();
     const ledger = registerAccount(createLedger(), { institutionId: 'wells-fargo', displayName: 'Invented transition', currency: 'USD', accountType: 'checking' });
     await h.driver.save(ledger); await h.driver.reopen();
-    const manifest = h.http.json(h.manifestFileId), catalog = await readCatalog(h.lifecycle.transactionAdapter, manifest);
-    const retained = Object.values(catalog.entries).length;
+    const retained=(await pagedEntries(h)).length;
+    const assertCanWrite=h.lifecycle.coordinator.assertCanWrite;
     if (mode === 'offline') await h.lifecycle.handleOffline();
     else {
       h.lifecycle.coordinator.assertCanWrite = async () => { throw Object.assign(new Error('Invented lease failure'), { code: 'ownership-lost' }); };
       await assert.rejects(h.lifecycle.requireReady(), { code: 'ownership-lost' });
     }
     h.http.phase = 'cold-after-transition';
-    await h.lifecycle.engine.verifyHistory(manifest);
+    h.lifecycle.coordinator.assertCanWrite=assertCanWrite;
+    await h.lifecycle.handleOnline();
     assert.ok(h.http.summary('cold-after-transition').categories.media >= retained);
   });
 });

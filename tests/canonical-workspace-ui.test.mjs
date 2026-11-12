@@ -1,3 +1,4 @@
+import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
 import {createWorkspacePages} from '../js/workspace-pages.mjs';
 import {buildFinancialPosition, buildAccountMonthCoverage} from '../js/financial-position.mjs';
 import {createSyntheticFinancialPosition} from '../js/synthetic-financial-position.mjs';
@@ -8,7 +9,7 @@ import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
 import {createWorkspaceViewReader, getWorkspaceActivity} from '../js/canonical-workspace-model.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {googleStartupMessage} from '../js/google-startup-diagnostics.mjs';
-import {CanonicalLedgerStore, serializeCanonicalLedger} from '../js/canonical-ledger-storage.mjs';
+import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
 import {registerAccount, prepareCanonicalImport, applyReviewDecision, getEffectiveActivities} from '../js/canonical-import.mjs';
 import {exactSignedDecimal, isCalendarDate} from '../js/import-reconciliation.mjs';
 import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
@@ -20,33 +21,33 @@ const text = element => [element.textContent, ...element.children.map(text)].joi
 async function workspacePage({ledger = recipe.ledger} = {}) {
   const state = {connects:[],writes:0,snapshotReads:0,releases:0,recovers:0,connectionError:null,saveGate:null,readbackGate:null,
     loseResponse:false,failSave:false,releaseVerified:true,snapshotError:false,recoveryGate:null};
-  const manifest = {syntheticOnly:true,databaseId:'invented-ui-db',copyId:'invented-ui-copy',revision:1,catalogFinalizationPending:null,snapshot:{}};
-  const objects = Object.fromEntries([...serializeCanonicalLedger(ledger)].map(([path, value]) => [path,new TextEncoder().encode(value)]));
-  for (const path of Object.keys(objects)) manifest.snapshot[path] = 'invented-hash';
+  const physical = await createPagedFixture();
+  const initialStore = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
+  await initialStore.load(); await initialStore.save(ledger);
+  const {manifest,objects} = physical;
+  const readSnapshot = physical.lifecycle.readPartitionedSnapshot, saveRoot = physical.lifecycle.savePartitionedRoot;
   let storage, session, browserNavigator;
   const timeouts = new Map();
   const timers = { setTimeout(callback, delay) { timeouts.set(callback, delay); return callback; }, clearTimeout(callback) { timeouts.delete(callback); } };
   const flushSearch = async () => { const callbacks = [...timeouts.keys()]; timeouts.clear(); for (const callback of callbacks) await callback(); };
   const lifecycle = {
+    ...physical.lifecycle,
     state:'ready',acceptingWrites:true,coordinator:{canWrite:true},folderId:'invented-ui-folder',
     async readManifest() { return structuredClone(manifest); },
     async readObject(path) { return objects[path]; },
-    async readVerifiedSnapshot() {
+    async readPartitionedSnapshot() {
       state.snapshotReads++;
       if (state.openGate) await state.openGate.promise;
       if (state.snapshotError) throw Object.assign(new Error('Private provider body'), {code:'snapshot-unavailable'});
       if (manifest.revision > 1 && state.readbackGate) await state.readbackGate.promise;
-      return {manifest:structuredClone(manifest),objects:structuredClone(objects)};
+      return readSnapshot();
     },
-    async transact(transaction) {
+    async savePartitionedRoot(transaction) {
       assert.deepEqual(transaction.expectedBase, manifest);
       if (state.saveGate) await state.saveGate.promise;
       if (state.failSave) throw Object.assign(new Error('Private provider detail'), {code:'base-conflict'});
       state.writes++;
-      for (const {logicalPath, content} of transaction.objects) {
-        objects[logicalPath] = new TextEncoder().encode(content); manifest.snapshot[logicalPath] = 'invented-hash';
-      }
-      manifest.revision++;
+      await saveRoot(transaction);
       if (state.loseResponse) {
         lifecycle.state = 'recovery-required'; lifecycle.acceptingWrites = false;
         storage.options.onStatus({state:lifecycle.state});
@@ -66,8 +67,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       if (state.connectionError) throw Object.assign(new Error('Private provider detail'), {code:state.connectionError});
       if (options.requireEmpty === true) {
         assert.equal(options.requireExisting, undefined);
-        for (const path of Object.keys(objects)) delete objects[path];
-        manifest.revision = 0; manifest.snapshot = {};
+        await physical.reset();
       } else {
         assert.equal(options.requireExisting, true);
         assert.equal(options.requireEmpty, undefined);
@@ -105,12 +105,10 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       await page.get('correction-rationale').emit('input');
       await page.click('stage-correction');
     },
-    replaceSavedLedger(next) {
-      for (const path of Object.keys(objects)) delete objects[path];
-      manifest.snapshot = {}; manifest.revision++;
-      for (const [path, value] of serializeCanonicalLedger(next)) {
-        objects[path] = new TextEncoder().encode(value); manifest.snapshot[path] = 'invented-hash';
-      }
+    async replaceSavedLedger(next) {
+      await physical.reset();
+      const store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
+      await store.load(); await store.save(next);
     },
     async storedLedger() { return new CanonicalLedgerStore({lifecycle}).load(); },
   };
@@ -551,7 +549,7 @@ test('unresolved source preview reports full scoped count and refreshes after re
   assert.equal(h.get('review-queue').children.length, 0);
   const rejected = ledger.observations.find(item => item.disposition === 'rejected');
   ledger = applyReviewDecision(ledger, {observationId:rejected.observationId, action:'reject', rationale:'Invented decision from advanced workbench'}, options);
-  h.replaceSavedLedger(ledger); await h.click('reopen-ledger'); await h.choose('month-filter', '2026-01');
+  await h.replaceSavedLedger(ledger); await h.click('reopen-ledger'); await h.choose('month-filter', '2026-01');
   assert.match(h.get('review-summary').textContent, /11 source observations await a decision/);
   assert.match(text(h.get('review-queue')), /Showing 10 of 11/);
   assert.equal(h.modelSession.ledger.activities.length, 1);
@@ -596,7 +594,7 @@ test('workspace undo-last and revert-all controls only change the local staged p
   assert.equal(h.get('undo-last-change').disabled, true);
   assert.equal(h.get('revert-all-changes').disabled, true);
   assert.equal(h.state.writes, 0);
-  assert.equal(h.manifest.revision, 1);
+  assert.equal(h.manifest.revision, '1');
   assert.equal(h.get('action-status').dataset.kind, 'success');
 });
 
@@ -1116,12 +1114,12 @@ test('Storage distinguishes the active saved format from preview and experimenta
   assert.match(h.get('storage-format').textContent, /Local preview, no saved format yet/);
   assert.match(h.get('storage-format').textContent, /new folder will use canonical v5/);
   await h.click('open-ledger');
-  assert.match(h.get('storage-format').textContent, /Last verified saved format: per-record v1/);
+  assert.match(h.get('storage-format').textContent, /Last verified saved format: canonical v5, compact-json-v1/);
   await h.click('release-ledger');
   assert.match(h.get('storage-format').textContent, /No saved format currently verified/);
   await h.click('preview-year');
   await h.click('save-preview');
-  assert.match(h.get('storage-format').textContent, /Last verified saved format: fragmented v3/);
+  assert.match(h.get('storage-format').textContent, /Last verified saved format: canonical v5, compact-json-v1/);
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /canonical v5 with the explicit compact-json-v1 value codec/);
   assert.match(html, /Opening a copy still verifies and loads the complete canonical ledger/);

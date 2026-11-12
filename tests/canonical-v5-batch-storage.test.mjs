@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildCompactPartitionedCanonicalLedger,updatePartitionedCanonicalLedger,createPartitionObjectIO,createPartitionValueCodec,partitionDigest} from '../js/canonical-partitions.mjs';
+import {updatePartitionedCanonicalLedger,createPartitionObjectIO,createPartitionValueCodec,partitionDigest} from '../js/canonical-partitions.mjs';
 import {createCanonicalPartitionReader} from '../js/canonical-partition-reader.mjs';
 import {readVerifiedPartitionedLedger,verifyPartitionedCanonicalCommit,canonicalPartitionVerificationPlans} from '../js/canonical-paged-storage.mjs';
 import {createImmutablePageTree} from '../js/immutable-page-tree.mjs';
@@ -29,17 +29,17 @@ test('v5 freezes exact compact root/header shapes and uses a distinct verifier',
   assert.deepEqual(Object.keys(f.root).sort(),['derived','format','source','syntheticOnly','valueCodec','version']);
   assert.equal(f.root.version,5);assert.equal(f.root.valueCodec,'compact-json-v1');assert.equal(f.source.version,2);assert.equal(f.derived.version,2);
   assert.deepEqual(Object.keys(f.derived).sort(),['effectiveActivities','format','monthActivities','source','summaries','version']);
-  const plans=canonicalPartitionVerificationPlans();assert.ok(plans.has('canonical-partitions-v4'));assert.ok(plans.has('canonical-partitions-v5'));
+  const plans=canonicalPartitionVerificationPlans();assert.equal(plans.has('canonical-partitions-v4'),false);assert.ok(plans.has('canonical-partitions-v5'));
   for(const bad of [{...f.root,version:6},{...f.root,valueCodec:'future'},{...f.root,relations:f.root.source},
     Object.fromEntries(Object.entries(f.root).filter(([key])=>key!=='valueCodec'))]) {
     await assert.rejects(createCanonicalPartitionReader(f.store,await f.io.write(bad)));
   }
   const input={manifest:{root:f.built.rootHash},commit:{root:f.built.rootHash,previousRoot:null,revision:'0',operation:'genesis',changeEvidenceRoot:null,semanticVersion:'canonical-partitions-v4'},readObject:q=>f.store.read(q.sha256)};
-  await assert.rejects(verifyPartitionedCanonicalCommit(input),{code:'canonical-profile-mismatch'});
+  await assert.rejects(verifyPartitionedCanonicalCommit(input),{code:'unsupported-canonical-profile'});
   await assert.rejects(plans.get('canonical-partitions-v5')(input),{code:'canonical-commit-mismatch'});
 });
 
-test('v5 accepts different valid derived topologies but v4 keeps deterministic root equality',async()=>{
+test('v5 accepts different valid derived topologies and rejects older root versions',async()=>{
   const f=await fixture(32),alternative=createImmutablePageTree(f.store,{maxEntries:2,maxChildren:2}),derived={...f.derived};
   for(const name of ['effectiveActivities','monthActivities','summaries']) {
     derived[name]=await alternative.build(await entries(f.tree,f.derived[name]));
@@ -48,10 +48,7 @@ test('v5 accepts different valid derived topologies but v4 keeps deterministic r
   for(const root of [f.built.rootHash,await derivedRoot(f,derived)]) {
     const result=await readVerifiedPartitionedLedger(f.store,root);assert.deepEqual(result.ledger,f.ledger);
   }
-  const v4=await buildCompactPartitionedCanonicalLedger(f.ledger,f.store);
-  assert.deepEqual((await readVerifiedPartitionedLedger(f.store,v4.rootHash)).ledger,f.ledger);
-  const alteredV4=await derivedRoot(f,derived,4);
-  assert.equal((await (await createCanonicalPartitionReader(f.store,alteredV4)).fullAudit()).verification.derived,'invalid');
+  for (const version of [1,2,3,4]) await assert.rejects(readVerifiedPartitionedLedger(f.store,await derivedRoot(f,derived,version)),/unsupported/);
 });
 
 for(const attack of ['wrong-summary','changed-effective','omitted-membership','extra-membership','missing-nested'])test(`v5 full logical oracle rejects rehashed ${attack}`,async()=>{
@@ -94,8 +91,8 @@ test('v5 builder owns inputs before asynchronous reads and refuses v4 as an incr
   const f=await fixture(),next=applyFinancialEvent(f.ledger,{type:'bank-correction',activityId:f.ledger.activities[0].activityId,amountText:'-9',commandId:'invented-v5-own',evidence:{rationale:'Invented ownership'}},f.options),expected=structuredClone(next);
   const pending=updatePartitionedCanonicalLedger(next,f.store,{baseRootHash:f.built.rootHash,baseLedger:f.ledger});next.activities[0].sourceDescription='mutated';
   const built=await pending;assert.deepEqual((await readVerifiedPartitionedLedger(f.store,built.rootHash)).ledger,expected);
-  const old=await buildCompactPartitionedCanonicalLedger(f.ledger,f.store);
-  await assert.rejects(updatePartitionedCanonicalLedger(expected,f.store,{baseRootHash:old.rootHash,baseLedger:f.ledger}),/canonical-profile-mismatch/);
+  const old=await f.io.write({...f.root,version:4});
+  await assert.rejects(updatePartitionedCanonicalLedger(expected,f.store,{baseRootHash:old,baseLedger:f.ledger}),/unsupported-partitioned-canonical/);
 });
 
 test('shared empty sentinel cannot silently change a lineage from v4 to v5',async()=>{

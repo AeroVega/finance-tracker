@@ -1,5 +1,4 @@
-import {isMonthIndexPath} from './canonical-month-index.mjs';
-import { CanonicalLedgerStore, CANONICAL_PREFIX } from './canonical-ledger-storage.mjs';
+import { CanonicalLedgerStore } from './canonical-ledger-storage.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
 
@@ -7,9 +6,8 @@ const equal = (a, b) => canonicalizeJcs(a) === canonicalizeJcs(b);
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const identity = (lifecycle, manifest) => ({ folderId: lifecycle.folderId, databaseId: manifest.databaseId, copyId: manifest.copyId });
 const pristine = manifest => manifest.syntheticOnly === true && manifest.role === 'primary' &&
-  (manifest.format === 'finance-tracker-physical-root-manifest'
-    ? manifest.version === 4 && manifest.revision === '0' && manifest.pending === null
-    : manifest.revision === 0 && manifest.catalogFinalizationPending === null && Object.keys(manifest.snapshot || {}).length === 0);
+  manifest.format === 'finance-tracker-physical-root-manifest' && manifest.version === 4 &&
+  manifest.revision === '0' && manifest.pending === null;
 
 /** The permission to create survives a recoverable failure only in this tab.
  * Nothing is saved in browser storage. After reload, existing copies can only
@@ -47,9 +45,8 @@ export class SyntheticYearSeeder {
       this.onProgress('preparing');
       const recipe = await this.preview();
       this.onProgress('checking');
-      const store = new CanonicalLedgerStore({ lifecycle, layout: lifecycle.pagedCanonical ? "partitions-v5" : "fragments-v3" });
+      const store = new CanonicalLedgerStore({ lifecycle });
       const saved = await store.load();
-      if (Object.keys(store.base.snapshot || {}).some(path => !path.startsWith(CANONICAL_PREFIX) && !isMonthIndexPath(path))) fail('unrecognized-seed-copy');
       if (saved) {
         if (!equal(saved, recipe.ledger)) fail('unrecognized-seed-copy');
         this.onProgress('verified');

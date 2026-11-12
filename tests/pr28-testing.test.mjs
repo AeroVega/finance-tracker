@@ -200,7 +200,7 @@ test('default human checklist contains no duplicated deterministic import recipe
   assert.match(html, /id="run-live-checks" disabled/); assert.match(html, /id="stop-live-checks" disabled/);
   assert.match(html, /id="prepare-interruption" disabled/);
   assert.match(script, /await liveRunner.run\(\)/); assert.match(script, /await liveRunner.verifyReconnect\(\)/);
-  assert.match(workbench, /value\.revision===0/);
+  assert.doesNotMatch(workbench, /value\.revision===0/);
   assert.match(workbench, /value\.version===4.*value\.revision==='0'.*value\.pending===null/);
   assert.match(workbench, /await store\.load\(\)!==null\|\|!fresh\(store\.base\)/);
 });
@@ -433,7 +433,7 @@ test('selected interruption step exposes contextual preparation, pause and verif
   for (const id of ['step-copy-guide', 'extended-copy-guide']) {
     const link = html.match(new RegExp('<a\\b(?=[^>]*\\bid="' + id + '")[^>]*\\bhref="([^"]+)"'));
     assert.ok(link, id + ' remains available');
-    assert.equal(link[1], './pr25-acceptance.html?guide=v4', id + ' opens the v4 source copy guide');
+    assert.equal(link[1], './pr25-acceptance.html?guide=v5', id + ' opens the v5 source copy guide');
   }
 });
 

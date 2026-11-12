@@ -6,8 +6,7 @@ import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {createImmutablePageTree, PAGE_TREE_MAX_BYTES} from './immutable-page-tree.mjs';
 
 export const PARTITIONED_CANONICAL_FORMAT = 'finance-tracker-partitioned-canonical';
-export const PARTITIONED_CANONICAL_VERSION = 4;
-export const BATCHED_CANONICAL_VERSION = 5;
+export const PARTITIONED_CANONICAL_VERSION = 5;
 export const PARTITION_VALUE_CHARS = 1024;
 export const COMPACT_PARTITION_CODEC = 'compact-json-v1';
 export const PARTITION_INLINE_BYTES = 4096;
@@ -146,19 +145,19 @@ export function createPartitionObjectIO(store) {
 }
 
 function valueVersion(version) {
-  if (![1,2].includes(version)) partitionFail('unsupported-partition-value-version');
+  if (version !== 2) partitionFail('unsupported-partition-value-version');
   return version;
 }
-export function validatePartitionValue(ref,version = 1) {
+export function validatePartitionValue(ref,version = 2) {
   valueVersion(version);
   // Own the entire descriptor before inspecting kind/value. Validating only
   // ref.value would let an accessor return different bytes during cloning.
-  return validateOwnedPartitionValue(snapshotPartitionJson(ref,PAGE_TREE_MAX_BYTES),version);
+  return validateOwnedPartitionValue(snapshotPartitionJson(ref,PAGE_TREE_MAX_BYTES));
 }
 // Only receives a strict owned snapshot or fresh JSON from the private tree
 // reader. Tree pages already enforce stricter descriptor byte/depth bounds.
-function validateOwnedPartitionValue(ref,version) {
-  if (ref?.kind === 'json' && version === 2) {
+function validateOwnedPartitionValue(ref) {
+  if (ref?.kind === 'json') {
     partitionFields(ref,['kind','value']);
     partitionJson(ref.value,PARTITION_INLINE_BYTES,PARTITION_INLINE_DEPTH,false);
   } else if (ref?.kind === 'scalar') {
@@ -175,12 +174,12 @@ function validateOwnedPartitionValue(ref,version) {
   return ref;
 }
 
-/** Codec v1 pages every array/object; v2 inlines bounded JSON and otherwise
+/** Value codec 2 inlines bounded JSON and otherwise
  * uses the same paged fallback. Long names and strings remain chunkable. This
  * encodes values, not a promise that JS can materialize arbitrary size.
  */
 export function createPartitionValueCodec(store,options = {}) {
-  const {version = 1} = partitionOptions(options,['version']); valueVersion(version);
+  const {version = 2} = partitionOptions(options,['version']); valueVersion(version);
   const validate = ref => validatePartitionValue(ref,version);
   // Only called on a privately owned JSON snapshot. Abort the candidate at its
   // byte/depth bound without serializing an oversized record or string.
@@ -221,7 +220,7 @@ export function createPartitionValueCodec(store,options = {}) {
       const root = await tree.build(chunks(),{signal});
       return {kind:'string',root,count:String(count),codeUnits:String(value.length)};
     }
-    if (version === 2 && inlineFits(value)) return {kind:'json',value};
+    if (inlineFits(value)) return {kind:'json',value};
     const array = Array.isArray(value), keys = array ? null : Object.keys(value).sort();
     const count = String(array ? value.length : keys.length);
     async function* entries() {
@@ -241,10 +240,10 @@ export function createPartitionValueCodec(store,options = {}) {
   function entryShape(ref,value) {
     if (ref.kind === 'string') {
       if (typeof value !== 'string' || !value.length || value.length > PARTITION_VALUE_CHARS) partitionFail('invalid-partition-string-chunk');
-    } else if (ref.kind === 'array') validateOwnedPartitionValue(value,version);
+    } else if (ref.kind === 'array') validateOwnedPartitionValue(value);
     else {
-      partitionFields(value,['key','value']); validateOwnedPartitionValue(value.key,version); validateOwnedPartitionValue(value.value,version);
-      const inlineKey = version === 2 && value.key.kind === 'json';
+      partitionFields(value,['key','value']); validateOwnedPartitionValue(value.key); validateOwnedPartitionValue(value.value);
+      const inlineKey = value.key.kind === 'json';
       if (!(value.key.kind === 'string' || ((value.key.kind === 'scalar' || inlineKey) && typeof value.key.value === 'string'))) partitionFail('invalid-partition-property');
     }
   }
@@ -335,17 +334,16 @@ export function createPartitionValueCodec(store,options = {}) {
 }
 
 export function validatePartitionRoot(root) {
-  const compact = Object.hasOwn(root ?? {},'valueCodec');
-  partitionFields(root,['format','version','syntheticOnly','source','derived',...(compact?['valueCodec']:[])]);
-  if (root.format !== PARTITIONED_CANONICAL_FORMAT || ![4,5].includes(root.version) || root.syntheticOnly !== true ||
-      (root.version === 5 && !compact) || (compact && root.valueCodec !== COMPACT_PARTITION_CODEC)) partitionFail('unsupported-partitioned-canonical');
+  partitionFields(root,['format','version','syntheticOnly','source','derived','valueCodec']);
+  if (root.format !== PARTITIONED_CANONICAL_FORMAT || root.version !== PARTITIONED_CANONICAL_VERSION || root.syntheticOnly !== true ||
+      root.valueCodec !== COMPACT_PARTITION_CODEC) partitionFail('unsupported-partitioned-canonical');
   partitionHash(root.source); partitionHash(root.derived); return root;
 }
-export function validatePartitionSource(source,version = source?.version) {
+export function validatePartitionSource(source,version = 2) {
   partitionFields(source,['format','version','metadata','collections','eventFrontier','positionEventFrontier']);
-  if (source.format !== PARTITIONED_CANONICAL_FORMAT + '-source' || ![1,2].includes(version) || source.version !== version) partitionFail('unsupported-partition-source');
+  if (source.format !== PARTITIONED_CANONICAL_FORMAT + '-source' || version !== 2 || source.version !== version) partitionFail('unsupported-partition-source');
   validatePartitionValue(source.metadata,version);
-  if (source.metadata.kind !== 'object' && !(version === 2 && source.metadata.kind === 'json' && source.metadata.value && typeof source.metadata.value === 'object' && !Array.isArray(source.metadata.value))) partitionFail('invalid-partition-metadata');
+  if (source.metadata.kind !== 'object' && !(source.metadata.kind === 'json' && source.metadata.value && typeof source.metadata.value === 'object' && !Array.isArray(source.metadata.value))) partitionFail('invalid-partition-metadata');
   partitionHash(source.collections); partitionCount(source.eventFrontier); partitionCount(source.positionEventFrontier); return source;
 }
 export function validatePartitionCollection(name,value) {
@@ -354,22 +352,22 @@ export function validatePartitionCollection(name,value) {
   if (value.idField !== PARTITION_COLLECTIONS[name]) partitionFail('invalid-partition-collection');
   partitionHash(value.byId); partitionHash(value.order); partitionCount(value.count); return value;
 }
-export function validatePartitionDerived(value,sourceHash,version = 1) {
+export function validatePartitionDerived(value,sourceHash,version = 2) {
   partitionFields(value,['format','version','source','effectiveActivities','monthActivities','summaries']);
-  if (value.format !== PARTITIONED_CANONICAL_FORMAT + '-derived' || ![1,2].includes(version) || value.version !== version || value.source !== sourceHash) partitionFail('invalid-partition-derived-source');
+  if (value.format !== PARTITIONED_CANONICAL_FORMAT + '-derived' || version !== 2 || value.version !== version || value.source !== sourceHash) partitionFail('invalid-partition-derived-source');
   for (const key of ['effectiveActivities','monthActivities','summaries']) partitionHash(value[key]);
   return value;
 }
 
 /** Complete independent financial oracle. Entries contain decoded logical
  * values, so v5 verification does not depend on a particular tree topology. */
-export function partitionDerivedEntries(ledger,{version = 1} = {}) {
+export function partitionDerivedEntries(ledger,{version = 2} = {}) {
   valueVersion(version);
   const index = createCanonicalMonthIndex(ledger), effective = [], membership = [], summaries = [];
   let ordinal = 0n;
   for (const activity of index.effectiveActivities()) {
-    if (version === 2 && Object.values(activity).some(value => value === undefined)) {
-      throw Object.assign(new Error('A linked refund has an undefined derived field. Preserve this copy and add an explicit category correction to its original activity before copying to a compact canonical profile.'),{code:'unsupported-derived-projection'});
+    if (Object.values(activity).some(value => value === undefined)) {
+      throw Object.assign(new Error('A linked refund has an undefined derived field. Preserve this copy and add an explicit category correction to its original activity before saving this canonical copy.'),{code:'unsupported-derived-projection'});
     }
     effective.push([activity.activityId,activity]);
     if (activity.active) {
@@ -386,68 +384,8 @@ export function partitionDerivedEntries(ledger,{version = 1} = {}) {
   return {effectiveActivities:partitionSort(effective),monthActivities:partitionSort(membership),summaries:partitionSort(summaries)};
 }
 
-/** Reference bulk builder retained for the original and compact v4 profiles. */
-export async function buildPartitionDerived(ledger,sourceHash,store,options = {}) {
-  const {signal,version = 1} = partitionOptions(options,['signal','version']); valueVersion(version);
-  const codec = createPartitionValueCodec(store,{version}), {tree} = codec, io = createPartitionObjectIO(store);
-  const roots = {};
-  for (const [name,entries] of Object.entries(partitionDerivedEntries(ledger,{version}))) {
-    async function* encoded() {
-      for (const [key,value] of entries) yield [key,name === 'monthActivities' ? value : await codec.encode(value,{signal})];
-    }
-    roots[name] = await tree.build(encoded(),{signal});
-  }
-  return io.write({format:PARTITIONED_CANONICAL_FORMAT + '-derived',version,source:sourceHash,...roots},{signal});
-}
-
-/** Isolated v4 encoder. It does not publish, migrate, or change the app default. */
-async function buildPartitionParts(ledger,store,{signal},version) {
-  partitionAbort(signal);
-  // Snapshot synchronously before any store awaits. The existing validator is
-  // the independent semantic oracle; never feed it a partial ledger.
-  const snapshot = snapshotJson(ledger); validateLedger(snapshot);
-  const codec = createPartitionValueCodec(store,{version}), {tree} = codec, io = createPartitionObjectIO(store);
-  const metadata = {...snapshot}, collections = [];
-  for (const [name,idField] of Object.entries(PARTITION_COLLECTIONS)) {
-    if (!Object.hasOwn(snapshot,name)) continue;
-    const records = [], order = []; let ordinal = 0n;
-    for (const record of snapshot[name]) {
-      records.push([record[idField],await codec.encode(record,{signal})]);
-      order.push([partitionOrdinal(ordinal++),record[idField]]);
-    }
-    collections.push([name,{idField,byId:await tree.build(partitionSort(records),{signal}),
-      order:await tree.build(order,{signal}),count:String(ordinal)}]);
-    delete metadata[name];
-  }
-  const source = await io.write({format:PARTITIONED_CANONICAL_FORMAT + '-source',version,
-    metadata:await codec.encode(metadata,{signal}),collections:await tree.build(partitionSort(collections),{signal}),
-    eventFrontier:String(snapshot.events.length),positionEventFrontier:String(snapshot.positionEvents?.length ?? 0)},{signal});
-  const derived = await buildPartitionDerived(snapshot,source,store,{signal,version});
-  return {sourceHash:source,derivedHash:derived};
-}
-
-/** Legacy v4 remains byte-compatible and never gains compact descriptors. */
-export async function buildPartitionedCanonicalLedger(ledger,store,options = {}) {
-  const {signal} = partitionOptions(options,['signal']);
-  const {sourceHash:source,derivedHash:derived} = await buildPartitionParts(ledger,store,{signal},1);
-  const io = createPartitionObjectIO(store);
-  const rootHash = await io.write({format:PARTITIONED_CANONICAL_FORMAT,version:4,syntheticOnly:true,source,derived},{signal});
-  return {rootHash,sourceHash:source,derivedHash:derived};
-}
-
-/** Explicit v4 codec extension. The tag makes old v4 readers reject before
- * interpreting source/derived-v2; the original v4 encoder remains unchanged. */
-export async function buildCompactPartitionedCanonicalLedger(ledger,store,options = {}) {
-  const {signal} = partitionOptions(options,['signal']);
-  const {sourceHash:source,derivedHash:derived} = await buildPartitionParts(ledger,store,{signal},2);
-  const rootHash = await createPartitionObjectIO(store).write({format:PARTITIONED_CANONICAL_FORMAT,version:4,
-    syntheticOnly:true,source,derived,valueCodec:COMPACT_PARTITION_CODEC},{signal});
-  return {rootHash,sourceHash:source,derivedHash:derived};
-}
-
-/** V5 uses the same exact source/value shapes as compact v4. The caller owns
- * a fully verified base and complete ledger; this replaces tree reconstruction,
- * not full-ledger validation, oracle evaluation or preparation memory. */
+/** V5 coalesces tree updates against a fully verified base and complete ledger.
+ * This does not replace full-ledger validation or preparation memory. */
 export async function updatePartitionedCanonicalLedger(ledger,store,options = {}) {
   const {signal,baseRootHash = null,baseLedger = null} = partitionOptions(options,['signal','baseRootHash','baseLedger']);
   partitionAbort(signal);

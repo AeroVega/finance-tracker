@@ -8,9 +8,9 @@ import {createWorkspaceView,getWorkspaceActivity} from '../js/canonical-workspac
 import {createCanonicalMonthIndex} from '../js/canonical-month-index.mjs';
 import {setupHttpCanonicalWorkbench} from './helpers/pr28-http-workbench.mjs';
 
-// Real application lifecycle, GoogleDriveTransactionAdapter and catalog/journal
+// Real application lifecycle, GoogleDriveTransactionAdapter and physical root
 // engine against invented HTTP. No live service, token or financial records.
-test('workspace posting correction commits and independently reopens through synthetic HTTP catalog history', async () => {
+test('workspace posting correction commits and independently reopens through synthetic HTTP v5 history', async () => {
   const recipe=await createSyntheticFinancialYear();
   const h=await setupHttpCanonicalWorkbench();
   try {
@@ -31,7 +31,7 @@ test('workspace posting correction commits and independently reopens through syn
     h.http.phase='save-posting-correction';await session.save();
     assert.ok(h.http.summary('save-posting-correction').mutations>0);
     assert.equal(session.dirty,false);assert.equal(session.unverified,false);
-    assert.equal(session.store.base.revision,2);
+    assert.equal(session.store.base.revision,'2');
     assert.deepEqual(session.ledger,proposed);
     await session.reopen();assert.deepEqual(session.ledger,proposed);
     // Discard warm historical byte evidence before a separate store reopens.

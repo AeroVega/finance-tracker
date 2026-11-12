@@ -2,9 +2,7 @@ import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import { canonicalizeJcs } from '../js/transaction-protocol.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
-import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
-import { validateSyntheticApplicationSnapshot } from '../js/synthetic-application-structure.mjs';
-import { exportPagedCanonicalArchive, verifyCanonicalMigrationEvidence } from '../js/paged-canonical-backup.mjs';
+import { exportPagedCanonicalArchive, withSourceEvidenceVerification } from '../js/paged-canonical-backup.mjs';
 import { canonicalPartitionVerificationPlans } from '../js/canonical-paged-storage.mjs';
 import { verifyPagedArchiveInMemory } from '../js/paged-archive-rehearsal.mjs';
 import { parseProviderCsv } from '../js/provider-csv.mjs';
@@ -490,9 +488,8 @@ export async function withAcceptanceWorkbench(operation) {
       async requireFresh() {
         ready();
         const manifest = await lifecycle.readManifest();
-        const fresh=value=>value?.syntheticOnly===true&&(lifecycle.pagedCanonical
-          ? value.version===4&&value.role==='primary'&&value.revision==='0'&&value.pending===null
-          : value.revision===0&&!Object.keys(value.snapshot||{}).length&&value.catalogFinalizationPending===null);
+        const fresh=value=>lifecycle.pagedCanonical&&value?.syntheticOnly===true&&
+          value.version===4&&value.role==='primary'&&value.revision==='0'&&value.pending===null;
         if(!fresh(manifest))inputError('fresh-empty-copy-required');
         invalidateLedgerSession();
         if(await store.load()!==null||!fresh(store.base))inputError('fresh-empty-copy-required');
@@ -504,17 +501,11 @@ export async function withAcceptanceWorkbench(operation) {
       reopen,
       async verifyPortable() {
         ready();
-        if(lifecycle.pagedCanonical) {
-          const chunks=[],plans=()=>canonicalPartitionVerificationPlans({verifyMigrationEvidence:verifyCanonicalMigrationEvidence});
-          await exportPagedCanonicalArchive({sourceAdapter:lifecycle.transactionAdapter,sourceManifestFileId:lifecycle.manifestFileId,
-            withSourceLock:operation=>lifecycle.coordinator.withWrite(operation),assertSourceWritable:async()=>{await lifecycle.coordinator.assertCanWrite({online:navigator.onLine!==false});},
-            verificationPlans:plans(),sink:{write:async chunk=>chunks.push(chunk)}});
-          await verifyPagedArchiveInMemory(chunks,{verificationPlans:plans()});
-          return;
-        }
-        const archive = await exportCatalogArchive({ adapter: lifecycle.transactionAdapter, manifestFileId: lifecycle.manifestFileId,
-          withSourceLock: operation => lifecycle.coordinator.withWrite(operation), validateStructure: validateSyntheticApplicationSnapshot });
-        await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });
+        const chunks=[],plans=()=>withSourceEvidenceVerification(canonicalPartitionVerificationPlans());
+        await exportPagedCanonicalArchive({sourceAdapter:lifecycle.transactionAdapter,sourceManifestFileId:lifecycle.manifestFileId,
+          withSourceLock:operation=>lifecycle.coordinator.withWrite(operation),assertSourceWritable:async()=>{await lifecycle.coordinator.assertCanWrite({online:navigator.onLine!==false});},
+          verificationPlans:plans(),sink:{write:async chunk=>chunks.push(chunk)}});
+        await verifyPagedArchiveInMemory(chunks,{verificationPlans:plans()});
         // The archive is neither downloaded, shared nor stored in checklist state.
       },
       async revalidate() { ready(); invalidateLedgerSession(true); await lifecycle.handleOnline(); ready(); },

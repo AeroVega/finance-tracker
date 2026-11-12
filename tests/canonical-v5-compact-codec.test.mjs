@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {buildCompactPartitionedCanonicalLedger,buildPartitionedCanonicalLedger,createPartitionObjectIO,createPartitionValueCodec,
+import {updatePartitionedCanonicalLedger,createPartitionObjectIO,createPartitionValueCodec,
   validatePartitionValue,partitionDigest,partitionOrdinal,PARTITION_INLINE_BYTES,PARTITION_INLINE_DEPTH} from '../js/canonical-partitions.mjs';
 import {createCanonicalPartitionReader} from '../js/canonical-partition-reader.mjs';
 import {createImmutablePageTree} from '../js/immutable-page-tree.mjs';
@@ -19,7 +19,7 @@ function memoryStore() {
     },
     async write(bytes) { writes++; const hash = await partitionDigest(bytes); objects.set(hash,bytes.slice()); return hash; }};
 }
-async function graph(ledger = replayFixture(2).ledger,builder = buildCompactPartitionedCanonicalLedger) {
+async function graph(ledger = replayFixture(2).ledger,builder = updatePartitionedCanonicalLedger) {
   const store = memoryStore(), built = await builder(ledger,store), io = createPartitionObjectIO(store);
   return {ledger,store,built,io,tree:createImmutablePageTree(store),codec:createPartitionValueCodec(store,{version:2}),
     root:await io.read(built.rootHash),source:await io.read(built.sourceHash),derived:await io.read(built.derivedHash),
@@ -63,9 +63,9 @@ test('inline expansions charge every JSON node, object key and string against ca
 });
 
 
-test('compact builder and codec preserve pre-await ownership and reject unsafe JSON without invoking accessors',async () => {
+test('v5 builder and codec preserve pre-await ownership and reject unsafe JSON without invoking accessors',async () => {
   const ledger = replayFixture(2).ledger, expected = structuredClone(ledger), store = memoryStore();
-  const pending = buildCompactPartitionedCanonicalLedger(ledger,store);
+  const pending = updatePartitionedCanonicalLedger(ledger,store);
   ledger.ledgerId = ledger.accounts[0].accountId; ledger.activities[0].sourceDescription = 'Changed after call';
   const built = await pending, reader = await createCanonicalPartitionReader(store,built.rootHash);
   assert.deepEqual((await reader.fullAudit()).ledger,expected);
@@ -159,30 +159,28 @@ test('compact codec keeps byte ownership and shared-memory rejection at object b
 // Request counts, unique stored bytes and exact reconstruction are reproducible
 // in-memory observations, not Drive latency or mobile/application memory claims.
 
-test('tagged compact v4 preserves original v4 byte interpretation and rejects mismatched or unknown codecs',async()=>{
-  const empty=replayFixture(0).ledger;
-  assert.equal((await buildPartitionedCanonicalLedger(empty,memoryStore())).rootHash,'5e86ee5874b62a8d30b6d8950042615246ba6a21ac5149d59d37ec20b8981d2b');
-  const old=await graph(empty,buildPartitionedCanonicalLedger),modern=await graph(empty);
-  assert.equal(old.root.version,4);assert.equal(Object.hasOwn(old.root,'valueCodec'),false);
-  assert.equal(modern.root.version,4);assert.equal(modern.root.valueCodec,'compact-json-v1');
+test('v5 rejects legacy roots, mismatched source versions and unknown codecs',async()=>{
+  const modern=await graph(replayFixture(0).ledger);
+  assert.equal(modern.root.version,5);assert.equal(modern.root.valueCodec,'compact-json-v1');
   assert.equal(modern.source.version,2);assert.equal(modern.derived.version,2);
-  assert.equal(old.source.version,1);assert.equal(old.derived.version,1);
-  for(const g of [old,modern])assert.deepEqual((await g.reader.fullAudit()).ledger,empty);
-  const combined={read:async(hash,opts)=>modern.store.objects.has(hash)?modern.store.read(hash,opts):old.store.read(hash,opts)};
-  for(const root of [{...modern.root,valueCodec:'unknown'},{...modern.root,version:6},{...modern.root,audit:'0'.repeat(64)},
-    {...modern.root,source:old.built.sourceHash},{...modern.root,derived:old.built.derivedHash},
-    {...old.root,valueCodec:'compact-json-v1'},Object.fromEntries(Object.entries(modern.root).filter(([key])=>key!=='valueCodec'))]) {
-    const hash=await modern.io.write(root);await assert.rejects(createCanonicalPartitionReader(combined,hash));
+  const badSource=await modern.io.write({...modern.source,version:1});
+  const badDerived=await modern.io.write({...modern.derived,version:1});
+  for(const root of [...[1,2,3,4,6].map(version=>({...modern.root,version})),
+    {...modern.root,valueCodec:'unknown'},{...modern.root,audit:'0'.repeat(64)},
+    {...modern.root,source:badSource},{...modern.root,derived:badDerived},
+    Object.fromEntries(Object.entries(modern.root).filter(([key])=>key!=='valueCodec'))]) {
+    const hash=await modern.io.write(root);await assert.rejects(createCanonicalPartitionReader(modern.store,hash));
   }
+  assert.throws(()=>createPartitionValueCodec(modern.store,{version:1}),/unsupported-partition-value-version/);
 });
 
-test('compact v4 rejects legacy-valid non-JSON derived refund safely without altering source',async()=>{
+test('v5 rejects non-JSON derived refund safely without altering source',async()=>{
   const {ledger,options}=replayFixture(2,[replayRow(0),replayRow(1,{amountText:'2.00',postedDate:'2026-02-02'})]);
   const [purchase,refund]=ledger.activities;delete purchase.categoryId;
   ledger.events=[{eventId:options.idFactory(),commandId:'invented-classification',eventType:'classification',activityId:purchase.activityId,recordedAt:options.now(),appendOnly:true,activityKind:'spending',categoryId:null,priorActivityKind:'unclassified'},
     {eventId:options.idFactory(),commandId:'invented-refund',eventType:'refund-link',activityId:refund.activityId,originalActivityId:purchase.activityId,recordedAt:options.now(),appendOnly:true,evidence:{reason:'invented'}}];
   assert.equal(validateLedger(ledger),true);const before=structuredClone(ledger);
-  await assert.rejects(buildCompactPartitionedCanonicalLedger(ledger,memoryStore()),{code:'unsupported-derived-projection'});
+  await assert.rejects(updatePartitionedCanonicalLedger(ledger,memoryStore()),{code:'unsupported-derived-projection'});
   assert.deepEqual(ledger,before);assert.equal(Object.hasOwn(ledger.activities[0],'categoryId'),false);
 });
 

@@ -71,3 +71,15 @@ machine, so they are directional timing evidence. They do not measure the later
 combined app changes. Removing the duplicate CI suite avoids repeating its test
 work; it does not promise to halve wall-clock time when jobs previously ran in
 parallel.
+
+## Current v5 workspace benchmark
+
+Run the current synthetic application path with:
+
+```sh
+V5_BENCH_DENSE=0 V5_BENCH_COLD_REOPEN=1 V5_BENCH_REVISIONS=1 \
+  node --max-old-space-size=768 tests/benchmark-v5-workspace.mjs
+```
+
+Use `V5_BENCH_DENSE=1` for the dense fixture. Earlier reports retain the command
+names from their measured revisions; they are historical reproduction steps.

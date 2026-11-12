@@ -1,5 +1,16 @@
 # Project status
 
+## V5-only active storage, November 12, 2026
+
+**Implemented and verified locally:** active canonical storage now uses v5 only.
+Older folders and archives are refused without conversion. New migration is
+removed; existing migration-origin v5 copies retain read-only provenance
+verification and remain editable and backupable. The obsolete raw-preview Drive
+controls are retired. See the [cleanup evidence](PR37_V5_ONLY_CLEANUP.md) for
+compatibility, coverage, source-size measurements and unchanged request traffic.
+The final extended suite passed 1,906/1,906 tests on Node 24.22.1, with no failures,
+skips or cancellations. No merge, deployment or live-data acceptance was performed.
+
 ## Shared privacy-safe diagnostics, November 11, 2026
 
 **Implemented in this change:** one shared error-code/message/report path across
@@ -55,13 +66,16 @@ complete-ledger loading limits in the v5 section remain open.
 
 **Implemented in the publication candidate:** the [v5 slice](PARTITIONED_CANONICAL_STORAGE.md)
 extends the existing paged store and lifecycle with coalesced canonical and locator
-updates and final-reachable new-page uploads. New synthetic copies and explicit
-v1/v3 fresh-copy migration output use canonical v5. Existing v4 copies keep their
-profile and writer; v4-to-v5 migration is not implemented. Full logical derived
+updates and final-reachable new-page uploads. The current application is v5-only;
+older canonical copies and initialization markers are refused and preserved, with
+no new migration or older writer path. Existing migration-origin v5 copies remain
+supported through full read-only audit of their retained legacy provenance.
+Full logical derived
 validation accepts different valid tree topologies. Compact source/derived 2,
 locator 3, physical protocol 4 and framed transport 3 retain their meanings, with
 an explicit `canonical5-physical4` archive profile. Initialization marker 2 pins
-v5; interrupted marker-1 initialization remains v4.
+v5; interrupted marker-1 initialization is refused. The following test and benchmark
+results predate this v5-only cleanup and do not validate its changes.
 
 **Verified repair baseline:** the required extended suite passed 1,840 tests on
 local `1993fb6a3d0e19f9909f48277257c03cad656c41`. [Published repair `89a29b6`](https://github.com/AeroVega/finance-tracker/commit/89a29b612747cc56cefeefd4bbb6bf2a818a939a)
@@ -197,7 +211,7 @@ The workflow in source deploys main pushes or an explicitly selected manual run.
 | --- | --- | --- |
 | Canonical activity | Account/month browsing, exact qualified reports, evidence, append-only corrections, staged undo/revert and manual transfer links. | Finish acceptance of changed save/reopen and transfer-link paths. |
 | Imports | Strict known Wells Fargo, SoFi and Fidelity fixture parsers; provenance, mapping, declared coverage, duplicate review and canonical storage in the advanced workbench. | Supported owner-file ingestion in the production-capable application, with the same validation and privacy controls. The main workspace currently does not ingest user CSVs. |
-| Storage | Synthetic ownership/session checks, immutable transaction history, recovery, backup/restore, portability and retention machinery. New canonical copies use fragmented v3; v1 remains readable; standalone grouped v2 is rejected. | Production binding, clearing, configuration/privacy/cost review and current end-to-end acceptance. Synthetic implementation is not production approval. |
+| Storage | Synthetic ownership/session checks, immutable transaction history, recovery, backup/restore, portability and retention machinery. The current application supports canonical v5 only and safely refuses older canonical copies. | Production binding, clearing, configuration/privacy/cost review and current end-to-end acceptance. Synthetic implementation is not production approval. |
 | Financial position | PR36 adds dated balances, holdings evidence, liabilities, qualified net-worth reporting and account/month reconciliation. Owner synthetic/device acceptance is recorded in PR36. | Historical monthly migration and supported owner-file ingestion remain separate work; production activation remains gated. |
 | Coverage | Import provenance and declared intervals; unresolved source evidence stays visible. | Evidence-backed per-account and per-month reconciliation completeness. An interval or row count does not prove completeness. |
 | Historical continuity | Monthly migration requirements are settled. | Separate monthly-summary schema, converter, reconciliation and source-selection rules from January 2023. No conversion is claimed. |
@@ -210,7 +224,7 @@ Code evidence: [workspace model](../js/canonical-workspace-model.mjs), [workspac
 - **User-confirmed, recorded in the workspace guide:** the owner accepted PR32 local synthetic-year exploration, evidence/corrections and mobile workspace experience. Preserve that observation; do not repeat unaffected checks merely because the PR merged.
 - **Open:** the newer preview-to-Drive save, transfer-link persistence and interruption checks. The guide does not provide a new acceptance pass for these paths. Record the full tested SHA with the next result.
 - **User-confirmed, historical:** PR25, PR28 and PR30 records contain bounded live synthetic/device results. They do not validate every later screen or every interruption boundary.
-- **Implemented checklist correction:** the [acceptance plan](../prototype/acceptance-plan.mjs) now requests canonical v5 seeding, explicit v1/v3 migration and v5 backup/restore. This removes the obsolete grouped-v2 steps; it does not establish owner acceptance. Use [the current owner guide](OWNER_ACCEPTANCE.md).
+- **Implemented checklist correction:** the [acceptance plan](../prototype/acceptance-plan.mjs) now requests canonical v5 seeding and v5 backup/restore. This removes the obsolete grouped-v2 steps; it does not establish owner acceptance. Use [the current owner guide](OWNER_ACCEPTANCE.md).
 
 ## Safety and release boundary
 

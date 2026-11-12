@@ -3,39 +3,31 @@ import assert from 'node:assert/strict';
 import { applyFinancialEvent, getEffectiveActivities, summarizeLedgerPeriods } from '../js/canonical-import.mjs';
 import { CanonicalWorkspaceSession } from '../js/canonical-workspace-session.mjs';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
-import { serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
+import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
+import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
 
 const recipe = await createSyntheticFinancialYear();
-function setup(layout = 'fragments-v3', fresh = false) {
-  const manifest = { syntheticOnly: true, databaseId: 'invented-db', copyId: 'invented-copy', revision: fresh ? 0 : 1, catalogFinalizationPending: null, snapshot: {} };
-  const serialize = {'records-v1': serializeCanonicalLedger, 'fragments-v3': serializeFragmentedCanonicalLedger}[layout];
-  let objects = fresh ? {} : Object.fromEntries([...serialize(recipe.ledger)].map(([path, text]) => [path, new TextEncoder().encode(text)]));
-  for (const path of Object.keys(objects)) manifest.snapshot[path] = 'invented-hash';
+async function setup(layout = 'partitions-v5', fresh = false) {
+  const fixture=await createPagedFixture(),lifecycle=fixture.lifecycle;
+  lifecycle.coordinator={canWrite:true};
+  if(!fresh){const store=new CanonicalLedgerStore({lifecycle});await store.load();await store.save(recipe.ledger);}
   const calls = { connects: [], writes: 0, reads: 0, fail: false, loseResponse: false };
-  const lifecycle = {
-    state: 'ready', acceptingWrites: true, coordinator: { canWrite: true }, folderId: 'invented-folder',
-    async readManifest() { return structuredClone(manifest); }, async readObject(path) { return objects[path]; },
-    async readVerifiedSnapshot() { calls.reads++; return { manifest: structuredClone(manifest), objects: structuredClone(objects) }; },
-    async transact(transaction) {
-      assert.deepEqual(transaction.expectedBase, manifest);
-      if (calls.fail) throw Object.assign(new Error('private failure'), { code: 'base-conflict' });
-      calls.writes++;
-      for (const { logicalPath, content } of transaction.objects) { objects[logicalPath] = new TextEncoder().encode(content); manifest.snapshot[logicalPath] = 'invented-hash'; }
-      manifest.revision++;
-      if (calls.loseResponse) throw Object.assign(new Error('private lost response'), { code: 'transaction-unresolved' });
-    }
+  const save=lifecycle.savePartitionedRoot.bind(lifecycle),read=lifecycle.readPartitionedSnapshot.bind(lifecycle);
+  lifecycle.readPartitionedSnapshot=async()=>{calls.reads++;return read();};
+  lifecycle.savePartitionedRoot=async args=>{
+    if(calls.fail)throw Object.assign(new Error('private failure'),{code:'base-conflict'});
+    await save(args);calls.writes++;
+    if(calls.loseResponse)throw Object.assign(new Error('lost response'),{code:'transaction-unresolved'});
   };
-  const storage = {
-    lifecycle: null, accessToken: 'invented-token',
-    async connect(options) { calls.connects.push(options); this.lifecycle = lifecycle; },
-    async release() { this.lifecycle = null; return { released: true }; }
-  };
-  const session = new CanonicalWorkspaceSession({ storage });
-  return { session, storage, lifecycle, calls, manifest };
+  const storage = {lifecycle:null,accessToken:'invented-token',
+    async connect(options){calls.connects.push(options);this.lifecycle=lifecycle;},
+    async release(){this.lifecycle=null;return {released:true};}};
+  const session=new CanonicalWorkspaceSession({storage});
+  return {session,storage,lifecycle,calls,get manifest(){return fixture.manifest;},reset:fixture.reset};
 }
 
 test('open selects an existing synthetic copy and independently loads canonical records', async () => {
-  const h = setup(); await h.session.open();
+  const h = await setup(); await h.session.open();
   assert.deepEqual(h.calls.connects, [{ requireExisting: true }]);
   assert.deepEqual(h.session.ledger, recipe.ledger);
   assert.equal(h.session.dirty, false); assert.equal(h.session.canEdit(), true); assert.equal(h.calls.writes, 0);
@@ -47,7 +39,7 @@ function correction(ledger, rationale = 'Invented corrected amount') {
 }
 
 test('corrections preserve source and base activities; explicit save then reopen preserves full graph', async () => {
-  const h = setup(); await h.session.open();
+  const h = await setup(); await h.session.open();
   const before = structuredClone(h.session.ledger);
   h.session.correct(correction(before));
   assert.equal(h.calls.writes, 0); assert.equal(h.session.dirty, true);
@@ -57,11 +49,11 @@ test('corrections preserve source and base activities; explicit save then reopen
   const proposed = structuredClone(h.session.ledger);
   await h.session.save(); assert.equal(h.calls.writes, 1); assert.equal(h.session.dirty, false);
   await h.session.reopen(); assert.deepEqual(h.session.ledger, proposed); assert.equal(h.calls.writes, 1);
-  assert.equal(h.session.store.layout, 'fragments-v3');
+  assert.equal(h.session.store.layout, 'partitions-v5');
 });
 
 test('preview remains local and cannot save or run alongside a selected Drive session', async () => {
-  const h = setup(); h.session.preview(recipe.ledger); h.session.correct(correction(h.session.ledger));
+  const h = await setup(); h.session.preview(recipe.ledger); h.session.correct(correction(h.session.ledger));
   assert.equal(h.session.mode, 'preview'); assert.equal(h.session.canSave(), false);
   await assert.rejects(h.session.save(), { code: 'verified-draft-required' });
   assert.equal(h.calls.writes, 0); assert.deepEqual(h.calls.connects, []);
@@ -69,7 +61,7 @@ test('preview remains local and cannot save or run alongside a selected Drive se
 });
 
 test('offline/session uncertainty blocks edits until a verified reopen, retaining local draft', async () => {
-  const h = setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
+  const h = await setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger);
   h.lifecycle.state = 'ownership-unknown'; h.session.invalidate();
   assert.equal(h.session.canEdit(), false); assert.equal(h.session.canSave(), false);
@@ -79,7 +71,7 @@ test('offline/session uncertainty blocks edits until a verified reopen, retainin
 });
 
 for (const [flag, writes] of [['fail', 0], ['loseResponse', 1]]) test(`${flag} retains proposal and forbids blind save retry`, async () => {
-  const h = setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
+  const h = await setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger); h.calls[flag] = true;
   await assert.rejects(h.session.save());
   assert.equal(h.session.unverified, true); assert.equal(h.session.dirty, true);
@@ -91,7 +83,7 @@ for (const [flag, writes] of [['fail', 0], ['loseResponse', 1]]) test(`${flag} r
 });
 
 test('release keeps draft read-only and clears credentials only after verified completion', async () => {
-  const h = setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
+  const h = await setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger);
   const release = h.storage.release;
   h.storage.release = async () => ({ released: false });
@@ -103,7 +95,7 @@ test('release keeps draft read-only and clears credentials only after verified c
 });
 
 test('failed open never adopts another copy as writable base for the retained draft', async () => {
-  const h = setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
+  const h = await setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger); h.storage.connect = async () => { throw new Error('invented cancellation'); };
   await assert.rejects(h.session.open());
   assert.deepEqual(h.session.ledger, proposal); assert.equal(h.session.canEdit(), false); assert.equal(h.session.canSave(), false);
@@ -111,28 +103,29 @@ test('failed open never adopts another copy as writable base for the retained dr
 
 test('missing canonical index and non-synthetic copies fail closed without initializing a ledger', async () => {
   for (const invalid of ['empty', 'production']) {
-    const h = setup();
-    h.lifecycle.readVerifiedSnapshot = async () => ({ manifest: { ...h.manifest, syntheticOnly: invalid !== 'production', snapshot: {} }, objects: {} });
+    const h = await setup();
+    if(invalid==='empty')await h.reset();
+    else h.lifecycle.readPartitionedSnapshot=async()=>{throw Object.assign(new Error('synthetic data required'),{code:'synthetic-data-required'});};
     await assert.rejects(h.session.open(), { code: invalid === 'empty' ? 'canonical-ledger-required' : 'synthetic-data-required' });
     assert.equal(h.session.ledger, null); assert.equal(h.calls.writes, 0); assert.equal(h.session.canEdit(), false);
   }
 });
 
 test('rationale and engine validation are required; invalid changes remain atomic', async () => {
-  const h = setup(); await h.session.open(); const before = structuredClone(h.session.ledger);
+  const h = await setup(); await h.session.open(); const before = structuredClone(h.session.ledger);
   assert.throws(() => h.session.correct(correction(before, ' ')), { code: 'correction-rationale-required' });
   assert.throws(() => h.session.correct({ ...correction(before), type: 'classification', activityKind: 'income' }), /classification-amount-conflict/);
   assert.deepEqual(h.session.ledger, before); assert.equal(h.session.dirty, false);
 });
 
 test('concurrent starts are refused while verified loading remains pending', async () => {
-  const h = setup(); let finish; h.storage.connect = () => new Promise(resolve => { finish = () => { h.storage.lifecycle = h.lifecycle; resolve(); }; });
+  const h = await setup(); let finish; h.storage.connect = () => new Promise(resolve => { finish = () => { h.storage.lifecycle = h.lifecycle; resolve(); }; });
   const first = h.session.open(); await assert.rejects(h.session.open(), { code: 'operation-in-progress' });
   assert.equal(h.session.canEdit(), false); finish(); await first; assert.equal(h.session.canEdit(), true);
 });
 
-for (const layout of ['records-v1', 'fragments-v3']) test(`${layout} workspace correction saves and reopens without conversion`, async () => {
-  const h = setup(layout); await h.session.open();
+for (const layout of ['partitions-v5']) test(`${layout} workspace correction saves and reopens without conversion`, async () => {
+  const h = await setup(layout); await h.session.open();
   assert.equal(h.session.store.layout, layout);
   h.session.correct(correction(h.session.ledger)); const proposal = structuredClone(h.session.ledger);
   await h.session.save(); await h.session.reopen();
@@ -141,7 +134,7 @@ for (const layout of ['records-v1', 'fragments-v3']) test(`${layout} workspace c
 
 
 for (const corrected of [false, true]) test(`local preview saves ${corrected ? 'the staged draft' : 'the untouched original year'} to a new empty folder and verifies an independent reopen`, async () => {
-  const h = setup('fragments-v3', true);
+  const h = await setup('partitions-v5', true);
   h.session.preview(recipe.ledger);
   if (corrected) h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger);
@@ -151,14 +144,14 @@ for (const corrected of [false, true]) test(`local preview saves ${corrected ? '
   assert.equal(h.session.mode, 'saved');
   assert.equal(h.session.dirty, false);
   assert.equal(h.session.unverified, false);
-  assert.equal(h.session.store.layout, 'fragments-v3');
+  assert.equal(h.session.store.layout, 'partitions-v5');
   assert.deepEqual(h.session.ledger, proposal);
   await h.session.reopen();
   assert.deepEqual(h.session.ledger, proposal);
   assert.equal(h.calls.writes, 1);
 });
 
-test('transfer links are append-only, reciprocal in the effective view, and preserve original activities', () => {
+test('transfer links are append-only, reciprocal in the effective view, and preserve original activities', async () => {
   const outgoing = recipe.ledger.activities.find(activity =>
     activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' &&
     activity.effectiveDate === '2025-01-16');
@@ -192,7 +185,7 @@ test('transfer links are append-only, reciprocal in the effective view, and pres
   }), { message: 'invalid-transfer-link' });
 });
 
-test('transfer linking rejects amount mismatches, same-account pairs and non-transfer activities', () => {
+test('transfer linking rejects amount mismatches, same-account pairs and non-transfer activities', async () => {
   const outgoing = recipe.ledger.activities.find(activity =>
     activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' &&
     activity.effectiveDate === '2025-01-16');
@@ -225,7 +218,7 @@ test('transfer linking rejects amount mismatches, same-account pairs and non-tra
 
 
 test('an uncertain fresh-copy write blocks retry and a verified reopen resolves the outcome', async () => {
-  const h = setup('fragments-v3', true);
+  const h = await setup('partitions-v5', true);
   h.session.preview(recipe.ledger);
   const proposal = structuredClone(h.session.ledger);
   h.calls.loseResponse = true;
@@ -244,7 +237,7 @@ test('an uncertain fresh-copy write blocks retry and a verified reopen resolves 
 });
 
 test('transfer-link events save and reopen through the existing canonical store', async () => {
-  const h = setup('fragments-v3');
+  const h = await setup('partitions-v5');
   await h.session.open();
   const outgoing = recipe.ledger.activities.find(activity =>
     activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' &&
@@ -265,7 +258,7 @@ test('transfer-link events save and reopen through the existing canonical store'
 
 
 test('preview persistence refuses an existing canonical copy without writing to it', async () => {
-  const h = setup('fragments-v3', false);
+  const h = await setup('partitions-v5', false);
   h.session.preview(recipe.ledger);
   await assert.rejects(h.session.savePreviewToNewCopy(), { message: 'new-empty-folder-required' });
   assert.deepEqual(h.calls.connects, [{ requireEmpty: true, canonicalLayout: 'partitions-v5' }]);
@@ -275,7 +268,7 @@ test('preview persistence refuses an existing canonical copy without writing to 
 });
 
 test('staged history can undo one change and revert all without changing the saved baseline', async () => {
-  const h = setup(); await h.session.open();
+  const h = await setup(); await h.session.open();
   const baseline = structuredClone(h.session.ledger);
   h.session.correct(correction(h.session.ledger, 'Invented first correction'));
   const first = structuredClone(h.session.ledger);
@@ -295,12 +288,12 @@ test('staged history can undo one change and revert all without changing the sav
   assert.equal(h.session.canUndo(), false);
   assert.equal(h.session.canRevertAll(), false);
   assert.equal(h.calls.writes, 0);
-  assert.equal(h.manifest.revision, 1);
+  assert.equal(h.manifest.revision, '1');
   assert.notDeepEqual(second, baseline);
 });
 
 test('staged history is cleared only after verified save or verified reopen', async () => {
-  const h = setup(); await h.session.open();
+  const h = await setup(); await h.session.open();
   h.session.correct(correction(h.session.ledger));
   assert.equal(h.session.stagedHistory.length, 1);
   await h.session.save();
@@ -324,7 +317,7 @@ function positionCommand(ledger, amountText = '1250.00') {
 }
 
 test('position updates stage locally, preserve observations and independently save/reopen', async () => {
-  const h = setup(); await h.session.open();
+  const h = await setup(); await h.session.open();
   const original = structuredClone(h.session.ledger);
   h.session.recordPosition(positionCommand(h.session.ledger));
   assert.equal(h.calls.writes, 0);
@@ -339,8 +332,8 @@ test('position updates stage locally, preserve observations and independently sa
   assert.equal(h.calls.writes, 1);
 });
 
-test('mixed activity and position undo restores exact previous graphs including absent collection', () => {
-  const h = setup(); h.session.preview(recipe.ledger);
+test('mixed activity and position undo restores exact previous graphs including absent collection', async () => {
+  const h = await setup(); h.session.preview(recipe.ledger);
   const original = structuredClone(h.session.ledger);
   assert.equal(Object.hasOwn(original, 'positionEvents'), false);
   h.session.recordPosition(positionCommand(h.session.ledger));
@@ -356,8 +349,8 @@ test('mixed activity and position undo restores exact previous graphs including 
   h.session.revertAllStagedChanges(); assert.deepEqual(h.session.ledger, original);
 });
 
-test('invalid position evidence leaves the draft and undo history unchanged', () => {
-  const h = setup(); h.session.preview(recipe.ledger);
+test('invalid position evidence leaves the draft and undo history unchanged', async () => {
+  const h = await setup(); h.session.preview(recipe.ledger);
   const original = structuredClone(h.session.ledger);
   assert.throws(() => h.session.recordPosition({ ...positionCommand(h.session.ledger), source: { kind: 'manual', reference: '' } }));
   assert.throws(() => h.session.recordPosition(positionCommand(h.session.ledger, 'not-a-number')));
@@ -367,7 +360,7 @@ test('invalid position evidence leaves the draft and undo history unchanged', ()
 });
 
 test('lost position save response retains proposal and blocks edits and retry until independent reopen', async () => {
-  const h = setup(); await h.session.open();
+  const h = await setup(); await h.session.open();
   h.session.recordPosition(positionCommand(h.session.ledger));
   const proposed = structuredClone(h.session.ledger);
   h.calls.loseResponse = true;
@@ -383,7 +376,7 @@ test('lost position save response retains proposal and blocks edits and retry un
 });
 
 test('a position-only local preview saves to a fresh synthetic copy and release blocks later edits', async () => {
-  const h = setup('fragments-v3', true); h.session.preview(recipe.ledger);
+  const h = await setup('partitions-v5', true); h.session.preview(recipe.ledger);
   h.session.recordPosition(positionCommand(h.session.ledger));
   const proposed = structuredClone(h.session.ledger);
   await h.session.savePreviewToNewCopy();
@@ -394,7 +387,7 @@ test('a position-only local preview saves to a fresh synthetic copy and release 
 });
 
 test('manual synthetic liability creation and balances stage, undo and save through existing history rules', async () => {
-  const h = setup(); await h.session.open();
+  const h = await setup(); await h.session.open();
   const original = structuredClone(h.session.ledger);
   h.session.addAccount({ institutionId:'sofi', accountType:'mortgage', displayName:'Invented new mortgage', currency:'USD' });
   const accountOnly = structuredClone(h.session.ledger);
@@ -414,7 +407,7 @@ test('manual synthetic liability creation and balances stage, undo and save thro
 });
 
 test('invalid or read-only account creation cannot change the canonical draft', async () => {
-  const h = setup(); await h.session.open();
+  const h = await setup(); await h.session.open();
   const original = structuredClone(h.session.ledger);
   assert.throws(()=>h.session.addAccount({ institutionId:'invented-unsupported',accountType:'mortgage',displayName:'Invented',currency:'USD' }));
   assert.deepEqual(h.session.ledger,original);assert.equal(h.session.stagedHistory.length,0);
@@ -423,8 +416,8 @@ test('invalid or read-only account creation cannot change the canonical draft', 
   assert.deepEqual(h.session.ledger,original);
 });
 
-for (const layout of ['records-v1', 'fragments-v3']) test(`${layout} explicit posting corrections save, reopen, undo and preserve original evidence`, async () => {
-  const h = setup(layout); await h.session.open();
+for (const layout of ['partitions-v5']) test(`${layout} explicit posting corrections save, reopen, undo and preserve original evidence`, async () => {
+  const h = await setup(layout); await h.session.open();
   const activity = getEffectiveActivities(h.session.ledger).find(a => a.lifecycleStatus === 'unknown');
   const before = structuredClone(h.session.ledger);
   const command = {activityId:activity.activityId,type:'posting-status-correction',lifecycleStatus:'posted',

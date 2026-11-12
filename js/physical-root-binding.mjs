@@ -116,6 +116,8 @@ function manifest(x, clean = false) {
   }
   return x;
 }
+/** Read-only envelope admission, including interrupted transaction states. */
+export function validatePhysicalRootManifest(value) { return copy(manifest(value)); }
 export function createPhysicalRootManifest({databaseId, copyId, folderId, provider = 'synthetic-adapter', role = 'primary', revision, root, headCommit, locatorRoot, receiptHead = null, sourceEvidence = null}) {
   return copy(manifest({format:PHYSICAL_MANIFEST_FORMAT, version:4, databaseId, copyId, role, syntheticOnly:true,
     lifecycleStatus:'active', storageBinding:{provider, folderId}, revision, root, headCommit, locatorRoot, receiptHead, pending:null, ...(sourceEvidence===null?{}:{sourceEvidence})}, true));

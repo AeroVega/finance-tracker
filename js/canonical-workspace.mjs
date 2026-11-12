@@ -130,7 +130,7 @@ function refresh() {
   $('storage-format').textContent = session.mode === 'preview'
     ? 'Local preview, no saved format yet. Saving to a new folder will use canonical v5.'
     : session.ledger && session.store?.base
-      ? `Last verified saved format: ${['partitions-v4','partitions-v5'].includes(session.store.layout) ? `canonical ${session.store.layout.slice('partitions-'.length)}, ${session.store.valueCodec || 'original source/derived codec 1'}` : session.store.layout === 'fragments-v3' ? 'fragmented v3' : 'per-record v1'}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
+      ? `Last verified saved format: canonical v5, ${session.store.valueCodec}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
       : 'No saved format currently verified. New synthetic copies use canonical v5.';
 }
 async function run(message, operation, formStatus = null) {

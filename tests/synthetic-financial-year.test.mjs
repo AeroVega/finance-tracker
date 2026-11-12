@@ -5,7 +5,8 @@ import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import {createSyntheticFinancialYear, DEFAULT_SYNTHETIC_YEAR} from '../js/synthetic-financial-year.mjs';
 import {parseProviderCsv} from '../js/provider-csv.mjs';
 import {getEffectiveActivities, prepareCanonicalImport, validateLedger} from '../js/canonical-import.mjs';
-import {serializeCanonicalLedger, validateCanonicalSnapshot, CANONICAL_INDEX, CANONICAL_PREFIX} from '../js/canonical-ledger-storage.mjs';
+import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
+import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
 
 // One shared immutable fixture keeps this suite bounded. No Drive or private inputs.
 const fixture = await createSyntheticFinancialYear();
@@ -112,13 +113,11 @@ test('source bytes reproduce provider fingerprints and reimport does not repeat 
 
 test('same recipe produces exact retry identity and a valid canonical storage roundtrip', async () => {
   assert.deepEqual(await createSyntheticFinancialYear(), fixture);
-  const objects = serializeCanonicalLedger(fixture.ledger);
-  assert.equal(objects.size, 722);
-  const bytes = Object.fromEntries([...objects].map(([path, text]) => [path, new TextEncoder().encode(text)]));
-  assert.equal(validateCanonicalSnapshot({objects: bytes}), true);
-  const index = JSON.parse(objects.get(CANONICAL_INDEX));
-  const restored = {...index.metadata};
-  for (const [collection, ids] of Object.entries(index.collections)) restored[collection] = ids.map(id => JSON.parse(objects.get(`${CANONICAL_PREFIX}${collection}/${id}.json`)));
+  const physical = await createPagedFixture(), store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
+  await store.load(); await store.save(fixture.ledger);
+  assert.ok([...physical.objects.values()].every(bytes => bytes.length <= 65536));
+  assert.equal(JSON.parse(new TextDecoder().decode(physical.objects.get(physical.manifest.root))).version, 5);
+  const restored = await new CanonicalLedgerStore({lifecycle:physical.lifecycle}).load();
   assert.deepEqual(restored, fixture.ledger);
 });
 

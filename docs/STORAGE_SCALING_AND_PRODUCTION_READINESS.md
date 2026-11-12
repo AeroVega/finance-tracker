@@ -1,5 +1,12 @@
 # Storage scaling and production readiness
 
+This is the historical November 11 audit based on `04aacf31` and its local
+follow-up, before the paged v5 application. Recommendations and commands below
+refer to that checkpoint, not current v5 support. Use [current test commands](TESTING.md)
+and the [v5 contract](PARTITIONED_CANONICAL_STORAGE.md) for current work. Removed
+benchmarks require their historical checkout; these measurements are retained as
+evidence, not current regression budgets.
+
 ## Status and scope
 
 **Verified November 11, 2026:** this audit starts from main
@@ -19,7 +26,7 @@ The subsequent owner-authorized implementation is tracked in
 [the incremental storage foundation](SCALABLE_STORAGE_FOUNDATION.md). The audit
 measurements below describe the pre-implementation baseline, not the new format.
 
-## Recommendation
+## Historical recommendation
 
 Keep the canonical financial model and fragmented-v3 representation for the next
 bounded milestone. Preserve exact decimal values, source evidence, append-only
@@ -31,7 +38,7 @@ The next substantial storage change should address catalog generations, bounded
 reads and recovery capacity before promising many years of mobile use. A small
 codec improvement is useful, but it does not fix those limits.
 
-## What the current format does well
+## What the audited fragmented format did well
 
 - Groups of up to 64 records avoid a Drive file for every record. Immutable
   content-addressed objects let unchanged groups reuse existing bytes.
@@ -72,7 +79,8 @@ reached 52,337,335 folder content bytes and 201 catalogs for one activity.
 
 These counts exclude Google metadata, OAuth, browser CORS, retries and periodic
 heartbeats. Reopen retains the same lifecycle's verified-byte cache; it is not a
-cold reconnect. They do not measure live Google latency. Run:
+cold reconnect. They do not measure live Google latency. Historical commands
+for the audit follow-up based on `04aacf31`:
 
 ```sh
 node tests/benchmark-history-reads.mjs --saves=30
@@ -80,7 +88,7 @@ node tests/benchmark-history-reads.mjs --saves=80
 ```
 
 The previous benchmark selected removed `chunks-v2`, so it could no longer run
-against current main. This change repairs it and prevents a silent comparison
+against the audited main revision. The audit follow-up repaired it and prevents a silent comparison
 between different storage layouts. The historical request counts in older
 performance documents remain historical, not current-v3 budgets.
 
@@ -112,7 +120,7 @@ capacities. Grouping by record count also means a large import or rule membershi
 can produce many fragments within one group. Retained padding avoids dropping
 history but does not reclaim space after a group shrinks.
 
-Run `node tests/benchmark-fragmented-storage.mjs` serially. The fixture has 2,340
+The historical audit ran `node tests/benchmark-fragmented-storage.mjs` serially. The fixture has 2,340
 activities per year and does not model every possible household or investment
 history. More years, more accounts, long descriptions, many corrections and
 holdings snapshots should be varied independently.
@@ -149,6 +157,8 @@ and 196.5 ms with the change, a 74.6% reduction in this codec operation. Baselin
 range was 738.9–809.9 ms; changed range was 161.3–218.1 ms. Complete physical and
 logical outputs matched on every run. Encoding ranges overlap, so this audit does
 not claim an encoding speedup. No end-to-end Drive or device improvement is proven.
+
+Historical codec comparison command for the audit follow-up, not the current checkout:
 
 ```sh
 node tests/benchmark-fragment-codec.mjs --baseline-ref=04aacf31b8aaae31fa73b10408fa22d417c0d943

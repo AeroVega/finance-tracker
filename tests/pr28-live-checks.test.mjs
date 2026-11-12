@@ -4,33 +4,27 @@ import { readFile } from 'node:fs/promises';
 import { createLiveRunner, LIVE_IDS, blankLive, prepareInterruption, verifyInterruption } from '../prototype/pr28-live-checks.mjs';
 import { CanonicalLedgerStore } from '../js/canonical-ledger-storage.mjs';
 import { summarizeLedger } from '../js/canonical-import.mjs';
-import { setupCatalog } from './helpers/catalog-drive.mjs';
-import { verifyCatalogHistory, readVerified } from '../js/catalog-storage.mjs';
-import { resolveSnapshotLocators } from '../js/drive-locator-catalog.mjs';
-import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
-import { validateSyntheticApplicationSnapshot } from '../js/synthetic-application-structure.mjs';
+import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
 const loadBytes = path => readFile(new URL('../prototype/' + path, import.meta.url));
 
 async function harness() {
-  const setup = await setupCatalog();
-  const { adapter, engine, manifestFileId } = setup;
-  const lifecycle = {
-    manifestFileId,
-    async readManifest() { const manifest = await adapter.readJson(manifestFileId); await verifyCatalogHistory(adapter, manifest); return manifest; },
-    async readObject(path) { const manifest = await this.readManifest(); const { catalog } = await verifyCatalogHistory(adapter, manifest); return readVerified(adapter, { ...resolveSnapshotLocators(manifest.snapshot, catalog)[path], kind: 'snapshot-object' }); },
-    transact: transaction => engine.transact(transaction)
-  };
+  const setup = await createPagedFixture(),lifecycle=setup.lifecycle;
+  let failWrite=false;
+  const save=lifecycle.savePartitionedRoot;
+  lifecycle.savePartitionedRoot=async args=>{if(failWrite)throw Object.assign(new Error('uncertain write'),{code:'transaction-unresolved'});return save(args);};
+  setup.adapter={get mutations(){return setup.commits.length;},set stopAfter(value){failWrite=true;},reboot(){failWrite=false;}};
+  setup.engine={recover:async()=>{}};
   let store = new CanonicalLedgerStore({ lifecycle }); await store.load();
   let staged, dirty = false, connected = true, occupied = false;
   const calls = { saves: 0, opens: 0, portable: 0, revalidated: 0, releases: 0, leases: 0 };
   const identity = { databaseId: setup.manifest.databaseId, copyId: setup.manifest.copyId };
   const driver = {
-    async requireFresh() { assert.equal(dirty, false); assert.equal(await store.load(), null); assert.equal(store.base.revision, 0); assert.deepEqual(store.base.snapshot, {}); },
+    async requireFresh() { assert.equal(dirty, false); assert.equal(await store.load(), null); assert.equal(store.base.revision, '0'); assert.equal(store.base.pending, null); },
     async identity() { return structuredClone(identity); },
     stage(next) { staged = structuredClone(next); dirty = true; },
     async save(next) { calls.saves++; const saved = await store.save(next); staged = saved; dirty = false; return saved; },
     async reopen() { calls.opens++; store = new CanonicalLedgerStore({ lifecycle }); staged = await store.load(); dirty = false; return staged; },
-    async verifyPortable() { calls.portable++; const archive = await exportCatalogArchive({ adapter, manifestFileId, withSourceLock: op => op(), validateStructure: validateSyntheticApplicationSnapshot }); await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot }); },
+    async verifyPortable() { calls.portable++; assert.deepEqual(await new CanonicalLedgerStore({lifecycle}).load(),staged); },
     async revalidate() { calls.revalidated++; },
     async release() { calls.releases++; connected = false; }
   };
@@ -38,7 +32,7 @@ async function harness() {
   return { setup, lifecycle, calls, driver, withWorkbench, identity, connect() { connected = true; }, get ledger() { return staged; }, get dirty() { return dirty; } };
 }
 
-test('live runner uses the actual catalog engine for full invented recipe, saves, independent opens, archive and release', async () => {
+test('live runner uses v5 fixture for full invented recipe, saves, independent opens, portable callback and release', async () => {
   const h = await harness(); let last;
   const runner = createLiveRunner({ withWorkbench: h.withWorkbench, loadBytes, onUpdate: update => { last = update; } });
   assert.equal(await runner.run(), true, JSON.stringify(last));
@@ -138,7 +132,7 @@ test('request metrics and throwing progress observers cannot alter operations or
 });
 
 
-test('interruption verifier recovers the prior exact graph using the actual engine and saves one retry only', async () => {
+test('interruption verifier accepts the prior exact v5 graph and saves one retry only', async () => {
   const h = await harness();
   const prepared = await prepareInterruption(h.withWorkbench, loadBytes);
   h.setup.adapter.stopAfter = h.setup.adapter.mutations + 1;

@@ -1,5 +1,5 @@
 import { createDiagnostic, diagnosticMessage } from './app-diagnostics.mjs';
-import { verifyCanonicalMigrationEvidence, withSourceEvidenceVerification } from "./paged-canonical-backup.mjs";
+import { withSourceEvidenceVerification } from "./paged-canonical-backup.mjs";
 import { inspectPagedCanonicalCopy, initializePagedCanonicalCopy } from "./paged-application-storage.mjs";
 import { canonicalPartitionVerificationPlans } from "./canonical-paged-storage.mjs";
 import { ApplicationStorageLifecycle } from "./application-storage-lifecycle.mjs";
@@ -247,8 +247,8 @@ export class DashboardSyntheticStorage {
     return this.accessToken;
   }
 
-  async connect({ requireEmpty = false, requireExisting = false, canonicalLayout = null } = {}) {
-    if (canonicalLayout !== null && !["partitions-v5","fragments-v3"].includes(canonicalLayout)) throw storageError("unsupported-canonical-layout", "New copies require an explicit supported canonical layout.");
+  async connect({ requireEmpty = false, requireExisting = false, canonicalLayout = "partitions-v5" } = {}) {
+    if (canonicalLayout !== "partitions-v5") throw storageError("unsupported-canonical-layout", "New copies require an explicit supported canonical layout.");
     if (this.busy) throw new Error("A storage operation is already in progress.");
     this.busy = true;
     try {
@@ -312,8 +312,10 @@ export class DashboardSyntheticStorage {
       });
       if (requireEmpty) await requireEmptySyntheticFolder(preflightAdapter);
       const paged = await inspectPagedCanonicalCopy(preflightAdapter);
-      const inspected = paged || await inspectPr25Folder(preflightAdapter);
-      const pagedCanonical = Boolean(paged || (!inspected.manifestFileId && canonicalLayout === "partitions-v5"));
+      if (!paged && (await preflightAdapter.listChildren()).length) {
+        throw storageError("unsupported-canonical-profile", "Only canonical v5 folders are supported. Existing files were left untouched; choose a new empty synthetic folder.");
+      }
+      const inspected = paged || {manifestFileId: null};
       if (requireExisting && !inspected.manifestFileId) {
         throw storageError("existing-copy-required", "No existing synthetic copy was found. Reconnect does not initialize a new folder.");
       }
@@ -332,9 +334,9 @@ export class DashboardSyntheticStorage {
           afterMutation: this.afterMutation,
           folderName: this.folderName,
           folderId: this.folderId,
-          pagedCanonical,
-          verificationPlans: pagedCanonical ? withSourceEvidenceVerification(canonicalPartitionVerificationPlans({verifyMigrationEvidence:verifyCanonicalMigrationEvidence})) : undefined,
-          initializeManifest: ({ adapter, guard }) => pagedCanonical ? initializePagedCanonicalCopy({adapter,guard}) : findOrCreateManifest(adapter, guard),
+          pagedCanonical: true,
+          verificationPlans: withSourceEvidenceVerification(canonicalPartitionVerificationPlans()),
+          initializeManifest: ({ adapter, guard }) => initializePagedCanonicalCopy({adapter,guard}),
           // Session adapter folder enumeration consumes the token synchronously.
           // Keep this provider synchronous; an async wrapper becomes Bearer [object Promise].
           accessToken: () => this.token(),
@@ -390,34 +392,8 @@ export class DashboardSyntheticStorage {
 
   async readSnapshot() {
     if (!this.lifecycle || this.lifecycle.state !== "ready") throw new Error("Synthetic storage is not ready.");
-    if (this.lifecycle.pagedCanonical) return [];
-    const manifest = await this.lifecycle.readManifest();
-    const reference = manifest.snapshot?.[SNAPSHOT_PATH];
-    if (!reference) return [];
-    const bytes = await this.lifecycle.readObject(SNAPSHOT_PATH);
-    const snapshot = JSON.parse(new TextDecoder().decode(bytes));
-    if (!isSyntheticDashboardSnapshot(snapshot)) throw new Error("Stored dashboard snapshot failed synthetic fixture validation.");
-    return snapshot.transactions;
-  }
-
-  async saveSyntheticSnapshot(transactions) {
-    if (this.lifecycle?.pagedCanonical) throw storageError("canonical-workspace-required", "Use the canonical workspace to save this paged copy.");
-    if (!this.lifecycle || this.lifecycle.state !== "ready") throw new Error("Synthetic storage is not ready.");
-    if (!transactions.every((row) => row?.syntheticOnly === true)) {
-      throw Object.assign(new Error("CSV-imported or other non-synthetic rows are never written to Drive in PR #24."), { code: "synthetic-data-required" });
-    }
-    const manifest = await this.lifecycle.readManifest();
-    const transaction = createSnapshotTransaction({ manifest, transactions });
-    const result = await this.lifecycle.transact({ manifestFileId: this.lifecycle.manifestFileId, ...transaction });
-    const verified = await this.readSnapshot();
-    if (JSON.stringify(verified) !== JSON.stringify(transactions)) throw new Error("Synthetic dashboard snapshot did not match its post-commit read-back.");
-    this.onSnapshot(verified);
-    return result;
-  }
-
-  async clearSyntheticSnapshot() {
-    if (!this.lifecycle || this.lifecycle.state !== "ready") throw new Error("Synthetic storage is not ready.");
-    return this.saveSyntheticSnapshot([]);
+    // Canonical records are opened through CanonicalLedgerStore after connect.
+    return [];
   }
 
   async recoverStaleSession() {

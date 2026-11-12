@@ -1,5 +1,7 @@
 // Fixed application copy only. Keys are the stable, shareable error codes.
 const workspace = {
+  'unsupported-canonical-profile': 'Only canonical version 5 is supported. Keep this folder unchanged and choose a new empty synthetic folder. Older copies are not migrated.',
+  'unsupported-canonical-layout': 'Only canonical version 5 is supported. Create a new synthetic copy; existing files will not be changed.',
   'unsupported-derived-projection': 'This ledger contains a linked refund without a defined category. Keep the original copy. Add an explicit category correction to the original activity, save it, then retry the new copy.',
   'canonical-ledger-required': 'This copy has no saved canonical ledger. Release it, seed a synthetic year in a new empty folder, then open that saved copy here.',
   'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. It was not initialized or modified. Preserve it and create a new synthetic copy using canonical version 5.',
