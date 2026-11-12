@@ -19,7 +19,7 @@ const extra = Object.freeze({
   'unknown': 'Action did not complete. Keep this tab and any selected folder unchanged. Copy diagnostics for inspection before retrying an operation that may have saved data.',
   'offline': 'The device is offline. Loaded records remain visible. Return online, then reopen and verify the saved copy before editing.',
   'authorization-required': 'Google authorization is unavailable. Keep your draft in this tab. Reconnect to the same copy and verify its state before retrying a save.',
-  'ownership-lost': 'This tab no longer owns the storage session. Do not save or delete session markers. Resolve the active session before reopening this copy.',
+  'ownership-lost': 'This tab’s storage session could not be verified. Writes are disabled. Preserve the folder and marker; copy diagnostics before reconnecting.',
   'not-owner': 'This tab does not own the storage session. Resolve the active session before reopening this copy.',
   'base-conflict': 'The saved copy changed. Reopen verified records before deciding what to retry.',
   'drive-network-error': 'A storage request failed to reach Google. Keep the folder unchanged and inspect its saved state before retrying any write.',

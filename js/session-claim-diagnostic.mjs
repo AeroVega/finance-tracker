@@ -10,14 +10,15 @@ const CHECKS = new Set([
 ]);
 
 export function sessionClaimDiagnostic(error) {
-  let applicable = false;
+  let code = null;
   try {
-    if (error?.code !== 'ownership-unknown') return null;
-    applicable = true;
+    const candidate = error?.code;
+    if (candidate !== 'ownership-unknown' && candidate !== 'ownership-lost') return null;
+    code = candidate;
     const check = error.sessionCheck;
-    return Object.freeze({ code: 'ownership-unknown',
+    return Object.freeze({ code,
       check: typeof check === 'string' && CHECKS.has(check) ? check : 'unknown' });
   } catch {
-    return applicable ? Object.freeze({ code: 'ownership-unknown', check: 'unknown' }) : null;
+    return code ? Object.freeze({ code, check: 'unknown' }) : null;
   }
 }

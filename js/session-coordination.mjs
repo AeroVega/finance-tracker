@@ -116,7 +116,8 @@ export class SessionCoordinator {
       return {
         status: "unknown",
         record: null,
-        errorCode: typeof error?.code === "string" ? error.code : "session-read-failed"
+        errorCode: typeof error?.code === "string" ? error.code : "session-read-failed",
+        sessionCheck: sessionClaimDiagnostic(error)?.check || "coordinator-read-failed"
       };
     }
     if (record === null) return { status: "absent", record: null };
@@ -299,7 +300,7 @@ export class SessionCoordinator {
       fail("authorization-required", "Google authorization is required to revalidate this Drive session. Reconnect to Google; the existing session and stored data were not changed. Writes remain disabled.");
     }
     this.ownership = "unknown";
-    fail("ownership-lost", "The prior session identity could not be revalidated. Writes remain disabled.");
+    fail("ownership-lost", "The prior session identity could not be revalidated. Writes remain disabled.", current.sessionCheck || "coordinator-record-changed");
   }
 
   async heartbeat() {
@@ -308,7 +309,7 @@ export class SessionCoordinator {
       const current = await this.inspect();
       if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
         this.ownership = "unknown";
-        fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.");
+        fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.", current.sessionCheck || "coordinator-record-changed");
       }
 
       if (!this.canWrite) fail("ownership-unknown", "Ownership was lost while checking the heartbeat.");
@@ -381,6 +382,14 @@ export class SessionCoordinator {
   }
 
   async assertCanWrite(options) {
+    // Offline invalidation must remain immediate, including during an in-flight
+    // heartbeat. Online inspections share the marker queue so our own heartbeat
+    // cannot change the metadata bracket of an admitted write guard.
+    if (options?.online === false) return this._assertCanWrite(options);
+    return this.withSessionOperation(() => this._assertCanWrite(options));
+  }
+
+  async _assertCanWrite(options) {
     if (options && options.online === false) {
       this.ownership = "unknown";
       fail("offline", "Offline writes are prohibited. Reconnect and re-establish the session before writing.");
@@ -391,7 +400,7 @@ export class SessionCoordinator {
     const current = await this.inspect();
     if (!this.canWrite || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
-      fail("ownership-lost", "The active session could not be verified. Writes are disabled.");
+      fail("ownership-lost", "The active session could not be verified. Writes are disabled.", current.sessionCheck || "coordinator-record-changed");
     }
     return true;
   }
@@ -430,7 +439,7 @@ export class SessionCoordinator {
         const current = await this.inspect();
         if (!this.canWrite || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
           this.ownership = "unknown";
-          fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.");
+          fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.", current.sessionCheck || "coordinator-record-changed");
         }
         if (this.heartbeatStop) this.heartbeatStop();
         const record = {
