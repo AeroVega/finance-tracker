@@ -45,7 +45,7 @@ export function storageWriteDiagnostic(error) {
       });
     }
 
-    const candidates = ['drive-request-failed', 'visibility-timeout', 'manifest-readback-mismatch', 'manifest-version-mismatch', 'drive-create-failed', 'drive-update-failed'];
+    const candidates = ['drive-request-failed', 'visibility-timeout', 'manifest-readback-mismatch', 'manifest-version-mismatch', 'verification-metadata-changed', 'drive-create-failed', 'drive-update-failed'];
     for (const candidate of candidates) {
       const current = findCode(error, candidate);
       if (!current) continue;
@@ -54,6 +54,16 @@ export function storageWriteDiagnostic(error) {
       if(candidate==='manifest-version-mismatch') {
         const reason=read(detail,'reason');
         if(['metadata-changed','content-size-mismatch','metadata-and-size-mismatch'].includes(reason))result.reason=reason;
+      }
+      if(candidate==='verification-metadata-changed') {
+        const reason=read(detail,'reason');
+        if(['object-missing','metadata-changed'].includes(reason))result.reason=reason;
+        const fields=read(detail,'fields');
+        const allowedFields=['id','name','mimeType','parents','appProperties','size','version','trashed'];
+        if(Array.isArray(fields)) {
+          const safeFields=[...new Set(fields.filter(field=>allowedFields.includes(field)))];
+          if(safeFields.length)result.fields=safeFields;
+        }
       }
       const httpStatus = status(read(detail, 'status') ?? read(detail, 'httpStatus'));
       const lastHttpStatus = status(read(detail, 'lastStatus'));

@@ -76,7 +76,15 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       const fresh=await adapter.readMetadataSnapshot();
       if(scope!==current||current.closed)fail('verification-scope-closed','Verification scope changed.');
       for(const [id,expected]of current.used) {
-        if(!fresh.has(id)||!same(validateMetadata(fresh.get(id),id,owner),expected))fail('verification-metadata-changed','Physical evidence changed during verification.');
+        if(!fresh.has(id))fail('verification-metadata-changed','Physical evidence changed during verification.',{reason:'object-missing'});
+        const actual=validateMetadata(fresh.get(id),id,owner);
+        if(!same(actual,expected)) {
+          const fields=[];
+          for(const field of ['id','name','mimeType','parents','appProperties','size','version','trashed'])
+            if(Object.hasOwn(actual,field)!==Object.hasOwn(expected,field)||
+               Object.hasOwn(actual,field)&&!same(actual[field],expected[field]))fields.push(field);
+          fail('verification-metadata-changed','Physical evidence changed during verification.',{reason:'metadata-changed',fields});
+        }
       }
       await assertWritable();
       if(scope!==current||current.closed)fail('verification-scope-closed','Verification was invalidated during its final ownership check.');

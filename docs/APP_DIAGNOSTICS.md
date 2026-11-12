@@ -24,8 +24,10 @@ The report contains only:
   such as HTTP status and attempt count. A manifest-read mismatch may include
   one fixed reason indicating whether metadata changed across the read, the
   reported content size disagreed with the bytes read, or both. Ownership
-  failures retain their allowlisted session subcheck. A bounded exception
-  class may be included when no code is recognized.
+  failures retain their allowlisted session subcheck. Verification metadata
+  changes may include a fixed missing/changed reason and names of changed
+  metadata fields, without the associated values. A bounded exception class may
+  be included when no code is recognized.
 
 It contains no credentials, session/folder/file/account identifiers, transaction
 records, amounts, dates, URLs, stacks, raw messages or provider response bodies.
@@ -50,9 +52,10 @@ the page phase and verified durable-write count. Adapter failures also include
 a fixed boundary label and may preserve the underlying allowlisted failure code.
 Selected Drive errors include only bounded numeric HTTP statuses and retry
 counts. Manifest-read mismatches distinguish metadata changes from reported
-size disagreement using a fixed reason enum. Unknown reports may include an
-allowlisted exception class. No messages, IDs, hashes, request bodies or
-financial records are exposed.
+size disagreement using a fixed reason enum. Verification metadata changes
+distinguish a missing file from changed metadata and may list only fixed field
+names. Unknown reports may include an allowlisted exception class. No messages,
+IDs, hashes, metadata values, request bodies or financial records are exposed.
 
 **Checked:** changed JavaScript modules pass `node --check`; `git diff --check`
 passes. Automated tests were not run. This is a local source change only; it

@@ -17,6 +17,16 @@ Automated tests were not run. This change is not in the deployed build; the next
 report from a build containing it can distinguish the mismatch category, but will
 not establish the provider-side cause by itself.
 
+The owner then reported (**User-confirmed**) `adapter-precondition-failed` with
+cause `verification-metadata-changed` at `root-manifest-admitted`, after 66
+verified durable writes on build `1845971`. The guard compares metadata used in
+the verification phase with a fresh folder listing before publication. The
+report does not identify which file or metadata field differed. The working tree
+now adds a privacy-safe missing/changed reason and allowlisted field names; the
+updated diagnostic has not yet been built or deployed. A mismatch classification
+does not by itself establish why Drive returned different metadata or prove
+whether recovery is needed.
+
 ## Combined PR37 storage and PR38 interface, November 12, 2026
 
 **Implemented:** merge PR37 head `8e340b3` into PR38 head `75e295e`, preserving
