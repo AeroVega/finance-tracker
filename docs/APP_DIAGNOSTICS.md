@@ -61,7 +61,10 @@ values, request bodies or financial records are exposed.
 
 **Checked:** changed JavaScript modules pass `node --check`; `git diff --check`
 passes. Automated tests were not run. This is a local source change only; it
-does not alter the deployed build or establish a live Drive failure cause.
+does not alter the deployed build. The owner later reported (**User-confirmed**)
+that deployed build `a510b09` completed a synthetic-year save and verified the
+exact saved year with 71 verified durable writes in 5m06s. This owner acceptance
+does not establish production readiness or independent live-Drive verification.
 
 ## Integrated surfaces
 

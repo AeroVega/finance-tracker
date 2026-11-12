@@ -42,6 +42,12 @@ not provide provider-side compare-and-swap. Verification closure allows up to
 512 version-changed files and 16 MiB of re-read content per phase; a higher
 count/byte limit remains an explicit stop with bounded counts in diagnostics.
 
+The owner reports (**User-confirmed**) that deployed build `a510b09` completed
+synthetic-year seeding and verified the exact saved year: 71 verified durable
+writes in 5m06s. This acceptance followed the version-only revalidation change.
+It confirms the reported synthetic operation succeeded; it is not independent
+live-Drive instrumentation or production approval.
+
 ## Combined PR37 storage and PR38 interface, November 12, 2026
 
 **Implemented:** merge PR37 head `8e340b3` into PR38 head `75e295e`, preserving
