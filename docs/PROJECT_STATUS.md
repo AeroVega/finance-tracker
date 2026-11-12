@@ -4,12 +4,13 @@
 
 **Implemented in the local `feat/apple-pwa-ui` working tree:** synthetic-year
 reports now retain allowlisted canonical v5 root, locator and Drive transport
-codes through bounded causes, and include the page phase plus verified durable
-write count. The diagnostic remains privacy-safe. `node --check` passes for the
-changed JavaScript modules and `git diff --check` passes. Automated tests were
-not run. This does not change the deployed `3a47f10` build or identify the live
+codes through bounded causes, include the page phase and verified durable-write
+count, and distinguish a missing adapter guard from a failure before the guard
+with a bounded operation label and underlying code. The diagnostic remains
+privacy-safe. `node --check` and `git diff --check` pass. Automated tests were not
+run. This does not change the deployed `3a47f10` build or identify the live
 Drive failure; a built/deployed revision and a new safe report are still needed
-to learn its code.
+to learn its underlying code.
 
 ## Combined PR37 storage and PR38 interface, November 12, 2026
 

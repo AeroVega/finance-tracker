@@ -41,6 +41,14 @@ check every visited immutable binding before accepting verification or publishin
 These guards are not provider compare-and-swap and do not eliminate races after
 the final provider check.
 
+Guard failures distinguish a successful adapter return without an awaited
+guard (`adapter-contract`) from an adapter error before completing its guard
+(`adapter-precondition-failed`). The latter includes a fixed boundary label
+(`immutable-create` or a root-manifest state) and may preserve the underlying
+allowlisted error code for diagnostics. It does not imply that publication
+succeeded or that no mutation occurred; the transaction still requires recovery
+and verification.
+
 Private byte reuse is limited to 8 MiB. Physical body facts have independent
 512-entry/1-MiB budgets and become reusable only after successful fresh closure.
 Every new operation opens fresh metadata; a fact hit must match the exact

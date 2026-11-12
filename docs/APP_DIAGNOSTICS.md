@@ -44,10 +44,11 @@ proof that no write happened. Existing controls continue to gate further work.
 v5 root-publication, paged-locator and Drive transport failures. Resolution
 checks a bounded cause chain and selected nested failure fields, preserving a
 recognized underlying code where available. Synthetic-year failures include
-the page phase and verified durable-write count. Selected Drive errors include
-only bounded numeric HTTP statuses and retry counts. Unknown reports may include
-an allowlisted exception class. No messages, IDs, hashes, request bodies or
-financial records are exposed.
+the page phase and verified durable-write count. Adapter failures also include
+a fixed boundary label and may preserve the underlying allowlisted failure code.
+Selected Drive errors include only bounded numeric HTTP statuses and retry
+counts. Unknown reports may include an allowlisted exception class. No messages,
+IDs, hashes, request bodies or financial records are exposed.
 
 **Checked:** changed JavaScript modules pass `node --check`; `git diff --check`
 passes. Automated tests were not run. This is a local source change only; it

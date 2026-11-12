@@ -2,13 +2,15 @@ import { diagnosticMessages, messagesForSurface } from './app-diagnostic-message
 import { googleStartupMessage } from './google-startup-diagnostics.mjs';
 import { storageWriteDiagnostic } from './storage-write-diagnostic.mjs';
 import { sessionClaimDiagnostic } from './session-claim-diagnostic.mjs';
-import { isSafeDiagnosticCode, safeDiagnosticErrorName } from './app-diagnostic-codes.mjs';
+import { isSafeDiagnosticCode, safeDiagnosticErrorName, safeDiagnosticOperation } from './app-diagnostic-codes.mjs';
 
 const extra = Object.freeze({
   'conflicting-match-requires-correction': 'The selected match has a different account, currency or amount, or is missing an amount. Choose a compatible activity or resolve the evidence with an explicit correction before matching.',
   'inactive-match-target': 'The selected activity is no longer active. Choose an active match target before submitting this review decision.',
 
   'recovery-required': 'Storage needs recovery before more changes can be saved. Keep this tab and folder unchanged. Use the recovery controls offered for this copy, then reopen and verify before retrying.',
+  'adapter-contract': 'The storage adapter returned without confirming its required mutation guard. Keep this tab and folder unchanged and inspect the diagnostic before retrying.',
+  'adapter-precondition-failed': 'The storage adapter failed before completing its mutation guard. The write outcome may still need recovery; keep this tab and folder unchanged and inspect the diagnostic before retrying.',
   'stale-session': 'A previous storage session appears stale. Stop every other tab or device using this copy, then use the explicit stale-session recovery control if offered. Do not delete its marker.',
   'session-active': 'Another storage session is active. Release it on the owning tab or device before opening this copy here.',
 
@@ -89,9 +91,10 @@ export function createDiagnostic(error, { surface, build, phase, verifiedDurable
   const existingDetail = storageWriteDiagnostic(error) || sessionClaimDiagnostic(error);
   const nestedCode = causeCode(error, code);
   const exception = code === 'unknown' ? errorChain(error, current => safeDiagnosticErrorName(current)) : null;
-  const detail = existingDetail || (nestedCode || exception
-    ? {...(nestedCode ? {causeCode: nestedCode} : {}), ...(exception ? {exception} : {})}
-    : null);
+  const operation = errorChain(error, current => safeDiagnosticOperation(read(read(current, 'details'), 'operation')));
+  const detail = existingDetail || nestedCode || exception || operation
+    ? {...(nestedCode ? {causeCode: nestedCode} : {}), ...(exception ? {exception} : {}), ...(operation ? {operation} : {}), ...(existingDetail || {})}
+    : null;
   if (detail) report.detail = detail;
   return Object.freeze({code, message, report: JSON.stringify(report, null, 2)});
 }

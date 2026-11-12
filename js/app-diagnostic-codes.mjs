@@ -10,7 +10,7 @@ const CODES = new Set([
   'object-not-found', 'readback-mismatch', 'version-mismatch', 'visibility-timeout',
   'write-readback-mismatch', 'write-unresolved',
   // Canonical v5 root transaction and recovery.
-  'adapter-contract', 'base-conflict', 'body-mismatch', 'candidate-mismatch',
+  'adapter-contract', 'adapter-precondition-failed', 'base-conflict', 'body-mismatch', 'candidate-mismatch',
   'disconnected-history', 'existing-object', 'history-mismatch', 'intent-mismatch',
   'manifest-metadata-mismatch', 'manifest-version-mismatch', 'pending-base',
   'pending-incomplete', 'pending-mismatch', 'physical-id-in-use', 'preparation-mismatch',
@@ -66,6 +66,10 @@ const ERROR_NAMES = new Set([
   'QuotaExceededError', 'RangeError', 'SecurityError', 'SessionCoordinationError',
   'SyntaxError', 'TimeoutError', 'TypeError'
 ]);
+const OPERATIONS = new Set([
+  'immutable-create', 'root-manifest-admitted', 'root-manifest-ready',
+  'root-manifest-published', 'root-manifest-clean'
+]);
 
 function read(value, key) {
   try { return value?.[key]; } catch { return undefined; }
@@ -82,4 +86,8 @@ export function safeDiagnosticCode(value) {
 export function safeDiagnosticErrorName(value) {
   const name = read(value, 'name');
   return typeof name === 'string' && ERROR_NAMES.has(name) ? name : null;
+}
+
+export function safeDiagnosticOperation(value) {
+  return typeof value === 'string' && OPERATIONS.has(value) ? value : null;
 }

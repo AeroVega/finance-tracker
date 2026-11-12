@@ -212,7 +212,7 @@ export class PhysicalRootBinding {
     this.#scope(); const after = validate(await this.#adapter.readMetadata(ref.fileId, {maxBytes:PHYSICAL_ROOT_LIMITS.manifestBytes, signal})); abort(signal);
     if (before.version !== after.version || before.size !== after.size) fail('version-mismatch', 'Direct physical content changed during verification.'); return raw;
   }
-  async #mutation(expected, signal, perform, authoritative = false) {
+  async #mutation(expected, signal, perform, authoritative = false, operation = 'immutable-create') {
     this.#scope();abort(signal);
     let open = true, active = null, calls = 0, rejected = false, rejection, failed = false, failure;
     const beforeMutation = () => {
@@ -223,7 +223,10 @@ export class PhysicalRootBinding {
     try { await perform(beforeMutation); } catch (e) { failed = true; failure = e; }
     open = false; const unfinished = active !== null; if (active) await active.catch(() => {});
     if (rejected && calls === 0) throw rejection;
-    if (calls === 0) fail('adapter-contract', 'Every durable attempt must await a live mutation guard.');
+    if (calls === 0) {
+      if (failed) fail('adapter-precondition-failed', 'The physical adapter failed before completing its mutation guard.', {operation, failure});
+      fail('adapter-contract', 'Every durable attempt must await a live mutation guard.', {operation});
+    }
     return {failed, failure, unresolved:rejected || unfinished, guardFailure:rejection};
   }
   async #ensure(ref, raw, kind, transactionId, expected, signal) {
@@ -231,7 +234,7 @@ export class PhysicalRootBinding {
     try { if (!equal(await this.#read(ref, kind, transactionId, signal), raw)) fail('readback-mismatch', 'Existing fixed-ID bytes differ.'); return; }
     catch (e) { if (e?.code !== 'object-not-found') throw e; }
     const outcome = await this.#mutation(expected, signal, beforeMutation => this.#adapter.createImmutable({fileId:ref.fileId, name:'ft-physical-' + ref.sha256 + '.bin',
-      kind:physicalKind(kind), transactionId, content:new Uint8Array(raw), expectedSha256:ref.sha256, maxBytes:PHYSICAL_ROOT_LIMITS.objectBytes, beforeMutation, signal}));
+      kind:physicalKind(kind), transactionId, content:new Uint8Array(raw), expectedSha256:ref.sha256, maxBytes:PHYSICAL_ROOT_LIMITS.objectBytes, beforeMutation, signal}), false, 'immutable-create');
     let actual;
     if (outcome.unresolved) fail('write-unresolved', 'A later failed or unfinished guard leaves an earlier create unresolved.', {reference:copy(ref), guardFailure:outcome.guardFailure});
     if (signal?.aborted) fail('write-unresolved', 'Cancellation after a guarded create requires exact-ID recovery.', {reference:copy(ref), cancelled:true});
@@ -246,7 +249,8 @@ export class PhysicalRootBinding {
   }
   async #writeManifest(expected, next, signal) {
     manifest(next); const raw = encode(next, PHYSICAL_ROOT_LIMITS.manifestBytes);
-    const outcome = await this.#mutation(expected, signal, beforeMutation => this.#adapter.writeManifest(new Uint8Array(raw), {beforeMutation, signal}), true);
+    const boundary = 'root-manifest-' + (next.pending?.state ?? 'clean');
+    const outcome = await this.#mutation(expected, signal, beforeMutation => this.#adapter.writeManifest(new Uint8Array(raw), {beforeMutation, signal}), true, boundary);
     let current;
     if (outcome.unresolved) fail('write-unresolved', 'A later failed or unfinished guard leaves an earlier manifest attempt unresolved.', {intendedManifestHash:await digest(raw), guardFailure:outcome.guardFailure});
     if (signal?.aborted) fail('write-unresolved', 'Cancellation after a guarded manifest attempt requires exact-state recovery.', {cancelled:true});
