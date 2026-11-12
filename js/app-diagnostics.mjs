@@ -2,6 +2,7 @@ import { diagnosticMessages, messagesForSurface } from './app-diagnostic-message
 import { googleStartupMessage } from './google-startup-diagnostics.mjs';
 import { storageWriteDiagnostic } from './storage-write-diagnostic.mjs';
 import { sessionClaimDiagnostic } from './session-claim-diagnostic.mjs';
+import { isSafeDiagnosticCode, safeDiagnosticErrorName } from './app-diagnostic-codes.mjs';
 
 const extra = Object.freeze({
   'conflicting-match-requires-correction': 'The selected match has a different account, currency or amount, or is missing an amount. Choose a compatible activity or resolve the evidence with an explicit correction before matching.',
@@ -28,33 +29,69 @@ const extra = Object.freeze({
 });
 const startup = new Set(['google-config-network', 'google-config-http', 'google-config-json', 'google-config-invalid', 'google-libraries-unavailable', 'google-picker-unavailable']);
 const surfaces = new Set(['workspace', 'synthetic-year', 'import', 'local-preview', 'developer-tool', 'copy-guide']);
+const phases = new Set(['starting', 'configuration', 'connecting', 'reconnecting', 'preparing', 'checking', 'saving', 'recovering', 'reopening', 'releasing', 'verifying']);
 function read(error, key) { try { return error?.[key]; } catch { return undefined; } }
 function recognized(value) {
-  return typeof value === 'string' && (Object.hasOwn(diagnosticMessages, value) || Object.hasOwn(extra, value) || startup.has(value));
+  return typeof value === 'string' && (isSafeDiagnosticCode(value) || Object.hasOwn(diagnosticMessages, value) || Object.hasOwn(extra, value) || startup.has(value));
+}
+function errorChain(error, visit) {
+  const seen = new Set(), queue = [{value:error, depth:0}];
+  while (queue.length && seen.size < 12) {
+    const {value:current, depth} = queue.shift();
+    if (!current || seen.has(current)) continue;
+    seen.add(current);
+    const result = visit(current);
+    if (result !== undefined) return result;
+    if (depth < 4) {
+      const cause = read(current, 'cause');
+      if (cause) queue.push({value:cause, depth:depth + 1});
+      const details = read(current, 'details');
+      for (const key of ['failure', 'guardFailure', 'createError', 'readbackError', 'readFailure']) {
+        const nested = read(details, key);
+        if (nested) queue.push({value:nested, depth:depth + 1});
+      }
+    }
+  }
 }
 function errorCode(error) {
-  const code = read(error, 'code');
-  if (recognized(code)) return code;
-  // Some local validators deliberately throw a fixed code as their TypeError message.
-  const message = read(error, 'name') === 'TypeError' ? read(error, 'message') : null;
-  return recognized(message) ? message : 'unknown';
+  return errorChain(error, current => {
+    const code = read(current, 'code');
+    if (recognized(code)) return code;
+    // Some local validators deliberately throw a fixed code as their TypeError message.
+    const message = read(current, 'name') === 'TypeError' ? read(current, 'message') : null;
+    return recognized(message) ? message : undefined;
+  }) || 'unknown';
+}
+function causeCode(error, selected) {
+  return errorChain(error, current => {
+    const code = read(current, 'code');
+    return recognized(code) && code !== selected ? code : undefined;
+  });
 }
 
 /** Construct from allowlisted fields, never redact or serialize arbitrary errors. */
-export function createDiagnostic(error, { surface, build } = {}) {
+export function createDiagnostic(error, { surface, build, phase, verifiedDurableWrites } = {}) {
   const code = errorCode(error);
   const message = startup.has(code)
     // No raw status/components cross this boundary. The startup formatter accepts
     // those for its original callers, but a report uses only fixed safe copy.
     ? googleStartupMessage({code})
-    : messagesForSurface(surface)[code] || extra[code] || diagnosticMessages[code];
+    : messagesForSurface(surface)[code] || extra[code] || diagnosticMessages[code] || extra.unknown;
   const report = {
     schema: 'finance-tracker-diagnostic-v1',
     code,
     surface: surfaces.has(surface) ? surface : 'unknown',
     build: typeof build === 'string' && /^[a-f0-9]{40}$/.test(build) ? build : 'development-or-unknown'
   };
-  const detail = storageWriteDiagnostic(error) || sessionClaimDiagnostic(error);
+  if (phases.has(phase)) report.phase = phase;
+  if (Number.isSafeInteger(verifiedDurableWrites) && verifiedDurableWrites >= 0 && verifiedDurableWrites <= 100000)
+    report.verifiedDurableWrites = verifiedDurableWrites;
+  const existingDetail = storageWriteDiagnostic(error) || sessionClaimDiagnostic(error);
+  const nestedCode = causeCode(error, code);
+  const exception = code === 'unknown' ? errorChain(error, current => safeDiagnosticErrorName(current)) : null;
+  const detail = existingDetail || (nestedCode || exception
+    ? {...(nestedCode ? {causeCode: nestedCode} : {}), ...(exception ? {exception} : {})}
+    : null);
   if (detail) report.detail = detail;
   return Object.freeze({code, message, report: JSON.stringify(report, null, 2)});
 }
@@ -69,8 +106,8 @@ export function clearDiagnostic(target) {
   const panel = target && panels.get(target);
   if (panel) { panel.generation++; panel.root.hidden = true; panel.root.remove(); panels.delete(target); }
 }
-export function showDiagnostic(error, {surface = 'developer-tool', target, document: doc = globalThis.document, navigator: nav = globalThis.navigator} = {}) {
-  const diagnostic = createDiagnostic(error, {surface, build: doc?.getElementById('build-sha')?.textContent});
+export function showDiagnostic(error, {surface = 'developer-tool', target, phase, verifiedDurableWrites, document: doc = globalThis.document, navigator: nav = globalThis.navigator} = {}) {
+  const diagnostic = createDiagnostic(error, {surface, phase, verifiedDurableWrites, build: doc?.getElementById('build-sha')?.textContent});
   const message = `${diagnostic.message} Error code: ${diagnostic.code}.`;
   if (!target || !doc) return message;
   clearDiagnostic(target);

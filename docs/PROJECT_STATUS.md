@@ -1,5 +1,16 @@
 # Project status
 
+## Safe diagnostic code follow-up, November 12, 2026
+
+**Implemented in the local `feat/apple-pwa-ui` working tree:** synthetic-year
+reports now retain allowlisted canonical v5 root, locator and Drive transport
+codes through bounded causes, and include the page phase plus verified durable
+write count. The diagnostic remains privacy-safe. `node --check` passes for the
+changed JavaScript modules and `git diff --check` passes. Automated tests were
+not run. This does not change the deployed `3a47f10` build or identify the live
+Drive failure; a built/deployed revision and a new safe report are still needed
+to learn its code.
+
 ## Combined PR37 storage and PR38 interface, November 12, 2026
 
 **Implemented:** merge PR37 head `8e340b3` into PR38 head `75e295e`, preserving

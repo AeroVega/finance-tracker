@@ -4,18 +4,26 @@
 
 `js/app-diagnostics.mjs` owns the privacy boundary and report controls.
 `js/app-diagnostic-messages.mjs` holds fixed, reviewed explanations and next
-steps. Existing error codes are stable identifiers, not raw provider text.
-Unknown codes become `unknown`; adding a foreseeable failure requires adding a
-fixed message and a test. Surface-specific wording preserves existing recovery
-instructions without letting callers supply arbitrary report content.
+steps. `js/app-diagnostic-codes.mjs` is the source allowlist for stable internal
+codes and exception class names. Codes are identifiers, not raw provider text.
+Unknown codes remain `unknown`; errors are resolved through a bounded cause
+chain and a small list of known nested failure fields. If a broad outer code
+masks a recognized inner code, the report may include it as `causeCode`.
+Surface-specific wording preserves existing recovery instructions without
+letting callers supply arbitrary report content. A new user-facing failure still
+needs fixed explanatory copy and an appropriate regression check.
 
 The report contains only:
 
 - The fixed report schema version.
 - An allowlisted error code and page category.
 - A 40-character hexadecimal source commit, or a fixed unknown/development label.
-- For unresolved writes or ownership checks, the existing allowlisted storage or
-  session diagnostic, including bounded HTTP statuses and attempt counts.
+- For the synthetic-year page, an allowlisted operation phase and a bounded
+  count of verified durable writes.
+- For unresolved writes and selected Drive failures, bounded storage details
+  such as HTTP status and attempt count. Ownership failures retain their
+  allowlisted session subcheck. A bounded exception class may be included when
+  no code is recognized.
 
 It contains no credentials, session/folder/file/account identifiers, transaction
 records, amounts, dates, URLs, stacks, raw messages or provider response bodies.
@@ -29,6 +37,21 @@ pending clipboard callback so an old failure cannot steal focus.
 Errors do not change storage ownership, verification or recovery decisions.
 An uncertain write is still uncertain. Copying a diagnostic is not recovery or
 proof that no write happened. Existing controls continue to gate further work.
+
+## Diagnostic-code follow-up, November 12, 2026
+
+**Implemented in the working tree:** the safe code set now includes canonical
+v5 root-publication, paged-locator and Drive transport failures. Resolution
+checks a bounded cause chain and selected nested failure fields, preserving a
+recognized underlying code where available. Synthetic-year failures include
+the page phase and verified durable-write count. Selected Drive errors include
+only bounded numeric HTTP statuses and retry counts. Unknown reports may include
+an allowlisted exception class. No messages, IDs, hashes, request bodies or
+financial records are exposed.
+
+**Checked:** changed JavaScript modules pass `node --check`; `git diff --check`
+passes. Automated tests were not run. This is a local source change only; it
+does not alter the deployed build or establish a live Drive failure cause.
 
 ## Integrated surfaces
 
