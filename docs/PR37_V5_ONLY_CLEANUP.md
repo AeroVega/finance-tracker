@@ -113,3 +113,70 @@ No live Drive, OAuth, physical mobile/browser acceptance, merge or deployment wa
 performed. Full ledger/history materialization and semantic validation remain.
 This cleanup does not complete bounded-memory loading, incremental financial
 validation, or production readiness.
+
+## Follow-up: remove repeated audit and paging work
+
+**Implemented November 12, 2026**, against cleanup head `ace083a8`:
+
+- Canonical full audits now stream entries through the existing checked tree
+  traversal instead of verifying each tree and then parsing it again. Hashes,
+  canonical bytes, child bounds, ordering, cycles and exact counts remain checked.
+  Count disagreements still drain structural checks before being reported. A
+  derived-value mismatch cannot hide a corrupt trailing page. No persistent
+  verification cache was added.
+- Workspace readers retain only the latest search/review selection while paging.
+  A changed filter or account/month replaces it. Unfiltered views reuse the
+  existing row array; filtered views retain one additional array of row references.
+  Input validation and detached results remain unchanged.
+
+**Verified synthetic measurements:** six audit samples per version in alternating
+A-B-B-A processes used the same dense invented year: 2,340 activities and 2,316
+financial events. Every root and ledger matched. Object reads fell from 494 to
+270, a 45.3% reduction; copied input bytes fell from 18,724,421 to 9,548,108, a 49.0% reduction. Median
+full-audit time fell from 1,195.35 ms to 828.58 ms, a 30.7% reduction. Ranges were
+1,113.58 to 1,296.76 ms and 812.84 to 923.81 ms. These are Node 24.22.1 in-memory audit
+measurements, with one warmup and three forced-GC-separated samples per process,
+not live Drive or browser latency. Shared subtree uses and compact-value checks
+still account for repeated reads.
+
+Seven alternating workspace-reader runs, 40 views per batch, measured search
+paging at 2.049 → 1.817 ms/view for 3,000 rows and 4.874 → 4.009 ms/view for
+8,064 rows, reductions of 11.3% and 17.8%. Complete outputs and consumed checksums matched.
+Other cases had overlapping ranges; no cold-open or general UI latency gain is
+claimed. DOM work, Drive and physical devices were outside this measurement.
+
+Reproduce the focused measurements with:
+
+```sh
+node --expose-gc --max-old-space-size=768 tests/benchmark-canonical-audit.mjs
+node tests/benchmark-workspace-filter-reader.mjs --baseline-ref ace083a8
+```
+
+Run the same audit benchmark in both checkouts and alternate their order. The
+benchmark records source hashes and exact fixture/root identities. The paging
+benchmark loads the historical reader while holding its financial engines fixed.
+
+Independent review found and fixed cancellation after the last root-leaf entry.
+Focused regressions cover partial iteration, caller mutation, invalid cached
+options, count-state behavior and semantic disagreement with corrupt tails.
+
+The full synthetic HTTP app benchmark also ran A-B-B-A with 253 activities, two
+retained corrections and cold-adapter reopen. Every phase retained identical
+requests, bytes and mutation counts: 1,858 requests, 2,172,299 request bytes and
+9,137,590 response bytes per run. Summed phase times were 21.491 and 21.214 seconds
+for baseline, versus 17.985 and 17.364 seconds for candidate. The two samples per
+version are supportive local evidence, not a precise production latency claim.
+Maximum process RSS ranges overlapped: 252,180 to 258,368 KiB baseline,
+and 252,888 to 258,260 KiB candidate. No memory improvement is established.
+Source fingerprints were unchanged during all four runs. The candidate fingerprint
+was `486b6ce0746d04513cac6746f7c2cfb6f6a70b115e12209eaefd91db766acb08`.
+
+```sh
+V5_BENCH_REVISIONS=2 V5_BENCH_COLD_REOPEN=1 node --max-old-space-size=768 tests/benchmark-v5-workspace.mjs
+```
+
+**Final local verification:** the full extended suite passed 1,916/1,916 tests,
+with zero failures, skips or cancellations, in 515.943 seconds. Changed-module
+syntax, documentation checks and independent review passed. Follow-up CI remains
+unverified at this report revision. No merge, manual deployment, live Drive or
+physical-device acceptance was performed.

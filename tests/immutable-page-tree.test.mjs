@@ -393,3 +393,48 @@ for(const [maxNodeBytes,expected] of [
   const root=await tree.build(entries),changed=await tree.set(root,'0090',{message:'Invented é revised',items:[90,false]}),deleted=await tree.delete(changed,'0001');
   assert.deepEqual([root,changed,deleted],expected);await tree.verify(deleted);
 });
+
+test('checked entries validate and yield every page once without retaining caller mutations', async () => {
+  const store = new MemoryStore(), tree = createImmutablePageTree(store, {maxEntries:4,maxChildren:3});
+  const expected = fixture(65), root = await tree.build(expected), info = await tree.verify(root);
+  store.reset(); await tree.verify(root); assert.deepEqual(await collect(tree.entries(root)),expected);
+  assert.equal(store.reads,2*Number(info.nodes));
+  store.reset(); const options = {expectedCount:'65'}, iterator = tree.checkedEntries(root,options);
+  options.expectedCount = '66';
+  const actual = await collect(iterator);
+  assert.deepEqual(actual,expected); assert.equal(store.reads,Number(info.nodes));
+  actual[0][0] = 'changed'; actual[1][1].text = 'changed';
+  assert.deepEqual(await collect(tree.checkedEntries(root)),expected);
+  assert.throws(() => tree.checkedEntries(root,{expectedCount:'065'}),{code:'invalid-count'});
+  assert.throws(() => tree.checkedEntries(root,{gte:'a'}),{code:'invalid-options'});
+});
+
+test('checked count disagreements expose no values and still reject corrupt trailing pages', async () => {
+  const store = new MemoryStore(), tree = createImmutablePageTree(store, {maxEntries:2,maxChildren:2});
+  const root = await tree.build(fixture(9)), pages = await collect(tree.walk(root));
+  const seen = [];
+  store.reset();
+  await assert.rejects(async () => { for await (const entry of tree.checkedEntries(root,{expectedCount:'8'})) seen.push(entry); },{code:'expected-count-mismatch'});
+  assert.deepEqual(seen,[]); assert.equal(store.reads,pages.length);
+  store.files.set(pages.at(-1).hash,encode({corrupt:'invented trailing page'}));
+  for (const expectedCount of ['8','9']) {
+    await assert.rejects(collect(tree.checkedEntries(root,{expectedCount})),{code:'hash-mismatch'});
+  }
+});
+
+test('checked entries preserve structural parent checks and cancellation between entries', async () => {
+  const store = new MemoryStore(), tree = createImmutablePageTree(store);
+  const a = ref(store,store.put(leaf([['a',1],['b',2]]))), b = ref(store,store.put(leaf([['x',3],['z',4]])));
+  const forged = store.put(branch([a,{...b,count:'3'}]));
+  for (const expectedCount of ['4','5']) await assert.rejects(collect(tree.checkedEntries(forged,{expectedCount})),{code:'child-mismatch'});
+  const root = await tree.build(fixture(4)), control = new AbortController();
+  const iterator = tree.checkedEntries(root,{signal:control.signal});
+  assert.deepEqual((await iterator.next()).value,fixture(4)[0]);
+  control.abort(); await assert.rejects(iterator.next(),{name:'AbortError'});
+  store.reset(); await assert.rejects(collect(tree.checkedEntries(root,{signal:control.signal})),{name:'AbortError'});
+  assert.equal(store.reads,0);
+  const finalControl = new AbortController(), single = await tree.build([['a',1]]);
+  const finalEntry = tree.checkedEntries(single,{signal:finalControl.signal});
+  assert.deepEqual((await finalEntry.next()).value,['a',1]);
+  finalControl.abort(); await assert.rejects(finalEntry.next(),{name:'AbortError'});
+});

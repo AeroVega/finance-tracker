@@ -1,5 +1,19 @@
 # Project status
 
+## Audit and paging efficiency, November 12, 2026
+
+**Implemented and verified locally:** canonical audits use one checked tree scan,
+and workspace pagination reuses its latest filter result. The complete extended
+suite passed 1,916/1,916 tests on Node 24.22.1, with no failures, skips or
+cancellations. Matched synthetic measurements show less audit work and faster
+search paging, with unchanged HTTP traffic. See the
+[follow-up evidence](PR37_V5_ONLY_CLEANUP.md#follow-up-remove-repeated-audit-and-paging-work).
+This does not complete selective loading or bounded whole-database memory.
+Cleanup head `ace083a8` passed both required CI jobs in
+[run 43127078947](https://github.com/AeroVega/finance-tracker/actions/runs/43127078947).
+Follow-up CI is not yet verified. No merge, manual deployment or live-data access
+was performed.
+
 ## V5-only active storage, November 12, 2026
 
 **Implemented and verified locally:** active canonical storage now uses v5 only.

@@ -523,6 +523,22 @@ export function createImmutablePageTree(store, options = {}) {
     }
     if (String(count) !== rootInfo.count) fail('count-mismatch', 'Traversal count does not match the root.');
   }
+  function checkedEntries(root, opts = {}) {
+    const {signal,expectedCount} = settings(opts, ['signal','expectedCount']); rootHash(root);
+    if (expectedCount !== undefined) decimal(expectedCount);
+    return (async function* () {
+      let first = true, mismatch = false;
+      // Complete structural verification requires exhaustion, including when a
+      // caller stops using values after finding a semantic mismatch. A wrong
+      // expected count suppresses values but still checks every descendant.
+      for await (const {node} of checkedWalk(root, signal)) {
+        if (first) { mismatch = expectedCount !== undefined && node.count !== expectedCount; first = false; }
+        if (!mismatch && node.kind === 'leaf') for (const entry of node.entries) { abort(signal); yield entry; }
+      }
+      abort(signal);
+      if (mismatch) fail('expected-count-mismatch', 'The fully checked tree differs from the expected entry count.');
+    })();
+  }
   function walk(root, opts = {}) {
     const {signal} = settings(opts, ['signal']); rootHash(root);
     return (async function* () {
@@ -537,6 +553,6 @@ export function createImmutablePageTree(store, options = {}) {
     for await (const {node} of checkedWalk(rootHash(root), signal)) { info ??= metadata(node); nodes++; }
     return {...info, nodes: String(nodes)};
   }
-  return Object.freeze({build, get, set, delete: del, updateMany, entries, page, inspect, verify, walk,
+  return Object.freeze({build, get, set, delete: del, updateMany, entries, checkedEntries, page, inspect, verify, walk,
     limits: Object.freeze({maxNodeBytes, maxEntries, maxChildren, maxKeyBytes})});
 }

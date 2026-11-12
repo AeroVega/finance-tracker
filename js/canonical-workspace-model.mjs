@@ -164,6 +164,7 @@ const searchableText = row => [row.sourceDescription, row.normalizedDescription,
  * single-view cache is bounded: changing account/month replaces the prior view.
  * Account metadata and month buckets belong to this snapshot and are reused.
  * Search/review/pagination reuse reports but cannot change their financial scope.
+ * Paging reuses only the latest search/review result within that scope.
  * Every result is detached so UI mutation cannot poison subsequent reads.
  */
 export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
@@ -194,6 +195,7 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
   };
   let cached = null;
   let searchTexts = null;
+  let filtered = null;
   let positionCache = null;
   let coverageCache = null;
   const accountScope = accountId => {
@@ -203,12 +205,16 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
   };
   return Object.freeze({view(options) {
     const selection = workspaceOptions(options);
-    const {accountId, month, query, reviewOnly, pageSize} = selection;
+    const {accountId, month, query, reviewOnly} = selection;
     if (!cached || cached.scope.accountId !== accountId || cached.scope.month !== month) {
       cached = buildWorkspaceScope(snapshot, null, {accountId, month}, index, prepareScope(accountId));
       searchTexts = cached.rows.map(searchableText);
+      filtered = null;
     }
-    return selectWorkspaceRows(cached, searchTexts, selection);
+    if (!filtered || filtered.query !== query || filtered.reviewOnly !== reviewOnly) {
+      filtered = {query, reviewOnly, rows:filterWorkspaceRows(cached, searchTexts, selection)};
+    }
+    return selectWorkspaceRows(cached, filtered.rows, selection);
   }, monthlySummaries() { return index.monthlySummaries(); }, position({asOf, accountId = ''} = {}) {
     const accountIds = accountScope(accountId);
     if (!isCalendarDate(asOf)) fail('invalid-position-as-of');
@@ -226,9 +232,13 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
   }});
 }
 
-function selectWorkspaceRows(scope, searchTexts, {query, reviewOnly, page:requestedPage, pageSize}) {
+function filterWorkspaceRows(scope, searchTexts, {query, reviewOnly}) {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const filtered = scope.rows.filter((row, i) => (!reviewOnly || row.needsReview) && terms.every(term => searchTexts[i].includes(term)));
+  if (!reviewOnly && !terms.length) return scope.rows;
+  return scope.rows.filter((row, i) => (!reviewOnly || row.needsReview) && terms.every(term => searchTexts[i].includes(term)));
+}
+
+function selectWorkspaceRows(scope, filtered, {page:requestedPage, pageSize}) {
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const page = Math.min(requestedPage, pages - 1);
   return structuredClone({...scope, rows:filtered.slice(page * pageSize, (page + 1) * pageSize),
@@ -240,7 +250,7 @@ export function createWorkspaceView(ledger, options) {
   const effective = getEffectiveActivities(ledger);
   const selection = workspaceOptions(options);
   const scope = buildWorkspaceScope(ledger, effective, selection);
-  return selectWorkspaceRows(scope, scope.rows.map(searchableText), selection);
+  return selectWorkspaceRows(scope, filterWorkspaceRows(scope, scope.rows.map(searchableText), selection), selection);
 }
 
 /** Fetch provenance only when an activity detail is opened. */

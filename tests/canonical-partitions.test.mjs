@@ -328,3 +328,57 @@ test(`growing invented fixtures keep roots fixed and read selected detail pages 
   assert.equal(new Set(measurements.map(value => value.rootBytes)).size,1);
   t.diagnostic(JSON.stringify(measurements));
 });
+
+test('full audit uses one checked traversal per collection and derived tree',async () => {
+  const {ledger} = replayFixture(24), {store,built,reader} = await builtReader(ledger);
+  const io = createPartitionObjectIO(store), tree = createImmutablePageTree(store);
+  const root = await io.read(built.rootHash), source = await io.read(root.source), derived = await io.read(root.derived);
+  const roots = [source.collections,...['effectiveActivities','monthActivities','summaries'].map(name => derived[name])];
+  for await (const [,descriptor] of tree.entries(source.collections)) roots.push(descriptor.byId,descriptor.order);
+  let visits = 0;
+  for (const hash of roots) visits += Number((await tree.verify(hash)).nodes);
+  store.reset(); const result = await reader.fullAudit();
+  assert.deepEqual(result.ledger,ledger); assert.equal(result.verification.derived,'semantic-verified');
+  assert.equal(store.metrics().reads,visits,'inline fixture reads each tree page only once per tree');
+  assert.equal(store.metrics().writes,0);
+});
+
+test('source count mismatches stay fatal and derived count mismatches stay invalid',async () => {
+  const {ledger} = replayFixture(4), {store,built} = await builtReader(ledger);
+  const io = createPartitionObjectIO(store), tree = createImmutablePageTree(store);
+  const root = await io.read(built.rootHash), source = await io.read(root.source), derived = await io.read(root.derived);
+  const descriptor = await tree.get(source.collections,'activities');
+  const sourceHash = await io.write({...source,collections:await tree.set(source.collections,'activities',{...descriptor,count:'3'})});
+  const badSource = await createCanonicalPartitionReader(store,await io.write({...root,source:sourceHash,derived:await io.write({...derived,source:sourceHash})}));
+  await assert.rejects(badSource.fullAudit(),{name:'TypeError',message:'partition-collection-count-mismatch'});
+  assert.equal(badSource.verification().source,'not-semantically-validated');
+  assert.equal(badSource.verification().derived,'not-semantically-validated');
+  const missing = await tree.delete(derived.effectiveActivities,ledger.activities[0].activityId);
+  const badDerived = await createCanonicalPartitionReader(store,await io.write({...root,derived:await io.write({...derived,effectiveActivities:missing})}));
+  const result = await badDerived.fullAudit();
+  assert.deepEqual(result.ledger,ledger);
+  assert.equal(result.verification.source,'full-ledger-validated'); assert.equal(result.verification.derived,'invalid');
+});
+
+test('derived semantic or count mismatches cannot hide corrupt trailing pages',async () => {
+  const {ledger} = replayFixture(140), {store,built} = await builtReader(ledger);
+  const io = createPartitionObjectIO(store), tree = createImmutablePageTree(store), codec = createPartitionValueCodec(store);
+  const root = await io.read(built.rootHash), derived = await io.read(root.derived);
+  const [firstId,firstRef] = (await tree.page(derived.effectiveActivities,{limit:1})).entries[0];
+  for (const kind of ['semantic','count']) {
+    let effective;
+    if (kind === 'semantic') {
+      const value = await codec.materialize(firstRef); value.sourceDescription = 'INVENTED wrong derived value';
+      effective = await tree.set(derived.effectiveActivities,firstId,await codec.encode(value));
+    } else effective = await tree.delete(derived.effectiveActivities,firstId);
+    let last;
+    for await (const page of tree.walk(effective)) last = page;
+    assert.notEqual(last.hash,effective,'fixture has a trailing child page');
+    const reader = await createCanonicalPartitionReader(store,await io.write({...root,derived:await io.write({...derived,effectiveActivities:effective})}));
+    const saved = store.objects.get(last.hash); store.objects.set(last.hash,new TextEncoder().encode('{}'));
+    try { await assert.rejects(reader.fullAudit(),{code:'hash-mismatch'}); }
+    finally { store.objects.set(last.hash,saved); }
+    assert.equal(reader.verification().source,'full-ledger-validated');
+    assert.equal(reader.verification().derived,'not-semantically-validated');
+  }
+});
