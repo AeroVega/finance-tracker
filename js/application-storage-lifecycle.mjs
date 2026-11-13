@@ -1,4 +1,6 @@
 import { createDiagnostic, diagnosticMessage } from './app-diagnostics.mjs';
+import { reportError, leaveBreadcrumb } from './error-reporting.mjs';
+import { SURFACES } from './diagnostic-context.mjs';
 import {PagedApplicationStorage,isObsoletePagedVerificationFailure,currentPagedVerificationFailure} from './paged-application-storage.mjs';
 import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "./drive-transaction-engine.mjs";
 import { createDriveSessionAdapter } from "./drive-session-adapter.mjs";
@@ -43,7 +45,7 @@ async function sha256(bytes, cryptoImpl) {
 export class ApplicationStorageLifecycle {
   constructor(options = {}) {
     const {
-      syntheticOnly = false, folderName = "", folderId, manifestFileId,
+      diagnosticSurface = 'workspace', syntheticOnly = false, folderName = "", folderId, manifestFileId,
       initializeManifest, accessToken, makeManifest, fetchImpl = globalThis.fetch,
       cryptoImpl = globalThis.crypto, isOnline = () => globalThis.navigator?.onLine !== false,
       onStatus = () => {}, onDiagnostic = () => {}, lifecycleTarget = globalThis,
@@ -59,13 +61,14 @@ export class ApplicationStorageLifecycle {
       fail("invalid-config", "A verified synthetic folder, manifest ID or session-gated manifest initializer, access-token provider, and manifest builder are required.");
     }
 
+    this.diagnosticSurface = SURFACES.has(diagnosticSurface) ? diagnosticSurface : 'workspace';
     this.folderName = folderName;
     this.folderId = folderId;
     this.manifestFileId = manifestFileId || null;
     this.initializeManifest = initializeManifest || null;
     this.accessToken = accessToken;
     this.makeManifest = makeManifest;
-    this.requestMetrics = createDriveRequestMetrics();
+    this.requestMetrics = createDriveRequestMetrics({ onRequest: entry => leaveBreadcrumb(entry) });
     // Both adapters share this one wrapper. Count actual fetch attempts once,
     // including session checks, retries and requests that reject before headers.
     this.fetchImpl = this.requestMetrics.wrapFetch(fetchImpl);
@@ -107,14 +110,21 @@ export class ApplicationStorageLifecycle {
     try { this.onDiagnostic({ event, state: this.state, ...details }); } catch { /* observational only */ }
   }
 
-  publish(state, message, code = null) {
+  publish(state, message, code = null, error = null) {
     if (state !== "ready") {
       this.engine?.invalidateHistory?.();
       this.sessionAdapter?.clear?.();
     }
     this.state = state;
-    const safe = code ? createDiagnostic({code}) : null;
-    this.onStatus({ state, message: safe ? diagnosticMessage({code: safe.code}) : message, code: safe?.code || null });
+    // Reporting is observational: it must not affect state transitions or writes.
+    let diagnostic;
+    try {
+      leaveBreadcrumb({ e: 'lifecycle.state', state });
+      if (code) diagnostic = reportError(error || {code}, {surface: this.diagnosticSurface || 'workspace', state});
+    } catch { /* best-effort: diagnostics cannot alter storage state */ }
+    const safe = diagnostic || (code ? createDiagnostic({code}) : null);
+    this.onStatus({ state, message: safe ? diagnosticMessage({code: safe.code}) : message, code: safe?.code || null,
+      ...(diagnostic ? {reportId: diagnostic.id} : {}) });
   }
 
   createComponents() {
@@ -186,7 +196,7 @@ export class ApplicationStorageLifecycle {
       onError: (error) => {
         this.acceptingWrites = false;
         this.heartbeatStop = null;
-        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", failureCode(error) || "ownership-unknown");
+        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", failureCode(error) || "ownership-unknown", error);
       }
     });
   }
@@ -244,7 +254,7 @@ export class ApplicationStorageLifecycle {
         failureCode(error) === "session-active" ? "session-active" :
         this.coordinator?.canWrite || this.engine?.recoveryRequired ? "recovery-required" :
         acquired ? "ownership-unknown" : "connection-error";
-      this.publish(state, "Storage connection could not be verified.", failureCode(error) || "unknown");
+      this.publish(state, "Storage connection could not be verified.", failureCode(error) || "unknown", error);
       throw error;
     }
   }
@@ -274,9 +284,9 @@ export class ApplicationStorageLifecycle {
         this.started = true;
         this.startHeartbeat();
         this.attachLifecycleListeners();
-        this.publish("recovery-required", "Session was acquired, but transaction recovery is unresolved.", failureCode(error) || "recovery-required");
+        this.publish("recovery-required", "Session was acquired, but transaction recovery is unresolved.", failureCode(error) || "recovery-required", error);
       } else {
-        this.publish("connection-error", "Session recovery could not be verified.", failureCode(error) || "unknown");
+        this.publish("connection-error", "Session recovery could not be verified.", failureCode(error) || "unknown", error);
       }
       throw error;
     }
@@ -306,10 +316,10 @@ export class ApplicationStorageLifecycle {
       this.acceptingWrites = false;
       if (this.coordinator?.canWrite && this.engine?.recoveryRequired) {
         this.startHeartbeat();
-        this.publish("recovery-required", "Transaction recovery remains unresolved.", failureCode(error) || "recovery-required");
+        this.publish("recovery-required", "Transaction recovery remains unresolved.", failureCode(error) || "recovery-required", error);
       } else {
         const state = failureCode(error) === "stale-session" ? "stale-session" : "ownership-unknown";
-        this.publish(state, "The previous session could not be revalidated.", failureCode(error) || "unknown");
+        this.publish(state, "The previous session could not be revalidated.", failureCode(error) || "unknown", error);
       }
     }
   }
@@ -407,7 +417,7 @@ export class ApplicationStorageLifecycle {
     this.acceptingWrites = false;
     if (this.engine) this.engine.recoveryRequired = true;
     this.publish(failureCode(error) === "authorization-required" ? "authorization-required" : "recovery-required",
-      "Storage could not be verified. Reconnect and recover before continuing.", failureCode(error) || "read-unverified");
+      "Storage could not be verified. Reconnect and recover before continuing.", failureCode(error) || "read-unverified", error);
   }
 
   async readObjectVerified(logicalPath) {
@@ -474,10 +484,10 @@ export class ApplicationStorageLifecycle {
       if(outdated)throw error;
       if (failureCode(error) === "transaction-unresolved" || this.engine.recoveryRequired) {
         this.acceptingWrites = false;
-        this.publish("recovery-required", "A save needs recovery before more changes can be made.", failureCode(error) || "recovery-required");
+        this.publish("recovery-required", "A save needs recovery before more changes can be made.", failureCode(error) || "recovery-required", error);
       } else if (failureCode(error) === "offline" || failureCode(error) === "ownership-lost" || failureCode(error) === "ownership-unknown") {
         this.acceptingWrites = false;
-        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", failureCode(error));
+        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", failureCode(error), error);
       }
       throw error;
     }
@@ -508,7 +518,7 @@ export class ApplicationStorageLifecycle {
       }
       return result;
     } catch (error) {
-      this.publish("recovery-required", "Recovery remains unresolved. No further writes are allowed.", failureCode(error) || "recovery-required");
+      this.publish("recovery-required", "Recovery remains unresolved. No further writes are allowed.", failureCode(error) || "recovery-required", error);
       throw error;
     }
   }
@@ -545,9 +555,9 @@ export class ApplicationStorageLifecycle {
       return { ...result, reason };
     } catch (error) {
       if (this.engine?.recoveryRequired || failureCode(error) === "recovery-required") {
-        this.publish("recovery-required", "A save needs recovery before more changes can be made.", "recovery-required");
+        this.publish("recovery-required", "A save needs recovery before more changes can be made.", "recovery-required", error);
       } else {
-        this.publish("release-unconfirmed", "Session release could not be verified. Do not switch devices yet.", failureCode(error) || "release-unconfirmed");
+        this.publish("release-unconfirmed", "Session release could not be verified. Do not switch devices yet.", failureCode(error) || "release-unconfirmed", error);
       }
       this.diagnostic("release-refused", { reason });
       throw error;

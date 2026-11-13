@@ -36,6 +36,7 @@ jobs:
           (() => {
             "use strict";
             const sourceCommit = "$source_sha";
+            globalThis.__FT_BUILD__ = Object.freeze({commit: sourceCommit, source: "deployed"});
             const target = document.getElementById("build-sha");
             if (target) {
               target.textContent = sourceCommit;
@@ -43,6 +44,8 @@ jobs:
             }
           })();
           EOF
+          grep -Fq "$source_sha" js/build-info.js
+          grep -Fq 'globalThis.__FT_BUILD__' js/build-info.js
           echo "Deploying source commit: $source_sha"
 
       - name: Stamp public Google configuration

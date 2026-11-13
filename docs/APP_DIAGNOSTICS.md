@@ -2,102 +2,83 @@
 
 ## Contract
 
-`js/app-diagnostics.mjs` owns the privacy boundary and report controls.
-`js/app-diagnostic-messages.mjs` holds fixed, reviewed explanations and next
-steps. `js/app-diagnostic-codes.mjs` is the source allowlist for stable internal
-codes and exception class names. Codes are identifiers, not raw provider text.
-Unknown codes remain `unknown`; errors are resolved through a bounded cause
-chain and a small list of known nested failure fields. If a broad outer code
-masks a recognized inner code, the report may include it as `causeCode`.
-Surface-specific wording preserves existing recovery instructions without
-letting callers supply arbitrary report content. A new user-facing failure still
-needs fixed explanatory copy and an appropriate regression check.
+The registry in `js/error-registry.mjs` owns stable code recognition, fixed copy,
+conservative presentation kinds and surface-specific recovery directions.
+`js/error-reporting.mjs` constructs diagnostic v2 JSON; `app-diagnostics.mjs`
+keeps the existing caller API and renders it. No diagnostic changes ownership,
+verification, cancellation, retry or recovery decisions. All write outcomes
+remain conservatively `unknown`; copying a report does not establish recovery.
 
-The report contains only:
+Reports and recent history stay in memory. Nothing uploads, persists, logs to
+console or retries automatically. Copy and Select require
+an explicit button press. At most ten reports and sixty typed breadcrumbs are
+retained. Repeated code/source/action failures within thirty seconds share a
+report ID and increment the visible occurrence count. Starting a new action
+clears its old panel, not its history.
 
-- The fixed report schema version.
-- An allowlisted error code and page category.
-- A 40-character hexadecimal source commit, or a fixed unknown/development label.
-- For the synthetic-year page, an allowlisted operation phase and a bounded
-  count of verified durable writes.
-- For unresolved writes and selected Drive failures, bounded storage details
-  such as HTTP status and attempt count. A manifest-read mismatch may include
-  one fixed reason indicating whether metadata changed across the read, the
-  reported content size disagreed with the bytes read, or both. Ownership
-  failures retain their allowlisted session subcheck. Verification metadata
-  changes that remain after revalidation may include a fixed reason and names
-  of changed metadata fields, without the associated values. A bounded
-  exception class may be included when no code is recognized.
+### What a report contains
 
-It contains no credentials, session/folder/file/account identifiers, transaction
-records, amounts, dates, URLs, stacks, raw messages or provider response bodies.
-Reports are constructed from those fields, not produced by redacting an Error.
-They stay in the current page. Nothing uploads, persists or retries automatically.
-Copying happens only when the user presses **Copy diagnostics**. A read-only,
-labelled textarea and **Select diagnostics** button remain available when the
-Clipboard API is absent or denied. Replacing or clearing a panel invalidates a
-pending clipboard callback so an old failure cannot steal focus.
+- Fixed codes, exception names, bounded cause links, existing safe storage/session
+  subchecks and fixed transport categories. No raw exception message is copied.
+- Build commit from `__FT_BUILD__`, report ID, generation time and page uptime.
+- Known action/page/phase, lifecycle/ownership/draft flags and request counters.
+- Ledger counts: exact only when `syntheticOnly === true`, otherwise upper
+  power-of-two buckets. No record content or financial values.
+- A bounded timeline of actions, page/lifecycle/visibility events and request
+  method, fixed endpoint class, status and elapsed time. URLs are never parsed by
+  request metrics; endpoints not labeled by a caller remain `unknown`.
+- Coarse browser/OS enums, version integers, viewport, display mode, capabilities,
+  connectivity, language and UTC offset. These describe the device, not its user.
+- Source file/line/column only when the stack URL matches this deployment's
+  origin/base and the explicit public-source manifest. Function names are omitted.
+  Raw messages, stack headers, foreign URLs, query strings, encoded paths and
+  traversal are rejected. Safari/JSC and V8 formats have fixture tests; these
+  tests are not physical Safari evidence.
 
-Errors do not change storage ownership, verification or recovery decisions.
-An uncertain write is still uncertain. Copying a diagnostic is not recovery or
-proof that no write happened. Existing controls continue to gate further work.
+No credentials, IDs, hashes other than the public build commit, filenames from
+imports, records, amounts, balances, source dates, headers or provider bodies
+are included. Each field is constructed from fixed vocabularies/numeric checks.
+Providers cannot register arbitrary schemas. Input lengths, cause traversal and
+output are bounded before potentially large iteration. The hard UTF-8 budget is
+16 KiB, including pretty JSON; truncation is identified in the report.
 
-## Diagnostic-code follow-up, November 12, 2026
+### Presentation
 
-**Implemented in the working tree:** the safe code set now includes canonical
-v5 root-publication, paged-locator and Drive transport failures. Resolution
-checks a bounded cause chain and selected nested failure fields, preserving a
-recognized underlying code where available. Synthetic-year failures include
-the page phase and verified durable-write count. Adapter failures also include
-a fixed boundary label and may preserve the underlying allowlisted failure code.
-Selected Drive errors include only bounded numeric HTTP statuses and retry
-counts. Manifest-read mismatches distinguish metadata changes from reported
-size disagreement using a fixed reason enum. A version-only verification
-change triggers exact-byte revalidation; remaining metadata mismatches may list
-only fixed field names and a fixed reason. A bounded revalidation-limit report
-may include the number of files and bytes already rechecked. Unknown reports
-may include an allowlisted exception class. No messages, IDs, hashes, metadata
-values, request bodies or financial records are exposed.
+Clearly identified form-input errors use inline messages without a technical
+panel. Expected state failures have closed Technical details. Integrity failures
+and defects open the report with a safe next step; ambiguous validation codes
+remain visible rather than hiding a stored-data problem. Clipboard denial and
+absence retain Select diagnostics; late clipboard completions cannot steal focus.
+Shared styles use 16px textareas and 44px controls. Recent problems and the manual
+**Test error reporting (developer)** control are in Recovery and advanced tools.
 
-**Checked:** changed JavaScript modules pass `node --check`; `git diff --check`
-passes. Automated tests were not run. This is a local source change only; it
-does not alter the deployed build. The owner later reported (**User-confirmed**)
-that deployed build `a510b09` completed a synthetic-year save and verified the
-exact saved year with 71 verified durable writes in 5m06s. This owner acceptance
-does not establish production readiness or independent live-Drive verification.
+The main app has a small classic startup script that catches known app-entry
+resource failures before modules load. Legacy prototype files are unchanged. They do not receive this boot fallback,
+the new stylesheet or report-ID forwarding; status-only errors there can still
+lose rich cause context. Main-app reporting is the integration target. It can show a fixed `module-load-failed` fallback, not a complete
+report when the reporter itself is unavailable. A crash, OS termination or tab
+death loses in-memory history. No complete crash-reporting claim is made.
 
-## Integrated surfaces
+## Maintenance and investigation
 
-**Implemented:** canonical workspace actions and Google setup; synthetic-year
-seeding/setup; the legacy local-preview dashboard and CSV failures; PR28 import
-and interruption tools; PR25 backup/restore/migration tools; session, lifecycle,
-Drive feasibility and folder-discovery tools. Lifecycle and dashboard status
-publishers also sanitize error codes/messages before asynchronous status updates
-reach the UI. Existing acceptance checklist/aggregate reports remain separate;
-they already have their own explicit copy controls and do not serialize errors.
+Run `node scripts/audit-error-codes.mjs` for unregistered literal sites. The
+lexical scan reports computed/forwarded sites separately; zero literal misses
+is not proof of every dynamic path. New typed errors can use `AppError`/`fail`
+from `js/app-error.mjs`, which rejects unknown codes. Existing storage classes
+remain intact to preserve their behavioral contracts; targeted boundaries retain
+native causes without reclassifying cancellation or weakening safety gates.
 
-Unhandled browser errors and promise rejections after the shared module loads
-produce a fixed unexpected-error report. This cannot cover failure to fetch or
-parse the shared module itself, a browser crash, or a tab/OS termination. There is
-no claim of complete crash reporting or remote telemetry. Developer tool views
-may intentionally show synthetic session state, but that state is not included
-in shared diagnostic reports.
+The [generated code index](ERROR_CODES.md) comes from the registry. Run
+`node scripts/generate-error-code-docs.mjs --check` to verify freshness.
+Use `node scripts/explain-diagnostic.mjs report.txt` (or stdin) to validate a pasted
+v2 report and inspect local code/test references. It accepts optional header/fences,
+but the application emits plain JSON for compatibility with existing consumers.
+It performs no network, checkout, recovery or replay. Missing commits are clearly
+identified before working-tree source is used. Source locations require public
+unminified modules; a future bundler would need retained source maps.
 
-## Verification and limits
-
-**Verified locally:** the final extended suite passed 2,039/2,039 tests on Node
-24.22.1, with no failures, skips or cancellations (330.726 seconds). Changed
-JavaScript syntax, documentation links and diff checks passed. Independent code
-and controller review found no remaining blocker.
-
-Node tests exercise allowlisting, hostile diagnostic inputs, safe readback/session
-subchecks, denied or missing clipboard access, manual selection, successful copy,
-stale clipboard completion, controller recovery guards, and asynchronous status
-sanitization. Controller tests use an intentionally small DOM and synthetic
-storage seams; they do not establish browser layout or live Google behavior.
-
-A local Chromium desktop/mobile check was attempted for this change, but this
-executor rejected Chromium's process socket creation, including an escalated
-attempt. Rendered layout, physical iPhone/iPad Safari clipboard behavior and live
-Google integration remain unverified. Do not claim deployment or owner acceptance
-from local tests. Production financial-data persistence remains **NO-GO**.
+See [project status](PROJECT_STATUS.md) for implementation/verification evidence,
+[testing](TESTING.md) for commands and [the v1 archive](archive/APP_DIAGNOSTICS_V1.md)
+for historical behavior. Rendered layout, physical Safari stack/clipboard/selection
+behavior and live Google integration require separate acceptance. Production
+financial-data persistence remains **NO-GO**.

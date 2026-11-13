@@ -11,12 +11,13 @@ const importHtml=await readFile(new URL('../prototype/pr28-testing.html',import.
 const hubHtml=await readFile(new URL('../prototype/index.html',import.meta.url),'utf8');
 const tick=()=>new Promise(setImmediate);
 const gate=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return {promise,resolve};};
+const findNode=(node,predicate)=>predicate(node)?node:node.children.map(child=>findNode(child,predicate)).find(Boolean);
 // Actual checked-in routing and event handlers. These tests replace browser,
 // permission and storage seams; separate HTTP tests exercise the copy engines.
 async function controller(search='?guide=v5') {
   const nodes=new Map(),calls={connect:[],release:0,pick:[],start:0,stop:0,targetRelease:0,backup:[],restore:[],export:[],migrate:[]};
   const state={folderFiles:[],folders:[],connected:false,paged:true,fail:null,pending:null,sourceOwnership:true,lifecycleState:'ready'};let storage;
-  function element(){const handlers=new Map();return {hidden:false,disabled:false,files:[],textContent:'',dataset:{},children:[],attributes:{},
+  function element(tag='div'){const handlers=new Map();return {tagName:tag.toUpperCase(),hidden:false,disabled:false,files:[],textContent:'',dataset:{},children:[],attributes:{},
     append(...items){this.children.push(...items);},setAttribute(key,value){this.attributes[key]=value;},
     insertAdjacentElement(position,node){this.diagnosticPanel=node;},remove(){},focus(){},select(){},
     addEventListener(type,fn){handlers.set(type,fn);},async emit(type){return handlers.get(type)?.();},click(){return this.emit('click');}};}
@@ -97,8 +98,13 @@ test('destination picker cancellation performs no destination mutation and permi
   assert.match(h.get('v5-result').textContent,/picker-cancelled/);assert.equal(h.calls.start,0);assert.equal(h.calls.backup.length,0);
   const panel=h.get('v5-result').diagnosticPanel;
   assert.equal(panel.attributes['aria-label'],'Safe error diagnostics');
-  assert.equal(panel.children[2].textContent,'Copy diagnostics');
-  assert.equal(JSON.parse(panel.children[1].children[0].value).surface,'developer-tool');
+  // Cancellation is an expected state: keep technical details available but quiet.
+  assert.equal(panel.attributes.role,'status');
+  assert.equal(findNode(panel,node=>node.tagName==='DETAILS').open,false);
+  assert.equal(findNode(panel,node=>node.textContent==='Copy diagnostics').tagName,'BUTTON');
+  const report=JSON.parse(findNode(panel,node=>node.tagName==='TEXTAREA').value);
+  assert.equal(report.where.surface,'developer-tool');
+  assert.equal(report.error.code,'picker-cancelled');assert.equal(report.error.kind,'state');
   assert.equal(h.get('v5-backup').disabled,false);h.state.folders.push('invented-target');await h.click('v5-backup');
   assert.equal(panel.hidden,true,'new action removes the old diagnostic panel');
   assert.equal(h.calls.backup.length,1);assert.equal(h.calls.targetRelease,1);assert.equal(h.calls.stop,1);
@@ -164,7 +170,15 @@ test('destination release failure cannot become a successful copy result',async(
 test('failed saved-file verification never announces restore success',async()=>{
  const h=await controller();h.get('v5-archive').files=[{stream:()=>({invalid:true})}];await h.get('v5-archive').emit('change');
  h.state.folders.push('invented-invalid-file');h.state.fail='restore';h.state.errorCode='restore-incomplete';await h.click('v5-restore');
- assert.match(h.get('v5-result').textContent,/Action did not complete/);assert.doesNotMatch(h.get('v5-result').textContent,/independently restored/);assert.equal(h.calls.targetRelease,1);
+ assert.match(h.get('v5-result').textContent,/Error code: restore-incomplete/);
+ assert.doesNotMatch(h.get('v5-result').textContent,/independently restored/);assert.equal(h.calls.targetRelease,1);
+ const panel=h.get('v5-result').diagnosticPanel;
+ assert.equal(panel.attributes.role,'alert');
+ assert.equal(findNode(panel,node=>node.tagName==='DETAILS').open,true);
+ const report=JSON.parse(findNode(panel,node=>node.tagName==='TEXTAREA').value);
+ assert.equal(report.error.code,'restore-incomplete');assert.equal(report.error.kind,'integrity');
+ assert.equal(report.error.retryable,false);assert.equal(report.error.writeOutcome,'unknown');
+ assert.equal(h.calls.restore.length,1,'verification failure must not retry the restore');
 });
 
 for(const [name,file] of [

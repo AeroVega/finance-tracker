@@ -3,17 +3,19 @@ import { sessionClaimDiagnostic } from "./session-claim-diagnostic.mjs";
 export const SESSION_FORMAT = "finance-tracker-session";
 export const SESSION_VERSION = 1;
 export const DEFAULT_SESSION_TTL_MS = 120_000;
+// Keep native failures private; inspect() remains a bounded status interface.
+const inspectionCauses = new WeakMap();
 
 export class SessionCoordinationError extends Error {
-  constructor(code, message) {
-    super(message);
+  constructor(code, message, cause) {
+    super(message, cause === undefined ? undefined : {cause});
     this.name = "SessionCoordinationError";
     this.code = code;
   }
 }
 
-function fail(code, message, sessionCheck) {
-  const error = new SessionCoordinationError(code, message);
+function fail(code, message, sessionCheck, cause) {
+  const error = new SessionCoordinationError(code, message, cause);
   if (sessionCheck) error.sessionCheck = sessionCheck;
   throw error;
 }
@@ -115,12 +117,14 @@ export class SessionCoordinator {
       // Preserve a safe diagnostic so the UI can distinguish Drive read,
       // malformed-marker, and authorization failures without weakening the
       // fail-closed ownership decision.
-      return {
+      const result = {
         status: "unknown",
         record: null,
         errorCode: typeof error?.code === "string" ? error.code : "session-read-failed",
         sessionCheck: sessionClaimDiagnostic(error)?.check || "coordinator-read-failed"
       };
+      inspectionCauses.set(result, error);
+      return result;
     }
     if (record === null) return { status: "absent", record: null };
     if (!validRecord(record)) return { status: "ambiguous", record: null };
@@ -158,7 +162,7 @@ export class SessionCoordinator {
     } catch (cause) {
       this.ownership = "unknown";
       fail(failureCode, "Session ownership could not be verified after the write. All writes are disabled.",
-        sessionClaimDiagnostic(cause)?.check || "coordinator-read-failed");
+        sessionClaimDiagnostic(cause)?.check || "coordinator-read-failed", cause);
     }
     if (!sameRecord(actual, expected)) {
       this.ownership = "unknown";
@@ -191,10 +195,10 @@ export class SessionCoordinator {
     if (current.status === "ambiguous" || current.status === "unknown") {
       this.ownership = "unknown";
       if (current.errorCode === "authorization-required") {
-        fail("authorization-required", "Google authorization is required to inspect the existing Drive session. Reconnect to Google; no session or stored data was changed. Writes remain disabled.");
+        fail("authorization-required", "Google authorization is required to inspect the existing Drive session. Reconnect to Google; no session or stored data was changed. Writes remain disabled.", current.sessionCheck, inspectionCauses.get(current));
       }
       const detail = current.errorCode ? " Drive check failed (" + current.errorCode + ")." : "";
-      fail("ownership-unknown", "The existing session state cannot be trusted. Writes are disabled." + detail);
+      fail("ownership-unknown", "The existing session state cannot be trusted. Writes are disabled." + detail, current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
     }
 
     const record = this.makeRecord(String(this.createSessionId()));
@@ -209,7 +213,7 @@ export class SessionCoordinator {
       assertCurrent();
       const detail = typeof cause?.code === "string" && /^[a-z][a-z0-9-]{0,95}$/.test(cause.code) ? " (" + cause.code + ")" : "";
       fail("ownership-unknown", "The session claim could not be confirmed" + detail + ". Preserve the folder and marker. Do not retry creation or switch devices.",
-        sessionClaimDiagnostic(cause)?.check);
+        sessionClaimDiagnostic(cause)?.check || "coordinator-claim-write-failed", cause);
     }
     await this.verifyWrittenRecord(record, "ownership-unknown");
     assertCurrent();
@@ -242,15 +246,15 @@ export class SessionCoordinator {
     try {
       latest = await this.adapter.read();
       assertCurrent();
-    } catch {
+    } catch (cause) {
       this.ownership = "unknown";
-      fail("ownership-unknown", "The stale session could not be rechecked. Recovery was refused.");
+      fail("ownership-unknown", "The stale session could not be rechecked. Recovery was refused.", "coordinator-read-failed", cause);
     }
     if (!sameRecord(latest, current.record) ||
         this.now() - latest.heartbeatAt < this.staleAfterMs ||
         latest.state !== "active") {
       this.ownership = "unknown";
-      fail("ownership-unknown", "The session changed during stale-session recovery. Writes remain disabled.");
+      fail("ownership-unknown", "The session changed during stale-session recovery. Writes remain disabled.", "coordinator-record-changed");
     }
 
     const record = this.makeRecord(String(this.createSessionId()));
@@ -260,9 +264,9 @@ export class SessionCoordinator {
       assertCurrent();
       await this.adapter.write(record);
       assertCurrent();
-    } catch {
+    } catch (cause) {
       this.ownership = "unknown";
-      fail("ownership-unknown", "The recovery write could not be confirmed. Writes are disabled.");
+      fail("ownership-unknown", "The recovery write could not be confirmed. Writes are disabled.", "coordinator-recovery-write-failed", cause);
     }
     await this.verifyWrittenRecord(record, "ownership-unknown");
     assertCurrent();
@@ -302,7 +306,7 @@ export class SessionCoordinator {
       fail("authorization-required", "Google authorization is required to revalidate this Drive session. Reconnect to Google; the existing session and stored data were not changed. Writes remain disabled.");
     }
     this.ownership = "unknown";
-    fail("ownership-lost", "The prior session identity could not be revalidated. Writes remain disabled.", current.sessionCheck || "coordinator-record-changed");
+    fail("ownership-lost", "The prior session identity could not be revalidated. Writes remain disabled.", current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
   }
 
   async heartbeat() {
@@ -311,10 +315,10 @@ export class SessionCoordinator {
       const current = await this.inspect();
       if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
         this.ownership = "unknown";
-        fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.", current.sessionCheck || "coordinator-record-changed");
+        fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.", current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
       }
 
-      if (!this.canWrite) fail("ownership-unknown", "Ownership was lost while checking the heartbeat.");
+      if (!this.canWrite) fail("ownership-unknown", "Ownership was lost while checking the heartbeat.", "coordinator-record-changed");
       const heartbeatAt = this.now();
       const record = {
         ...this.session,
@@ -324,12 +328,12 @@ export class SessionCoordinator {
       };
       try {
         await this.adapter.write(record);
-      } catch {
+      } catch (cause) {
         this.ownership = "unknown";
-        fail("ownership-unknown", "The heartbeat could not be confirmed. Writes are disabled until ownership is re-established.");
+        fail("ownership-unknown", "The heartbeat could not be confirmed. Writes are disabled until ownership is re-established.", "coordinator-heartbeat-write-failed", cause);
       }
       await this.verifyWrittenRecord(record, "ownership-unknown");
-      if (!this.canWrite) fail("ownership-unknown", "Ownership was lost while verifying the heartbeat.");
+      if (!this.canWrite) fail("ownership-unknown", "Ownership was lost while verifying the heartbeat.", "coordinator-record-changed");
       this.session = record;
       return record;
     });
@@ -415,7 +419,7 @@ export class SessionCoordinator {
     const current = await this.inspect();
     if (!this.canWrite || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
       this.ownership = "unknown";
-      fail("ownership-lost", "The active session could not be verified. Writes are disabled.", current.sessionCheck || "coordinator-record-changed");
+      fail("ownership-lost", "The active session could not be verified. Writes are disabled.", current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
     }
     return true;
   }
@@ -455,7 +459,7 @@ export class SessionCoordinator {
         const current = await this.inspect();
         if (!this.canWrite || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
           this.ownership = "unknown";
-          fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.", current.sessionCheck || "coordinator-record-changed");
+          fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.", current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
         }
         if (this.heartbeatStop) this.heartbeatStop();
         const record = {

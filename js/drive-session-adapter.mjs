@@ -5,8 +5,8 @@ import { SessionCoordinationError } from "./session-coordination.mjs";
 export const SESSION_MARKER_NAME = "finance-tracker-active-session.json";
 export const SESSION_MARKER_PROPERTY = "financeTrackerSession";
 
-function error(code, message, sessionCheck) {
-  const failure = new SessionCoordinationError(code, message);
+function error(code, message, sessionCheck, cause) {
+  const failure = new SessionCoordinationError(code, message, cause);
   if (sessionCheck) failure.sessionCheck = sessionCheck;
   return failure;
 }
@@ -169,8 +169,8 @@ export function createDriveSessionAdapter(options) {
         DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(file.id) + "?alt=media",
         { method: "GET", cache: "no-store", headers: authHeaders(accessToken) }
       );
-    } catch {
-      throw error("network-error", "The session marker could not be read from Google Drive.");
+    } catch (cause) {
+      throw error("network-error", "The session marker could not be read from Google Drive.", undefined, cause);
     }
     if (!response || !response.ok) {
       await discardDriveResponse(response);
@@ -182,7 +182,7 @@ export function createDriveSessionAdapter(options) {
       record = await readBoundedDriveJson(response, { kind: "session-marker", limits: responseLimits });
     } catch (cause) {
       if (cause.code !== "invalid-json-object") throw cause;
-      throw error("ambiguous-session-record", "The session marker content is not valid JSON.");
+      throw error("ambiguous-session-record", "The session marker content is not valid JSON.", undefined, cause);
     }
     if (validVersion(file)) {
       let closingResponse;
@@ -190,7 +190,7 @@ export function createDriveSessionAdapter(options) {
         closingResponse = await request(signal, DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(file.id) +
           "?fields=id,name,mimeType,parents,appProperties,version,trashed",
           { method: "GET", cache: "no-store", headers: authHeaders(accessToken) });
-      } catch { throw error("network-error", "The session marker version could not be confirmed."); }
+      } catch (cause) { throw error("network-error", "The session marker version could not be confirmed.", undefined, cause); }
       if (!closingResponse?.ok) {
         await discardDriveResponse(closingResponse);
         throw error("drive-read-failed", "The session marker version could not be confirmed.");
@@ -231,8 +231,8 @@ export function createDriveSessionAdapter(options) {
         method: "GET",
         headers: authHeaders(accessToken)
       });
-    } catch {
-      throw error("network-error", "Google Drive could not generate a session marker ID.");
+    } catch (cause) {
+      throw error("network-error", "Google Drive could not generate a session marker ID.", undefined, cause);
     }
     if (!response || !response.ok) {
       await discardDriveResponse(response);
@@ -242,7 +242,7 @@ export function createDriveSessionAdapter(options) {
     try { payload = await readBoundedDriveJson(response, { kind: "generated-ids", limits: responseLimits }); }
     catch (cause) {
       if (cause.code !== "invalid-json-object") throw cause;
-      throw error("invalid-response", "Google Drive returned an invalid generated ID response.");
+      throw error("invalid-response", "Google Drive returned an invalid generated ID response.", undefined, cause);
     }
     if (!payload || !Array.isArray(payload.ids) || typeof payload.ids[0] !== "string" || !payload.ids[0]) {
       throw error("invalid-response", "Google Drive returned no usable session marker ID.");

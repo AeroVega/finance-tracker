@@ -1,0 +1,427 @@
+Approximate regex baseline, 2026-11-13 UTC
+Commit: 7aa553eeab83d898b9a6bb43dfb8a68c298ae70a
+Node: v24.22.1
+Synthetic source inspection only; computed codes/ternaries may be missed.
+
+Distinct: 621; unrecognized: 420
+
+account-already-exists: canonical-import.mjs
+account-mapping-conflict: canonical-import.mjs
+activity-outside-declared-coverage: canonical-import.mjs
+ambiguous-original-import-index: drive-original-retention.mjs
+ambiguous-pending-original: drive-original-retention.mjs
+ambiguous-session-record: drive-session-adapter.mjs
+ambiguous-transactions: catalog-transaction-engine.mjs
+archive-canonical-profile-mismatch: paged-canonical-backup.mjs
+archive-hash-mismatch: catalog-backup.mjs, portable-backup.mjs
+archive-identity-mismatch: portable-backup.mjs
+archive-object-hash-mismatch: catalog-backup.mjs
+authorization-changed: drive-original-retention.mjs
+backup-commit-readback-failed: portable-backup.mjs
+backup-manifest-readback-failed: portable-backup.mjs
+backup-metadata-mismatch: portable-backup.mjs
+backup-metadata-unavailable: portable-backup.mjs
+backup-object-not-visible: portable-backup.mjs
+backup-object-readback-failed: portable-backup.mjs
+backup-quarantined: portable-backup.mjs
+backup-structure-invalid: portable-backup.mjs
+broken-chain: transaction-protocol.mjs
+candidate-money-mismatch: canonical-import.mjs
+canonical-commit-mismatch: canonical-paged-storage.mjs
+canonical-derived-mismatch: canonical-paged-storage.mjs
+canonical-genesis-mismatch: canonical-paged-storage.mjs
+canonical-identity-mismatch: legacy-canonical-evidence.mjs
+canonical-index-missing: legacy-canonical-evidence.mjs
+canonical-preparation-mismatch: canonical-paged-storage.mjs
+canonical-readback-mismatch: canonical-paged-storage.mjs
+canonical-record-missing: legacy-canonical-evidence.mjs
+cash-reconciliation-cannot-add-components: financial-position-contract.mjs
+catalog-base-mismatch: catalog-storage.mjs
+catalog-changed: catalog-backup.mjs
+catalog-manifest-required: catalog-storage.mjs
+catalog-required: application-storage-lifecycle.mjs
+catalog-root-limit: catalog-storage.mjs
+catalog-segment-chain-mismatch: catalog-storage.mjs
+catalog-segment-cycle: catalog-storage.mjs
+catalog-segment-limit: catalog-segments.mjs, catalog-storage.mjs
+classification-history-mismatch: canonical-import.mjs
+clean-v4-manifest-required: paged-canonical-backup.mjs
+clipboard-unavailable: app-diagnostics.mjs
+commit-hash-mismatch: portable-backup.mjs
+commit-history-cycle: catalog-storage.mjs
+commit-history-mismatch: catalog-storage.mjs
+commit-identity-mismatch: catalog-backup.mjs, portable-backup.mjs
+concurrent-verification-read: framed-backup-stream.mjs
+confirmation-required: session-coordination.mjs
+confirmed-coverage-required: canonical-import.mjs
+content-mismatch: drive-feasibility-spike.mjs
+copy-readback-mismatch: paged-canonical-backup.mjs
+copy-source-hash-mismatch: catalog-backup.mjs
+correction-evidence-required: canonical-import.mjs
+correction-history-mismatch: canonical-import.mjs
+cursor-mismatch: immutable-page-tree.mjs, paged-physical-locators.mjs
+cyclic-refund-link: canonical-import.mjs
+cyclic-value: immutable-page-tree.mjs, transaction-protocol.mjs
+delete-not-accepted: drive-original-retention.mjs
+deletion-not-confirmed: original-retention-policy.mjs
+duplicate-archive-object: catalog-backup.mjs
+duplicate-attempt-id: canonical-import.mjs
+duplicate-catalog-binding: catalog-storage.mjs
+duplicate-object-identity: paged-canonical-backup.mjs
+duplicate-original-locator: drive-original-retention.mjs
+duplicate-record-id: legacy-canonical-evidence.mjs
+duplicate-row-ordinal: canonical-import.mjs
+empty-journal: transaction-protocol.mjs
+entry-limit: locator-codec.mjs
+event-after-terminal: transaction-protocol.mjs
+event-command-conflict: canonical-import.mjs
+event-command-id-required: canonical-import.mjs
+event-hash-mismatch: transaction-protocol.mjs
+existing-original-imports: drive-original-retention.mjs
+expected-count-mismatch: immutable-page-tree.mjs
+expired-original-content: drive-original-retention.mjs
+expired-write-receipt-scope: catalog-storage.mjs
+explicit-account-mapping-required: canonical-import.mjs, import-reconciliation.mjs
+explicit-currency-resolution-required: canonical-import.mjs
+fetch-unavailable: drive-feasibility-spike.mjs, drive-folder-discovery.mjs, drive-session-adapter.mjs
+google-library-timeout: dashboard-synthetic-storage.mjs
+header-byte-limit: framed-backup-stream.mjs
+history-order-change-refused: canonical-history.mjs
+history-removal-refused: canonical-history.mjs
+history-rewrite-refused: canonical-history.mjs
+http-error: drive-folder-discovery.mjs
+immutable-hash-mismatch: catalog-storage.mjs
+immutable-version-mismatch: catalog-storage.mjs
+import-counts-mismatch: canonical-import.mjs
+import-evidence-rewrite-refused: canonical-history.mjs
+import-status-mismatch: canonical-import.mjs
+inactive-financial-target: canonical-import.mjs
+incomplete-search: drive-feasibility-spike.mjs
+invalid-abort: transaction-protocol.mjs
+invalid-activity: canonical-import.mjs
+invalid-activity-kind: canonical-import.mjs
+invalid-activity-money: canonical-import.mjs
+invalid-backup-config: portable-backup.mjs
+invalid-backup-copy-id: portable-backup.mjs
+invalid-backup-source: portable-backup.mjs
+invalid-backup-source-locator: original-retention-policy.mjs
+invalid-balance-resolution: financial-position-contract.mjs
+invalid-bank-correction: canonical-import.mjs
+invalid-base64: catalog-backup.mjs, portable-backup.mjs
+invalid-canonical-fragments: legacy-canonical-evidence.mjs
+invalid-canonical-group: legacy-canonical-evidence.mjs
+invalid-canonical-index: legacy-canonical-evidence.mjs
+invalid-canonical-ledger: canonical-import.mjs
+invalid-canonical-object: legacy-canonical-evidence.mjs
+invalid-catalog-archive: catalog-backup.mjs
+invalid-catalog-parent: drive-locator-catalog.mjs
+invalid-catalog-root: catalog-segments.mjs
+invalid-catalog-segment: catalog-segments.mjs
+invalid-category-correction: canonical-import.mjs
+invalid-chunk: framed-backup-stream.mjs
+invalid-classification: canonical-import.mjs
+invalid-clock: canonical-import.mjs
+invalid-command: immutable-page-tree.mjs
+invalid-commit-hash: portable-backup.mjs
+invalid-commit-stage: transaction-protocol.mjs
+invalid-config: application-storage-lifecycle.mjs
+invalid-copy-identity: catalog-backup.mjs, legacy-canonical-evidence.mjs, paged-canonical-backup.mjs
+invalid-csv-quoting: provider-csv.mjs
+invalid-cursor: immutable-page-tree.mjs
+invalid-data-object-identity: drive-locator-catalog.mjs
+invalid-deletion-state: original-retention-policy.mjs
+invalid-descriptor: framed-backup-stream.mjs
+invalid-effective-refund: canonical-import.mjs
+invalid-entry: immutable-page-tree.mjs, locator-codec.mjs
+invalid-event: transaction-protocol.mjs
+invalid-event-command: canonical-import.mjs
+invalid-event-metadata: canonical-import.mjs
+invalid-event-money: canonical-import.mjs
+invalid-event-type: transaction-protocol.mjs
+invalid-exact-amount: canonical-import.mjs
+invalid-filter: drive-feasibility-spike.mjs
+invalid-financial-commands: canonical-import.mjs
+invalid-first-event: transaction-protocol.mjs
+invalid-frame-order: framed-backup-stream.mjs
+invalid-header: framed-backup-stream.mjs
+invalid-height: immutable-page-tree.mjs, locator-codec.mjs
+invalid-history-cache-limit: catalog-storage.mjs
+invalid-holdings-snapshot: financial-position-contract.mjs
+invalid-id: transaction-protocol.mjs
+invalid-import: canonical-import.mjs
+invalid-import-counts: canonical-import.mjs
+invalid-import-observations: canonical-import.mjs
+invalid-journal-locator: drive-locator-catalog.mjs
+invalid-ledger-collection: canonical-import.mjs
+invalid-lifecycle-event: canonical-import.mjs
+invalid-limits: framed-backup-stream.mjs
+invalid-locator-addition: drive-locator-catalog.mjs
+invalid-locator-catalog: drive-locator-catalog.mjs
+invalid-locator-catalog-input: drive-locator-catalog.mjs
+invalid-locator-entry: drive-locator-catalog.mjs
+invalid-locator-identity: drive-locator-catalog.mjs
+invalid-logical-commit: catalog-storage.mjs
+invalid-logical-snapshot: catalog-storage.mjs, drive-locator-catalog.mjs
+invalid-logical-snapshot-entry: drive-locator-catalog.mjs
+invalid-manifest: dashboard-synthetic-storage.mjs, portable-backup.mjs
+invalid-memory-write: paged-archive-rehearsal.mjs
+invalid-money: import-reconciliation.mjs
+invalid-node: immutable-page-tree.mjs, locator-codec.mjs
+invalid-number: immutable-page-tree.mjs, transaction-protocol.mjs
+invalid-object-bytes: portable-backup.mjs
+invalid-object-id: framed-backup-stream.mjs
+invalid-object-list: portable-backup.mjs
+invalid-object-plan: transaction-protocol.mjs
+invalid-object-stage: transaction-protocol.mjs
+invalid-observation: canonical-import.mjs
+invalid-observation-state: canonical-import.mjs
+invalid-operation: session-coordination.mjs
+invalid-or-duplicate-record-id: canonical-import.mjs
+invalid-original-archive: catalog-backup.mjs, drive-original-retention.mjs
+invalid-original-import: drive-original-retention.mjs
+invalid-original-import-index: drive-original-retention.mjs
+invalid-original-omission: drive-original-retention.mjs
+invalid-original-retention-intent: drive-original-retention.mjs
+invalid-parent: locator-codec.mjs
+invalid-parent-catalog-hash: drive-locator-catalog.mjs
+invalid-parsed-import: canonical-import.mjs
+invalid-path: application-storage-lifecycle.mjs
+invalid-payload: transaction-protocol.mjs
+invalid-portable-binding: portable-backup.mjs
+invalid-portable-commit: paged-canonical-backup.mjs
+invalid-position-account-scope: financial-position.mjs
+invalid-position-as-of: canonical-workspace-model.mjs, financial-position.mjs
+invalid-position-basis: financial-position-contract.mjs
+invalid-position-command: financial-position.mjs
+invalid-position-event: financial-position-contract.mjs
+invalid-position-events: financial-position-contract.mjs
+invalid-position-source-import: financial-position-contract.mjs
+invalid-posted-date: canonical-import.mjs
+invalid-previous-hash: transaction-protocol.mjs
+invalid-prospective-category-rule: canonical-import.mjs
+invalid-publication: transaction-protocol.mjs
+invalid-publication-intent: catalog-transaction-engine.mjs
+invalid-publication-plan: transaction-protocol.mjs
+invalid-query: immutable-page-tree.mjs
+invalid-range: immutable-page-tree.mjs, locator-codec.mjs
+invalid-read-limit: framed-backup-stream.mjs
+invalid-reconciliation-method: financial-position-contract.mjs
+invalid-record-id: legacy-canonical-evidence.mjs
+invalid-refund-link: canonical-import.mjs
+invalid-refund-posted-date: canonical-import.mjs
+invalid-report-scope: canonical-import.mjs, canonical-month-index.mjs
+invalid-report-scopes: canonical-import.mjs
+invalid-response: drive-feasibility-spike.mjs, drive-folder-discovery.mjs, drive-session-adapter.mjs
+invalid-restore-copy-id: portable-backup.mjs
+invalid-retention-adapter: original-retention-policy.mjs
+invalid-retention-record: original-retention-policy.mjs
+invalid-retention-state: original-retention-policy.mjs
+invalid-retry-audit: canonical-import.mjs
+invalid-review: canonical-import.mjs
+invalid-review-decision: canonical-import.mjs
+invalid-review-reversal: canonical-import.mjs
+invalid-review-target: canonical-import.mjs
+invalid-revision: portable-backup.mjs
+invalid-root: framed-backup-stream.mjs
+invalid-row-cannot-be-accepted: canonical-import.mjs
+invalid-settlement-date: canonical-import.mjs
+invalid-sink: framed-backup-stream.mjs
+invalid-source: framed-backup-stream.mjs
+invalid-source-bytes: provider-csv.mjs
+invalid-source-check: framed-backup-stream.mjs
+invalid-source-encoding: provider-csv.mjs
+invalid-source-hash: original-retention-policy.mjs
+invalid-staging-store: framed-backup-stream.mjs
+invalid-storage-binding: portable-backup.mjs
+invalid-store: immutable-page-tree.mjs
+invalid-synthetic-year-options: synthetic-financial-year.mjs
+invalid-terminal-event: transaction-protocol.mjs
+invalid-timestamp: original-retention-policy.mjs, transaction-protocol.mjs
+invalid-timing: drive-session-adapter.mjs, session-coordination.mjs
+invalid-transition: transaction-protocol.mjs
+invalid-unicode: immutable-page-tree.mjs, transaction-protocol.mjs
+invalid-value: immutable-page-tree.mjs
+invalid-verifier: physical-root-binding.mjs
+invalid-workspace-month: canonical-workspace-model.mjs
+invalid-workspace-options: canonical-workspace-model.mjs
+invalid-write-receipt: catalog-storage.mjs
+journal-commit-mismatch: catalog-storage.mjs, catalog-transaction-engine.mjs
+key-byte-limit: immutable-page-tree.mjs
+ledger-identity-mismatch: canonical-history.mjs
+ledger-metadata-rewrite-refused: canonical-history.mjs
+ledger-session-busy: canonical-import.mjs
+ledger-session-closed: canonical-import.mjs
+locator-catalog-generation-mismatch: drive-locator-catalog.mjs
+locator-catalog-identity-mismatch: catalog-segments.mjs, drive-locator-catalog.mjs
+locator-hash-mismatch: drive-locator-catalog.mjs
+locator-not-found: drive-locator-catalog.mjs
+locator-replacement-forbidden: drive-locator-catalog.mjs
+manifest-byte-limit: paged-canonical-backup.mjs
+manifest-commit-mismatch: catalog-storage.mjs
+manifest-unavailable: application-storage-lifecycle.mjs
+memory-write-hash-mismatch: paged-archive-rehearsal.mjs
+migration-chunk-format: legacy-canonical-evidence.mjs
+migration-commit-mismatch: legacy-canonical-evidence.mjs
+migration-empty-chunk: legacy-canonical-evidence.mjs
+migration-evidence-format: legacy-canonical-evidence.mjs
+migration-evidence-hash: legacy-canonical-evidence.mjs
+migration-evidence-required: canonical-paged-storage.mjs
+migration-latest-ledger-mismatch: legacy-canonical-evidence.mjs
+migration-length-mismatch: legacy-canonical-evidence.mjs
+migration-payload-mismatch: legacy-canonical-evidence.mjs
+migration-snapshot-missing: legacy-canonical-evidence.mjs
+migration-source-mismatch: legacy-canonical-evidence.mjs
+migration-target-identity-required: legacy-canonical-evidence.mjs
+missing-archive-object: paged-canonical-backup.mjs
+missing-csv-header: provider-csv.mjs
+missing-currency: canonical-import.mjs
+missing-deletion-failure: original-retention-policy.mjs
+missing-file-id: drive-feasibility-spike.mjs
+missing-folder: drive-feasibility-spike.mjs, drive-session-adapter.mjs, synthetic-folder-picker.mjs
+missing-folder-name: drive-folder-discovery.mjs
+missing-history: catalog-storage.mjs
+missing-import-id: original-retention-policy.mjs
+missing-original-retention: drive-original-retention.mjs
+missing-pending-journal: catalog-transaction-engine.mjs
+missing-restored-locator: original-retention-policy.mjs
+missing-source-locator: original-retention-policy.mjs
+missing-staged-commit: catalog-transaction-engine.mjs
+missing-staged-object: catalog-transaction-engine.mjs
+missing-token: drive-feasibility-spike.mjs, drive-folder-discovery.mjs
+no-session-context: session-coordination.mjs
+no-staged-changes: canonical-workspace-session.mjs
+node-byte-limit: immutable-page-tree.mjs
+node-entry-limit: immutable-page-tree.mjs
+non-json-ledger: canonical-import.mjs
+noncanonical-header: framed-backup-stream.mjs
+not-restorable-backup: portable-backup.mjs
+not-retained-original: drive-original-retention.mjs
+not-stale: session-coordination.mjs
+object-byte-limit: framed-backup-stream.mjs, paged-canonical-backup.mjs
+object-hash-mismatch: framed-backup-stream.mjs, portable-backup.mjs
+object-integrity-failure: application-storage-lifecycle.mjs
+object-metadata-mismatch: application-storage-lifecycle.mjs
+observation-account-conflict: canonical-import.mjs
+observation-already-resolved: canonical-import.mjs
+observation-evidence-mismatch: canonical-import.mjs
+observation-outside-declared-coverage: canonical-import.mjs
+observation-resolution-without-decision: canonical-import.mjs
+operation-in-progress: canonical-paged-storage.mjs, canonical-workspace-session.mjs, catalog-storage.mjs, synthetic-year-seeder.mjs
+original-hash-mismatch: drive-original-retention.mjs
+original-import-binding-mismatch: drive-original-retention.mjs
+original-index-conflict: drive-original-retention.mjs
+original-index-unverified: drive-original-retention.mjs
+paged-lifecycle-required: canonical-paged-storage.mjs
+paged-required: application-storage-lifecycle.mjs
+parent-mismatch: drive-feasibility-spike.mjs
+pending-aborted-transaction: catalog-transaction-engine.mjs
+pending-manifest-mismatch: catalog-transaction-engine.mjs
+permission-denied: drive-folder-discovery.mjs
+physical-archive-locator: catalog-backup.mjs
+position-command-conflict: financial-position.mjs
+position-source-required: financial-position-contract.mjs
+posting-status-history-mismatch: canonical-import.mjs
+published-copy-mismatch: paged-canonical-backup.mjs
+race-folder-mismatch: drive-feasibility-spike.mjs
+read-before-write-required: drive-session-adapter.mjs
+read-only-copy: catalog-transaction-engine.mjs, physical-root-binding.mjs
+read-only-store: immutable-page-tree.mjs
+recovery-base-mismatch: catalog-transaction-engine.mjs
+recovery-not-required: canonical-workspace-session.mjs
+refund-evidence-required: canonical-import.mjs
+refund-exceeds-original: canonical-import.mjs
+release-before-preview: canonical-workspace-session.mjs
+restore-incomplete: framed-backup-stream.mjs
+retention-clock-mismatch: original-retention-policy.mjs
+retention-intent-conflict: drive-original-retention.mjs
+retention-intent-hash-mismatch: drive-original-retention.mjs
+retention-not-expired: original-retention-policy.mjs
+retry-history-rewrite-refused: canonical-history.mjs
+retry-normalization-changed: canonical-import.mjs
+retry-not-conflict: drive-feasibility-spike.mjs
+retry-row-missing: canonical-import.mjs
+rows-must-be-array: import-reconciliation.mjs
+same-backup-destination: catalog-backup.mjs
+semantic-scope-open: canonical-paged-storage.mjs
+session-activity-id-required: canonical-import.mjs
+session-generation-exhausted: canonical-import.mjs
+session-json-and-storage-binding-required: canonical-import.mjs
+session-json-required: canonical-import.mjs
+session-primitive-event-metadata-required: canonical-import.mjs
+session-released: session-coordination.mjs
+session-revision-exhausted: canonical-import.mjs
+snapshot-object-set-mismatch: portable-backup.mjs
+source-changed-during-backup: portable-backup.mjs
+source-commit-invalid: portable-backup.mjs
+source-evidence-binding-mismatch: paged-canonical-backup.mjs
+source-evidence-byte-limit: paged-canonical-backup.mjs
+source-evidence-bytes-changed: paged-canonical-backup.mjs
+source-evidence-cycle: paged-canonical-backup.mjs
+source-evidence-database-mismatch: paged-canonical-backup.mjs
+source-evidence-format: paged-canonical-backup.mjs
+source-evidence-hash-mismatch: paged-canonical-backup.mjs
+source-evidence-manifest-mismatch: paged-canonical-backup.mjs
+source-evidence-metadata-mismatch: paged-canonical-backup.mjs
+source-evidence-missing-file: paged-canonical-backup.mjs
+source-evidence-missing-object: paged-canonical-backup.mjs
+source-evidence-read-only: paged-canonical-backup.mjs
+source-evidence-required: paged-canonical-backup.mjs
+source-evidence-rewrite-refused: canonical-history.mjs
+source-evidence-size-mismatch: paged-canonical-backup.mjs
+source-evidence-unreferenced-file: paged-canonical-backup.mjs
+source-evidence-version-changed: paged-canonical-backup.mjs
+source-lock-and-sink-required: paged-canonical-backup.mjs
+source-lock-required: catalog-backup.mjs, paged-canonical-backup.mjs, portable-backup.mjs
+source-object-hash-mismatch: portable-backup.mjs
+source-originals-changed: catalog-backup.mjs, drive-original-retention.mjs
+source-version-changed: paged-canonical-backup.mjs
+staged-commit-mismatch: catalog-transaction-engine.mjs
+staged-object-hash-mismatch: framed-backup-stream.mjs
+staged-object-id-mismatch: framed-backup-stream.mjs
+staged-object-mismatch: paged-canonical-backup.mjs
+stale-ledger-session-revision: canonical-import.mjs
+statement-reconciliation-evidence-required: financial-position-contract.mjs
+storage-binding-mismatch: portable-backup.mjs
+structural-validation-failed: catalog-backup.mjs, portable-backup.mjs
+structural-validator-required: catalog-backup.mjs, portable-backup.mjs
+structural-verification-failed: framed-backup-stream.mjs
+structural-verifier-required: framed-backup-stream.mjs
+synthetic-catalog-required: catalog-storage.mjs
+synthetic-data-required: canonical-workspace-session.mjs
+synthetic-only-required: canonical-import.mjs
+target-lock-required: catalog-backup.mjs, paged-canonical-backup.mjs
+terminal-commitment-mismatch: framed-backup-stream.mjs
+terminal-count-mismatch: framed-backup-stream.mjs
+timer-unavailable: session-coordination.mjs
+trailing-bytes: framed-backup-stream.mjs
+truncated-stream: framed-backup-stream.mjs
+unexpected-parent-catalog-hash: drive-locator-catalog.mjs
+unguarded-copy-write: paged-canonical-backup.mjs
+unindexed-canonical-record: legacy-canonical-evidence.mjs
+unknown-account: canonical-import.mjs, canonical-month-index.mjs, canonical-workspace-model.mjs
+unknown-activity: canonical-import.mjs, canonical-workspace-model.mjs
+unknown-position-account: financial-position-contract.mjs, financial-position.mjs
+unsafe-name: drive-feasibility-spike.mjs
+unsafe-race-target: drive-feasibility-spike.mjs
+unsupported-archive: portable-backup.mjs
+unsupported-catalog: locator-codec.mjs
+unsupported-classification: canonical-import.mjs
+unsupported-csv-header: provider-csv.mjs
+unsupported-financial-event: canonical-import.mjs
+unsupported-folder-format: dashboard-synthetic-storage.mjs
+unsupported-money-precision: import-reconciliation.mjs
+unsupported-object: transaction-protocol.mjs
+unsupported-persisted-event: canonical-import.mjs
+unsupported-root-profile: framed-backup-stream.mjs
+unsupported-root-version: framed-backup-stream.mjs
+unsupported-source-format: import-reconciliation.mjs, provider-csv.mjs
+unsupported-stream-version: framed-backup-stream.mjs
+unsupported-synthetic-retention-or-completeness: canonical-import.mjs
+unsupported-value: transaction-protocol.mjs
+unsupported-workspace-correction: canonical-workspace-session.mjs
+utf8-string-required: utf8-length.mjs
+uuid-v4-required: canonical-import.mjs
+value-depth-limit: immutable-page-tree.mjs
+verification-closed: framed-backup-stream.mjs
+verified-base-required: canonical-paged-storage.mjs
+write-hash-mismatch: immutable-page-tree.mjs

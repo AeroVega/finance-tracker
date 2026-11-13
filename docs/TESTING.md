@@ -83,3 +83,18 @@ V5_BENCH_DENSE=0 V5_BENCH_COLD_REOPEN=1 V5_BENCH_REVISIONS=1 \
 
 Use `V5_BENCH_DENSE=1` for the dense fixture. Earlier reports retain the command
 names from their measured revisions; they are historical reproduction steps.
+
+## Diagnostic contract checks
+
+```sh
+node scripts/audit-error-codes.mjs
+node scripts/generate-error-code-docs.mjs --check
+node --test tests/app-diagnostics.test.mjs tests/error-registry.test.mjs tests/error-reporting.test.mjs tests/diagnostic-capture.test.mjs tests/boot-diagnostics.test.mjs tests/diagnostic-tools.test.mjs
+node scripts/explain-diagnostic.mjs tests/fixtures/diagnostic-reports/integrity.json
+```
+
+The literal-code scan reports dynamic forwarding sites for review rather than
+claiming complete static coverage. The full suite includes the focused cases; CI
+does not run a second full suite. `scripts/check-apple-ui.cjs` includes diagnostic
+layout/self-test cases, but a blocked browser launch is not a pass. Real Safari
+stack capture, clipboard/selection and boot-failure behavior need device acceptance.

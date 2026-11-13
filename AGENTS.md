@@ -28,6 +28,8 @@ Use deliberately synthetic test fixtures authored with invented data. Do not cop
 - MVP1 is file imports. MVP2 may investigate free, authorized direct integrations. Keep file imports permanently.
 - Prefer deterministic, inspectable categorization rules and a review queue over AI as a default categorizer.
 
+- New throw sites should use a registered code through `AppError`/`fail`; wrapped native errors should retain `cause`. Shared reports must be constructed from typed allowlisted fields, never raw errors or messages.
+
 ## Data correctness
 - Preserve source descriptions, stable identifiers where available, and import provenance.
 - Re-imports and overlapping exports must not silently duplicate transactions.

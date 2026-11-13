@@ -23,32 +23,11 @@ jobs:
           node-version: 26
       - name: Check browser module syntax
         run: |
-          node --check js/app.js
-          node --check js/dashboard-synthetic-storage.mjs
-          node --check js/provider-csv.mjs
-          node --check js/canonical-import.mjs
-          node --check js/canonical-ledger-storage.mjs
-          node --check js/synthetic-application-structure.mjs
-          node --check prototype/application-storage-lifecycle-test.mjs
-          node --check prototype/pr25-acceptance.mjs
-          node --check js/workspace-pages.mjs
-          node --check js/workspace-chrome.mjs
-          node --check js/canonical-workspace.mjs
-          node --check js/canonical-workspace-model.mjs
-          node --check js/canonical-workspace-session.mjs
-          node --check js/financial-position-contract.mjs
-          node --check js/financial-position.mjs
-          node --check js/synthetic-financial-position.mjs
-          node --check js/synthetic-financial-year.mjs
-          node --check js/synthetic-year-seeder.mjs
-          node --check prototype/synthetic-year.mjs
-          node --check prototype/pr28-import.mjs
-          node --check prototype/acceptance.mjs
-          node --check prototype/acceptance-plan.mjs
-          node --check prototype/pr28-testing.mjs
-          node --check prototype/pr28-testing-plan.mjs
-          node --check prototype/pr28-testing-checks.mjs
-          node --check prototype/pr28-live-checks.mjs
+          find js prototype -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+      - name: Check registered diagnostic codes and generated reference
+        run: |
+          node scripts/audit-error-codes.mjs
+          node scripts/generate-error-code-docs.mjs --check
       - name: Check documentation links and current-state contracts
         run: node scripts/check-docs.mjs
       - name: Run complete Node suite including extended storage growth

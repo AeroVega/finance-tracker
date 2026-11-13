@@ -378,3 +378,47 @@ The accepted production policy requires working financial data and tokens in mem
 PR27's later decision removes a separate real-data smoke-test prerequisite. Synthetic test evidence still must be accompanied by actual OAuth/configuration review, live synthetic acceptance, recovery/privacy/cost review, residual-risk acceptance and explicit production authorization. January 1, 2027 remains a conditional v1.0.0 target.
 
 Continue with [next steps](NEXT_STEPS.md). The broader product scope remains in the [roadmap](ROADMAP.md).
+
+## Diagnostic v2 follow-up — November 13, 2026
+
+**Implemented:** the focused `feat/actionable-diagnostics` branch starts at PR38
+`7aa553eeab83d898b9a6bb43dfb8a68c298ae70a`. It consolidates code recognition and
+fixed copy; preserves sanitized reports across status publishers and native
+causes at transport/session boundaries; adds bounded source locations, action,
+request, lifecycle and environment context; and integrates tiered diagnostic UI,
+recent history, a manual developer self-test, startup fallback and offline triage.
+It does not rewrite the storage error hierarchy or change ownership, retry,
+verification or recovery decisions. Existing cancellation codes are retained;
+reports can identify the underlying native abort. The literal-code audit finds
+628 codes with zero unregistered literal sites, and explicitly lists 40 dynamic
+forwarding sites rather than claiming those are statically proven.
+
+**Verified baseline:** Node 24.22.1, extended suite at `7aa553e` passed 1,950 tests
+in 481.7 seconds. The [approximate baseline audit](evidence/error-code-audit-baseline.txt)
+found 420 unrecognized codes out of 621. The new lexical audit has broader coverage,
+so these two scan totals are not identical populations.
+
+**Verified candidate:** diagnostic-focused checks at `37e6a7f` passed 50 tests.
+Syntax, code audit, generated-reference freshness and documentation checks passed.
+Independent reviews found and fixed changing-getter/array-method privacy bypasses,
+stale cross-attempt deduplication, and tool-surface forwarding. The final extended
+suite at `85edca6` passed **1,993/1,993 tests** in **485.4 seconds**, Node 24.22.1.
+Nine initial integration failures were outdated v1 field/DOM assertions; the
+updated tests retain exact metadata, privacy, mutation and false-success checks.
+
+**Not deployed or owner-accepted:** Chromium launch is blocked by this executor's
+socket restrictions; rendered checks were added but are unverified. Physical
+Safari stack capture, clipboard/selection, panel layout and live Google integration
+remain owner acceptance. No merge, deployment or live Drive operation was performed.
+Production financial-data persistence remains **NO-GO**.
+
+**Publication scope:** owner requested Copy/Select only; the optional OS Share
+button and its capability field were removed. All prototype files are unchanged from PR38. Startup fallback, diagnostic styling
+and status report-ID forwarding are integrated in the main app only; legacy
+prototype status-only error paths retain their previous context limitations.
+
+**Verified reduced scope:** the exact Copy/Select-only, main-app integration tree
+at `760ef91` passed the complete extended suite: **1,994/1,994 tests**, Node
+24.22.1, **495.3 seconds**. All prototype files match the PR38 base byte-for-byte.
+Publication is pending approval review of diagnostics-related synthetic test
+updates; no branch, PR, deployment or merge has been published for this follow-up.

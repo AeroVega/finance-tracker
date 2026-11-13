@@ -1,3 +1,4 @@
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -95,3 +96,6 @@ if (errors.length) {
 } else {
   console.log(`Documentation checks passed: ${markdownFiles.length} Markdown files, local links/anchors and current-state contracts.`);
 }
+
+const generated=spawnSync(process.execPath,['scripts/generate-error-code-docs.mjs','--check'],{cwd:root,stdio:'inherit'});
+if(generated.status!==0)process.exitCode=1;

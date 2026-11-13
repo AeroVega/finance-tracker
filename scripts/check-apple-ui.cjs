@@ -133,5 +133,28 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
   assert.equal(response.status(),200);assert(response.headers()['content-type'].includes('image/png'));
  }
  console.log('PASS anonymous subpath manifest and icon delivery');
+ for (const width of [375,768]) {
+  const diagnostics=await browser.newPage({viewport:{width,height:900}});
+  await diagnostics.route('https://**/*',r=>r.abort());
+  await diagnostics.goto(base); await diagnostics.click('#nav-storage');
+  await diagnostics.locator('#recovery-tools > summary').click();
+  await diagnostics.click('#diagnostic-self-test');
+  const report=diagnostics.locator('#diagnostic-test-status + .app-diagnostics');
+  await report.waitFor({state:'visible'});
+  assert((await report.locator('textarea').inputValue()).includes('diagnostic-self-test'));
+  assert(await report.locator('textarea').evaluate(el=>parseFloat(getComputedStyle(el).fontSize)>=16));
+  for(const control of await report.locator('button').all()) {
+   const box=await control.boundingBox();assert(box.height>=44&&box.width>=44,'diagnostic touch target');
+  }
+  assert(await diagnostics.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'diagnostic horizontal overflow');
+  await diagnostics.evaluate(async()=>{
+   const {showDiagnostic}=await import('./js/app-diagnostics.mjs');
+   const target=document.getElementById('diagnostic-test-status');
+   showDiagnostic({code:'category-required'},{surface:'workspace',target});
+  });
+  assert.equal(await report.count(),0,'input validation must not display diagnostic panel');
+  await diagnostics.close();
+ }
+ console.log('PASS diagnostics self-test, input tier, 375/768px overflow and touch controls');
  await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

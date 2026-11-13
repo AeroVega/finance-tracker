@@ -7,8 +7,8 @@ test('reports construct only bounded allowlisted fields, never echo input string
   for (const error of [new Error(secret), {code:secret}, {code:'write-unresolved', details:{createFailed:false, readbackError:{code:secret,message:secret}}}, {code:'ownership-unknown',sessionCheck:secret}, {code:'google-libraries-unavailable',components:[secret]}, {code:'google-config-http',status:secret}]) {
     const result=createDiagnostic(error,{surface:secret,build:secret});
     assert.doesNotMatch(JSON.stringify(result), /private-/);
-    assert.equal(JSON.parse(result.report).surface,'unknown');
-    assert.ok(result.report.length<2048);
+    assert.equal(JSON.parse(result.report).where.surface,'unknown');
+    assert.ok(new TextEncoder().encode(result.report).length<=16384);
   }
   assert.equal(createDiagnostic({code:'constructor'}).code,'unknown');
   assert.equal(createDiagnostic({code:'__proto__'}).code,'unknown');
@@ -21,7 +21,7 @@ test('hostile accessors and serialized objects do not bypass the allowlist', () 
 });
 test('existing storage diagnostics retain fixed check details, no unsafe detail',()=>{
   const result=createDiagnostic({code:'ownership-unknown',sessionCheck:'closing-version-changed',sessionId:secret},{surface:'workspace',build:'a'.repeat(40)});
-  assert.deepEqual(JSON.parse(result.report),{schema:'finance-tracker-diagnostic-v1',code:'ownership-unknown',surface:'workspace',build:'a'.repeat(40),detail:{code:'ownership-unknown',check:'closing-version-changed'}});
+  const report=JSON.parse(result.report);assert.equal(report.schema,'finance-tracker-diagnostic-v2');assert.equal(report.error.code,'ownership-unknown');assert.equal(report.where.surface,'workspace');assert.equal(report.build.commit,'a'.repeat(40));assert.equal(report.error.chain[0].context.check,'closing-version-changed');
   assert.match(diagnosticMessage({code:'write-unresolved'}), /Do not upload again, reconnect, recover or delete/);
 });
 function dom() {
@@ -35,13 +35,13 @@ test('clipboard denial and absence provide explicit selectable fallback without 
   const d=dom();showDiagnostic({code:'ownership-unknown'},{...d,navigator,surface:'workspace'});
   const copy=d.all.find(n=>n.textContent==='Copy diagnostics'),report=d.all.find(n=>n.tag==='textarea');
   assert.equal(report.readOnly,true);await copy.click();assert.equal(report.selected,true);assert.equal(report.focused,true);
-  assert.match(d.all.at(-1).textContent,/device Copy command/);assert.equal(copy.disabled,false);
+  assert.ok(d.all.some(n=>/device Copy command/.test(n.textContent||'')));assert.equal(copy.disabled,false);
  }
 });
 test('copy succeeds, manual selection works, and replaced reports cannot steal focus on late failure',async()=>{
  const d=dom(),copied=[];
  showDiagnostic({code:'offline'},{...d,navigator:{clipboard:{writeText:async text=>copied.push(text)}}});
- await d.all.find(n=>n.textContent==='Copy diagnostics').click();assert.equal(JSON.parse(copied[0]).code,'offline');
+ await d.all.find(n=>n.textContent==='Copy diagnostics').click();assert.equal(JSON.parse(copied[0]).error.code,'offline');
  d.all.find(n=>n.textContent==='Select diagnostics').click();assert.equal(d.all.find(n=>n.tag==='textarea').selected,true);
  let reject;showDiagnostic({code:'write-unresolved'},{...d,navigator:{clipboard:{writeText:()=>new Promise((_,r)=>{reject=r})}}});
  const copy=d.all.filter(n=>n.textContent==='Copy diagnostics').at(-1), report=d.all.filter(n=>n.tag==='textarea').at(-1);
@@ -61,8 +61,8 @@ test('unexpected runtime handlers are installed once and never serialize event d
  installUnexpectedDiagnostics({...d,window});installUnexpectedDiagnostics({...d,window});
  events.error({message:secret,filename:secret,error:new Error(secret)});
  events.unhandledrejection({reason:{code:secret}});
- const reports=d.all.filter(n=>n.tag==='textarea');assert.equal(reports.length,2);
- assert.equal(JSON.parse(reports[1].value).code,'unexpected-error');assert.doesNotMatch(JSON.stringify(d.all),/private-/);
+ const reports=d.all.filter(n=>n.tag==='textarea');assert.ok(reports.length>=1);
+ assert.equal(JSON.parse(reports.at(-1).value).error.kind,'defect');assert.doesNotMatch(JSON.stringify(d.all),/private-/);
 });
 
 test('workspace recovery directions never point to copy-guide-only controls',()=>{
@@ -74,4 +74,13 @@ test('workspace recovery directions never point to copy-guide-only controls',()=
   }
  }
  assert.match(createDiagnostic({code:'stale-session'},{surface:'copy-guide'}).message,/Confirm stopped sessions below/);
+});
+
+// Owner chose Copy/Select only; even a supported OS share API stays unused.
+test('diagnostics exposes Copy and Select only, never an OS share action',async()=>{
+ const d=dom();let shares=0,copies=0;
+ showDiagnostic({code:'ownership-unknown'},{...d,navigator:{share:async()=>{shares++},clipboard:{writeText:async()=>{copies++}}}});
+ assert.deepEqual(d.all.filter(n=>n.tag==='button').map(n=>n.textContent),['Copy diagnostics','Select diagnostics']);
+ await d.all.find(n=>n.textContent==='Copy diagnostics').click();
+ assert.equal(copies,1);assert.equal(shares,0);
 });

@@ -7,9 +7,11 @@ import { getEffectiveActivities } from './canonical-import.mjs';
 import { exactSignedDecimal, isCalendarDate } from './import-reconciliation.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
 import { showDiagnostic, clearDiagnostic } from './app-diagnostics.mjs';
+import { leaveBreadcrumb, registerContextProvider, recentReports } from './error-reporting.mjs';
+import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
 
 const $ = id => document.getElementById(id);
-const pages = createWorkspacePages({document, window});
+const pages = createWorkspacePages({document, window, onNavigate: page => leaveBreadcrumb({e:'page.view', page})});
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
   if (text !== undefined) result.textContent = text;
@@ -57,11 +59,43 @@ const storage = new DashboardSyntheticStorage({
     if (status.state !== 'ready') session.invalidate();
     $('connection-status').textContent = status.state === 'ready'
       ? 'Connected to a synthetic copy. Opening and saves verify its canonical records.'
-      : status.code ? showDiagnostic({code: status.code}, {surface: 'workspace', target: $('connection-status')}) : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
+      : status.code ? showDiagnostic({code: status.code}, {surface: 'workspace', target: $('connection-status'), reportId: status.reportId, page: pages.current}) : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
     refresh();
   }
 });
 const session = new CanonicalWorkspaceSession({ storage });
+registerContextProvider('workspace', () => ({
+  lifecycle: storage.lifecycle?.state,
+  ownership: storage.lifecycle?.coordinator?.canWrite === true ? 'owner' : 'unknown',
+  busy, dirty: session.dirty, needsReopen: session.needsReopen,
+  profile: session.store?.base ? 'canonical5-physical4' : undefined,
+  ledger: session.ledger ? {
+    syntheticOnly: session.ledger.syntheticOnly === true,
+    accounts: session.ledger.accounts.length, activities: session.ledger.activities.length,
+    events: session.ledger.events.length, stagedChanges: session.stagedHistory.length
+  } : undefined
+}));
+registerContextProvider('requests', () => storage.lifecycle?.requestMetrics?.snapshot());
+let diagnosticHistoryKey = '';
+function refreshDiagnosticHistory() {
+  const history = recentReports();
+  const key = history.map(item => item.id).join(',');
+  if (key === diagnosticHistoryKey) return;
+  diagnosticHistoryKey = key;
+  const list = $('recent-problems');
+  list.replaceChildren();
+  const serious = history.filter(item => ['integrity', 'defect'].includes(item.kind)).length;
+  $('recent-problems-count').textContent = serious ? ` (${serious})` : '';
+  for (const item of history) {
+    const button = node('button', `${item.code} · ${item.id}`, 'text-button'); button.type = 'button';
+    button.addEventListener('click', () => {
+      $('diagnostic-test-status').textContent = showDiagnostic(null, {reportId:item.id, surface:'workspace', target:$('diagnostic-test-status')});
+    });
+    const row = node('li'); row.append(button); list.append(row);
+  }
+}
+installDiagnosticSelfTest({button:$('diagnostic-self-test'), target:$('diagnostic-test-status'), onReport:refreshDiagnosticHistory, document, navigator});
+
 function announce(text, kind = 'info') {
   $('action-status').textContent = text; $('action-status').dataset.kind = kind;
   if (activeFormStatus) {
@@ -70,6 +104,7 @@ function announce(text, kind = 'info') {
   }
 }
 function refresh() {
+  refreshDiagnosticHistory();
   const lifecycle = storage.lifecycle;
   const needsRecovery = ['recovery-required', 'stale-session'].includes(lifecycle?.state);
   if (needsRecovery) $('recovery-tools').open = true;
@@ -142,23 +177,25 @@ function refresh() {
       ? `Last verified saved format: canonical v5, ${session.store.valueCodec}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
       : 'No saved format currently verified. New synthetic copies use canonical v5.';
 }
-async function run(message, operation, formStatus = null) {
+async function run(message, operation, formStatus = null, actionId = 'workspace-action') {
   if (busy) return;
   // Apply a queued query before an action so cancellation leaves rows and input aligned.
   if (searchTimer !== null) { cancelSearch(); page = 0; render(); }
   activeFormStatus = formStatus;
+  leaveBreadcrumb({e:'action.start', actionId});
   clearDiagnostic($('action-status'));
   busy = true; operationStarted = Date.now(); refresh(); announce(message);
   const timer = setInterval(refresh, 1000);
-  try { await operation(); }
+  try { await operation(); leaveBreadcrumb({e:'action.ok', actionId}); }
   catch (error) {
-    const message = showDiagnostic(error, {surface: 'workspace', target: $('action-status')});
+    leaveBreadcrumb({e:'action.fail', actionId});
+    const message = showDiagnostic(error, {surface: 'workspace', target: $('action-status'), actionId, page: pages.current});
     announce(message + (session.dirty ? ' Your staged changes remain in this tab.' : ''), 'error');
   } finally { clearInterval(timer); busy = false; operationStarted = null; refresh(); activeFormStatus = null; }
 }
 const formStatuses = { 'stage-account':'account-form-status', 'stage-balance':'position-form-status', 'stage-closure':'closure-form-status', 'stage-holdings':'holdings-form-status', 'stage-reconciliation':'reconciliation-form-status' };
 const action = (id, message, callback) => $(id).addEventListener('click', () => {
-  if (!$(id).disabled) return run(message, callback, formStatuses[id]);
+  if (!$(id).disabled) return run(message, callback, formStatuses[id], id);
 });
 function confirmReplace() {
   if ((!session.dirty && !hasUnfinishedDetail()) || window.confirm('Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.')) return true;
@@ -342,7 +379,7 @@ function resolveHoldings(card, account) {
       return run('Recording holdings evidence selection locally.', async () => {
         session.recordPosition({type:'holdings-resolution', accountId:account.accountId, effectiveDate:event.effectiveDate, selectedEventId:event.eventId, candidateEventIds:events.map(item => item.eventId), reason:reason.value.trim()});
         render(); announce('Holdings selection staged. All candidate statements remain in the audit history.', 'success');
-      });
+      }, null, 'select-holdings-evidence');
     });
   }
 }
@@ -402,7 +439,7 @@ function renderPosition() {
           return run('Recording an auditable balance selection.', async () => {
             session.recordPosition({type:'balance-resolution', accountId:account.accountId, effectiveDate:event.effectiveDate, selectedEventId:event.eventId, candidateEventIds:account.candidateEventIds, reason:rationale.value.trim()});
             render(); announce('Balance selection staged with its reason. Prior evidence is preserved. Save changes to persist it.', 'success');
-          });
+          }, null, 'select-balance-evidence');
         });
         card.append(button);
       }
@@ -723,7 +760,7 @@ window.addEventListener('online', refresh);
 refresh();
 storage.prepare().then(() => { configured = true; refresh(); }).catch(error => {
   configured = false;
-  $('connection-status').textContent = showDiagnostic(error, {surface: 'workspace', target: $('connection-status')});
+  $('connection-status').textContent = showDiagnostic(error, {surface: 'workspace', target: $('connection-status'), page: pages.current});
   refresh();
 });
 correctionFields(); refresh();

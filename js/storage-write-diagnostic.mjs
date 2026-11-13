@@ -66,7 +66,11 @@ export function storageWriteDiagnostic(error) {
         const fields=read(detail,'fields');
         const allowedFields=['id','name','mimeType','parents','appProperties','size','version','trashed'];
         if(Array.isArray(fields)) {
-          const safeFields=[...new Set(fields.filter(field=>allowedFields.includes(field)))];
+          const safeFields=[];
+          const length=read(fields,'length');
+          for(let i=0;i<Math.min(Number.isSafeInteger(length)?length:0,32);i++){
+            const field=read(fields,i);if(allowedFields.includes(field)&&!safeFields.includes(field))safeFields.push(field);
+          }
           if(safeFields.length)result.fields=safeFields;
         }
         const revalidatedObjects=read(detail,'revalidatedObjects'),revalidatedBytes=read(detail,'revalidatedBytes');

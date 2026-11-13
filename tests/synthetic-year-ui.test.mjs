@@ -14,6 +14,9 @@ import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs
 import { HttpCatalogDrive } from './helpers/http-catalog-drive.mjs';
 import { pageController, deferred } from './helpers/page-controller.mjs';
 
+const findNode=(node,predicate)=>predicate(node)?node:node.children.map(child=>findNode(child,predicate)).find(Boolean);
+const diagnosticText=panel=>findNode(panel,node=>node.tagName==='TEXTAREA').value;
+
 // The physical v5 fixture controls cancellation, busy and failure ordering.
 // The real HTTP lifecycle/controller test below covers connection orchestration.
 async function yearPage() {
@@ -327,9 +330,14 @@ test('unresolved setup shows safe readback cause and never initiates automatic r
   await h.upload();
   assert.equal(h.state.connects.length, 1);
   assert.equal(h.diagnostics().length, 1);
-  assert.match(h.diagnostics()[0].children[1].children[0].value, /object-not-found/);
-  assert.match(h.diagnostics()[0].children[1].children[0].value, /completed/);
-  assert.doesNotMatch(h.diagnostics()[0].children[1].children[0].value, /private-/);
+  const panel=h.diagnostics()[0], report=JSON.parse(diagnosticText(panel));
+  assert.equal(panel.attributes.role,'alert');
+  assert.equal(findNode(panel,node=>node.tagName==='DETAILS').open,true);
+  assert.equal(report.error.kind,'integrity');
+  assert.equal(report.error.code,'write-unresolved');
+  assert.match(diagnosticText(panel), /object-not-found/);
+  assert.match(diagnosticText(h.diagnostics()[0]), /completed/);
+  assert.doesNotMatch(diagnosticText(h.diagnostics()[0]), /private-/);
   assert.match(h.get('result').textContent, /Preserve this folder and leave this tab open/);
   assert.doesNotMatch(h.get('result').textContent, /reconnect to verify before retrying/);
   await new Promise(setImmediate);
@@ -348,10 +356,10 @@ test('unconfirmed session shows only a fixed check and does not retry or reconne
   await h.upload();
   assert.equal(h.state.connects.length, 1);
   assert.equal(h.diagnostics().length, 1);
-  assert.deepEqual(JSON.parse(h.diagnostics()[0].children[1].children[0].value).detail,
+  assert.deepEqual(JSON.parse(diagnosticText(h.diagnostics()[0])).error.chain[0].context,
     {code: 'ownership-unknown', check: 'closing-version-changed'});
   assert.match(h.get('result').textContent, /Preserve this folder and marker/);
-  assert.doesNotMatch(h.diagnostics()[0].children[1].children[0].value + h.get('result').textContent, /private-/);
+  assert.doesNotMatch(diagnosticText(h.diagnostics()[0]) + h.get('result').textContent, /private-/);
   await new Promise(setImmediate);
   assert.equal(h.state.connects.length, 1);
   assert.equal(h.state.writes, 0);

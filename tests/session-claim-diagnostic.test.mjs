@@ -135,7 +135,11 @@ for (const operation of ['assertCanWrite', 'heartbeat', 'resume', 'release']) te
   const {createDiagnostic} = await import('../js/app-diagnostics.mjs');
   await assert.rejects(session[operation](), failure => {
     const diagnostic = createDiagnostic(failure, {surface:'synthetic-year'});
-    assert.deepEqual(JSON.parse(diagnostic.report).detail, {code:'ownership-lost', check:'closing-version-changed'});
+    const report = JSON.parse(diagnostic.report);
+    assert.equal(report.schema, 'finance-tracker-diagnostic-v2');
+    assert.equal(report.error.code, 'ownership-lost');
+    assert.equal(report.where.surface, 'synthetic-year');
+    assert.deepEqual(report.error.chain[0].context, {code:'ownership-lost', check:'closing-version-changed'});
     assert.match(diagnostic.message, /could not be verified/);
     assert.ok(!diagnostic.report.includes(http.folderId));
     return true;

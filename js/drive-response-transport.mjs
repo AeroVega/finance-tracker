@@ -17,8 +17,8 @@ export const DEFAULT_DRIVE_RESPONSE_LIMITS = Object.freeze({
 });
 
 export class DriveResponseError extends Error {
-  constructor(code, message, details = {}) {
-    super(message);
+  constructor(code, message, details = {}, cause) {
+    super(message, cause === undefined ? undefined : {cause});
     this.name = 'DriveResponseError';
     this.code = code;
     this.details = details;
@@ -96,7 +96,7 @@ export async function readBoundedDriveBytes(response, { kind = 'stored-object', 
   }
   let reader;
   try { reader = response.body.getReader(); }
-  catch { throw new DriveResponseError('drive-stream-unavailable', 'A bounded Drive response stream is required.'); }
+  catch (cause) { throw new DriveResponseError('drive-stream-unavailable', 'A bounded Drive response stream is required.', {}, cause); }
   const chunks = [];
   let total = 0;
   let tail = null;
@@ -135,7 +135,7 @@ export async function readBoundedDriveBytes(response, { kind = 'stored-object', 
   } catch (error) {
     try { await reader.cancel(); } catch { /* Preserve the fixed diagnostic. */ }
     if (error instanceof DriveResponseError) throw error;
-    throw new DriveResponseError('drive-response-interrupted', 'A Drive response ended before its bytes could be verified.');
+    throw new DriveResponseError('drive-response-interrupted', 'A Drive response ended before its bytes could be verified.', {}, error);
   } finally {
     reader.releaseLock();
   }
@@ -145,8 +145,8 @@ export async function readBoundedDriveJson(response, options) {
   const bytes = await readBoundedDriveBytes(response, options);
   try {
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-  } catch {
-    // JSON.parse messages can quote private response content. Never forward them.
-    throw new DriveResponseError('invalid-json-object', 'A Drive response is not valid UTF-8 JSON.');
+  } catch (cause) {
+    // Preserve native type/stack privately; the reporter never emits its message.
+    throw new DriveResponseError('invalid-json-object', 'A Drive response is not valid UTF-8 JSON.', {}, cause);
   }
 }

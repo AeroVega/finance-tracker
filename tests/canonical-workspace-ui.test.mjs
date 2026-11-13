@@ -1291,3 +1291,17 @@ test('Home reads stay cached during Activity filtering and invalidate with scope
   assert.equal(h.state.homeReads, beforeEdit + 1);
   assert.equal(h.modelSession.dirty, true);
 });
+
+test('developer diagnostics self-test stays local and exposes copyable context', async () => {
+  const p = await workspacePage();
+  await p.get('diagnostic-self-test').click();
+  const panels = p.diagnostics();
+  const find = (node, tag) => node.tagName === tag ? node : node.children.map(child => find(child, tag)).find(Boolean);
+  const report = JSON.parse(find(panels.at(-1), 'TEXTAREA').value);
+  assert.equal(report.error.code, 'diagnostic-self-test');
+  assert.equal(report.where.actionId, 'diagnostic-self-test');
+  assert.equal(report.where.page, 'storage');
+  assert.equal(p.state.writes, 0);
+  assert.equal(p.state.connects.length, 0);
+  assert.ok(p.get('recent-problems').children.length > 0);
+});

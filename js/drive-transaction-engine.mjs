@@ -1,3 +1,4 @@
+import { markRequestEndpoint } from './drive-request-metrics.mjs';
 import { createDriveResponseLimits, readBoundedDriveBytes, readBoundedDriveJson, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
 import { copyOwnedBytes } from "./byte-ownership.mjs";
 import {
@@ -15,16 +16,16 @@ const FILE_ID_BATCH_SIZE = 16;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class DriveTransactionError extends Error {
-  constructor(code, message, details = {}) {
-    super(message);
+  constructor(code, message, details = {}, cause) {
+    super(message, cause === undefined ? undefined : {cause});
     this.name = "DriveTransactionError";
     this.code = code;
     this.details = details;
   }
 }
 
-function fail(code, message, details) {
-  throw new DriveTransactionError(code, message, details);
+function fail(code, message, details, cause) {
+  throw new DriveTransactionError(code, message, details, cause);
 }
 
 function bytesOf(value) {
@@ -106,7 +107,7 @@ export class GoogleDriveTransactionAdapter {
     }finally{scope.active=false;this.#mutationScopes.delete(token);this.#pendingMutations.delete(guard);}
   }
 
-  async request(url, options = {}, { allowStatuses = [], beforeMutation, mutationScope } = {}) {
+  async request(url, options = {}, { allowStatuses = [], beforeMutation, mutationScope, endpointClass } = {}) {
     // Capture before token/ownership awaits. This synchronous fence is separate
     // from the async remote ownership check and runs in the fetch call's turn.
     const mutation=!['GET','HEAD'].includes(String(options.method??'GET').toUpperCase());
@@ -122,13 +123,14 @@ export class GoogleDriveTransactionAdapter {
       cache: "no-store",
       headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
     };
+    markRequestEndpoint(requestOptions, endpointClass);
     if(scope){if(!scope.active)fail("verification-scope-closed","Mutation scope is closed.");scope.guard();}
     guard?.();
     // Only private accounting remains between the final fence and fetch.
     if(scope){scope.dispatched=true;this.#pendingMutations.add(scope.guard);}
     let response;
     try {response=await fetch.call(this,url,requestOptions);}
-    catch {fail("drive-network-error","The Drive request did not return a confirmed response.");}
+    catch (cause) {fail("drive-network-error","The Drive request did not return a confirmed response.", {}, cause);}
     if (!response || !Number.isInteger(response.status)) {
       await discardDriveResponse(response);
       fail("invalid-drive-response", "The Drive request returned no valid HTTP response.");
@@ -148,7 +150,7 @@ export class GoogleDriveTransactionAdapter {
     while (this.generatedFileIds.length === 0) {
       if (!this.fileIdRefill) {
         this.fileIdRefill = (async () => {
-          const response = await this.request(`${API}/files/generateIds?count=${FILE_ID_BATCH_SIZE}&space=drive`);
+          const response = await this.request(`${API}/files/generateIds?count=${FILE_ID_BATCH_SIZE}&space=drive`, {}, {endpointClass:"files.generateIds"});
           const result = await readBoundedDriveJson(response, { kind: "generated-ids", limits: this.responseLimits });
           if (!Array.isArray(result?.ids) || result.ids.length !== FILE_ID_BATCH_SIZE ||
               result.ids.some((id) => typeof id !== "string" || !id.trim() || this.seenGeneratedFileIds.has(id)) ||
@@ -174,7 +176,7 @@ export class GoogleDriveTransactionAdapter {
         fields: "nextPageToken,incompleteSearch,files(id,name,mimeType,parents,appProperties,size,version,trashed)"
       });
       if (pageToken) query.set("pageToken", pageToken);
-      const response = await this.request(`${API}/files?${query}`);
+      const response = await this.request(`${API}/files?${query}`, {}, {endpointClass:"files.list"});
       const page = await readBoundedDriveJson(response, { kind: "list-page", limits: this.responseLimits });
       if (page?.incompleteSearch !== false || !Array.isArray(page.files) || page.files.length > 1000 ||
           (page.nextPageToken != null && typeof page.nextPageToken !== "string")) {
@@ -227,7 +229,7 @@ export class GoogleDriveTransactionAdapter {
 
   async readMetadata(fileId, { maxBytes, signal } = {}) {
     const query = new URLSearchParams({ fields: "id,name,mimeType,parents,appProperties,size,version,trashed" });
-    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?${query}`, { signal });
+    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?${query}`, { signal }, {endpointClass:"files.get"});
     const metadata = await readBoundedDriveJson(response, { kind: "metadata", limits: this.responseLimits, maxBytes });
     if (!metadata || metadata.id !== fileId || metadata.trashed || !Array.isArray(metadata.parents) || !metadata.parents.includes(this.folderId)) {
       fail("object-location-mismatch", "A transaction file is missing, trashed, or outside the selected database folder.", { fileId });
@@ -236,7 +238,7 @@ export class GoogleDriveTransactionAdapter {
   }
 
   async readBytes(fileId, { kind = "stored-object", maxBytes, signal } = {}) {
-    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?alt=media`, { signal });
+    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?alt=media`, { signal }, {endpointClass:"files.get"});
     return readBoundedDriveBytes(response, { kind, limits: this.responseLimits, maxBytes });
   }
 
@@ -315,7 +317,7 @@ export class GoogleDriveTransactionAdapter {
         method: "POST",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
         body
-      }, {allowStatuses:[409],beforeMutation,mutationScope});
+      }, {allowStatuses:[409],beforeMutation,mutationScope,endpointClass:"files.create"});
       createResponseSummary = { status: createResponse.status };
       if (createResponse.ok) {
         const returnedMetadata = await readBoundedDriveJson(createResponse, { kind: "metadata", limits: this.responseLimits });
@@ -402,7 +404,7 @@ export class GoogleDriveTransactionAdapter {
       method: "PATCH",
       headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
       body: joinBytes([head, bytes, tail])
-    }, {beforeMutation,mutationScope});
+    }, {beforeMutation,mutationScope,endpointClass:"files.update"});
     await discardDriveResponse(published);
     const visible = await this.readBytes(manifestFileId, { kind: "manifest" });
     if (new TextDecoder().decode(visible) !== content) {
