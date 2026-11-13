@@ -22,6 +22,14 @@ clears its old panel, not its history.
   subchecks and fixed transport categories. No raw exception message is copied.
 - Build commit from `__FT_BUILD__`, report ID, generation time and page uptime.
 - Known action/page/phase, lifecycle/ownership/draft flags and request counters.
+  `requests` is the lifecycle aggregate, including idle time in `elapsedMs`; it
+  is not one save. Optional `actionRequests` covers requests admitted while the
+  current UI action runs and its wall-clock elapsed time. Both `requestMs` values
+  sum fetch-to-response durations, not body-read/CPU time. An action window is
+  unavailable when no lifecycle existed at action start.
+- Immutable receipt failures may identify fixed metadata field names. A
+  `hash-mismatch` code without these fields does not distinguish a body mismatch
+  from metadata binding/size mismatch in older builds. No field values are copied.
 - Ledger counts: exact only when `syntheticOnly === true`, otherwise upper
   power-of-two buckets. No record content or financial values.
 - A bounded timeline of actions, page/lifecycle/visibility events and request

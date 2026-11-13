@@ -50,7 +50,7 @@ export function storageWriteDiagnostic(error) {
       });
     }
 
-    const candidates = ['drive-request-failed', 'visibility-timeout', 'manifest-readback-mismatch', 'manifest-version-mismatch', 'verification-metadata-changed', 'drive-create-failed', 'drive-update-failed'];
+    const candidates = ['hash-mismatch', 'drive-request-failed', 'visibility-timeout', 'manifest-readback-mismatch', 'manifest-version-mismatch', 'verification-metadata-changed', 'drive-create-failed', 'drive-update-failed'];
     for (const candidate of candidates) {
       const current = findCode(error, candidate);
       if (!current) continue;
@@ -60,7 +60,7 @@ export function storageWriteDiagnostic(error) {
         const reason=read(detail,'reason');
         if(['metadata-changed','content-size-mismatch','metadata-and-size-mismatch','metadata-unstable'].includes(reason))result.reason=reason;
       }
-      if(candidate==='verification-metadata-changed') {
+      if(candidate==='verification-metadata-changed'||candidate==='hash-mismatch') {
         const reason=read(detail,'reason');
         if(['object-missing','metadata-changed','content-proof-unavailable','metadata-unstable','revalidation-limit'].includes(reason))result.reason=reason;
         const fields=read(detail,'fields');

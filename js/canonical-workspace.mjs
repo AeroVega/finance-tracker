@@ -76,6 +76,8 @@ registerContextProvider('workspace', () => ({
   } : undefined
 }));
 registerContextProvider('requests', () => storage.lifecycle?.requestMetrics?.snapshot());
+let actionRequestWindow = null;
+registerContextProvider('actionRequests', () => actionRequestWindow?.snapshot());
 let diagnosticHistoryKey = '';
 function refreshDiagnosticHistory() {
   const history = recentReports();
@@ -182,6 +184,8 @@ async function run(message, operation, formStatus = null, actionId = 'workspace-
   // Apply a queued query before an action so cancellation leaves rows and input aligned.
   if (searchTimer !== null) { cancelSearch(); page = 0; render(); }
   activeFormStatus = formStatus;
+  // Observation only: never let metrics block an action or replace its failure.
+  try { actionRequestWindow = storage.lifecycle?.requestMetrics?.openWindow() ?? null; } catch { actionRequestWindow = null; }
   leaveBreadcrumb({e:'action.start', actionId});
   clearDiagnostic($('action-status'));
   busy = true; operationStarted = Date.now(); refresh(); announce(message);
@@ -191,7 +195,10 @@ async function run(message, operation, formStatus = null, actionId = 'workspace-
     leaveBreadcrumb({e:'action.fail', actionId});
     const message = showDiagnostic(error, {surface: 'workspace', target: $('action-status'), actionId, page: pages.current});
     announce(message + (session.dirty ? ' Your staged changes remain in this tab.' : ''), 'error');
-  } finally { clearInterval(timer); busy = false; operationStarted = null; refresh(); activeFormStatus = null; }
+  } finally {
+    try { actionRequestWindow?.close(); } catch { /* observational only */ }
+    actionRequestWindow = null;
+    clearInterval(timer); busy = false; operationStarted = null; refresh(); activeFormStatus = null; }
 }
 const formStatuses = { 'stage-account':'account-form-status', 'stage-balance':'position-form-status', 'stage-closure':'closure-form-status', 'stage-holdings':'holdings-form-status', 'stage-reconciliation':'reconciliation-form-status' };
 const action = (id, message, callback) => $(id).addEventListener('click', () => {

@@ -28,3 +28,9 @@ test('root-binding and wrapped failures use the same diagnostic without raw exce
   assert.equal(storageWriteDiagnostic(source).create, 'completed');
   assert.equal(storageWriteDiagnostic({code: 'write-unresolved', cause: source}).readbackHttp, 403);
 });
+
+test('receipt mismatch reports field names but never their values',()=>{
+ const result=storageWriteDiagnostic({code:'hash-mismatch',details:{reason:'metadata-changed',fields:['name','mimeType','size','private-secret'],name:'private-secret',mimeType:'private-secret',size:'private-secret'}});
+ assert.deepEqual(result,{code:'hash-mismatch',reason:'metadata-changed',fields:['name','mimeType','size']});
+ assert.doesNotMatch(JSON.stringify(result),/private-secret/);
+});

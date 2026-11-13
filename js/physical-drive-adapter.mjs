@@ -67,7 +67,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
     if(adapter.folderId!==selectedFolderId)fail('copy-mismatch','Physical destination changed.');
     if(owner.current?.failed)throw owner.current.failed;
   };
-  const poison = (code,message,owner) => {const error=Object.assign(new Error(message),{code});if(currentOwner(owner)){clearFacts();if(owner.current){owner.current.failed=error;resetProofs(owner.current);}cache.clear();metadata.clear();cacheBytes=0;manifestCache=null;}throw error;};
+  const poison = (code,message,owner,details) => {const error=Object.assign(new Error(message),{code,...(details?{details}:{})});if(currentOwner(owner)){clearFacts();if(owner.current){owner.current.failed=error;resetProofs(owner.current);}cache.clear();metadata.clear();cacheBytes=0;manifestCache=null;}throw error;};
   const validateMetadata = (m,id,owner) => {
     if (!m || m.id!==id || m.trashed!==false || !Array.isArray(m.parents) || !m.parents.includes(adapter.folderId) ||
         typeof m.version!=='string' || !/^[1-9][0-9]*$/.test(m.version) || typeof m.size!=='string' || !/^(0|[1-9][0-9]*)$/.test(m.size)) poison('metadata-mismatch','Physical metadata identity, size or version is invalid.',owner);
@@ -313,15 +313,37 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       const result=await adapter.createImmutable(input);
       liveRead(owner,input.signal);
       if(!result?.readback)return result; // Generic adapters retain independent readback.
-      const m=structuredClone(result.readback.metadata);
-      const bytes=ownedBytes(result.readback.bytes,expected.maxBytes);
-      validateMetadata(m,expected.fileId,owner);
-      if(m.name!==expected.name||m.mimeType!=='application/octet-stream'||
-         m.appProperties?.financeTrackerKind!==expected.kind||
-         m.appProperties?.financeTrackerTransaction!==expected.transactionId||
-         m.appProperties?.financeTrackerHash!==expected.sha256||m.size!==String(bytes.length)||
-         await partitionDigest(bytes)!==expected.sha256)
-        poison('hash-mismatch','Immutable create readback does not match its requested binding.',owner);
+      let m=structuredClone(result.readback.metadata);
+      let bytes=ownedBytes(result.readback.bytes,expected.maxBytes);
+      const mismatchFields=()=>{
+        const fields=[];
+        if(m.name!==expected.name)fields.push('name');
+        if(m.mimeType!=='application/octet-stream')fields.push('mimeType');
+        if(m.appProperties?.financeTrackerKind!==expected.kind||
+           m.appProperties?.financeTrackerTransaction!==expected.transactionId||
+           m.appProperties?.financeTrackerHash!==expected.sha256)fields.push('appProperties');
+        if(m.size!==String(bytes.length))fields.push('size');
+        return fields;
+      };
+      for(let attempt=0;;attempt++) {
+        validateMetadata(m,expected.fileId,owner);
+        const digest=await partitionDigest(bytes);liveRead(owner,input.signal);
+        if(digest!==expected.sha256)
+          poison('hash-mismatch','Immutable create readback body does not match its requested hash.',owner);
+        const fields=mismatchFields();
+        if(!fields.length)break;
+        if(attempt>=2) {
+          poison('hash-mismatch','Immutable create metadata did not converge to its requested binding.',owner,{reason:'metadata-changed',fields});
+        }
+        // Re-read only the already-created ID. Never repeat the mutation, adopt
+        // a changed binding, or repair a corrupt body. Fresh reads bypass caches.
+        await new Promise(resolve=>setTimeout(resolve,100*(attempt+1)));
+        liveRead(owner,input.signal);await assertWritable();liveRead(owner,input.signal);
+        m=structuredClone(await adapter.readMetadata(expected.fileId,{maxBytes:16384,signal:input.signal}));
+        liveRead(owner,input.signal);
+        bytes=ownedBytes(await adapter.readBytes(expected.fileId,{maxBytes:expected.maxBytes,signal:input.signal}),expected.maxBytes);
+        liveRead(owner,input.signal);
+      }
       liveRead(owner,input.signal);
       // These are the adapter's exact-ID GET bytes, never the upload or POST
       // response. The normal scope closure still checks their metadata witness.
@@ -331,7 +353,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       if(hit){cache.delete(expected.fileId);cacheBytes-=hit.bytes.length;}
       while(cacheBytes+bytes.length>cacheBudget&&cache.size){const key=cache.keys().next().value;cacheBytes-=cache.get(key).bytes.length;cache.delete(key);}
       cache.set(expected.fileId,{fingerprint:canonicalizeJcs(m),bytes:bytes.slice()});cacheBytes+=bytes.length;
-      return result;
+      return {...result,readback:{metadata:structuredClone(m),bytes:bytes.slice()}};
       })();
       if(current){current.pending.add(operation);operation.then(()=>current.pending.delete(operation),()=>current.pending.delete(operation));}
       return operation;

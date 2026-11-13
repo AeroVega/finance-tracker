@@ -1,3 +1,4 @@
+import {createDriveRequestMetrics} from '../js/drive-request-metrics.mjs';
 import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
 import {createWorkspacePages} from '../js/workspace-pages.mjs';
 import {buildFinancialPosition, buildAccountMonthCoverage} from '../js/financial-position.mjs';
@@ -45,6 +46,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     async savePartitionedRoot(transaction) {
       assert.deepEqual(transaction.expectedBase, manifest);
       if (state.saveGate) await state.saveGate.promise;
+      if (state.measureSave) await state.measureSave();
       if (state.failSave) throw Object.assign(new Error('Private provider detail'), {code:'base-conflict'});
       state.writes++;
       const result = await saveRoot(transaction);
@@ -1304,4 +1306,36 @@ test('developer diagnostics self-test stays local and exposes copyable context',
   assert.equal(p.state.writes, 0);
   assert.equal(p.state.connects.length, 0);
   assert.ok(p.get('recent-problems').children.length > 0);
+});
+
+// The report must distinguish one save from requests accumulated while connected.
+test('failed save reports its own request window and clears it before the next action', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
+  let time = 0;
+  const metrics = createDriveRequestMetrics({now: () => time});
+  h.lifecycle.requestMetrics = metrics;
+  const fetch = metrics.wrapFetch(async () => { time += 20; return {status:200}; });
+  await fetch('https://example.invalid', {method:'GET'});
+  time += 1000;
+  h.state.measureSave = () => fetch('https://example.invalid', {method:'PATCH'});
+  h.state.failSave = true;
+  await h.click('save-ledger');
+  const find = (node, tag) => node.tagName === tag ? node : node.children.map(child => find(child, tag)).find(Boolean);
+  const report = JSON.parse(find(h.diagnostics().at(-1), 'TEXTAREA').value);
+  assert.equal(report.where.actionId, 'save-ledger');
+  assert.equal(report.requests.requests, 2);
+  assert.equal(report.requests.elapsedMs, 1040);
+  assert.equal(report.actionRequests.requests, 1);
+  assert.equal(report.actionRequests.patch, 1);
+  assert.equal(report.actionRequests.elapsedMs, 20);
+  // A later action must never inherit the failed save's measurements.
+  await h.get('diagnostic-self-test').click();
+  const next = JSON.parse(find(h.diagnostics().at(-1), 'TEXTAREA').value);
+  assert.equal(next.error.code, 'diagnostic-self-test');
+  assert.equal(next.actionRequests, undefined);
+  h.state.snapshotError = true;
+  await h.click('open-ledger');
+  const reopened = JSON.parse(find(h.diagnostics().at(-1), 'TEXTAREA').value);
+  assert.equal(reopened.where.actionId, 'open-ledger');
+  assert.equal(reopened.actionRequests.requests, 0);
 });

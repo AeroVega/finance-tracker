@@ -117,3 +117,19 @@ test('routine input validation does not fill or evict recent problem history',()
  for(let i=0;i<100;i++)r.reportError({code:'category-required'},{actionId:'stage-correction'});
  assert.equal(r.recentReports().length,1);assert.equal(r.getReport(serious.id).id,serious.id);
 });
+
+test('current-action request window is separate from lifetime and still allowlisted',async()=>{
+ const {createDriveRequestMetrics}=await import('../js/drive-request-metrics.mjs');
+ const {validateDiagnosticReport}=await import('../scripts/explain-diagnostic.mjs');
+ let t=0;const metrics=createDriveRequestMetrics({now:()=>t});
+ const fetch=metrics.wrapFetch(async()=>{t+=10;return {status:200}});
+ await fetch();t=200;const window=metrics.openWindow();await fetch();
+ const r=reporter();r.registerContextProvider('requests',()=>metrics.snapshot());
+ r.registerContextProvider('actionRequests',()=>({...window.snapshot(),token:secret}));
+ for(let i=0;i<61;i++)r.leaveBreadcrumb({e:'request',ep:'files.get',m:'get',s:200,ms:i,outcome:'ok'});
+ const report=r.createReport({code:'write-unresolved'});
+ assert.equal(report.requests.requests,2);assert.equal(report.requests.elapsedMs,210);
+ assert.equal(report.actionRequests.requests,1);assert.equal(report.actionRequests.elapsedMs,10);
+ assert.doesNotMatch(JSON.stringify(report),/PRIVATE/);validateDiagnosticReport(report);
+ r.registerContextProvider('actionRequests',()=>null);assert.equal(r.createReport(null).actionRequests,undefined);
+});

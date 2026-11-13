@@ -422,3 +422,25 @@ at `760ef91` passed the complete extended suite: **1,994/1,994 tests**, Node
 24.22.1, **495.3 seconds**. All prototype files match the PR38 base byte-for-byte.
 Publication is pending approval review of diagnostics-related synthetic test
 updates; no branch, PR, deployment or merge has been published for this follow-up.
+
+
+## PR40 save receipt investigation — November 13, 2026
+
+**User-confirmed:** PR40 diagnostics build `311b542` was deployed and a staged
+synthetic save failed. The report locates the first failure in immutable-create
+receipt checking; `verification-scope-closed` is a subsequent invalidation of the
+captured locator read capability. The older broad `hash-mismatch` check cannot
+distinguish metadata fields from body corruption. The precise live cause remains
+unconfirmed; no owner Drive folder was inspected or modified.
+
+**Implemented candidate:** correct-body receipt metadata gets at most two fresh
+reads of the same already-created ID before refusal. Every original binding,
+size and body hash must match; corrupt bodies, lost ownership/cancellation and
+persistent metadata mismatch still fail. No write is retried. Fixed field labels
+make persistent failures more specific, and current-action request metrics are
+separate from lifecycle aggregates. Focused synthetic checks reproduce stale-size
+receipt convergence and retained refusal behavior. The complete extended suite at
+`5688c04` passed **2,012/2,012 tests** (Node 24.22.1,497.6seconds). Code-audit,
+generated-reference and documentation checks passed. The candidate is not yet
+deployed or live-verified; preserve the affected folder rather than retrying it
+on the strength of synthetic tests.

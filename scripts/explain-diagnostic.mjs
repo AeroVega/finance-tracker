@@ -69,10 +69,11 @@ export function validateDiagnosticReport(report){
     where:v=>shape(v,{surface:x=>x==='unknown'||SURFACES.has(x),page:member(PAGES),actionId:member(ACTIONS),phase:member(PHASES)},['surface']),
     state:v=>shape(v,{lifecycle:member(STATES),ownership:choice(['owner','not-owner','unknown','released']),busy:bool,dirty:bool,needsReopen:bool,verifiedDurableWrites:int(100000),profile:choice(['canonical5-physical4']),ledger}),
     requests:v=>shape(v,Object.fromEntries(REQUEST_METRIC_FIELDS.map(k=>[k,int()])),REQUEST_METRIC_FIELDS)&&safeRequestMetrics(v)!==null,
+    actionRequests:v=>shape(v,Object.fromEntries(REQUEST_METRIC_FIELDS.map(k=>[k,int()])),REQUEST_METRIC_FIELDS)&&safeRequestMetrics(v)!==null,
     breadcrumbs:list(breadcrumb,60),env:environment,truncated:list(choice(['stack-input','breadcrumbs','frames','chain.context','env.features']),5)
   };
   try{
-    if(!shape(report,fields,Object.keys(fields).filter(k=>k!=='requests'))||Buffer.byteLength(JSON.stringify(report,null,2))>16384)invalid();
+    if(!shape(report,fields,Object.keys(fields).filter(k=>!['requests','actionRequests'].includes(k)))||Buffer.byteLength(JSON.stringify(report,null,2))>16384)invalid();
     // A pasted claim cannot turn an uncertain write into safe permission to retry.
     const entry=getEntry(report.error.code);
     if(report.error.kind!==entry.kind||report.error.area!==entry.area||report.error.retryable!==entry.retryable||report.error.writeOutcome!==entry.writeOutcome)invalid();
@@ -107,7 +108,8 @@ export function explainDiagnostic(report,{repoRoot=root}={}){
   for(const code of codes){const entry=getEntry(code);lines.push(`- ${code} [${entry.area}/${entry.kind}]: ${entry.message}`,`  Next step: ${entry.userAction} Retryable: ${entry.retryable}; write outcome: ${entry.writeOutcome}.`);}
   lines.push('','Reproduction envelope (facts, not an automatic reproduction):',`State: ${JSON.stringify(report.state)}`,`Environment: ${JSON.stringify(report.env)}`);
   if(report.state.ledger?.synthetic){const large=report.state.ledger.activities>600;lines.push(`Synthetic starting point: ${large?'tests/helpers/dense-ledger-fixture.mjs':'js/synthetic-year-seeder.mjs'}; inspect generator options and match the reported shape. Counts do not recreate the original records.`);}else lines.push('No exact synthetic shape captured. Use invented records; do not request real records to reproduce.');
-  if(report.requests)lines.push(`Requests: ${JSON.stringify(report.requests)}`);
+  if(report.requests)lines.push(`Lifecycle request aggregate (not one action): ${JSON.stringify(report.requests)}`);
+  if(report.actionRequests)lines.push(`Current action request window: ${JSON.stringify(report.actionRequests)}. elapsedMs is action wall time; requestMs sums fetch-to-response time, not body/CPU time.`);
   lines.push('','Breadcrumb timeline (milliseconds since page start; delta from preceding event):');
   let previous;for(const event of report.breadcrumbs){const {t,...detail}=event;lines.push(`${t} (+${previous===undefined?0:t-previous}) ${JSON.stringify(detail)}`);previous=t;}
   if(report.breadcrumbs.some(e=>e.e==='vis'&&e.state==='hidden')&&report.breadcrumbs.some(e=>e.e==='request'&&e.outcome==='network-error'))lines.push('Question: did backgrounding interrupt the request? Visibility plus a network error is a clue, not proof of Safari suspension.');
