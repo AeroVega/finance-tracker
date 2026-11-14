@@ -3,7 +3,7 @@
 Read [the agent quick start](docs/AGENT_QUICK_START.md) first. It points to the concise [current state](docs/CURRENT_STATE.md), this file, and only the focused contracts needed for the task. Use [the documentation index](docs/README.md) to navigate; do not ingest every document by default.
 
 ## Agent workflows
-Read [the engineering workflow index](engineering-workflows/README.md) when a task needs a defined workflow. Canonical skill files live in `engineering-workflows/skills/`; `.agents/skills/` exposes them for agent discovery. Skills supplement these instructions and never grant permission to merge, deploy, or use real financial data.
+Read [the skills index](engineering-workflows/README.md) when a task needs a defined workflow. Canonical skill files live in `engineering-workflows/skills/`; `.agents/skills/` exposes them for agent discovery. Skills supplement these instructions and never grant permission to merge, deploy, or use real financial data.
 
 ## Git workflow and permissions
 - Work on a focused branch and submit a pull request into `main`.
