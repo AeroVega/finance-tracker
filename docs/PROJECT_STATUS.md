@@ -1,5 +1,29 @@
 # Project status
 
+## Verified open/save progress, November 14, 2026
+
+Selected code `00cd939` passed **2083/2083 extended synthetic tests**, zero
+failures/skips, in 484.5 seconds; syntax, diagnostic-code, generated reference,
+documentation and independent source reviews passed. The first aggregate run's
+preparation-reader expectation was corrected by separately testing the expiring
+base reader and immutable no-fallback output map, then rerunning the full suite.
+
+The candidate combines owned immutable preparation readers, bounded cross-index
+lookups and eight owned verification/preflight read slots. Writes and staging
+probes remain at four; generic callbacks preserve their original serial behavior.
+Two artificial 400 ms runs averaged **58.201 seconds save / 34.921 seconds open**,
+about 8.4% / 11.1% faster than the published preservation checkpoint control.
+Requests and exact saved/reopened graph checks are unchanged. Separate process
+memory samples showed no conspicuous increase, not a browser-memory guarantee.
+
+Owner-anchor ratios still predict roughly **53 seconds save / 41 seconds open**,
+not the 30-second Alpha goal or live acceptance. The unsafe combined-open
+experiment was rejected and is not included. See [performance evidence and
+limits](OPEN_SAVE_PERFORMANCE.md). Work targets the existing
+`perf/open-save-preservation-2026-11-14` branch only; no merge, deployment or
+real-data use follows from these local checks. Production remains **NO-GO**.
+
+
 ## Local performance reconstruction, November 14, 2026
 
 PR #37, #38 and #40 are merged; the base is main at

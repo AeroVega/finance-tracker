@@ -50,6 +50,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/legacy-canonical-fragments.mjs",
   "js/locator-codec.mjs",
   "js/original-retention-policy.mjs",
+  "js/owned-preparation-reader.mjs",
   "js/paged-application-storage.mjs",
   "js/paged-archive-rehearsal.mjs",
   "js/paged-canonical-backup.mjs",

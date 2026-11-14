@@ -1,3 +1,4 @@
+import {bindPreparationRead,typedPreparationRead} from './owned-preparation-reader.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {partitionDigest} from './canonical-partitions.mjs';
 import {EMPTY_CANONICAL_BYTES, PAGED_CANONICAL_VERIFIER, canonicalProfileForVerifier} from './paged-canonical-format.mjs';
@@ -295,7 +296,7 @@ export class PagedApplicationStorage {
       const {rootHash,objects,preparationStore}=result,read=preparationStore?.read;
       if(typeof rootHash!=='string'||!Array.isArray(objects)||typeof read!=='function')
         fail('invalid-preparation','Callback preparation requires a root, descriptor array and byte reader.');
-      return {rootHash,objects:structuredClone(objects),preparationStore:Object.freeze({read:read.bind(preparationStore)})};
+      return {rootHash,objects:structuredClone(objects),preparationStore:Object.freeze({read:bindPreparationRead(preparationStore,read)})};
     };
     context.preparing=true;
     try {
@@ -333,9 +334,9 @@ export class PagedApplicationStorage {
       const prepared=await this.#prepareRoot(context,prepare,current,profile.verifier,tree);this.#assertOpen(context);
       ({rootHash,objects,preparationStore}=prepared);
     }
-    const readPreparation=preparationStore?.read?.bind(preparationStore);
+    const readPreparation=bindPreparationRead(preparationStore);
     if(typeof readPreparation!=='function')fail('invalid-preparation','Preparation requires a byte reader.');
-    const typedStore={read:(q,opts)=>readPreparation(q.sha256,opts)};
+    const typedStore={read:typedPreparationRead(readPreparation)};
     const additions=(async function* () { for await (const d of objects) {
       const existing=await tree.get(current.locatorRoot,{kind:d.kind,sha256:d.sha256});
       if (!existing) yield d;

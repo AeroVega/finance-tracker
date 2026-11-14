@@ -749,10 +749,29 @@ export function createPagedPhysicalLocators(adapter, config) {
           if(item.ref){pages++;bytes+=BigInt(item.bytes.length);}
           else if(index==='objects') {
             const [pk,e]=item.pair;
-            if(await find(root.identities,'identities',identityKey(e),signal)!==pk || await find(root.files,'files',e.fileId,signal)!==pk)fail('index-mismatch','Locator indexes do not form a one-to-one mapping.');
+            // These two distinct immutable indexes are independent. Drain both
+            // before accepting their mappings or starting this entry's body.
+            let lookupFailed=false,lookupFailure;
+            const lookup=promise=>promise.catch(error=>{
+              if(!lookupFailed || (lookupFailure?.code==='verification-scope-closed'&&error?.code!=='verification-scope-closed')) {
+                lookupFailed=true;lookupFailure=error;
+              }
+              throw error;
+            });
+            if(pending.length<7) {
+              const matches=await Promise.allSettled([
+                lookup(find(root.identities,'identities',identityKey(e),signal)),
+                lookup(find(root.files,'files',e.fileId,signal))
+              ]);
+              if(lookupFailed)throw lookupFailure;
+              if(matches.some(result=>result.value!==pk))fail('index-mismatch','Locator indexes do not form a one-to-one mapping.');
+            } else {
+              // Seven admitted body reads leave room for only one index read.
+              if(await find(root.identities,'identities',identityKey(e),signal)!==pk || await find(root.files,'files',e.fileId,signal)!==pk)fail('index-mismatch','Locator indexes do not form a one-to-one mapping.');
+            }
             const operation=verifyEntry(e,signal);
             pending.push(operation.then(length=>({ok:true,length}),error=>{if(!bodyFailed){bodyFailed=true;bodyFailure=error;}return {ok:false,error};}));
-            if(pending.length===4)await drain();
+            if(pending.length===8)await drain();
           }
         }
         await drain();

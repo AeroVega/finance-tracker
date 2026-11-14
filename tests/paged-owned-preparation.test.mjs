@@ -145,14 +145,24 @@ for(const change of ['folder','verifier','manifest','ownership'])test(`${change}
  }finally{app.transactionAdapter.folderId=folder;plans.set(PAGED_CANONICAL_VERIFIER,verifier);drive.files.set(app.manifestFileId,original);app.coordinator.ownership='owned';await release(app);}
 });
 
-test('canonical input remains owned and preparation base fallback expires after callback',async()=>{
- const {drive,app}=await fixture();let escaped,baseRoot;const save=app.savePartitionedRoot.bind(app);
+test('canonical input and prepared bytes remain owned while callback base authority expires',async()=>{
+ const {drive,app}=await fixture();let escaped,baseRoot,baseReader,preparedHash,preparedBytes;const save=app.savePartitionedRoot.bind(app);
  try {
   const store=new CanonicalLedgerStore({lifecycle:app});await store.load();const input=replayFixture(3).ledger,expected=structuredClone(input);
-  app.savePartitionedRoot=args=>save({...args,prepare:async context=>{baseRoot=context.rootHash;const result=await args.prepare(context);escaped=result.preparationStore;return result;}});
+  app.savePartitionedRoot=args=>save({...args,prepare:async context=>{baseRoot=context.rootHash;baseReader=context.store.read;
+    const result=await args.prepare(context);escaped=result.preparationStore;
+    const requests=drive.requests.length;
+    await assert.rejects(escaped.read(baseRoot),{code:'object-not-found'});
+    assert.equal(drive.requests.length,requests);
+    preparedHash=result.rootHash;preparedBytes=await escaped.read(preparedHash);
+    return result;}});
   const saving=store.save(input);input.accounts[0].displayName='Invented caller mutation';input.activities.length=0;
   assert.deepEqual(await saving,expected);const requests=drive.requests.length;
-  await assert.rejects(escaped.read(baseRoot),{code:'verification-scope-closed'});assert.equal(drive.requests.length,requests);
+  await assert.rejects(baseReader(baseRoot),{code:'verification-scope-closed'});
+  await assert.rejects(escaped.read(baseRoot),{code:'object-not-found'});
+  const copy=await escaped.read(preparedHash);assert.deepEqual(copy,preparedBytes);copy[0]^=1;
+  assert.deepEqual(await escaped.read(preparedHash),preparedBytes);
+  assert.equal(drive.requests.length,requests);
  }finally{await release(app);}
 });
 

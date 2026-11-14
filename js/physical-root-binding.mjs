@@ -1,3 +1,4 @@
+import {bindPreparationRead,getOwnedPreparationReader} from './owned-preparation-reader.mjs';
 import {snapshotPhysicalAdapter,getOwnedPhysicalBodyVerifier} from './physical-drive-adapter.mjs';
 /** Synthetic v4 publication. Logical commits are portable; admission,
  * locators and receipts are copy-local. This does not change root protocol v3. */
@@ -339,7 +340,7 @@ export class PhysicalRootBinding {
   }
   prepare({verifiedBase, root, transactionId, operation, semanticVersion, changeEvidenceRoot = null, objects, preparationStore, signal}) {
     const base = this.#baselines.get(verifiedBase), args = copy({root, transactionId, operation, semanticVersion, changeEvidenceRoot});
-    const read = preparationStore?.read?.bind(preparationStore);
+    const read = bindPreparationRead(preparationStore);
     return this.#enqueue(async () => {
       if (!base) fail('verified-baseline-required', 'Use a privately verified baseline from this binding instance.');
       if (!this.#verifiers.has(args.semanticVersion)) fail('verification-plan-unavailable', 'The requested semantic verifier is unavailable.');
@@ -411,7 +412,7 @@ export class PhysicalRootBinding {
   async #preflight(value, tree, signal) {
     let generated = 0;
     const fileIds = new Set(), identities = new Set(), batch = [];
-    const concurrency = getOwnedPhysicalBodyVerifier(this.#adapter) ? 4 : 1;
+    const concurrency = getOwnedPhysicalBodyVerifier(this.#adapter) ? 8 : 1;
     const inspect = async e => {
       this.#scope(); abort(signal);
       let exists = false;
@@ -452,7 +453,72 @@ export class PhysicalRootBinding {
     await drain();
   }
 
+  async #stageWithPrefetchedReads(value, expected, preparation, signal) {
+    const readOwned=getOwnedPreparationReader(preparation);
+    if(!readOwned)fail('invalid-preparation','Prefetched staging requires an owned byte reader.');
+    let generated = 0;
+    const batch = [];
+    const stageBatch = async () => {
+      let readFailure, readFailed = false;
+      // Own at most four descriptors/complete bodies. A missing read is local
+      // to this batch, not a reusable absence proof. No writes overlap probes.
+      const results = await Promise.all(batch.splice(0).map(async item => {
+        try {
+          const raw = await this.#read({fileId:item.entry.fileId, sha256:item.entry.sha256}, item.entry.kind,
+            item.entry.transactionId ?? value.transactionId, signal);
+          return {...item, raw};
+        } catch (error) {
+          if (error?.code === 'object-not-found') return {...item, missing:true};
+          if (!readFailed) { readFailed = true; readFailure = error; }
+          return {...item, error};
+        }
+      }));
+      if (readFailed) throw readFailure;
+      this.#scope(); abort(signal);
+      // Validate every occupied descriptor before starting this batch's writes.
+      for (const {entry:e, deterministic, raw, missing} of results) {
+        if (!missing && (raw.length !== e.byteLength || (deterministic && !equal(raw, deterministic))))
+          fail('body-mismatch', 'Staged body differs from the admitted plan.');
+      }
+      let writeFailed = false, writeFailure;
+      const pending = [];
+      try {
+        for (const {entry:e, deterministic, missing} of results) {
+          if (writeFailed) throw writeFailure;
+          if (!missing) continue;
+          this.#scope(); abort(signal);
+          if (!deterministic && !preparation) fail('pending-incomplete', 'Supply the original preparation bytes; the pending fixed IDs must be preserved.');
+          // Owned byte reads retain descriptor order. No external preparation
+          // callback runs here; each result is owned before the next read.
+          const raw = deterministic ?? owned(await readOwned(e.sha256));
+          if (raw.length !== e.byteLength) fail('body-mismatch', 'Prepared body differs from the admitted plan.');
+          if (writeFailed) throw writeFailure;
+          pending.push(this.#ensure({fileId:e.fileId, sha256:e.sha256}, raw, e.kind,
+            e.transactionId ?? value.transactionId, expected, signal, true).catch(error => {
+              if (!writeFailed) { writeFailed = true; writeFailure = error; }
+            }));
+        }
+        await Promise.all(pending);
+        if (writeFailed) throw writeFailure;
+      } catch (error) {
+        await Promise.all(pending);
+        if (writeFailed && error?.code === 'verification-scope-closed') throw writeFailure;
+        throw error;
+      } finally { await Promise.all(pending); }
+    };
+    for await (const e of this.#plan(value, signal)) {
+      let deterministic;
+      if (e.kind === 'commit-record' && e.sha256 === value.logicalHead.sha256) { deterministic = encode(value.logicalCommit); generated++; }
+      if (e.kind === 'protocol-object' && e.sha256 === value.baseManifestHash) { deterministic = encode(value.baseManifest, PHYSICAL_ROOT_LIMITS.manifestBytes); generated++; }
+      batch.push({entry:e, deterministic});
+      if (batch.length === 4) await stageBatch();
+    }
+    await stageBatch();
+    if (generated !== 2) fail('invalid-plan', 'Plan must include exact portable commit and retained base-manifest evidence.');
+  }
   async #stage(value, expected, preparation, signal, allowWrites = true) {
+    if (allowWrites && getOwnedPhysicalBodyVerifier(this.#adapter) && getOwnedPreparationReader(preparation))
+      return this.#stageWithPrefetchedReads(value, expected, preparation, signal);
     let generated = 0, stagingFailed = false, stagingFailure;
     const pending = [];
     const drain = async () => {
@@ -587,7 +653,7 @@ export class PhysicalRootBinding {
     return {status:'committed', transactionId:value.transactionId, manifest:copy(current)};
   }
   transact({intent:input, preparationStore, signal}) {
-    const value = copy(input), preparation = preparationStore?.read?.bind(preparationStore);
+    const value = copy(input), preparation = bindPreparationRead(preparationStore);
     return this.#enqueue(async () => {
       const admitted = await this.#binding(value); let current = await this.#manifest(signal), preparedCandidate = null;
       if (same(current, value.baseManifest)) {
@@ -617,7 +683,7 @@ export class PhysicalRootBinding {
     });
   }
   recover({preparationStore, signal} = {}) {
-    const preparation = preparationStore?.read?.bind(preparationStore);
+    const preparation = bindPreparationRead(preparationStore);
     return this.#enqueue(async () => {
       const current = await this.#manifest(signal);
       if (current.pending === null) return {status:'idle', manifest:copy(current)};
