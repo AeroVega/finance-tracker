@@ -4,13 +4,15 @@ import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import {createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent,
   applyReviewDecision, reverseReviewDecision, getEffectiveActivities, summarizeLedger, validateLedger} from '../js/canonical-import.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
-import {CanonicalLedgerStore, serializeFragmentedCanonicalLedger, CANONICAL_INDEX} from '../js/canonical-ledger-storage.mjs';
-import {FRAGMENT_OBJECT_BYTES} from '../js/canonical-fragments.mjs';
-import {setupCatalog, MemoryCatalogDrive} from './helpers/catalog-drive.mjs';
-import {CatalogTransactionEngine} from '../js/catalog-transaction-engine.mjs';
-import {verifyCatalogHistory} from '../js/catalog-storage.mjs';
-import {exportCatalogArchive, verifyCatalogArchive, restoreCatalogArchive} from '../js/catalog-backup.mjs';
-import {validateSyntheticApplicationSnapshot} from '../js/synthetic-application-structure.mjs';
+import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
+import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
+import {ApplicationStorageLifecycle} from '../js/application-storage-lifecycle.mjs';
+import {initializePagedCanonicalCopy} from '../js/paged-application-storage.mjs';
+import {canonicalPartitionVerificationPlans} from '../js/canonical-paged-storage.mjs';
+import {exportPagedCanonicalArchive,restorePagedCanonicalArchive,withSourceEvidenceVerification} from '../js/paged-canonical-backup.mjs';
+import {verifyPagedArchiveInMemory} from '../js/paged-archive-rehearsal.mjs';
+import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
+import {GoogleDriveTransactionAdapter} from '../js/drive-transaction-engine.mjs';
 
 const now='2026-11-08T00:00:00.000Z';
 const options=()=>{let n=0;return {now:()=>now,idFactory:()=>`f00d0001-0000-4000-8000-${String(++n).padStart(12,'0')}`};};
@@ -35,15 +37,20 @@ const matchingIds=(ledger,a)=>ledger.activities.filter(peer=>canonicalizeJcs(sco
 const annual=ledger=>summarizeLedger(ledger,{start:'2025-01-01',end:'2025-12-31',currency:'USD'});
 const year=await createSyntheticFinancialYear();
 
-function lifecycleFor({adapter,manifestFileId,engine}) {
-  return {manifestFileId,
-    async readManifest(){const manifest=await adapter.readJson(manifestFileId);await verifyCatalogHistory(adapter,manifest);return manifest;},
-    async readVerifiedSnapshot(){
-      const manifest=await adapter.readJson(manifestFileId),verified=await verifyCatalogHistory(adapter,manifest);
-      return {manifest,objects:Object.fromEntries(Object.entries(manifest.snapshot).map(([path,hash])=>[path,verified.objects.get('data-object:'+hash).slice()]))};
-    },
-    async readObject(path){return (await this.readVerifiedSnapshot()).objects[path];},
-    transact:transaction=>engine.transact(transaction)};
+const plans=()=>withSourceEvidenceVerification(canonicalPartitionVerificationPlans());
+function application(drive,manifestFileId) {
+  return new ApplicationStorageLifecycle({syntheticOnly:true,pagedCanonical:true,verificationPlans:plans(),
+    folderName:'Invented synthetic category rules',folderId:drive.folderId,manifestFileId,
+    accessToken:()=> 'invented-test-token',fetchImpl:drive.fetch,makeManifest:()=>{},
+    initializeManifest:({adapter,guard})=>initializePagedCanonicalCopy({adapter,guard}),
+    adapterOptions:{visibilityDelayMs:0,visibilityMaxDelayMs:0},setIntervalImpl:()=>1,clearIntervalImpl:()=>{},lifecycleTarget:null});
+}
+async function persisted(ledger) {
+  const fixture=await createPagedFixture(),store=new CanonicalLedgerStore({lifecycle:fixture.lifecycle});
+  await store.load();await store.save(ledger);
+  assert.deepEqual(await new CanonicalLedgerStore({lifecycle:fixture.lifecycle}).load(),ledger);
+  assert.ok([...fixture.objects.values()].every(bytes=>bytes.length<=65536));
+  return fixture;
 }
 
 test('new category rules retain only exact-key peers and preserve every scope boundary',()=>{
@@ -85,18 +92,16 @@ test('inactive retained peers stay excluded from prospective recategorization',(
   assert.equal(getEffectiveActivities(ledger).find(a=>a.activityId===inactiveId).categoryId,null);
 });
 
-test('1,000 distinct activities support four corrections in bounded fragmented v3 storage',()=>{
+test('1,000 distinct activities support four corrections in bounded v5 pages',async()=>{
   const {opt,ledger:initial}=setup();let ledger=initial;
   for(let i=1;i<=4;i++)ledger=correct(ledger,opt,ledger.activities[0].activityId,`invented-${i}`);
   assert.ok(ledger.events.every(event=>event.prospectiveRule.existingActivityIds.length===1));
   assert.ok(Buffer.byteLength(canonicalizeJcs(ledger.events))<4000);
-  const currentObjects=serializeFragmentedCanonicalLedger(ledger);
-  assert.ok([...currentObjects.values()].every(text=>Buffer.byteLength(text)<=FRAGMENT_OBJECT_BYTES));
+  const current=await persisted(ledger);
   const legacy=structuredClone(ledger);for(const event of legacy.events)event.prospectiveRule.existingActivityIds=initial.activities.map(a=>a.activityId);
   assert.equal(validateLedger(legacy),true);
-  const legacyObjects=serializeFragmentedCanonicalLedger(legacy);
-  assert.ok([...legacyObjects.values()].every(text=>Buffer.byteLength(text)<=FRAGMENT_OBJECT_BYTES));
-  assert.ok(legacyObjects.size>=currentObjects.size);
+  const expanded=await persisted(legacy);
+  assert.ok(expanded.objects.size>=current.objects.size);
   assert.deepEqual(getEffectiveActivities(ledger),getEffectiveActivities(legacy));
 });
 
@@ -131,22 +136,31 @@ test('year fixture with legacy rules can append scoped rules, save, reopen, expo
   // Reproduce a previously persisted v1 event without changing its command or financial effect.
   ledger.events.at(-1).prospectiveRule.existingActivityIds=year.ledger.activities.map(a=>a.activityId);
   const legacyEvent=canonicalizeJcs(ledger.events.at(-1)),baseline=annual(ledger);
-  const source=await setupCatalog(),store=new CanonicalLedgerStore({lifecycle:lifecycleFor(source)});
+  const source=new HttpCatalogDrive({folderId:'invented-category-source',idPrefix:'category-source-'}),app=application(source);
+  let restoredApp;
+  try {
+  await app.start();const store=new CanonicalLedgerStore({lifecycle:app});
   await store.load();await store.save(ledger);
   for(let i=1;i<=4;i++)ledger=correct(ledger,opt,target.activityId,`scoped-utility-${i}`);
   assert.equal(canonicalizeJcs(ledger.events[year.ledger.events.length]),legacyEvent);
   assert.ok(ledger.events.slice(-4).every(e=>e.prospectiveRule.existingActivityIds.length===12));
   await store.save(ledger);
-  assert.deepEqual(await new CanonicalLedgerStore({lifecycle:lifecycleFor(source)}).load(),ledger);
-  const archive=await exportCatalogArchive({adapter:source.adapter,manifestFileId:source.manifestFileId,withSourceLock:op=>op(),validateStructure:validateSyntheticApplicationSnapshot,now});
-  await verifyCatalogArchive(archive,{validateStructure:validateSyntheticApplicationSnapshot});
-  const destination=new MemoryCatalogDrive('invented-category-restore');
-  const restored=await restoreCatalogArchive({archive,targetAdapter:destination,withTargetLock:op=>op(),assertTargetWritable:async()=>{},validateStructure:validateSyntheticApplicationSnapshot});
-  const engine=new CatalogTransactionEngine({adapter:destination,assertWritable:async()=>{},isOnline:()=>true});
-  const reopened=await new CanonicalLedgerStore({lifecycle:lifecycleFor({adapter:destination,manifestFileId:restored.manifestFileId,engine})}).load();
+  assert.deepEqual(await new CanonicalLedgerStore({lifecycle:app}).load(),ledger);
+  const chunks=[];
+  await exportPagedCanonicalArchive({sourceAdapter:app.transactionAdapter,sourceManifestFileId:app.manifestFileId,
+    withSourceLock:op=>app.coordinator.withWrite(op),assertSourceWritable:async()=>{await app.coordinator.assertCanWrite({online:true});},
+    verificationPlans:plans(),sink:{write:async chunk=>chunks.push(chunk)}});
+  await verifyPagedArchiveInMemory(chunks,{verificationPlans:plans()});
+  await app.release();source.stopped=true;
+  const destination=new HttpCatalogDrive({folderId:'invented-category-restore',idPrefix:'category-restore-'});
+  const adapter=new GoogleDriveTransactionAdapter({folderId:destination.folderId,accessToken:()=> 'invented-test-token',fetchImpl:destination.fetch,visibilityDelayMs:0,visibilityMaxDelayMs:0});
+  const restored=await restorePagedCanonicalArchive({source:chunks,targetAdapter:adapter,withTargetLock:op=>op(),assertTargetWritable:async()=>{},verificationPlans:plans()});
+  restoredApp=application(destination,restored.manifestFileId);await restoredApp.start();
+  const restoredStore=new CanonicalLedgerStore({lifecycle:restoredApp}),reopened=await restoredStore.load();
   assert.deepEqual(reopened,ledger);assert.deepEqual(annual(reopened),baseline);
   const changed=structuredClone(reopened);changed.events[year.ledger.events.length].prospectiveRule.existingActivityIds=[target.activityId];
-  await assert.rejects(store.save(changed),{code:'history-rewrite-refused'});
+  await assert.rejects(restoredStore.save(changed),{code:'history-rewrite-refused'});
+  } finally {if(restoredApp?.started)await restoredApp.release();if(app.started&&!source.stopped)await app.release();}
 });
 
 test('unrelated legacy membership arrays are not searched during effective projection',()=>{
@@ -187,13 +201,19 @@ test('structured source-action JSON retains accepted legacy JCS equality',()=>{
   assert.equal(validateLedger(JSON.parse(canonicalizeJcs(later))),true);
 });
 
-test('dense same-key history is persisted through bounded fragmented v3 groups',()=>{
+test('dense same-key history is persisted through bounded v5 pages',async()=>{
   const {opt,ledger:initial}=setup(Array.from({length:1000},(_,i)=>row(i,{normalizedDescription:'invented recurring merchant'})));
   let ledger=initial;
   for(let i=1;i<=4;i++)ledger=correct(ledger,opt,ledger.activities[0].activityId,`dense-${i}`);
   assert.ok(ledger.events.every(event=>event.prospectiveRule.existingActivityIds.length===1000));
-  const physical=serializeFragmentedCanonicalLedger(ledger);
-  assert.ok([...physical.values()].every(text=>Buffer.byteLength(text)<=FRAGMENT_OBJECT_BYTES));
-  const root=JSON.parse(physical.get(CANONICAL_INDEX));
-  assert.ok(Object.values(root.fragments).some(item=>item.parts>1), 'oversized logical groups must be split across bounded physical fragments');
+  const physical=await persisted(ledger);
+  const root=JSON.parse(new TextDecoder().decode(physical.objects.get(physical.manifest.root)));
+  assert.equal(root.version,5);
+  const {createCanonicalPartitionReader}=await import('../js/canonical-partition-reader.mjs');
+  const reader=await createCanonicalPartitionReader({read:async hash=>physical.objects.get(hash).slice()},physical.manifest.root);
+  const event=(await reader.getRecord('events',ledger.events[0].eventId)).value;
+  const rule=(await reader.field(event,'prospectiveRule')).value;
+  const ids=(await reader.field(rule,'existingActivityIds')).value;
+  assert.equal(ids.ref.kind,'array');assert.equal(ids.ref.count,'1000');
+  assert.ok((await reader.pageValue(ids,{limit:128})).cursor,'oversized membership remains pageable');
 });

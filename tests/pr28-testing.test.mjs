@@ -1,3 +1,4 @@
+import { clearDiagnostic, showDiagnostic } from '../js/app-diagnostics.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -91,7 +92,8 @@ function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage =
       append(...items) { this.children.push(...items); if (this.tag === 'select' && this.value === '' && items[0]) this.value = items[0].value; },
       replaceChildren(...items) { this.children = items; }, setAttribute(key, value) { this.attributes[key] = value; },
       addEventListener(name, handler) { this[name] = handler; }, focus() { this.focused = true; }, select() { this.selected = true; },
-      setSelectionRange(start, end) { this.selection = [start, end]; }
+      setSelectionRange(start, end) { this.selection = [start, end]; },
+      insertAdjacentElement(position, node) { this.diagnosticPanel = node; }, remove() {}
     };
   }
   function get(id) {
@@ -117,6 +119,8 @@ function controller({ stamp = 'a'.repeat(40), saved = null, unavailableStorage =
     runFixtureChecks: async () => { calls.checks++; return runFixtures ? runFixtures() : Object.fromEntries(plan.AUTOMATED_IDS.map(id => [id, 'passed'])); }
   };
   const source = script.replace(/^import .*;$/gm, '').replaceAll('import.meta.url', JSON.stringify(new URL('../prototype/pr28-testing.mjs', import.meta.url).href)).replace("import('./pr28-import.mjs')", 'mountModule()');
+  context.clearDiagnostic = clearDiagnostic;
+  context.showDiagnostic = (error, options) => showDiagnostic(error, { ...options, document: context.document, navigator: context.navigator });
   vm.runInNewContext(source, context);
   return { get, stored, copied, calls, context, intervals };
 }
@@ -196,7 +200,9 @@ test('default human checklist contains no duplicated deterministic import recipe
   assert.match(html, /id="run-live-checks" disabled/); assert.match(html, /id="stop-live-checks" disabled/);
   assert.match(html, /id="prepare-interruption" disabled/);
   assert.match(script, /await liveRunner.run\(\)/); assert.match(script, /await liveRunner.verifyReconnect\(\)/);
-  assert.match(workbench, /store.base\?\.revision !== 0/); assert.match(workbench, /Object.keys\(store.base\?\.snapshot/);
+  assert.doesNotMatch(workbench, /value\.revision===0/);
+  assert.match(workbench, /value\.version===4.*value\.revision==='0'.*value\.pending===null/);
+  assert.match(workbench, /await store\.load\(\)!==null\|\|!fresh\(store\.base\)/);
 });
 
 test('safe report serializes only fixed metric fields and phases, never caller payloads or coerced values', async () => {
@@ -424,7 +430,11 @@ test('selected interruption step exposes contextual preparation, pause and verif
   h.get('step-choice').value = '3'; h.get('step-choice').change();
   assert.equal(h.get('step-interruption').hidden, true); assert.equal(h.get('step-copy-controls').hidden, false);
   assert.match(h.get('step-folder-role').textContent, /intended saved corrections/);
-  assert.match(html, /pr25-acceptance.html\?guide=pr28/);
+  for (const id of ['step-copy-guide', 'extended-copy-guide']) {
+    const link = html.match(new RegExp('<a\\b(?=[^>]*\\bid="' + id + '")[^>]*\\bhref="([^"]+)"'));
+    assert.ok(link, id + ' remains available');
+    assert.equal(link[1], './pr25-acceptance.html?guide=v5', id + ' opens the v5 source copy guide');
+  }
 });
 
 test('actual interruption handlers require explicit starts, serialize repeated clicks and never change human results', async () => {
@@ -457,11 +467,18 @@ test('interruption cancelled choices do no work and unsupported recipe clears a 
   const cancelled = controller({ workbenchModule: module, answer: false, prepare: async () => { prepareCalls++; }, verify: async () => { checks++; } }); await tick();
   await cancelled.get('prepare-interruption').click(); await cancelled.get('verify-interruption').click();
   assert.equal(prepareCalls, 0); assert.equal(checks, 0);
-  const h = controller({ workbenchModule: module, verify: async () => { if (++checks > 1) throw new Error('interruption-recipe-unrecognized'); return 'saved-classification-verified'; } }); await tick();
+  const h = controller({ workbenchModule: module, verify: async () => { if (++checks > 1) throw Object.assign(new Error('private-provider-body'), { code: 'interruption-recipe-unrecognized' }); return 'saved-classification-verified'; } }); await tick();
   await h.get('verify-interruption').click(); assert.equal(h.get('interruption-verification').dataset.result, 'passed');
   await h.get('verify-interruption').click(); assert.equal(h.get('interruption-verification').dataset.result, 'failed');
-  assert.match(h.get('interruption-verification').textContent, /No classification was staged or saved.*not necessarily corrupt/);
+  assert.match(h.get('interruption-verification').textContent, /Error code: interruption-recipe-unrecognized/);
   assert.doesNotMatch(h.get('interruption-verification').textContent, /Complete graph verified/);
+  const panel = h.get('interruption-verification').diagnosticPanel;
+  assert.equal(panel.attributes['aria-label'], 'Safe error diagnostics');
+  assert.equal(panel.children[2].textContent, 'Copy diagnostics');
+  await panel.children[2].click();
+  assert.equal(JSON.parse(h.copied.at(-1)).surface, 'developer-tool');
+  h.get('reset-checklist').click();
+  assert.equal(panel.hidden, true, 'reset removes the previous error report');
   listener({ ready: false, busy: false, lifecycleState: 'stale-session' });
   assert.equal(h.get('verify-interruption').disabled, true); assert.match(h.get('step-connection-state').textContent, /confirm all earlier tabs/);
 });

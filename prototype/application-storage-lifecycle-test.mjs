@@ -1,3 +1,4 @@
+import { clearDiagnostic, showDiagnostic, diagnosticMessage } from "../js/app-diagnostics.mjs";
 import { validateGoogleConfig } from "../js/google-config-validation.mjs";
 import { DRIVE_FILES_ENDPOINT } from "../js/drive-feasibility-spike.mjs";
 import { ApplicationStorageLifecycle } from "../js/application-storage-lifecycle.mjs";
@@ -25,6 +26,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 function status(id, message, kind = "info") {
+  if (kind !== "error") clearDiagnostic($(id));
   const node = $(id);
   node.textContent = message;
   node.dataset.kind = kind;
@@ -67,7 +69,7 @@ function renderLifecycle(snapshot) {
 }
 function publishStatus(snapshot) {
   renderLifecycle(snapshot);
-  status("lifecycle-status", snapshot.message || snapshot.state, snapshot.state === "ready" || snapshot.state === "released" ? "success" :
+  status("lifecycle-status", snapshot.code ? showDiagnostic({ code: snapshot.code }, { surface: "developer-tool", target: $("lifecycle-status") }) : snapshot.message || snapshot.state, snapshot.code ? "error" : snapshot.state === "ready" || snapshot.state === "released" ? "success" :
     ["stale-session", "session-active", "offline", "recovery-required", "ownership-unknown", "release-unconfirmed"].includes(snapshot.state) ? "warning" : "info");
   if (snapshot.state === "ready") status("crash-status", "Storage recovered and ready. Session ID: " + (state.lifecycle?.coordinator?.session?.sessionId || "unavailable"), "success");
   if (snapshot.state === "session-active") status("handoff-status", "PASS: Drive reported another active session. This page did not acquire ownership or enable writes. Release the first device, then retry Start here.", "success");
@@ -174,7 +176,7 @@ async function verifyFolder(item) {
     $("check-connect").className = "pass";
     updateActions();
   } catch (error) {
-    status("connection-status", error instanceof Error ? error.message : "Could not verify the selected folder.", "error");
+    status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error");
   }
 }
 function manifestBuilder({ current, record, commitFileId, commitHash, snapshot }) {
@@ -230,11 +232,12 @@ async function findOrCreateManifest(adapter) {
   return fileId;
 }
 async function runBusy(action) {
+  for (const id of ["lifecycle-status", "transaction-status", "connection-status"]) clearDiagnostic($(id));
   state.busy = true;
   updateActions();
   try { await action(); }
   catch (error) {
-    const message = error instanceof Error ? error.message : "The operation failed.";
+    const message = showDiagnostic(error, { surface: "developer-tool", target: $("lifecycle-status") });
     status("lifecycle-status", message, "error");
     if (error?.code === "authorization-required") {
       state.accessToken = "";
@@ -316,7 +319,7 @@ async function runTransactions() {
   const loser = raceResults.find((result) => result.status === "rejected");
   if (!winner || !loser || loser.error?.code !== "base-conflict") {
     throw new Error("The concurrent stale-base test did not produce exactly one commit and one safe base-conflict refusal. Results: " +
-      raceResults.map((result) => result.status === "fulfilled" ? "committed" : result.error?.code || "failed").join(", "));
+      raceResults.map((result) => result.status === "fulfilled" ? "committed" : diagnosticMessage(result.error)).join(", "));
   }
   testStage = "reading the concurrent-write winner";
   const retryBase = await lifecycle.readManifest();
@@ -350,20 +353,7 @@ async function runTransactions() {
   text("check-transaction", "Serialized writes + SHA-256 read-back: PASS");
   $("check-transaction").className = "pass";
   } catch (error) {
-    const details = error?.details || {};
-    const cause = details.cause || error?.code || error?.name || "unknown";
-    const diagnostic = [
-      "Harness stage failed: " + testStage + ".",
-      "Code: " + (error?.code || "unknown"),
-      "Underlying cause: " + cause,
-      details.causeMessage ? "Cause detail: " + details.causeMessage : "",
-      Number.isInteger(details.causeDetails?.status) ? "Drive HTTP status: " + details.causeDetails.status : "",
-      typeof details.causeDetails?.body === "string" ? "Drive response: " + details.causeDetails.body.slice(0, 300) : "",
-      typeof details.causeDetails?.fileId === "string" ? "Affected file ID: " + details.causeDetails.fileId : "",
-      details.transactionId ? "Transaction ID: " + details.transactionId : "",
-      Number.isInteger(details.journalEventCount) ? "Journal events written: " + details.journalEventCount : ""
-    ].filter(Boolean).join(" ");
-    status("transaction-status", diagnostic, "error");
+    status("transaction-status", showDiagnostic(error, { surface: "developer-tool", target: $("transaction-status") }), "error");
     throw error;
   }
 }
@@ -454,7 +444,7 @@ async function recoverTransaction() {
       "success");
   } catch (error) {
     renderLifecycle({ state: lifecycle.state });
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = showDiagnostic(error, { surface: "developer-tool", target: $("transaction-status") });
     status("transaction-status", "Recovery did not pass final verification. " + detail, "error");
     throw error;
   }
@@ -534,7 +524,7 @@ $("connect-google").addEventListener("click", () => runBusy(async () => {
 }));
 $("select-folder").addEventListener("click", () => {
   try { openPicker(); }
-  catch (error) { status("connection-status", error.message || "Could not open Google Picker.", "error"); }
+  catch (error) { status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error"); }
 });
 $("start-lifecycle").addEventListener("click", () => runBusy(async () => {
   await startLifecycle();
@@ -565,7 +555,7 @@ Promise.all([loadGoogleLibraries(), loadDeploymentConfig()]).then(([, config]) =
   status("connection-status", "Google services and deployment configuration loaded. Connect, then choose a dedicated synthetic test folder.");
 }).catch((error) => {
   $("connect-google").disabled = true;
-  status("connection-status", error.message || "Google services or deployment configuration could not load.", "error");
+  status("connection-status", showDiagnostic(error, { surface: "developer-tool", target: $("connection-status") }), "error");
 });
 window.addEventListener("online", () => {
   if (state.lifecycle) status("reconnect-status", "Browser reports online. The lifecycle controller is revalidating the prior session…");

@@ -1,3 +1,4 @@
+import { clearDiagnostic, showDiagnostic } from "../js/app-diagnostics.mjs";
 import { GOOGLE_CONFIG } from "../js/google-config.js?v=standalone-discovery-1";
 import { classifyFolderDiscoveryResult, discoverFoldersByExactName } from "../js/drive-folder-discovery.mjs?v=standalone-discovery-2";
 
@@ -22,6 +23,7 @@ const selectionStatus = $("selection-status");
 const discoveryStatus = $("discovery-status");
 
 function setStatus(node, message, kind) {
+  if (kind !== "error") clearDiagnostic(node);
   node.textContent = message;
   node.dataset.kind = kind || "info";
 }
@@ -205,7 +207,7 @@ connectButton.addEventListener("click", async () => {
       );
     }
   } catch (error) {
-    setStatus(authStatus, error instanceof Error ? error.message : "Could not authorize Google Drive.", "error");
+    setStatus(authStatus, showDiagnostic(error, { surface: "developer-tool", target: authStatus }), "error");
   } finally {
     connectButton.disabled = false;
   }
@@ -214,11 +216,12 @@ connectButton.addEventListener("click", async () => {
 clearReferenceButton.addEventListener("click", clearSavedReference);
 
 selectFolderButton.addEventListener("click", () => {
+  clearDiagnostic(selectionStatus);
   try {
     getUsableToken();
     openFolderPicker();
   } catch (error) {
-    setStatus(selectionStatus, error instanceof Error ? error.message : "Could not open Google Picker.", "error");
+    setStatus(selectionStatus, showDiagnostic(error, { surface: "developer-tool", target: selectionStatus }), "error");
   }
 });
 
@@ -274,7 +277,7 @@ discoverButton.addEventListener("click", async () => {
     }
     setStatus(
       discoveryStatus,
-      error instanceof Error ? error.message : "Drive folder discovery failed. Retry or select the intended folder with Google Picker.",
+      showDiagnostic(error, { surface: "developer-tool", target: discoveryStatus }),
       "error"
     );
   } finally {
@@ -293,5 +296,5 @@ ensureGoogleLibraries().then(() => {
   connectButton.disabled = false;
   setStatus(authStatus, "Google services are ready. Continue with Google to begin.", "info");
 }).catch((error) => {
-  setStatus(authStatus, error instanceof Error ? error.message : "Google services could not load.", "error");
+  setStatus(authStatus, showDiagnostic(error, { surface: "developer-tool", target: authStatus }), "error");
 });

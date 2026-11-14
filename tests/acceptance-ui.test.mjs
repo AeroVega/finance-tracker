@@ -35,10 +35,10 @@ test('reload keeps only same-source checklist choices and a changed deployed sou
 });
 
 test('changing a source observation clears only dependents; handlers preserve focus and fresh-run cancellation', async () => {
-  const h = await ready(); await h.choose('device-status', 'pass'); await h.choose('year-v3-status', 'pass'); await h.choose('copies-status', 'pass');
-  await h.choose('year-v3-status', 'fail');
+  const h = await ready(); await h.choose('device-status', 'pass'); await h.choose('year-v5-status', 'pass'); await h.choose('copies-status', 'pass');
+  await h.choose('year-v5-status', 'fail');
   assert.equal(report(h).manual.copies, 'not-run'); assert.equal(report(h).manual.device, 'pass');
-  assert.equal(h.observed.focused, h.get('year-v3-status'));
+  assert.equal(h.observed.focused, h.get('year-v5-status'));
   const before = report(h); h.observed.confirm = false; await h.click('fresh'); assert.deepEqual(report(h), before);
   h.observed.confirm = true; await h.click('fresh'); allNotRun(h);
   assert.equal(h.get('source-confirmed').checked, false); assert.equal(h.get('browser').value, 'Not recorded');

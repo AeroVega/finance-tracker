@@ -1,3 +1,5 @@
+import { createDiagnostic, diagnosticMessage } from './app-diagnostics.mjs';
+import {PagedApplicationStorage,isObsoletePagedVerificationFailure,currentPagedVerificationFailure} from './paged-application-storage.mjs';
 import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "./drive-transaction-engine.mjs";
 import { createDriveSessionAdapter } from "./drive-session-adapter.mjs";
 import { SessionCoordinator } from "./session-coordination.mjs";
@@ -13,6 +15,12 @@ export class ApplicationStorageError extends Error {
     this.name = "ApplicationStorageError";
     this.code = code;
   }
+}
+
+// Internal control flow keeps its existing code semantics; presentation is
+// independently allowlisted by publish(). A hostile getter must not skip cleanup.
+function failureCode(error) {
+  try { const code = error?.code; return typeof code === 'string' ? code : undefined; } catch { return undefined; }
 }
 
 function fail(code, message) {
@@ -40,7 +48,7 @@ export class ApplicationStorageLifecycle {
       cryptoImpl = globalThis.crypto, isOnline = () => globalThis.navigator?.onLine !== false,
       onStatus = () => {}, onDiagnostic = () => {}, lifecycleTarget = globalThis,
       setIntervalImpl = globalThis.setInterval, clearIntervalImpl = globalThis.clearInterval,
-      factories = {}, catalogProtocol = false, afterMutation = null
+      factories = {}, catalogProtocol = false, pagedCanonical = false, verificationPlans, adapterOptions = {}, afterMutation = null
     } = options;
 
     if (syntheticOnly !== true || !/synthetic/i.test(folderName)) {
@@ -71,6 +79,9 @@ export class ApplicationStorageLifecycle {
     this.clearIntervalImpl = clearIntervalImpl;
     this.factories = factories;
     this.catalogProtocol = catalogProtocol;
+    this.pagedCanonical = pagedCanonical;
+    this.verificationPlans = verificationPlans;
+    this.adapterOptions = adapterOptions;
     this.afterMutation = afterMutation;
     this.state = "disconnected";
     this.sessionAdapter = null;
@@ -86,6 +97,7 @@ export class ApplicationStorageLifecycle {
     this._onPageHide = (event) => {
       this.diagnostic("pagehide", { isTrusted: event?.isTrusted === true, persisted: event?.persisted === true,
         visibility: this.lifecycleTarget?.document?.visibilityState });
+      if (!this.coordinator?.canWrite) this.coordinator?.cancelPending?.();
       void this.release({ reason: "pagehide" }).catch(() => {});
     };
   }
@@ -96,9 +108,13 @@ export class ApplicationStorageLifecycle {
   }
 
   publish(state, message, code = null) {
-    if (state !== "ready") this.engine?.invalidateHistory?.();
+    if (state !== "ready") {
+      this.engine?.invalidateHistory?.();
+      this.sessionAdapter?.clear?.();
+    }
     this.state = state;
-    this.onStatus({ state, message, code });
+    const safe = code ? createDiagnostic({code}) : null;
+    this.onStatus({ state, message: safe ? diagnosticMessage({code: safe.code}) : message, code: safe?.code || null });
   }
 
   createComponents() {
@@ -108,15 +124,36 @@ export class ApplicationStorageLifecycle {
       fetchImpl: this.fetchImpl
     });
     this.coordinator = (this.factories.createCoordinator || ((options) => new SessionCoordinator(options)))({ adapter: this.sessionAdapter });
-    this.transactionAdapter = (this.factories.createTransactionAdapter || ((options) => new GoogleDriveTransactionAdapter(options)))({
+    const transactionAdapter = (this.factories.createTransactionAdapter || ((options) => new GoogleDriveTransactionAdapter(options)))({
+      ...this.adapterOptions,
       accessToken: this.accessToken,
       folderId: this.folderId,
       fetchImpl: this.fetchImpl,
       afterMutation: this.afterMutation,
-      cryptoImpl: this.crypto
+      cryptoImpl: this.crypto,
+      ...(this.pagedCanonical?{captureMutationGuard:()=>{
+        const engine=this.engine,generation=engine?.verificationGeneration?.(),coordinator=this.coordinator,
+          sessionId=coordinator?.session?.sessionId,folderId=this.folderId,assertEngine=engine?.captureMutationGuard?.();
+        return ()=>{
+          const online=this.isOnline();
+          if(this.transactionAdapter!==transactionAdapter||this.engine!==engine||this.coordinator!==coordinator||this.folderId!==folderId||transactionAdapter.folderId!==folderId||
+            coordinator?.session?.sessionId!==sessionId||!coordinator?.canWrite||this.releasePending||!online)
+            fail("verification-scope-closed","Mutation lifetime or ownership changed before dispatch.");
+          engine?.assertVerificationGeneration?.(generation);assertEngine?.();
+        };
+      },
+      onExpiredMutation:error=>{
+        if(this.transactionAdapter!==transactionAdapter)return;
+        // Unlike an obsolete read, a dispatched write can change this copy.
+        this.engine.recoveryRequired=true;
+        if(this.state!=="recovery-required"||this.acceptingWrites)this.pauseAfterReadFailure(error);
+      }}:{})
     });
-    this.engine = (this.factories.createEngine || ((options) => new (this.catalogProtocol ? CatalogTransactionEngine : DriveTransactionEngine)(options)))({
+    this.transactionAdapter=transactionAdapter;
+    this.engine = (this.factories.createEngine || ((options) => new (this.pagedCanonical ? PagedApplicationStorage : this.catalogProtocol ? CatalogTransactionEngine : DriveTransactionEngine)(options)))({
       adapter: this.transactionAdapter,
+      verificationPlans: this.verificationPlans,
+      onReadFailure: error => this.pauseAfterReadFailure(error),
       cryptoImpl: this.crypto,
       isOnline: this.isOnline,
       assertWritable: () => this.coordinator.assertCanWrite({ online: this.isOnline() })
@@ -148,12 +185,13 @@ export class ApplicationStorageLifecycle {
       onError: (error) => {
         this.acceptingWrites = false;
         this.heartbeatStop = null;
-        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", error?.code || "ownership-unknown");
+        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", failureCode(error) || "ownership-unknown");
       }
     });
   }
 
   async recoverBeforeUse() {
+    this.transactionAdapter?.assertMutationsSettled?.();
     this.acceptingWrites = false;
     this.publish("recovering", "Checking Drive transaction state…");
     const result = await this.coordinator.withWrite(async () => {
@@ -177,6 +215,7 @@ export class ApplicationStorageLifecycle {
     if (!this.isOnline()) fail("offline", "Connect to the internet before opening the database.");
     this.publish("connecting", "Connecting to private storage…");
     if (!this.coordinator) this.createComponents();
+    this.attachLifecycleListeners();
     let acquired = false;
     try {
       await this.coordinator.start();
@@ -200,11 +239,11 @@ export class ApplicationStorageLifecycle {
         if (this.coordinator?.canWrite) this.startHeartbeat();
         this.attachLifecycleListeners();
       }
-      const state = error?.code === "stale-session" ? "stale-session" :
-        error?.code === "session-active" ? "session-active" :
+      const state = !this.isOnline() ? "offline" : failureCode(error) === "stale-session" ? "stale-session" :
+        failureCode(error) === "session-active" ? "session-active" :
         this.coordinator?.canWrite || this.engine?.recoveryRequired ? "recovery-required" :
         acquired ? "ownership-unknown" : "connection-error";
-      this.publish(state, error?.message || "Storage connection could not be verified.", error?.code || "unknown");
+      this.publish(state, "Storage connection could not be verified.", failureCode(error) || "unknown");
       throw error;
     }
   }
@@ -234,15 +273,16 @@ export class ApplicationStorageLifecycle {
         this.started = true;
         this.startHeartbeat();
         this.attachLifecycleListeners();
-        this.publish("recovery-required", error?.message || "Session was acquired, but transaction recovery is unresolved.", error?.code || "recovery-required");
+        this.publish("recovery-required", "Session was acquired, but transaction recovery is unresolved.", failureCode(error) || "recovery-required");
       } else {
-        this.publish("connection-error", error?.message || "Session recovery could not be verified.", error?.code || "unknown");
+        this.publish("connection-error", "Session recovery could not be verified.", failureCode(error) || "unknown");
       }
       throw error;
     }
   }
 
   async handleOffline() {
+    this.coordinator?.cancelPending?.();
     this.acceptingWrites = false;
     this.heartbeatStop?.();
     this.heartbeatStop = null;
@@ -265,10 +305,10 @@ export class ApplicationStorageLifecycle {
       this.acceptingWrites = false;
       if (this.coordinator?.canWrite && this.engine?.recoveryRequired) {
         this.startHeartbeat();
-        this.publish("recovery-required", error?.message || "Transaction recovery remains unresolved.", error?.code || "recovery-required");
+        this.publish("recovery-required", "Transaction recovery remains unresolved.", failureCode(error) || "recovery-required");
       } else {
-        const state = error?.code === "stale-session" ? "stale-session" : "ownership-unknown";
-        this.publish(state, error?.message || "The previous session could not be revalidated.", error?.code || "unknown");
+        const state = failureCode(error) === "stale-session" ? "stale-session" : "ownership-unknown";
+        this.publish(state, "The previous session could not be revalidated.", failureCode(error) || "unknown");
       }
     }
   }
@@ -280,29 +320,56 @@ export class ApplicationStorageLifecycle {
       : verifyCatalogHistory(this.transactionAdapter, manifest, this.crypto);
   }
 
+  async readPartitionedSnapshot() {
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
+    try { await this.requireReady();engine?.assertVerificationGeneration?.(generation);
+      if (!this.pagedCanonical) fail("paged-required", "This copy does not use canonical v4.");
+      const snapshot=await engine.readSnapshot();engine.assertSnapshotCurrent(snapshot);return snapshot;
+    } catch (error) { if(!isObsoletePagedVerificationFailure(error))this.pauseAfterReadFailure(error); throw error; }
+  }
+
+  async savePartitionedRoot(input) {
+    if (!this.pagedCanonical) fail("paged-required", "This copy does not use canonical v4.");
+    return this.transact(input);
+  }
+
   async readManifest() {
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
     try {
-      await this.requireReady();
-      const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
-      if (this.catalogProtocol) {
+      await this.requireReady();engine?.assertVerificationGeneration?.(generation);
+      const manifest = this.pagedCanonical ? JSON.parse(new TextDecoder().decode(await this.engine.readManifest())) : await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
+      if (this.pagedCanonical) {
+        if (manifest.pending !== null) fail("recovery-required", "Finish root publication before reading.");
+      } else if (this.catalogProtocol) {
         if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Catalog finalization must complete before reading application state.");
         await this.verifyHistory(manifest);
       }
-      return manifest;
-    } catch (error) { this.pauseAfterReadFailure(error); throw error; }
+      engine?.assertVerificationGeneration?.(generation);return manifest;
+    } catch (error) { if(!isObsoletePagedVerificationFailure(error))this.pauseAfterReadFailure(error); throw error; }
   }
 
   // Changed-save preflight only. The transaction engine still verifies full
   // retained history before writing; this is not a replacement snapshot reader.
   async assertCurrentManifest(expectedManifest) {
+    let closure;
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
     try {
-      await this.requireReady();
-      const current = await this.transactionAdapter.readJson(this.manifestFileId);
+      await this.requireReady();engine?.assertVerificationGeneration?.(generation);
+      const current = this.pagedCanonical ? JSON.parse(new TextDecoder().decode(await this.engine.readManifest())) : await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
+      if (this.pagedCanonical) {
+        engine.assertVerificationGeneration(generation);
+        closure=await this.engine.finishSnapshot();engine.assertVerificationGeneration(generation);
+        const after = JSON.parse(new TextDecoder().decode(await this.engine.readManifest()));engine.assertVerificationGeneration(generation);
+        if (canonicalizeJcs(after) !== canonicalizeJcs(current)) fail("base-conflict", "Root changed while physical evidence was being checked.");
+      }
       if (canonicalizeJcs(current) !== canonicalizeJcs(expectedManifest)) fail("base-conflict", "Storage changed. Reopen before continuing.");
       await this.requireReady();
+      if(this.pagedCanonical){engine.assertVerificationGeneration(generation);this.engine.completeSnapshot(closure,current);}
       return current;
     } catch (error) {
-      if (error?.code !== "base-conflict") this.pauseAfterReadFailure(error);
+      const outdated=isObsoletePagedVerificationFailure(error);
+      if(this.pagedCanonical)this.engine.discardSnapshot(closure,generation);
+      if (failureCode(error) !== "base-conflict"&&!outdated) this.pauseAfterReadFailure(error);
       throw error;
     }
   }
@@ -317,7 +384,7 @@ export class ApplicationStorageLifecycle {
     try {
       await this.requireReady();
       if (!this.catalogProtocol) fail("catalog-required", "A verified snapshot requires the version-2 catalog protocol.");
-      const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
+      const manifest = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
       if (manifest.catalogFinalizationPending !== null) fail("recovery-required", "Complete catalog finalization before reading a snapshot.");
       const verified = await this.verifyHistory(manifest);
       // This validates every selected logical path and its catalog binding.
@@ -328,24 +395,24 @@ export class ApplicationStorageLifecycle {
         if (!(bytes instanceof Uint8Array)) fail("object-not-found", "A selected snapshot object was not verified.");
         objects[path] = bytes.slice();
       }
-      const current = await this.transactionAdapter.readJson(this.manifestFileId);
+      const current = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
       if (canonicalizeJcs(current) !== canonicalizeJcs(manifest)) fail("base-conflict", "Storage changed while the snapshot was being verified. Reopen before continuing.");
       await this.requireReady();
       return { manifest: structuredClone(manifest), objects };
-    } catch (error) { this.pauseAfterReadFailure(error); throw error; }
+    } catch (error) { if(!isObsoletePagedVerificationFailure(error))this.pauseAfterReadFailure(error); throw error; }
   }
 
   pauseAfterReadFailure(error) {
     this.acceptingWrites = false;
     if (this.engine) this.engine.recoveryRequired = true;
-    this.publish(error?.code === "authorization-required" ? "authorization-required" : "recovery-required",
-      "Storage could not be verified. Reconnect and recover before continuing.", error?.code || "read-unverified");
+    this.publish(failureCode(error) === "authorization-required" ? "authorization-required" : "recovery-required",
+      "Storage could not be verified. Reconnect and recover before continuing.", failureCode(error) || "read-unverified");
   }
 
   async readObjectVerified(logicalPath) {
     await this.requireReady();
     if (typeof logicalPath !== "string" || !logicalPath) fail("invalid-path", "A logical object path is required.");
-    const manifest = await this.transactionAdapter.readJson(this.manifestFileId);
+    const manifest = await this.transactionAdapter.readJson(this.manifestFileId, { kind: "manifest" });
     if (this.catalogProtocol && manifest.catalogFinalizationPending !== null) fail("recovery-required", "Finish catalog recovery before reading objects.");
     const reference = this.catalogProtocol
       ? resolveSnapshotLocators(manifest.snapshot, (await this.verifyHistory(manifest)).catalog)[logicalPath]
@@ -365,40 +432,58 @@ export class ApplicationStorageLifecycle {
   }
 
   async requireReady() {
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
     try {
+      if(this.pagedCanonical)this.transactionAdapter?.assertNoExpiredMutation?.();
       if (!this.started || !this.acceptingWrites || this.state !== "ready") {
         fail("storage-not-ready", "Private storage is not in a verified ready state.");
       }
       await this.coordinator.assertCanWrite({ online: this.isOnline() });
+      engine?.assertVerificationGeneration?.(generation);
+      if(!this.started||!this.acceptingWrites||this.state!=="ready")fail("storage-not-ready","Storage readiness changed during ownership verification.");
     } catch (error) {
+      engine?.assertVerificationGeneration?.(generation);
       this.engine?.invalidateHistory?.();
-      throw error;
+      this.sessionAdapter?.clear?.();
+      throw engine?.verificationFailure?.(error)??currentPagedVerificationFailure(error);
     }
   }
 
   async transact(transaction) {
-    await this.requireReady();
+    if(this.pagedCanonical)transaction={...transaction,expectedBase:structuredClone(transaction.expectedBase)};
+    const engine=this.engine,generation=engine?.verificationGeneration?.();
+    await this.requireReady();engine?.assertVerificationGeneration?.(generation);
+    let result,handedOff=false;
     try {
-      const result = await this.coordinator.withWrite(() => this.engine.transact(transaction));
+      result = await this.coordinator.withWrite(() => {
+        engine?.assertVerificationGeneration?.(generation);handedOff=true;return engine.transact(transaction);
+      });
+      if(this.pagedCanonical)engine.assertTransactionCurrent(result);
       // A committed transaction is not proof that ownership survived its final
       // read-back. Preserve a concurrent heartbeat/offline failure status.
       if (!this.releasePending && this.acceptingWrites && this.coordinator.canWrite && this.isOnline()) {
         this.publish("ready", "Changes synchronized.");
       }
+      if(this.pagedCanonical){await this.requireReady();this.engine.completeTransaction(result);}
       return result;
     } catch (error) {
-      if (error?.code === "transaction-unresolved" || this.engine.recoveryRequired) {
+      if(!handedOff){engine?.assertVerificationGeneration?.(generation);error=currentPagedVerificationFailure(error);}
+      const outdated=isObsoletePagedVerificationFailure(error);
+      if(this.pagedCanonical)this.engine.discardTransaction(result);
+      if(outdated)throw error;
+      if (failureCode(error) === "transaction-unresolved" || this.engine.recoveryRequired) {
         this.acceptingWrites = false;
-        this.publish("recovery-required", "A save needs recovery before more changes can be made.", error?.code || "recovery-required");
-      } else if (error?.code === "offline" || error?.code === "ownership-lost" || error?.code === "ownership-unknown") {
+        this.publish("recovery-required", "A save needs recovery before more changes can be made.", failureCode(error) || "recovery-required");
+      } else if (failureCode(error) === "offline" || failureCode(error) === "ownership-lost" || failureCode(error) === "ownership-unknown") {
         this.acceptingWrites = false;
-        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", error.code);
+        this.publish("ownership-unknown", "Connection could not be verified. Writes are paused.", failureCode(error));
       }
       throw error;
     }
   }
 
   async recover() {
+    this.transactionAdapter?.assertMutationsSettled?.();
     if (this.releasePending) fail("release-unconfirmed", "Session handoff is still in progress.");
     if (!this.coordinator?.canWrite || !this.isOnline()) fail("storage-not-ready", "A verified online session is required for recovery.");
     this.acceptingWrites = false;
@@ -422,7 +507,7 @@ export class ApplicationStorageLifecycle {
       }
       return result;
     } catch (error) {
-      this.publish("recovery-required", "Recovery remains unresolved. No further writes are allowed.", error?.code || "recovery-required");
+      this.publish("recovery-required", "Recovery remains unresolved. No further writes are allowed.", failureCode(error) || "recovery-required");
       throw error;
     }
   }
@@ -458,10 +543,10 @@ export class ApplicationStorageLifecycle {
       this.diagnostic("release-complete", { reason });
       return { ...result, reason };
     } catch (error) {
-      if (this.engine?.recoveryRequired || error?.code === "recovery-required") {
+      if (this.engine?.recoveryRequired || failureCode(error) === "recovery-required") {
         this.publish("recovery-required", "A save needs recovery before more changes can be made.", "recovery-required");
       } else {
-        this.publish("release-unconfirmed", "Session release could not be verified. Do not switch devices yet.", error?.code || "release-unconfirmed");
+        this.publish("release-unconfirmed", "Session release could not be verified. Do not switch devices yet.", failureCode(error) || "release-unconfirmed");
       }
       this.diagnostic("release-refused", { reason });
       throw error;

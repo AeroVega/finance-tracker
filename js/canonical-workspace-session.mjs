@@ -93,14 +93,15 @@ export class CanonicalWorkspaceSession {
     this.savedEventCount = ledger.events.length;
   }
 
-  correct({ activityId, type, activityKind, categoryId, amountText, rationale }) {
+  correct({ activityId, type, activityKind, categoryId, amountText, lifecycleStatus, postedDate, rationale }) {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
-    if (!['classification', 'category-correction', 'bank-correction'].includes(type)) fail('unsupported-workspace-correction');
+    if (!['classification', 'category-correction', 'bank-correction', 'posting-status-correction'].includes(type)) fail('unsupported-workspace-correction');
     const command = { activityId, type, commandId: crypto.randomUUID(), evidence: { rationale: rationale.trim() } };
     if (type === 'classification') command.activityKind = activityKind;
     if (type === 'category-correction') command.categoryId = typeof categoryId === 'string' ? categoryId.trim() : categoryId;
     if (type === 'bank-correction') command.amountText = typeof amountText === 'string' ? amountText.trim() : amountText;
+    if (type === 'posting-status-correction') { command.lifecycleStatus = lifecycleStatus; command.postedDate = postedDate; }
     const next = applyFinancialEvent(this.ledger, command);
     this.stageCheckpoint();
     this.ledger = next;
@@ -182,15 +183,15 @@ export class CanonicalWorkspaceSession {
     return this.operation(async () => {
       let store = null, writeStarted = false, writeVerified = false;
       try {
-        await this.storage.connect({ requireEmpty: true });
+        await this.storage.connect({ requireEmpty: true, canonicalLayout: 'partitions-v5' });
         const lifecycle = this.storage.lifecycle;
         if (!this.ready() || !lifecycle) fail('reconnect-required');
         const genesis = await lifecycle.readManifest();
-        if (genesis.syntheticOnly !== true || genesis.revision !== 0 ||
-            genesis.catalogFinalizationPending !== null || Object.keys(genesis.snapshot || {}).length !== 0) {
+        if (!lifecycle.pagedCanonical || genesis.syntheticOnly !== true ||
+          genesis.revision !== '0' || genesis.pending !== null || genesis.role !== 'primary') {
           fail('new-empty-folder-required');
         }
-        store = new CanonicalLedgerStore({ lifecycle, layout: 'fragments-v3' });
+        store = new CanonicalLedgerStore({ lifecycle });
         const existing = await store.load();
         if (existing !== null || !store.base || canonicalizeJcs(store.base) !== canonicalizeJcs(genesis)) {
           fail('new-empty-folder-required');

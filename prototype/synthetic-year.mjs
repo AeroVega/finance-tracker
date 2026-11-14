@@ -1,29 +1,15 @@
+import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
-import { serializeCanonicalLedger, serializeFragmentedCanonicalLedger } from '../js/canonical-ledger-storage.mjs';
 
 const $ = id => document.getElementById(id);
 let busy = false, configured = false, writes = 0, started = 0, phase = '', timer = null;
 const messages = {
   preparing: 'Preparing the invented year locally…',
   checking: 'Checking the selected copy and existing canonical records…',
-  saving: 'Saving invented canonical records through the existing transaction engine…',
+  saving: 'Saving invented canonical records with canonical v5 and recoverable root publication…',
   reopening: 'Independently reopening and comparing every canonical record…',
   verified: 'Exact saved year verified.'
-};
-const failures = {
-  'empty-folder-required': 'The selected folder is not empty. No upload was started. Choose a newly created empty synthetic folder.',
-  'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. No records were changed. Preserve it and choose a new empty synthetic folder for a fragmented version-3 copy.',
-  'existing-copy-required': 'No existing synthetic copy was found. Reconnect does not initialize a folder.',
-  'fresh-genesis-required': 'The folder is no longer a fresh empty copy. No year was uploaded. Preserve it and choose a new empty folder.',
-  'unrecognized-seed-copy': 'This copy is different from this version’s exact invented year. It will not be replaced or appended to. Preserve it and choose a new empty folder.',
-  'new-empty-folder-required': 'This tab cannot safely retry into this copy. Preserve it and choose a new empty folder.',
-  'seed-readback-mismatch': 'Read-back did not match the invented year. Success is not verified. Preserve this folder for inspection.',
-  'authorization-required': 'Google authorization expired or is unavailable. Reconnect to the same folder, then verify before retrying.',
-  'transaction-unresolved': 'The upload did not finish and verify. Some files may have been saved. Reconnect to the same folder and use recovery if offered before verifying or retrying.',
-  'nonempty-folder': 'This folder has files without a supported manifest. Preserve it for inspection and choose a new empty synthetic folder.',
-  'reconnect-required': 'Reconnect and resolve the storage session before continuing.',
-  'release-unconfirmed': 'Release was not verified. Resolve the connection before switching devices.'
 };
 function result(text, state = '') { $('result').textContent = text; $('result').dataset.state = state; }
 function refresh() {
@@ -47,7 +33,8 @@ function progress() {
 const storage = new DashboardSyntheticStorage({
   maintainOriginals: false,
   onStatus: status => {
-    $('connection').textContent = status.state === 'ready' ? 'Synthetic storage connected. Use the year result below to confirm the upload.' : status.message;
+    if (!status.code) clearDiagnostic($('connection'));
+    $('connection').textContent = status.state === 'ready' ? 'Synthetic storage connected. Use the year result below to confirm the upload.' : status.code ? showDiagnostic({code: status.code}, {surface: 'synthetic-year', target: $('connection')}) : status.message;
     refresh();
   },
   afterMutation: () => { writes += 1; progress(); }
@@ -57,8 +44,7 @@ const seeder = new SyntheticYearSeeder({ onProgress: state => {
 } });
 function previewResult(recipe) {
   const ledger = recipe.ledger;
-  const physical = serializeFragmentedCanonicalLedger(ledger);
-  $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. ${serializeCanonicalLedger(ledger).size} logical canonical objects grouped into ${physical.size} storage objects before journals. January–December 2025. No Drive write is needed for this preview.`;
+  $('preview-result').textContent = `${ledger.accounts.length} invented accounts, ${ledger.imports.length} source imports, ${ledger.activities.length} activities, ${ledger.observations.length} source observations and ${ledger.events.length} audit events. New copies use canonical v5 with compact values and paged fallback. January–December 2025. No Drive write is needed for this preview.`;
 }
 async function verify() {
   const recipe = await seeder.verifyOrSeed(storage.lifecycle);
@@ -69,12 +55,13 @@ async function verify() {
 }
 async function run(operation) {
   if (busy) return;
-  busy = true; writes = 0; started = Date.now(); phase = 'Starting…'; refresh(); progress();
+  busy = true; writes = 0; started = Date.now(); phase = 'Starting…';
+  clearDiagnostic($('result'));
+  refresh(); progress();
   timer = setInterval(progress, 1000);
   try { await operation(); }
   catch (error) {
-    const code = typeof error?.code === 'string' && /^[a-z][a-z0-9-]{0,95}$/.test(error.code) ? error.code : 'setup-or-connection-unavailable';
-    result(failures[code] || `Action did not complete (${code}). If authorization or folder selection was cancelled, nothing further will run. If setup or saving had begun, preserve the folder and reconnect to verify before retrying.`, 'error');
+    result(showDiagnostic(error, {surface: 'synthetic-year', target: $('result')}), 'error');
   } finally { clearInterval(timer); timer = null; progress(); busy = false; refresh(); }
 }
 $('preview').addEventListener('click', () => run(async () => {
@@ -86,7 +73,8 @@ $('upload').addEventListener('click', () => {
   void run(async () => {
     result('Choose your newly created empty synthetic folder.');
     // Keep the Google authorization invocation in the user activation path.
-    await storage.connect({ requireEmpty: true });
+    phase = 'Acquiring the storage session and verifying initial setup…'; progress();
+    await storage.connect({ requireEmpty: true, canonicalLayout: 'partitions-v5' });
     await seeder.admitFreshConnection(storage.lifecycle);
     await verify();
   });
@@ -120,7 +108,7 @@ refresh();
 // starts until the user presses Upload or Reconnect.
 storage.prepare().then(() => {
   configured = true; $('configuration').textContent = 'Google setup loaded. Nothing uploads until you choose a folder and confirm.'; refresh();
-}).catch(() => {
-  $('configuration').textContent = 'Google setup is unavailable. Local preview still works. Use a configured deployment and reload for Drive actions.';
+}).catch(error => {
+  $('configuration').textContent = showDiagnostic(error, {surface: 'synthetic-year', target: $('configuration')});
   refresh();
 });

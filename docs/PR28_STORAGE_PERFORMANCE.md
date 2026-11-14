@@ -2,6 +2,13 @@
 
 The measurements below record PR28 checkpoints. The later [Drive history verification change](DRIVE_HISTORY_VERIFICATION.md) reduces repeated body downloads using private session evidence checked against fresh Drive versions. Its measurements and remaining growth limits supersede the earlier no-cache behavior described here.
 
+This is historical PR28 and follow-up evidence. Its per-record/catalog paths are
+not the current application contract. The application now supports canonical v5
+only. Use [current test commands](TESTING.md) and the
+[v5 contract](PARTITIONED_CANONICAL_STORAGE.md) for current checks. Reproducing
+removed benchmarks requires the corresponding historical checkout, not the
+current v5 branch.
+
 ## Evidence and limits
 
 **Verified in an invented HTTP simulation:** at commit `b9229cdcc3c90b83b932d742c3d9282bab3abe02`, the 24-step live recipe before human reconnect made 9,590 Drive API requests. The simulation used the actual live runner, application lifecycle, catalog transaction engine, Google Drive transaction adapter, and session adapter. Fetch returned invented in-memory files. It exercised the deployed bulk snapshot path, not the older per-record test fallback.
@@ -76,7 +83,7 @@ The improvement comes from overlapping up to four independent retained-object co
 
 The delayed experiment observed one concurrent immutable create before and four after. Periodic heartbeats are disabled only in this simulation. Production source and destination heartbeats continue unchanged and may overlap these requests, so four is a retained-copy worker limit, not a global HTTP-concurrency limit. The original canonical save recipe still has serial durable writes.
 
-Run `node tests/benchmark-backup.mjs --baseline-ref=7072816 --latency-ms=2 --runs=3` to repeat the comparison. The benchmark loads that committed backup module into a temporary local file and uses current shared adapters and fixture assertions for both versions. It does not check out another branch or contact Drive. Omitting `--baseline-ref` measures only the current implementation; omitting `--latency-ms` adds no timer delay. Request budgets run with `node --test tests/pr28-backup-budget.test.mjs tests/pr28-request-budget.test.mjs`. The original recipe tests keep their existing assertions through a shared fixture helper.
+The historical backup follow-up used `node tests/benchmark-backup.mjs --baseline-ref=7072816 --latency-ms=2 --runs=3` to compare against `70728162c4c20918c152a08a90856f2e0328dbfa`. This command and its removed budget fixtures require that follow-up checkout. The benchmark loads that committed backup module into a temporary local file and used the shared adapters and fixture assertions from that checkout for both versions. It does not check out another branch or contact Drive. Omitting `--baseline-ref` measures only the current implementation; omitting `--latency-ms` adds no timer delay. Its historical request budgets ran with `node --test tests/pr28-backup-budget.test.mjs tests/pr28-request-budget.test.mjs`. The original recipe tests keep their existing assertions through a shared fixture helper.
 
 The PR25 page now reports fixed copy phases, verified-object counts, elapsed time and final duration. A count measures objects that completed their individual verification; it is not an estimate of time remaining or proof that the copy is usable. The page reports success only after final verification and destination-session release. Its timer includes time spent choosing a destination, so it is not a network-only measurement. Missing clocks remain unmeasured. Progress callbacks receive no file identifiers or object bytes, and callback failures cannot change storage outcomes. Archive-file loading uses the same busy guard as copying to prevent overlapping actions from replacing its result.
 

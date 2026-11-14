@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+      - feat/durable-drive-transaction-engine
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,6 +23,14 @@ jobs:
           node-version: 26
       - name: Check browser module syntax
         run: |
+          node --check js/app.js
+          node --check js/dashboard-synthetic-storage.mjs
+          node --check js/provider-csv.mjs
+          node --check js/canonical-import.mjs
+          node --check js/canonical-ledger-storage.mjs
+          node --check js/synthetic-application-structure.mjs
+          node --check prototype/application-storage-lifecycle-test.mjs
+          node --check prototype/pr25-acceptance.mjs
           node --check js/workspace-pages.mjs
           node --check js/canonical-workspace.mjs
           node --check js/canonical-workspace-model.mjs
@@ -38,6 +48,22 @@ jobs:
           node --check prototype/pr28-testing-plan.mjs
           node --check prototype/pr28-testing-checks.mjs
           node --check prototype/pr28-live-checks.mjs
-      - name: Run complete Node test suite
+      - name: Check documentation links and current-state contracts
+        run: node scripts/check-docs.mjs
+      - name: Run complete Node suite including extended storage growth
         # Dense synthetic storage regressions must not compete for heap across files.
+        # Local runs use representative growth fixtures; CI retains every scale.
+        env:
+          FINANCE_EXTENDED_STORAGE_TESTS: "1"
         run: node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs
+
+  # Preserve the former required-check name without running the suite twice.
+  transaction-contracts:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the complete suite to pass
+        env:
+          SUITE_RESULT: ${{ needs.test.result }}
+        run: test "$SUITE_RESULT" = success

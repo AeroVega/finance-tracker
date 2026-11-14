@@ -14,133 +14,26 @@
 </head>
 <body><a class="skip-link" href="#tool-main">Skip to main content</a><main id="tool-main" tabindex="-1">
 <nav class="tool-navigation" aria-label="Development navigation"><a id="prototype-tools" href="./acceptance.html">← Acceptance tests</a><span>Synthetic data only</span></nav>
-<div id="copy-guide" hidden>
-  <p class="eyebrow">Finance Tracker · PR #28 · Synthetic tests only</p>
-  <h1>Backup and restore, step by step</h1>
-  <p>Reuse your completed canonical synthetic source. <strong>You do not need to rerun the 25 live checks.</strong> Category corrections are kept and compared exactly as saved.</p>
-  <aside>Release the source on the page where you used it before starting here. Close other tabs using it. Keep this tab open and your iPad awake until each step finishes. No operation starts when this page loads.</aside>
-  <div class="guide-roles">
-    <p><strong>SOURCE</strong> is the existing folder with your completed invented records. It is only read for these copy checks. Session markers still update.</p>
-    <p><strong>BACKUP</strong> and <strong>RESTORED COPY</strong> are two different new empty synthetic folders you choose. Each folder name must contain "synthetic", such as "synthetic-backup" and "synthetic-restore". Do not select the source, each other, or an interrupted destination.</p>
-    <p><strong>ARCHIVE</strong> is the downloaded JSON file in Files, not a Drive destination folder. Keep it private.</p>
-  </div>
-  <p id="guide-next" class="guide-next" role="status" aria-live="polite">Loading Google services. No Drive operation has started.</p>
-  <section>
-    <h2>1. Choose the completed source</h2>
-    <p>You approve Google access and choose the source folder. The page checks its synthetic canonical records and retained history. Folder names alone cannot prove which run it is.</p>
-    <button id="guide-source" disabled class="primary-action">Choose and verify existing source</button>
-    <button id="guide-recover" hidden disabled>Confirm stopped sessions and recover source</button>
-    <p id="guide-source-result" role="status" aria-live="polite">Not verified. Empty folders will not be initialized.</p>
-    <p id="guide-source-time" class="step-time"></p>
+<div id="v5-copy-tools">
+  <p class="eyebrow">Canonical v5 · Synthetic data only</p>
+  <h1>Back up or restore a synthetic copy</h1>
+  <p>Release other tabs before choosing a source. A destination must be a new empty synthetic folder. Interrupted destinations remain untouched; choose a different empty folder rather than retrying there.</p>
+  <p>Direct backup and framed file restore stream bounded objects. Full financial verification still materializes ledgers. Browser download fallback holds the file in memory; it is not a large-device capacity guarantee.</p>
+  <section><h2>Existing source</h2>
+    <button id="v5-connect" disabled>Choose existing synthetic source</button>
+    <button id="v5-release" disabled>Release source</button>
+    <button id="v5-backup" disabled>Back up this copy to a fresh folder</button>
+    <button id="v5-export" disabled>Export a framed file</button>
   </section>
-  <section>
-    <h2>2. Make the Drive backup</h2>
-    <p>You choose a new empty BACKUP folder with "synthetic" in its name. Copying, verification, release and a separate reopen run automatically.</p>
-    <button id="guide-backup" disabled class="primary-action">Choose backup folder and run checks</button>
-    <p id="guide-backup-result" role="status" aria-live="polite">Backup not run.</p>
-    <p id="guide-backup-time" class="step-time"></p>
-    <p id="guide-backup-reopen-result" role="status" aria-live="polite">Independent backup reopen not run.</p>
+  <section><h2>Restore without the source</h2>
+    <button id="v5-restore-backup" disabled>Restore a direct backup to a fresh primary copy</button>
+    <p>Select the existing backup folder, then a different empty destination. The backup remains read-only and the original source is not needed.</p>
+    <label for="v5-archive">Choose a saved v5 framed archive</label>
+    <input id="v5-archive" type="file" accept=".ftbs,application/octet-stream">
+    <button id="v5-restore" disabled>Restore file to a fresh synthetic folder</button>
+    <p>A source connection is not required. Restore verifies the complete saved file and retained history before creating a selectable copy.</p>
   </section>
-  <section>
-    <h2>3. Download the archive</h2>
-    <p>The page verifies the archive and releases the source. Your browser handles saving the file. A download request does not prove it was saved.</p>
-    <button id="guide-export" disabled class="primary-action">Verify, release source and download</button>
-    <p id="guide-export-result" role="status" aria-live="polite">Export not run.</p>
-    <p id="guide-export-time" class="step-time"></p>
-  </section>
-  <section>
-    <h2>4. Open the saved file</h2>
-    <p>Choose the exact JSON file you just saved in Files. The page verifies it and compares it with this run's export. The in-memory export cannot pass this step.</p>
-    <label for="guide-archive">Select the saved synthetic archive</label>
-    <input id="guide-archive" type="file" accept="application/json,.json" disabled>
-    <p id="guide-archive-result" role="status" aria-live="polite">Saved local file not verified.</p>
-    <p id="guide-archive-time" class="step-time"></p>
-  </section>
-  <section>
-    <h2>5. Restore and independently reopen</h2>
-    <p>You choose another new empty RESTORED COPY folder with "synthetic" in its name. The page restores the selected file, releases the folder, opens it through a new session, compares all retained logical bytes, then releases it again.</p>
-    <button id="guide-restore" disabled class="primary-action">Choose restore folder and run checks</button>
-    <p id="guide-restore-result" role="status" aria-live="polite">Restore not run.</p>
-    <p id="guide-restore-time" class="step-time"></p>
-    <p id="guide-restore-reopen-result" role="status" aria-live="polite">Independent restored-copy reopen not run.</p>
-  </section>
-  <section>
-    <h2>Session status</h2>
-    <p>Release runs automatically at the safe points above. Use this button if you want to stop or a release was not confirmed. It asks Google to reauthorize and verifies the existing sessions before releasing them. It does not delete files or retry a failed copy.</p>
-    <button id="guide-release" disabled>Release sessions and stop this run</button>
-    <button id="guide-recover-release" hidden disabled>Confirm stopped sessions, recover and release</button>
-    <p id="guide-release-result" role="status" aria-live="polite">No session release has been verified for this run.</p>
-    <p id="guide-release-time" class="step-time"></p>
-  </section>
-  <div id="guide-progress" class="copy-progress" hidden>
-    <p id="guide-phase" role="status" aria-live="polite"></p>
-    <p id="guide-count" aria-live="off" hidden></p>
-    <p id="guide-elapsed" aria-live="off"></p>
-  </div>
-  <p class="guide-limits">Results apply only to this tab's run. Reloading does not preserve folder IDs, archives or records. An interrupted copy is not a passing copy, and a generic failure does not prove quarantine. Original-file expiry rules still apply. This guide accepts canonical fixtures without separately retained original files. Live device behavior and the other acceptance checks remain separate.</p>
-  <p id="guide-navigation-result" role="status" aria-live="polite"></p>
-  <p><a id="guide-return" href="acceptance.html">Return to acceptance tests</a></p>
-  <details id="guide-advanced"><summary>Advanced PR25 tools</summary><p>Snapshot, retention, deliberate failure and OAuth rehearsals are separate from these copy checks. Opening advanced tools leaves this guide.</p><a href="pr25-acceptance.html">Open legacy PR25 controls</a></details>
+  <p id="v5-result" role="status" aria-live="polite">Loading Google services. No storage operation has started.</p>
 </div>
-<div id="legacy-tools">
-  <p class="eyebrow">Finance Tracker · PR #25 · Development only</p>
-  <h1>Storage acceptance</h1>
-  <p>Use invented fixtures in dedicated synthetic folders. Production financial data remains disabled.</p>
-  <aside>Each copy destination must be fresh. Preserve interrupted or failed destinations as evidence. Their state must be verified before use; a failure alone does not prove durable quarantine. These tools never delete a database or modify an existing copy.</aside>
-  <section>
-    <h2>1. Connect a synthetic primary</h2>
-    <p>Choose a fresh empty synthetic folder, or reopen a version-2 synthetic copy. PR24-format folders are not supported.</p>
-    <button id="connect" disabled class="primary-action">Connect Google Drive</button>
-    <button id="stale" disabled>Confirm stale-session recovery</button>
-    <button id="recover" disabled>Retry transaction recovery</button>
-    <button id="release" disabled>Release source session</button>
-    <p id="connection" role="status" aria-live="polite">Loading Google services…</p>
-  </section>
-  <section>
-    <h2>2. Save and reopen invented data</h2>
-    <button id="save" disabled class="primary-action">Save invented snapshot</button>
-    <button id="verify-source" disabled>Verify all retained history</button>
-    <p id="source-result" role="status" aria-live="polite">Not tested.</p>
-  </section>
-  <section>
-    <h2>3. Backup, quarantine, and portable restore</h2>
-    <button id="backup" disabled>Create verified Drive backup</button>
-    <button id="quarantine" disabled>Rehearse failed backup</button>
-    <button id="export" disabled>Export portable archive</button>
-    <label for="archive">Open an exported synthetic archive</label>
-    <input id="archive" type="file" accept="application/json,.json">
-    <button id="verify-archive" disabled>Verify loaded archive</button>
-    <button id="restore" disabled>Restore archive into fresh Drive folder</button>
-    <p id="copy-result" role="status" aria-live="polite">Not tested. Exported originals keep their original expiry; manage local exported files privately.</p>
-    <div id="copy-progress" class="copy-progress" hidden>
-      <p id="copy-phase" role="status" aria-live="polite"></p>
-      <p id="copy-count" aria-live="off" hidden></p>
-      <p id="copy-elapsed" aria-live="off"></p>
-    </div>
-  </section>
-  <section>
-    <h2>4. Original-source retention</h2>
-    <p>The fixture CSV is generated by this page. Simulated time affects only this explicit rehearsal. Routine cleanup runs at reconnect and hourly while the app is open and owns its session.</p>
-    <button id="retain" disabled>Retain invented original</button>
-    <button id="before-expiry" disabled>Check one millisecond before day 540</button>
-    <button id="expiry" disabled>Delete expired invented originals</button>
-    <p id="retention-result" role="status" aria-live="polite">Not tested.</p>
-  </section>
-  <section>
-    <h2>5. Real browser interruption rehearsal</h2>
-    <p>Use a disposable source for each boundary. Pause the save, fully close this tab, reopen this page, reconnect to the same folder, then explicitly recover its stale session. Verify all history. A reload alone is also useful, but does not prove process termination on iOS.</p>
-    <label for="boundary">Pause after durable write (1–14)</label>
-    <input id="boundary" type="number" min="1" max="14" value="1">
-    <button id="pause-save" disabled>Save and pause at boundary</button>
-    <p id="fault-result" role="status" aria-live="polite">Not tested. The page will wait for you to close it.</p>
-  </section>
-  <section>
-    <h2>6. OAuth failure and reconnect</h2>
-    <button id="expire" disabled>Simulate local token expiry</button>
-    <p>For real revocation, revoke the app from your Google account, then try Verify all retained history. Also test a different account, a folder without a grant, and denied consent. Reconnect must verify the existing session and history before any further write. Do not create a replacement copy to bypass an access failure.</p>
-    <p id="oauth-result" role="status" aria-live="polite">Live provider tests remain open.</p>
-  </section>
-</div>
-
   <footer>Source: <span id="build-sha">development (not deployed)</span></footer>
 </main></body></html>

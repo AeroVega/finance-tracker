@@ -1,4 +1,5 @@
 import { DriveTransactionEngine, DriveTransactionError } from "./drive-transaction-engine.mjs";
+import { copyOwnedBytes } from "./byte-ownership.mjs";
 import { canonicalizeJcs, createJournalEvent, verifyJournal } from "./transaction-protocol.mjs";
 import { createLocatorCatalog, createCatalogResolver } from "./drive-locator-catalog.mjs";
 import { encode, hashRaw, writeVerified, readVerified, mapImmutableReads, writeCatalog, createCatalogHistoryVerifier, validateLogicalCommit, storageError } from "./catalog-storage.mjs";
@@ -8,10 +9,18 @@ const equal = (a, b) => canonicalizeJcs(a) === canonicalizeJcs(b);
 /** Version-2 synthetic engine. Legacy history is never rewritten implicitly. */
 export class CatalogTransactionEngine extends DriveTransactionEngine {
   #historyVerifier = createCatalogHistoryVerifier();
+  #rememberReadback = null;
 
   invalidateHistory() { this.#historyVerifier.clear(); }
   async verifyHistory(manifest) {
     return this.#historyVerifier.verify(this.adapter, manifest, this.crypto);
+  }
+  #withWriteReadbacks(operation) {
+    return this.#historyVerifier.withWriteReadbacks(async remember => {
+      this.#rememberReadback = remember;
+      try { return await operation(remember); }
+      finally { this.#rememberReadback = null; }
+    });
   }
   enqueue(operation) {
     return super.enqueue(async () => {
@@ -26,12 +35,12 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
   async publishExact(manifestFileId, base, next) {
     await this.assertWritable();
     if (!this.isOnline()) throw storageError("offline", "Manifest publication requires an online session.");
-    if (!equal(await this.adapter.readJson(manifestFileId), base)) throw storageError("base-conflict", "The exact base manifest changed before publication.");
+    if (!equal(await this.adapter.readJson(manifestFileId, { kind: "manifest" }), base)) throw storageError("base-conflict", "The exact base manifest changed before publication.");
     await this.adapter.publishManifest(manifestFileId, next, { beforeMutation: async () => {
       if (!this.isOnline()) throw storageError("offline", "Publication stopped while offline.");
       await this.assertWritable();
     } });
-    if (!equal(await this.adapter.readJson(manifestFileId), next)) throw storageError("manifest-readback-mismatch", "The exact intended manifest did not read back.");
+    if (!equal(await this.adapter.readJson(manifestFileId, { kind: "manifest" }), next)) throw storageError("manifest-readback-mismatch", "The exact intended manifest did not read back.");
   }
 
   async journal(eventType, payload, events, additions, transactionId) {
@@ -41,19 +50,23 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
       name: "ft-journal-" + event.eventId + ".json" }, async () => {
       if (!this.isOnline()) throw storageError("offline", "Journal writes require an online session.");
       await this.assertWritable();
-    }, this.crypto);
+    }, this.crypto, this.#rememberReadback);
     events.push(event);
     additions.push({ kind: "journal-event", identity: event.eventId, transactionId, sequence: event.sequence, ...location });
     return event;
   }
 
   async transact({ manifestFileId, expectedBase, objects, commitRecord = {}, transactionId = this.crypto.randomUUID() }) {
-    return this.enqueue(async () => {
+    // The operation may queue behind another save. Own caller byte inputs now,
+    // before either recovery or hashing yields to code that can reuse them.
+    if (Array.isArray(objects)) objects = objects.map(object => object && ({ ...object,
+      content: object.content instanceof Uint8Array ? copyOwnedBytes(object.content) : object.content }));
+    return this.enqueue(() => this.#withWriteReadbacks(async remember => {
       await this.guard();
       // Folder enumeration catches even a start event created by a prior page
       // which died before publishing any new catalog pointer.
       const recovered = await this.recoverInternal({ manifestFileId });
-      const current = await this.adapter.readJson(manifestFileId);
+      const current = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
       if (!equal(current, expectedBase) || !equal(current, recovered.manifest)) throw storageError("base-conflict", "The transaction requires the exact verified base manifest.");
       if (current.role !== "primary") throw storageError("read-only-copy", "Backup copies cannot accept transactions.");
       // Recovery just verified this complete history after all repair writes.
@@ -67,6 +80,9 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
             ["__proto__", "prototype", "constructor"].includes(object.logicalPath)) throw storageError("invalid-logical-path", "Changed object paths must be unique and valid.");
         paths.add(object.logicalPath);
         const bytes = object.content instanceof Uint8Array ? object.content : encode(object.content);
+        // Reject data that this adapter could not reopen before starting a
+        // durable journal. Physical and logical tags share one byte budget.
+        this.adapter.assertContentSize?.(bytes, "data-object");
         planned.push({ logicalPath: object.logicalPath, bytes, sha256: await hashRaw(bytes, this.crypto) });
       }
       const files = await this.adapter.listChildren();
@@ -86,7 +102,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
             const fileId = await this.adapter.allocateFileId();
             await add("object-stage-planned", { logicalPath: item.logicalPath, fileId, sha256: item.sha256 });
             const location = await writeVerified(this.adapter, { fileId, content: item.bytes, kind: "snapshot-object", transactionId,
-              name: "ft-object-" + item.sha256 + ".bin" }, () => this.guard(), this.crypto);
+              name: "ft-object-" + item.sha256 + ".bin" }, () => this.guard(), this.crypto, remember);
             additions.push({ kind: "data-object", identity: item.sha256, ...location });
             await add("object-staged", { fileId, sha256: item.sha256 });
           }
@@ -99,12 +115,12 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
         const commitFileId = await this.adapter.allocateFileId();
         await add("commit-stage-planned", { commitId, fileId: commitFileId });
         const commit = await writeVerified(this.adapter, { fileId: commitFileId, content: record, kind: "commit-record", transactionId,
-          name: "ft-commit-" + commitId + ".json" }, () => this.guard(), this.crypto);
+          name: "ft-commit-" + commitId + ".json" }, () => this.guard(), this.crypto, remember);
         additions.push({ kind: "commit-record", identity: commitId, ...commit });
         await add("commit-staged", { commitId, recordHash: commit.sha256 });
         const next = { ...current, revision: record.revision, commitId, parentCommitId: current.commitId,
           commitRecordHash: commit.sha256, snapshot, catalogFinalizationPending: transactionId };
-        const staged = await writeCatalog(this.adapter, { manifest: next, previousCatalog: catalog, additions }, () => this.guard(), this.crypto);
+        const staged = await writeCatalog(this.adapter, { manifest: next, previousCatalog: catalog, additions }, () => this.guard(), this.crypto, remember);
         next.locatorCatalog = staged.pointer;
         await this.verifyHistory(next);
         // This event cannot index itself. It and the terminal events are added
@@ -122,7 +138,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
         throw new DriveTransactionError("transaction-unresolved", "Preserve the synthetic transaction evidence and reconnect for recovery.",
           { transactionId, cause: error.code || error.name });
       }
-    });
+    }));
   }
 
   async finalize(manifestFileId, manifest, catalog, additions) {
@@ -130,7 +146,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
       previousCatalog: catalog, previousCatalogHash: manifest.locatorCatalog.sha256, additions });
     const missing = additions.filter((entry) => !catalog.entries[entry.kind + ":" + entry.identity]);
     if (!missing.length && manifest.catalogFinalizationPending === null) return manifest;
-    const staged = await writeCatalog(this.adapter, { manifest, previousCatalog: catalog, additions }, () => this.recoveryGuard(), this.crypto);
+    const staged = await writeCatalog(this.adapter, { manifest, previousCatalog: catalog, additions }, () => this.recoveryGuard(), this.crypto, this.#rememberReadback);
     const next = { ...manifest, locatorCatalog: staged.pointer, catalogFinalizationPending: null };
     await this.verifyHistory(next);
     await this.publishExact(manifestFileId, manifest, next);
@@ -148,7 +164,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
   async recoverInternal({ manifestFileId }) {
     this.recoveryRequired = true;
     if (!this.isOnline()) throw storageError("offline", "Recovery requires an online connection.");
-    let manifest = await this.adapter.readJson(manifestFileId);
+    let manifest = await this.adapter.readJson(manifestFileId, { kind: "manifest" });
     let verified = await this.verifyHistory(manifest);
     let resolver = createCatalogResolver(verified.catalog);
     const files = await this.adapter.listChildren();
@@ -286,7 +302,7 @@ export class CatalogTransactionEngine extends DriveTransactionEngine {
     // createLocatorCatalog rejects a duplicate/rebound enumeration result.
     manifest = await this.finalize(manifestFileId, manifest, verified.catalog, additions);
     verified = await this.verifyHistory(manifest);
-    if (!equal(await this.adapter.readJson(manifestFileId), manifest)) {
+    if (!equal(await this.adapter.readJson(manifestFileId, { kind: "manifest" }), manifest)) {
       throw storageError("base-conflict", "The manifest changed while recovery verified retained history.");
     }
     this.recoveryRequired = false;

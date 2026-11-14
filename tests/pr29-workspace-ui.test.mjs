@@ -1,9 +1,10 @@
+import { diagnosticMessage } from '../js/app-diagnostics.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import vm from 'node:vm';
 
-async function dashboard({ saveGate = null } = {}) {
+async function dashboard() {
   const nodes = new Map(), events = new Map();
   const element = () => ({ value: '', textContent: '', dataset: {}, style: {}, hidden: false, disabled: false, children: [],
     addEventListener(name, handler) { this[name] = handler; },
@@ -11,28 +12,19 @@ async function dashboard({ saveGate = null } = {}) {
     append(...children) { this.children.push(...children); },
     appendChild(child) { this.children.push(child); } });
   const get = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
-  const writes = [];
-  let storage;
-  class Storage {
-    constructor(options) { this.options = options; this.lifecycle = null; storage = this; }
-    async prepare() {}
-    async saveSyntheticSnapshot(rows) { writes.push(rows); if (saveGate) await saveGate; this.options.onSnapshot(rows); }
-  }
-  const context = {
+  const context = { showDiagnostic: diagnosticMessage, clearDiagnostic() {},
     Intl, Date, TextEncoder, Set, Promise,
+    fetch() { assert.fail("local preview must never use the network"); },
     addEventListener: (name, handler) => events.set(name, handler),
     document: { getElementById: get, createElement: element },
-    fakeStorage: { DashboardSyntheticStorage: Storage, createDashboardReleaseHandler: () => () => {} },
-    fakeDiagnostic: { createStorageDiagnostics: () => ({ record() {}, format() { return ''; } }) }
   };
   vm.createContext(context);
   const source = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8')
-    .replace('let syntheticStorage = null;', 'globalThis.testState = state; let syntheticStorage = null;')
-    .replace('import("./dashboard-synthetic-storage.mjs")', 'Promise.resolve(fakeStorage)')
-    .replace('import("./storage-diagnostics.mjs")', 'Promise.resolve(fakeDiagnostic)');
+    .replace(/^import .*app-diagnostics.*;\n/m, '')
+    .replace('let pendingImports = 0;', 'globalThis.testState = state; let pendingImports = 0;');
   vm.runInContext(source, context);
   await new Promise(setImmediate);
-  return { get, state: context.testState, writes, events, storage,
+  return { get, state: context.testState, events,
     import: (text, name = 'invented.csv') => get('csv-file').change({ target: { files: [{ name, type: 'text/csv', text: async () => text }] } }),
     search: value => { get('transaction-search').value = value; get('transaction-search').input(); } };
 }
@@ -66,7 +58,6 @@ test('search filters only display, including displayed and ISO dates, without ch
   h.search('');
   assert.equal(h.get('search-empty').hidden, true);
   assert.equal(h.get('transaction-rows').children.length, 2);
-  assert.equal(h.writes.length, 0);
 });
 
 test('local CSV and invented sample stay distinguishable when mixed', async () => {
@@ -78,7 +69,6 @@ test('local CSV and invented sample stay distinguishable when mixed', async () =
   const notes = h.get('transaction-rows').children.map(row => row.children[1].children[0].textContent);
   assert.equal(notes.filter(note => note.startsWith('Local CSV')).length, 1);
   assert.equal(notes.filter(note => note.startsWith('Invented sample')).length, 4);
-  assert.equal(h.writes.length, 0);
   assert.equal(h.get('ledger-status').textContent, h.get('import-status').textContent);
 });
 
@@ -94,30 +84,20 @@ test('leaving a local CSV preview requests a warning; clearing it removes the wa
   assert.equal(h.get('net-total').textContent, 'Unavailable');
 });
 
-test('pending synthetic mutations request an unload warning until verified success or failure settles', async () => {
-  for (const fail of [false, true]) {
-    let resolve, reject;
-    const saveGate = new Promise((done, error) => { resolve = done; reject = error; });
-    const h = await dashboard({ saveGate });
-    h.storage.lifecycle = { state: 'ready' };
-    const pending = h.get('load-sample').click();
-    let warned = false;
-    h.events.get('beforeunload')({ preventDefault() { warned = true; } });
-    assert.equal(warned, true);
-    assert.equal(h.get('save-data').disabled, true);
-    if (fail) reject(new Error('Invented save failure')); else resolve();
-    await pending;
-    warned = false;
-    h.events.get('beforeunload')({ preventDefault() { warned = true; } });
-    assert.equal(warned, false);
-    assert.equal(h.get('save-data').disabled, false);
-  }
+test('invented samples are replaceable local previews and clearing them needs no storage session', async () => {
+  const h = await dashboard();
+  await h.get('load-sample').click(); await h.get('load-sample').click();
+  assert.equal(h.state.syntheticTransactions.length,4);
+  assert.equal(h.get('clear-data').disabled,false);
+  await h.get('clear-data').click();
+  assert.equal(h.state.syntheticTransactions.length,0);
+  assert.equal(h.get('net-total').textContent,'Unavailable');
 });
 
 test('workspace navigation follows hash and back/forward without intercepting clicks or reloading', () => {
   const links = ['#overview', '#import', '#transactions', '#storage'].map(href => ({ attrs: { href }, getAttribute(k) { return this.attrs[k]; }, setAttribute(k,v) { this.attrs[k]=v; }, removeAttribute(k) { delete this.attrs[k]; } }));
   const events = new Map(), location = { hash: '' };
-  const context = { document: { querySelectorAll: () => links }, location, addEventListener: (name, callback) => events.set(name, callback) };
+  const context = { showDiagnostic: diagnosticMessage, clearDiagnostic() {}, document: { querySelectorAll: () => links }, location, addEventListener: (name, callback) => events.set(name, callback) };
   vm.runInNewContext(readFileSync(new URL('../js/workspace-navigation.js', import.meta.url), 'utf8'), context);
   assert.equal(links[0].attrs['aria-current'], 'location');
   for (const hash of ['#transactions', '#import', '#transactions', '']) {
@@ -142,10 +122,11 @@ test('shared static theme covers every retained tool and guarded navigation targ
     assert.match(html, name === 'local-preview.html' ? /primary-nav/ : /tool-navigation/, name);
   }
   const hub = readFileSync(new URL('../prototype/index.html', import.meta.url), 'utf8');
-  assert.match(hub, /pr25-acceptance.html\?guide=pr28/);
+  assert.match(hub, /pr25-acceptance.html\?guide=v5/);
   assert.match(hub, /acceptance.html/);
   assert.match(hub, /<details/);
   const acceptance = readFileSync(new URL('../prototype/pr25-acceptance.html', import.meta.url), 'utf8');
+  assert.doesNotMatch(acceptance, /guide=pr28/);
   const acceptanceNavigation = acceptance.match(/<nav class="tool-navigation"[\s\S]*?<\/nav>/)[0];
   assert.match(acceptanceNavigation, /id="prototype-tools"/, 'keep the copy guide navigation guard hook');
   assert.doesNotMatch(acceptanceNavigation, /href="\.\.\/index.html"/, 'do not add an unguarded exit beside the copy guide');

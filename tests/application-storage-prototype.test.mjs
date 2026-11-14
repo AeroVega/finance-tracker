@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-test("prototype hub links to the PR24 application lifecycle harness", async () => {
+test("prototype hub and lifecycle harness keep their module, controls and synthetic guard wired", async () => {
   const hub = await readFile(new URL("../prototype/index.html", import.meta.url), "utf8");
   const page = await readFile(new URL("../prototype/application-storage-lifecycle-test.html", import.meta.url), "utf8");
   const module = await readFile(new URL("../prototype/application-storage-lifecycle-test.mjs", import.meta.url), "utf8");
@@ -11,15 +11,8 @@ test("prototype hub links to the PR24 application lifecycle harness", async () =
   assert.match(module, /ApplicationStorageLifecycle/);
   assert.match(module, /syntheticOnly:\s*true/);
   assert.match(module, /finance-tracker-database/);
-  assert.match(module, /const firstId = crypto\.randomUUID\(\)/);
-  assert.match(module, /const raceIds = \[crypto\.randomUUID\(\), crypto\.randomUUID\(\)\]/);
-  assert.match(module, /const retryId = crypto\.randomUUID\(\)/);
-  assert.match(module, /snapshot: firstBase\.snapshot/);
-  assert.match(module, /snapshot: sharedBase\.snapshot/);
-  assert.match(module, /snapshot: retryBase\.snapshot/);
-  assert.match(module, /let testStage = /);
-  assert.match(module, /commitId: crypto\.randomUUID\(\)/);
-  assert.match(module, /async function recoverTransaction\(\)/);
+  // Keep the harness-specific recovery and cleanup safeguards. Engine tests do
+  // not execute this page's glue code. Avoid pinning its private local names.
   assert.match(module, /lifecycle\.state === "ready"/);
   assert.match(module, /lifecycle\.acceptingWrites === true/);
   assert.match(module, /lifecycle\.coordinator\.canWrite === true/);

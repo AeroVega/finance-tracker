@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCatalogHistoryVerifier, verifyCatalogHistory, encode } from '../js/catalog-storage.mjs';
+import { createCatalogHistoryVerifier, verifyCatalogHistory, readCatalog, encode } from '../js/catalog-storage.mjs';
 import { GoogleDriveTransactionAdapter } from '../js/drive-transaction-engine.mjs';
 import { CatalogTransactionEngine } from '../js/catalog-transaction-engine.mjs';
 import { setupCatalog } from './helpers/catalog-drive.mjs';
 import { setupHttpCanonicalWorkbench } from './helpers/pr28-http-workbench.mjs';
 import { createLedger, registerAccount } from '../js/canonical-import.mjs';
-import { exportCatalogArchive, verifyCatalogArchive } from '../js/catalog-backup.mjs';
-import { validateSyntheticApplicationSnapshot } from '../js/synthetic-application-structure.mjs';
+import {createPagedPhysicalLocators} from '../js/paged-physical-locators.mjs';
+async function pagedEntries(h) {const manifest=h.http.json(h.manifestFileId),tree=createPagedPhysicalLocators(h.lifecycle.transactionAdapter,{databaseId:manifest.databaseId,copyId:manifest.copyId,folderId:h.lifecycle.folderId}),entries=[];for await(const e of tree.entries(manifest.locatorRoot))entries.push(e);return entries;}
 
 async function setup() {
   const h = await setupCatalog();
@@ -42,7 +42,7 @@ test('private history evidence reuses only exact versions and never shares retur
   bump(h.adapter.files.get(changed.fileId));
   h.reads.length = 0;
   await h.verifier.verify(h.adapter, h.manifest);
-  assert.deepEqual(new Set(h.reads), new Set([h.manifest.locatorCatalog.fileId, changed.fileId]));
+  assert.deepEqual(new Set(h.reads), new Set([...[h.manifest.locatorCatalog.fileId], changed.fileId]));
 });
 
 test('changed historical bytes download again and fail even when the client hash tag is untouched', async () => {
@@ -73,7 +73,7 @@ test('cached objects still require both complete metadata brackets with unchange
     let calls = 0;
     h.adapter.readMetadataBatch = async ids => {
       const result = await batch(ids);
-      if (++calls === 2) mutate(result, entry.fileId);
+      if (ids.includes(entry.fileId) && ++calls === 2) mutate(result, entry.fileId);
       return result;
     };
     const before = h.adapter.mutations;
@@ -132,7 +132,7 @@ test('explicit recovery starts cold and rejects corruption even if simulated pro
 });
 
 test('all durable interruption boundaries recover with warm history and retain exact old or new state', async t => {
-  for (let boundary = 1; boundary <= 14; boundary++) await t.test('boundary ' + boundary, async () => {
+  for (let boundary = 1; boundary <= 16; boundary++) await t.test('boundary ' + boundary, async () => {
     const h = await setup();
     await h.engine.verifyHistory(h.manifest);
     const start = h.adapter.mutations;
@@ -171,23 +171,20 @@ test('HTTP lifecycle clears evidence on release/reconnect and backup exports ret
   const h = await setupHttpCanonicalWorkbench();
   const ledger = registerAccount(createLedger(), { institutionId: 'wells-fargo', displayName: 'Invented cache account', currency: 'USD', accountType: 'checking' });
   await h.driver.save(ledger); await h.driver.reopen();
-  const manifest = h.http.json(h.manifestFileId), catalog = h.http.json(manifest.locatorCatalog.fileId);
-  const retained = Object.values(catalog.entries).length;
+  const retainedEntries=await pagedEntries(h),retained=retainedEntries.length;
   h.http.phase = 'cached-reopen'; await h.driver.reopen();
   assert.ok(h.http.summary('cached-reopen').categories.media < retained);
   h.http.phase = 'archive';
-  const archive = await exportCatalogArchive({ adapter: h.lifecycle.transactionAdapter, manifestFileId: h.manifestFileId,
-    withSourceLock: operation => h.lifecycle.coordinator.withWrite(operation), validateStructure: validateSyntheticApplicationSnapshot });
-  await verifyCatalogArchive(archive, { validateStructure: validateSyntheticApplicationSnapshot });
+  await h.driver.verifyPortable();
   assert.ok(h.http.summary('archive').categories.media >= retained);
   await h.lifecycle.release();
   h.http.phase = 'reconnect'; await h.lifecycle.start();
   assert.ok(h.http.summary('reconnect').categories.media >= retained);
   assert.deepEqual(await h.driver.reopen(), ledger);
-  const historical = Object.values(catalog.entries).find(entry => entry.kind === 'data-object');
+  const historical = retainedEntries.find(entry => entry.kind === 'data-object');
   // An uncached archive catches corruption even if a test double violates Drive's version contract.
   h.http.files.get(historical.fileId).bytes[0] ^= 1;
-  await assert.rejects(h.driver.verifyPortable(), { code: 'immutable-hash-mismatch' });
+  await assert.rejects(h.driver.verifyPortable(), {code:'hash-mismatch'});
 });
 
 test('warm cache never authorizes a write after ownership loss', async () => {
@@ -230,15 +227,16 @@ test('offline and failed ownership transitions discard warm lifecycle evidence',
     const h = await setupHttpCanonicalWorkbench();
     const ledger = registerAccount(createLedger(), { institutionId: 'wells-fargo', displayName: 'Invented transition', currency: 'USD', accountType: 'checking' });
     await h.driver.save(ledger); await h.driver.reopen();
-    const manifest = h.http.json(h.manifestFileId), catalog = h.http.json(manifest.locatorCatalog.fileId);
-    const retained = Object.values(catalog.entries).length;
+    const retained=(await pagedEntries(h)).length;
+    const assertCanWrite=h.lifecycle.coordinator.assertCanWrite;
     if (mode === 'offline') await h.lifecycle.handleOffline();
     else {
       h.lifecycle.coordinator.assertCanWrite = async () => { throw Object.assign(new Error('Invented lease failure'), { code: 'ownership-lost' }); };
       await assert.rejects(h.lifecycle.requireReady(), { code: 'ownership-lost' });
     }
     h.http.phase = 'cold-after-transition';
-    await h.lifecycle.engine.verifyHistory(manifest);
+    h.lifecycle.coordinator.assertCanWrite=assertCanWrite;
+    await h.lifecycle.handleOnline();
     assert.ok(h.http.summary('cold-after-transition').categories.media >= retained);
   });
 });
@@ -261,4 +259,89 @@ test('an older successful read cannot refill evidence after a concurrent verific
   h.reads.length = 0;
   await h.verifier.verify(h.adapter, h.manifest);
   for (const entry of Object.values(h.verified.catalog.entries)) assert.ok(h.reads.includes(entry.fileId));
+});
+
+test('segment cache reuses only verified bytes and changed segment versions force exact rereads', async () => {
+  const h = await setup();
+  const root = await h.adapter.readJson(h.manifest.locatorCatalog.fileId);
+  h.reads.length = 0;
+  await h.verifier.verify(h.adapter, h.manifest);
+  assert.deepEqual(h.reads, [h.manifest.locatorCatalog.fileId]);
+  const file = h.adapter.files.get(root.segmentTip.fileId);
+  file.bytes[0] ^= 1; bump(file);
+  await assert.rejects(h.verifier.verify(h.adapter, h.manifest), { code: 'immutable-hash-mismatch' });
+  assert.ok(h.reads.includes(root.segmentTip.fileId));
+  file.bytes[0] ^= 1; bump(file); h.reads.length = 0;
+  await h.verifier.verify(h.adapter, h.manifest);
+  assert.ok(h.reads.includes(root.segmentTip.fileId), 'failed verification clears segment evidence too');
+  for (const entry of Object.values(h.verified.catalog.entries)) assert.ok(h.reads.includes(entry.fileId));
+});
+
+test('cached segment metadata must agree at both version brackets', async () => {
+  const h = await setup(), root = await h.adapter.readJson(h.manifest.locatorCatalog.fileId);
+  const batch = h.adapter.readMetadataBatch.bind(h.adapter);
+  let calls = 0;
+  h.adapter.readMetadataBatch = async ids => {
+    const metadata = await batch(ids);
+    if (ids.includes(root.segmentTip.fileId) && ++calls === 2) metadata.get(root.segmentTip.fileId).version += '1';
+    return metadata;
+  };
+  await assert.rejects(h.verifier.verify(h.adapter, h.manifest), { code: 'immutable-version-mismatch' });
+});
+
+test('segment reuse shares the existing byte budget and explicit clears force remote bytes', async () => {
+  const h = await setup(), root = await h.adapter.readJson(h.manifest.locatorCatalog.fileId);
+  const limited = createCatalogHistoryVerifier({ maxBytes: 1 });
+  await limited.verify(h.adapter, h.manifest); h.reads.length = 0;
+  await limited.verify(h.adapter, h.manifest);
+  assert.ok(h.reads.includes(root.segmentTip.fileId));
+  h.verifier.clear(); h.reads.length = 0;
+  await h.verifier.verify(h.adapter, h.manifest);
+  assert.ok(h.reads.includes(root.segmentTip.fileId));
+});
+
+test('transaction readbacks outside the next catalog-cache budget still require a closing version bracket', async () => {
+  const { writeVerified } = await import('../js/catalog-storage.mjs');
+  const h = await setup();
+  const root = await h.adapter.readJson(h.manifest.locatorCatalog.fileId);
+  const newest = await h.adapter.readJson(root.segmentTip.fileId);
+  const older = newest.previousSegment;
+  assert.ok(older);
+  const file = h.adapter.files.get(older.fileId), bytes = file.bytes.slice();
+  const create = h.adapter.createImmutable.bind(h.adapter);
+  h.adapter.createImmutable = async input => input.fileId === older.fileId ? { readback: {
+    metadata: await h.adapter.readMetadata(older.fileId), bytes: await h.adapter.readBytes(older.fileId)
+  } } : create(input);
+  const batch = h.adapter.readMetadataBatch.bind(h.adapter);
+  let mutated = false;
+  h.adapter.readMetadataBatch = async ids => {
+    if (ids.includes(root.segmentTip.fileId) && !mutated) { mutated = true; file.bytes[0] ^= 1; bump(file); }
+    return batch(ids);
+  };
+  const verifier = createCatalogHistoryVerifier({ maxEntries: 1 });
+  await verifier.withWriteReadbacks(async remember => {
+    await writeVerified(h.adapter, { fileId: older.fileId, content: bytes, kind: 'locator-catalog-segment',
+      transactionId: file.metadata.appProperties.financeTrackerTransaction }, async () => {}, globalThis.crypto, remember);
+    await assert.rejects(verifier.verify(h.adapter, h.manifest), { code: 'immutable-version-mismatch' });
+  });
+  assert.equal(mutated, true);
+  await assert.rejects(verifyCatalogHistory(h.adapter, h.manifest), { code: 'immutable-hash-mismatch' });
+});
+
+test('write receipt versions are detached before hashing can yield to adapter mutation', async () => {
+  const { writeVerified } = await import('../js/catalog-storage.mjs');
+  const h = await setup(), entry = target(h), file = h.adapter.files.get(entry.fileId), original = file.bytes.slice();
+  const metadata = structuredClone(file.metadata);
+  h.adapter.createImmutable = async () => ({ readback: { metadata, bytes: original } });
+  let digests = 0;
+  const cryptoImpl = { subtle: { async digest(...args) {
+    if (++digests === 2) { file.bytes[0] ^= 1; bump(file); metadata.version = file.metadata.version; }
+    return globalThis.crypto.subtle.digest(...args);
+  } } };
+  const verifier = createCatalogHistoryVerifier();
+  await verifier.withWriteReadbacks(async remember => {
+    await writeVerified(h.adapter, { fileId: entry.fileId, content: original, kind: 'snapshot-object',
+      transactionId: metadata.appProperties.financeTrackerTransaction }, async () => {}, cryptoImpl, remember);
+    await assert.rejects(verifier.verify(h.adapter, h.manifest, cryptoImpl), { code: 'immutable-hash-mismatch' });
+  });
 });

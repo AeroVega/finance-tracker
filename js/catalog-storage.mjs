@@ -1,5 +1,16 @@
 import { canonicalizeJcs, verifyJournal } from "./transaction-protocol.mjs";
-import { createLocatorCatalog, validateLocatorCatalog, createCatalogResolver } from "./drive-locator-catalog.mjs";
+import { copyOwnedBytes } from "./byte-ownership.mjs";
+import { createLocatorCatalog, validateLocatorCatalog, createCatalogResolver, LOCATOR_CATALOG_FORMAT } from "./drive-locator-catalog.mjs";
+
+import { validateCatalogRoot, validateCatalogSegment, SEGMENTED_CATALOG_VERSION,
+  CATALOG_SEGMENT_ENTRIES, CATALOG_SEGMENT_BYTES, CATALOG_ROOT_BYTES } from "./catalog-segments.mjs";
+
+// Private provenance binds a materialized lookup map to its verified stored root.
+// A cloned or modified map cannot silently claim a different immutable prefix.
+const catalogOrigins = new WeakMap();
+// Only writeVerified can mint these capabilities after verifying an exact-ID
+// adapter GET receipt. External callers cannot supply raw cache candidates.
+const verifiedWriteReceipts = new WeakMap();
 
 export function storageError(code, message) { return Object.assign(new Error(message), { code }); }
 export const encode = (value) => new TextEncoder().encode(typeof value === "string" ? value : canonicalizeJcs(value));
@@ -10,8 +21,8 @@ export async function hashRaw(bytes, cryptoImpl = globalThis.crypto) {
 export const physicalKind = (kind) => kind === "data-object" ? "snapshot-object" : kind;
 
 /** Exact-ID read-back is the only way to resolve an ambiguous create response. */
-export async function writeVerified(adapter, { content, kind, transactionId, name, fileId }, guard, cryptoImpl = globalThis.crypto) {
-  const bytes = typeof content === "string" ? encode(content) : content instanceof Uint8Array ? content : encode(content);
+export async function writeVerified(adapter, { content, kind, transactionId, name, fileId }, guard, cryptoImpl = globalThis.crypto, rememberReadback = null) {
+  const bytes = content instanceof Uint8Array ? copyOwnedBytes(content) : encode(content);
   const sha256 = await hashRaw(bytes, cryptoImpl);
   fileId ||= await adapter.allocateFileId();
   await guard();
@@ -23,7 +34,14 @@ export async function writeVerified(adapter, { content, kind, transactionId, nam
   // adapter, never the upload payload or POST response. Recheck every binding
   // and the raw bytes here. A hash-only success result is not a receipt.
   if (!createError && created?.readback?.metadata && created.readback.bytes instanceof Uint8Array) {
-    await verifyReadback(adapter, { fileId, sha256, kind, transactionId }, created.readback, cryptoImpl);
+    const reference = { fileId, sha256, kind, transactionId };
+    const readback = { metadata: structuredClone(created.readback.metadata), bytes: copyOwnedBytes(created.readback.bytes) };
+    const verified = await verifyReadback(adapter, reference, readback, cryptoImpl);
+    if (rememberReadback) {
+      const receipt = Object.freeze({});
+      verifiedWriteReceipts.set(receipt, { adapter, crypto: cryptoImpl, collector: rememberReadback, reference, version: readback.metadata.version, bytes: copyOwnedBytes(verified) });
+      rememberReadback(receipt);
+    }
     return { fileId, sha256 };
   }
   try { await readVerified(adapter, { fileId, sha256, kind, transactionId }, cryptoImpl); }
@@ -42,6 +60,7 @@ function verifyMetadata(adapter, { fileId, sha256, kind, transactionId }, metada
 
 async function verifyReadback(adapter, reference, { metadata, bytes }, cryptoImpl) {
   verifyMetadata(adapter, reference, metadata);
+  bytes = copyOwnedBytes(bytes);
   if (await hashRaw(bytes, cryptoImpl) !== reference.sha256) throw storageError("immutable-hash-mismatch", "An immutable object failed exact-byte verification.");
   return bytes;
 }
@@ -50,7 +69,7 @@ export async function readVerified(adapter, reference, cryptoImpl = globalThis.c
   const { fileId } = reference;
   const metadata = await adapter.readMetadata(fileId);
   verifyMetadata(adapter, reference, metadata);
-  const bytes = await adapter.readBytes(fileId);
+  const bytes = await adapter.readBytes(fileId, { kind: reference.kind });
   return verifyReadback(adapter, reference, { metadata, bytes }, cryptoImpl);
 }
 
@@ -92,6 +111,12 @@ export function requireCatalogManifest(manifest, adapter) {
 }
 
 export async function readCatalog(adapter, manifest, cryptoImpl = globalThis.crypto) {
+  return loadCatalog(adapter, manifest, cryptoImpl);
+}
+
+// Only the private session verifier can supply reuse evidence. Public reads,
+// exports and explicit reconnect begin with exact remote bytes.
+async function loadCatalog(adapter, manifest, cryptoImpl, cache = null) {
   requireCatalogManifest(manifest, adapter);
   if (manifest.copyPreparationFileId) {
     const metadata = await adapter.readMetadata(manifest.copyPreparationFileId);
@@ -103,17 +128,166 @@ export async function readCatalog(adapter, manifest, cryptoImpl = globalThis.cry
       throw storageError("copy-quarantined", "This destination has not completed verified copy preparation.");
     }
   }
-  const bytes = await readVerified(adapter, { ...manifest.locatorCatalog, kind: "locator-catalog" }, cryptoImpl);
-  const catalog = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  validateLocatorCatalog(catalog, { databaseId: manifest.databaseId, copyId: manifest.copyId });
+  const reused = new Map();
+  const candidates = new Map();
+  const batchBindings = async bindings => {
+    const metadata = await adapter.readMetadataBatch([...bindings.keys()]);
+    if (!(metadata instanceof Map) || metadata.size !== bindings.size) throw storageError("invalid-metadata-batch", "Catalog metadata must cover exactly the requested file IDs.");
+    for (const [fileId, value] of bindings) {
+      const reference = value.reference;
+      const file = metadata.get(fileId);
+      verifyMetadata(adapter, reference, file);
+      if (typeof file?.version !== "string" || !/^[0-9]+$/.test(file.version)) throw storageError("invalid-metadata-batch", "Catalog metadata requires fresh file versions.");
+    }
+    return structuredClone(metadata);
+  };
+  const previous = cache?.previousCatalog;
+  const before = cache?.metadataBefore || (previous?.size && typeof adapter.readMetadataBatch === "function" ? await batchBindings(previous) : null);
+  const readPart = async reference => {
+    if (!cache || typeof adapter.readMetadataBatch !== "function") return readVerified(adapter, reference, cryptoImpl);
+    const prior = previous?.get(reference.fileId);
+    const file = cache.metadataBefore ? before.get(reference.fileId) : before?.get(reference.fileId) || await adapter.readMetadata(reference.fileId);
+    verifyMetadata(adapter, reference, file);
+    if (cache.metadataBefore && file.trashed !== false) throw storageError("object-location-mismatch", "Fresh catalog metadata must explicitly confirm an untrashed file.");
+    if (typeof file?.version !== "string" || !/^[0-9]+$/.test(file.version)) throw storageError("invalid-metadata-batch", "Catalog metadata requires fresh file versions.");
+    const canReuse = prior && canonicalizeJcs(prior.reference) === canonicalizeJcs(reference) && prior.version === file.version;
+    const receiptBytes = canReuse ? null : transactionReadback(cache, adapter, reference, file, cryptoImpl);
+    const source = canReuse ? prior.bytes : receiptBytes || await adapter.readBytes(reference.fileId, { kind: reference.kind });
+    const bytes = await verifyReadback(adapter, reference, { metadata: file, bytes: source }, cryptoImpl);
+    const evidence = { reference: { ...reference }, version: file.version };
+    cache.catalogBindings?.set(reference.fileId, evidence);
+    // Every reused byte requires the closing bracket, even when the next cache
+    // budget cannot retain it. New cache candidates need that bracket too.
+    if (canReuse || receiptBytes) reused.set(reference.fileId, evidence);
+    if (cache.nextCatalog.size < cache.maxEntries && cache.bytes + bytes.byteLength <= cache.maxBytes) {
+      candidates.set(reference.fileId, evidence);
+      cache.nextCatalog.set(reference.fileId, { ...evidence, bytes: copyOwnedBytes(bytes) });
+      cache.bytes += bytes.byteLength;
+    }
+    return bytes;
+  };
+  const pointer = manifest.locatorCatalog;
+  const bytes = cache?.metadataBefore ? await readPart({ ...pointer, kind: "locator-catalog" })
+    : await readVerified(adapter, { ...pointer, kind: "locator-catalog" }, cryptoImpl);
+  const root = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  let catalog;
+  if (root.version === 1) {
+    catalog = validateLocatorCatalog(root, manifest);
+  } else {
+    if (bytes.byteLength > CATALOG_ROOT_BYTES) throw storageError("catalog-root-limit", "A catalog root exceeds its per-object byte limit.");
+    validateCatalogRoot(root, manifest);
+    const entries = Object.create(null);
+    const structuralIds = new Set([pointer.fileId]);
+    const physicalIds = new Set();
+    const append = source => {
+      for (const [key, entry] of Object.entries(source)) {
+        if (Object.hasOwn(entries, key)) throw storageError("duplicate-catalog-binding", "A catalog chain repeats an immutable identity.");
+        if (physicalIds.has(entry.fileId)) throw storageError("duplicate-physical-locator", "A catalog chain reuses a physical file ID.");
+        physicalIds.add(entry.fileId);
+        entries[key] = entry;
+      }
+    };
+    let segmentPointer = root.segmentTip;
+    let sequence = root.segmentCount - 1;
+    let generation = root.generation;
+    // Iterate rather than recurse: retained history has no total segment limit.
+    while (segmentPointer !== null) {
+      if (structuralIds.has(segmentPointer.fileId)) throw storageError("catalog-segment-cycle", "A catalog chain repeats a physical segment ID.");
+      structuralIds.add(segmentPointer.fileId);
+      const segmentBytes = await readPart({ ...segmentPointer, kind: "locator-catalog-segment" });
+      if (segmentBytes.byteLength > CATALOG_SEGMENT_BYTES) throw storageError("catalog-segment-limit", "A catalog segment exceeds its per-object byte limit.");
+      const segment = validateCatalogSegment(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(segmentBytes)), manifest);
+      if (segment.sequence !== sequence || segment.generation > generation || segment.generation < generation - 1 ||
+          (sequence === root.segmentCount - 1 && segment.generation !== root.generation)) {
+        throw storageError("catalog-segment-chain-mismatch", "Catalog segment order or generation does not match its root.");
+      }
+      append(segment.entries);
+      generation = segment.generation;
+      sequence--;
+      segmentPointer = segment.previousSegment;
+    }
+    if (sequence !== -1) throw storageError("catalog-segment-chain-mismatch", "The catalog chain has missing segments.");
+    let firstGeneration = 0;
+    if (root.legacyCatalog) {
+      if (structuralIds.has(root.legacyCatalog.fileId)) throw storageError("catalog-segment-cycle", "A legacy base cannot reuse a segment ID.");
+      structuralIds.add(root.legacyCatalog.fileId);
+      const legacyBytes = await readPart({ ...root.legacyCatalog, kind: "locator-catalog" });
+      const legacy = validateLocatorCatalog(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(legacyBytes)), manifest);
+      firstGeneration = legacy.generation + 1;
+      append(legacy.entries);
+    }
+    if (generation !== firstGeneration || Object.keys(entries).length !== root.entryCount) {
+      throw storageError("catalog-segment-chain-mismatch", "Catalog generations or retained entry counts do not match.");
+    }
+    for (const id of structuralIds) if (physicalIds.has(id)) throw storageError("duplicate-physical-locator", "Catalog metadata cannot also identify a retained protocol object.");
+    catalog = validateLocatorCatalog({ format: LOCATOR_CATALOG_FORMAT, version: 1, databaseId: root.databaseId,
+      copyId: root.copyId, generation: root.generation, parentCatalogHash: root.parentCatalogHash, entries }, manifest);
+  }
+  const checked = new Map([...reused, ...candidates]);
+  if (checked.size && !cache?.metadataBefore) {
+    const after = await batchBindings(checked);
+    for (const [fileId, value] of checked) if (after.get(fileId).version !== value.version) {
+      throw storageError("immutable-version-mismatch", "A catalog segment changed during verification.");
+    }
+  }
+  catalogOrigins.set(catalog, { adapter, pointer: { ...pointer }, root: structuredClone(root.version === 1 ? null : root),
+    fingerprint: await hashRaw(encode(catalog), cryptoImpl) });
   return catalog;
 }
 
-export async function writeCatalog(adapter, { manifest, previousCatalog = null, additions }, guard, cryptoImpl = globalThis.crypto) {
+export async function writeCatalog(adapter, { manifest, previousCatalog = null, additions }, guard, cryptoImpl = globalThis.crypto, rememberReadback = null) {
+  if (manifest.syntheticOnly !== true) throw storageError("synthetic-catalog-required", "Segmented catalog writes are restricted to synthetic copies.");
   const catalog = createLocatorCatalog({ databaseId: manifest.databaseId, copyId: manifest.copyId,
     previousCatalog, previousCatalogHash: previousCatalog ? manifest.locatorCatalog.sha256 : null, additions });
-  const pointer = await writeVerified(adapter, { content: catalog, kind: "locator-catalog",
-    transactionId: manifest.catalogFinalizationPending || "synthetic-catalog-maintenance", name: "ft-locator-catalog.json" }, guard, cryptoImpl);
+  let origin = null;
+  if (previousCatalog) {
+    origin = catalogOrigins.get(previousCatalog);
+    const fingerprint = await hashRaw(encode(previousCatalog), cryptoImpl);
+    if (origin) {
+      if (origin.adapter !== adapter || canonicalizeJcs(origin.pointer) !== canonicalizeJcs(manifest.locatorCatalog) || origin.fingerprint !== fingerprint) {
+        throw storageError("catalog-base-mismatch", "The materialized catalog no longer matches its verified base pointer.");
+      }
+    } else {
+      // Compatibility for callers constructing a legacy v1 base themselves.
+      if (fingerprint !== manifest.locatorCatalog.sha256) throw storageError("catalog-base-mismatch", "An unverified catalog cannot extend the selected immutable base.");
+      origin = { pointer: { ...manifest.locatorCatalog }, root: null };
+    }
+  }
+  const missing = Object.entries(catalog.entries).filter(([key]) => !previousCatalog || !Object.hasOwn(previousCatalog.entries, key));
+  if (previousCatalog && !missing.length) return { catalog: previousCatalog, pointer: { ...origin.pointer } };
+  const root = { format: LOCATOR_CATALOG_FORMAT, version: SEGMENTED_CATALOG_VERSION,
+    databaseId: catalog.databaseId, copyId: catalog.copyId, generation: catalog.generation,
+    parentCatalogHash: catalog.parentCatalogHash, entryCount: Object.keys(catalog.entries).length,
+    segmentCount: origin?.root?.segmentCount || 0, segmentTip: origin?.root?.segmentTip || null,
+    legacyCatalog: origin ? origin.root?.legacyCatalog || (origin.root ? null : origin.pointer) : null };
+  const transactionId = manifest.catalogFinalizationPending || "synthetic-catalog-maintenance";
+  let offset = 0;
+  while (offset < missing.length) {
+    const segment = { format: "finance-tracker-locator-segment", version: 1, databaseId: catalog.databaseId,
+      copyId: catalog.copyId, generation: catalog.generation, sequence: root.segmentCount,
+      previousSegment: root.segmentTip, entries: Object.create(null) };
+    let count = 0;
+    while (offset < missing.length && count < CATALOG_SEGMENT_ENTRIES) {
+      const [key, entry] = missing[offset];
+      segment.entries[key] = entry;
+      if (encode(segment).byteLength > CATALOG_SEGMENT_BYTES) {
+        delete segment.entries[key];
+        if (!count) throw storageError("catalog-segment-limit", "One locator cannot fit within a catalog segment's byte limit.");
+        break;
+      }
+      offset++; count++;
+    }
+    validateCatalogSegment(segment, manifest);
+    root.segmentTip = await writeVerified(adapter, { content: segment, kind: "locator-catalog-segment",
+      transactionId, name: "ft-locator-segment.json" }, guard, cryptoImpl, rememberReadback);
+    root.segmentCount++;
+  }
+  validateCatalogRoot(root, manifest);
+  if (encode(root).byteLength > CATALOG_ROOT_BYTES) throw storageError("catalog-root-limit", "A catalog root exceeds its per-object byte limit.");
+  const pointer = await writeVerified(adapter, { content: root, kind: "locator-catalog",
+    transactionId, name: "ft-locator-catalog.json" }, guard, cryptoImpl, rememberReadback);
+  catalogOrigins.set(catalog, { adapter, pointer: { ...pointer }, root: structuredClone(root),
+    fingerprint: await hashRaw(encode(catalog), cryptoImpl) });
   return { catalog, pointer };
 }
 
@@ -133,8 +307,8 @@ export function validateLogicalCommit(record, databaseId) {
 }
 
 /** Verify every retained object and the entire selected commit ancestry. */
-export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globalThis.crypto) {
-  return verifyHistory(adapter, manifest, cryptoImpl);
+export async function verifyCatalogHistory(adapter, manifest, cryptoImpl = globalThis.crypto, { retainDataObjects = true } = {}) {
+  return verifyHistory(adapter, manifest, cryptoImpl, null, { retainDataObjects });
 }
 
 /**
@@ -147,33 +321,79 @@ export function createCatalogHistoryVerifier({ maxBytes = 16 * 1024 * 1024, maxE
     throw storageError("invalid-history-cache-limit", "History evidence limits must be nonnegative safe integers.");
   }
   let evidence = null;
+  let readbacks = null;
   let generation = 0;
-  const clear = () => { generation++; evidence = null; };
-  return Object.freeze({ clear, async verify(adapter, manifest, cryptoImpl = globalThis.crypto) {
+  const clear = () => { generation++; evidence = null; readbacks?.entries.clear(); };
+  return Object.freeze({ clear, async withWriteReadbacks(operation) {
+    if (readbacks) throw storageError("operation-in-progress", "Immutable readback scopes cannot overlap.");
+    const scope = { entries: new Map(), bytes: 0, epoch: generation };
+    readbacks = scope;
+    try {
+      const remember = receipt => {
+        if (readbacks !== scope) throw storageError("expired-write-receipt-scope", "The transaction readback scope is closed.");
+        const candidate = verifiedWriteReceipts.get(receipt);
+        if (!candidate || candidate.collector !== remember) throw storageError("invalid-write-receipt", "Only privately verified exact-ID readbacks may supply candidate bytes.");
+        const { reference, version, bytes } = candidate;
+        if (scope.epoch !== generation || typeof version !== "string" || !/^[0-9]+$/.test(version) ||
+            scope.entries.has(reference.fileId) || scope.entries.size >= maxEntries || scope.bytes + bytes.byteLength > maxBytes) return;
+        scope.entries.set(reference.fileId, { adapter: candidate.adapter, crypto: candidate.crypto, reference: { ...reference }, version, bytes: copyOwnedBytes(bytes) });
+        scope.bytes += bytes.byteLength;
+      };
+      return await operation(remember);
+    } finally { scope.entries.clear(); if (readbacks === scope) readbacks = null; }
+  }, async verify(adapter, manifest, cryptoImpl = globalThis.crypto) {
     try {
       requireCatalogManifest(manifest, adapter);
       const scope = canonicalizeJcs([adapter.folderId, manifest.databaseId, manifest.copyId]);
       if (evidence && (evidence.adapter !== adapter || evidence.crypto !== cryptoImpl || evidence.scope !== scope ||
           manifest.revision < evidence.revision)) clear();
       const epoch = generation;
-      const cache = { previous: evidence?.entries, next: new Map(), bytes: 0, maxBytes, maxEntries };
+      const cache = { readbacks: readbacks?.entries, previous: evidence?.entries, previousCatalog: evidence?.catalogParts, next: new Map(), nextCatalog: new Map(), bytes: 0, maxBytes, maxEntries };
       const verified = await verifyHistory(adapter, manifest, cryptoImpl, cache);
       // An offline/release/error transition during a read must not repopulate it.
       if (generation === epoch) evidence = { adapter, crypto: cryptoImpl, scope,
-        revision: manifest.revision, entries: cache.next };
+        revision: manifest.revision, entries: cache.next, catalogParts: cache.nextCatalog };
       return verified;
     } catch (error) { clear(); throw error; }
   } });
 }
 
-async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
-  const catalog = await readCatalog(adapter, manifest, cryptoImpl);
+// A transaction receipt can supply bytes, never authority. Fresh metadata must
+// bind its exact ID, physical kind, hash and version before the normal hash,
+// typed identity, journal and ancestry checks. The closing version bracket is
+// mandatory, and only a fully successful verification can seed session evidence.
+function transactionReadback(cache, adapter, reference, metadata, cryptoImpl) {
+  const candidate = cache?.readbacks?.get(reference.fileId);
+  if (!candidate || candidate.adapter !== adapter || candidate.crypto !== cryptoImpl || candidate.version !== metadata.version || candidate.reference.sha256 !== reference.sha256 ||
+      physicalKind(candidate.reference.kind) !== physicalKind(reference.kind)) return null;
+  verifyMetadata(adapter, candidate.reference, metadata);
+  return copyOwnedBytes(candidate.bytes);
+}
+
+async function verifyHistory(adapter, manifest, cryptoImpl, cache = null, { retainDataObjects = true } = {}) {
+  // The active Drive adapter can cover catalog structure and retained entries
+  // with the same fresh opening/closing enumeration. Metadata never survives
+  // this verification, and a later verification must enumerate again.
+  const snapshotMetadata = async () => {
+    const result = await adapter.readMetadataSnapshot();
+    if (!(result instanceof Map)) throw storageError("invalid-metadata-batch", "Folder metadata must be a complete map.");
+    for (const [id, file] of result) if (typeof id !== "string" || !id || file?.id !== id) {
+      throw storageError("invalid-metadata-batch", "Folder metadata contains an invalid file identity.");
+    }
+    return structuredClone(result);
+  };
+  if (cache && typeof adapter.readMetadataSnapshot === "function") {
+    cache.metadataBefore = await snapshotMetadata();
+    cache.catalogBindings = new Map();
+  }
+  const catalog = await loadCatalog(adapter, manifest, cryptoImpl, cache);
   const resolver = createCatalogResolver(catalog);
   const objects = new Map();
   const journals = new Map();
   const entries = Object.entries(catalog.entries);
-  const readMetadataBatch = async () => {
-    const result = await adapter.readMetadataBatch(entries.map(([, entry]) => entry.fileId));
+  const readMetadataBatch = async (complete = null) => {
+    const result = complete ? new Map(entries.map(([, entry]) => [entry.fileId, complete.get(entry.fileId)]))
+      : await adapter.readMetadataBatch(entries.map(([, entry]) => entry.fileId));
     if (!(result instanceof Map) || result.size !== entries.length) {
       throw storageError("invalid-metadata-batch", "Batch metadata must cover exactly the retained file IDs.");
     }
@@ -182,26 +402,39 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
     for (const [, entry] of entries) {
       const file = result.get(entry.fileId);
       verifyMetadata(adapter, entry, file);
+      if (complete && file.trashed !== false) throw storageError("object-location-mismatch", "Fresh retained metadata must explicitly confirm an untrashed file.");
       if (typeof file.version !== "string" || !/^[0-9]+$/.test(file.version)) {
         throw storageError("invalid-metadata-batch", "Batch metadata must provide a valid version for every retained file.");
       }
     }
     return structuredClone(result);
   };
-  const metadata = typeof adapter.readMetadataBatch === "function" ? await readMetadataBatch() : null;
+  const metadata = typeof adapter.readMetadataBatch === "function" ? await readMetadataBatch(cache?.metadataBefore) : null;
   const verifiedBytes = await mapImmutableReads(entries, async ([key, entry]) => {
-    if (!metadata) return readVerified(adapter, entry, cryptoImpl);
+    if (!metadata) {
+      const bytes = await readVerified(adapter, entry, cryptoImpl);
+      return !retainDataObjects && entry.kind === "data-object" ? null : bytes;
+    }
     const prior = cache?.previous?.get(key);
     const reusable = prior && prior.binding === canonicalizeJcs(entry) &&
       prior.version === metadata.get(entry.fileId).version;
     // Detach returned bytes from private evidence, and hash them on every use.
-    const bytes = reusable ? prior.bytes.slice() : (await adapter.readBytes(entry.fileId)).slice();
-    return verifyReadback(adapter, entry, { metadata: metadata.get(entry.fileId), bytes }, cryptoImpl);
+    const source = reusable ? prior.bytes : transactionReadback(cache, adapter, entry, metadata.get(entry.fileId), cryptoImpl) ||
+      await adapter.readBytes(entry.fileId, { kind: entry.kind });
+    const bytes = await verifyReadback(adapter, entry, { metadata: metadata.get(entry.fileId), bytes: source }, cryptoImpl);
+    return !retainDataObjects && entry.kind === "data-object" ? null : bytes;
   });
   if (metadata) {
     // Bracket media reads with a second fresh complete enumeration. Membership,
     // tags and Drive versions must still agree. This is not an atomic snapshot.
-    const after = await readMetadataBatch();
+    const closing = cache?.metadataBefore ? await snapshotMetadata() : null;
+    const after = await readMetadataBatch(closing);
+    for (const [id, binding] of cache?.catalogBindings || []) {
+      const file = closing.get(id);
+      verifyMetadata(adapter, binding.reference, file);
+      if (file.trashed !== false) throw storageError("object-location-mismatch", "Fresh catalog metadata must explicitly confirm an untrashed file.");
+      if (file.version !== binding.version) throw storageError("immutable-version-mismatch", "A catalog object changed during verification.");
+    }
     for (const [, entry] of entries) {
       if (metadata.get(entry.fileId).version !== after.get(entry.fileId).version) {
         throw storageError("immutable-version-mismatch", "A retained file changed while its bytes were being verified.");
@@ -209,7 +442,7 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
     }
   }
   for (const [index, [key, entry]] of entries.entries()) {
-    objects.set(key, verifiedBytes[index]);
+    if (verifiedBytes[index] !== null) objects.set(key, verifiedBytes[index]);
     if (entry.kind === "journal-event") {
       const event = JSON.parse(new TextDecoder().decode(objects.get(key)));
       if (event.eventId !== entry.identity || event.transactionId !== entry.transactionId || event.sequence !== entry.sequence) {
@@ -264,13 +497,13 @@ async function verifyHistory(adapter, manifest, cryptoImpl, cache = null) {
   for (const entry of Object.values(catalog.entries).filter((entry) => entry.kind === "commit-record")) {
     if (!seen.has(entry.identity)) throw storageError("disconnected-history", "A catalog commit is not part of the selected retained ancestry.");
   }
-  if (cache && metadata) {
+  if (cache && metadata && retainDataObjects) {
     // Keep only this fully verified catalog, bounded in both bytes and entries.
     // Uncached objects are always downloaded again; hitting a limit is safe.
     for (const [key, entry] of entries) {
       const bytes = objects.get(key);
-      if (cache.next.size >= cache.maxEntries || cache.bytes + bytes.byteLength > cache.maxBytes) continue;
-      cache.next.set(key, { binding: canonicalizeJcs(entry), version: metadata.get(entry.fileId).version, bytes: bytes.slice() });
+      if (cache.next.size + cache.nextCatalog.size >= cache.maxEntries || cache.bytes + bytes.byteLength > cache.maxBytes) continue;
+      cache.next.set(key, { binding: canonicalizeJcs(entry), version: metadata.get(entry.fileId).version, bytes: copyOwnedBytes(bytes) });
       cache.bytes += bytes.byteLength;
     }
   }

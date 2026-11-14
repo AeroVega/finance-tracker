@@ -1,6 +1,6 @@
 # Contributor and Agent Instructions
 
-Read `README.md`, this file, and relevant `docs/` files before changing the project.
+Read [the agent quick start](docs/AGENT_QUICK_START.md), `README.md`, this file, and only the relevant `docs/` contracts before changing the project.
 
 ## Agent skills
 
@@ -37,7 +37,19 @@ Use deliberately synthetic test fixtures authored with invented data. Do not cop
 - Separate investment contributions, trades, fees, dividends, and market-value changes from ordinary spending.
 - Unavailable data is not zero. Do not fabricate historical figures.
 
-## Documentation
+## Documentation Governance
+
+Documentation must preserve project knowledge while making current project direction unambiguous. These principles govern all documentation changes:
+
+1. **Preserve project knowledge.** Retain meaningful decisions, rationale, constraints, lessons learned, and historical evidence. Do not discard useful context merely because implementation has moved on.
+2. **Centralize project direction.** Maintain one clear, authoritative place for current project status, priorities, decisions, and next steps. Other documents should link to it rather than independently restating mutable project direction.
+3. **Keep implementation truth close to the code.** Technical contracts, behavioral details, and implementation-specific instructions should live alongside the relevant code or in focused documentation directly referenced by it.
+4. **Separate historical context from current instructions.** Archive completed work, superseded decisions, and historical reports so they remain discoverable without competing with current guidance.
+5. **Distinguish proposed from integrated architecture.** Proposals, prototypes, experiments, and partially implemented designs must never be described as established production architecture. Clearly identify their implementation and verification status.
+6. **Make current state easy to establish.** An agent should be able to determine the project's current state, governing constraints, and immediate priorities quickly, before making changes.
+
+When documentation conflicts, current authoritative project direction and verified implementation take precedence over historical reports, proposals, and exploratory material. Resolve contradictions at their source rather than adding another competing explanation.
+
 Label claims as **Verified**, **User-confirmed**, **Hypothesis**, or **Open**. Use primary-source URLs for provider claims and recheck time-sensitive terms. Update decision records when choices change.
 
 ## GitHub Pages and PWA engineering guardrails
@@ -71,18 +83,15 @@ Apply these checks when implementation or release work is authorized; they do no
 For each significant change, report what changed and why, the checks actually run and their results, the diff/PR status, deployment status, known limitations, and remaining work. Clearly distinguish **implemented**, **validated**, and **deployed and verified**. Mark unmet acceptance criteria as outstanding rather than claiming completion.
 
 ## Current phase
-The owner has authorized the bounded synthetic-only PR28 canonical import implementation described in `docs/PR28_IMPLEMENTATION_SCOPE.md`. Reuse the merged PR20–25 storage machinery. Production financial-data activation remains gated by PR27 and separate owner review; this authorization does not permit real-data tests, merge, or deployment. Do not modify the archived `Finances.xlsx` workbook.
 
-The owner has also authorized PR29's shared visual overhaul and usability improvements, documented in `docs/PR29_VISUAL_OVERHAUL.md`. That PR preserved all prototype pages and the original modern-stack reference at the time. The later cleanup authorization below supersedes that preservation requirement. This extends the presentation and navigation scope, not production-data permissions, persistence architecture, or release authorization.
+Read [the agent quick start](docs/AGENT_QUICK_START.md) for the current implementation map, format terminology and documentation authority.
 
-The owner has also requested the synthetic financial-year upload button documented in `docs/SYNTHETIC_FINANCIAL_YEAR.md`. This authorizes the bounded invented-data implementation, using the existing canonical and storage engines and a user-chosen empty synthetic folder. The owner then requested reconsidering storage for speed. The historical grouped-v2 experiment is now deprecated: new canonical stores use fragmented v3 with its distinct version-3 logical group schema, standalone grouped-v2 copies are rejected, existing per-record v1 copies remain readable, and legacy fragmented-v3 copies upgrade to the current v3 group schema only on explicit save. Preserve integrity, recovery and ownership checks. This does not authorize real Drive use by agents, production financial persistence, merge, or deployment.
+Current authorization is synthetic-only. PR37's [incremental storage foundation](docs/SCALABLE_STORAGE_FOUNDATION.md) and [paged-storage follow-up](docs/PAGED_STORAGE_MILESTONE.md) document the approved scope and its limits. Use invented fixtures only; do not access real records, the private workbook or owner Drive data. Do not merge, deploy or activate production persistence.
 
-The owner also requested a solution to repeated retained-history reads. The synthetic-only [history verification scope](docs/DRIVE_HISTORY_VERIFICATION.md) permits bounded private verified-byte reuse guarded by fresh Drive versions and unchanged integrity, ownership and recovery checks. It does not authorize live Drive use, production persistence, history deletion, merge or deployment.
+The local synthetic application creates canonical v5 copies through the existing paged store and lifecycle. The application supports canonical v5 only. Canonical v1/v2/v3/v4 copies and older initialization markers are refused without migration or overwrite. Existing v5 copies created by earlier migrations remain supported through read-only verification of their retained legacy provenance. Existing data must be preserved; use a fresh empty synthetic folder for a new v5 copy. See [the format contract](docs/PARTITIONED_CANONICAL_STORAGE.md) for exact version tags and recovery rules, and [project status](docs/PROJECT_STATUS.md) for publication and verification evidence. Full ledger/history loading, validation and preparation memory remain; this is not completed bounded-memory loading or incremental financial validation.
 
-The owner subsequently authorized safe prototype cleanup and a fresh, easy owner acceptance suite. The [cleanup inventory](docs/PROTOTYPE_CLEANUP.md) records retired UI, retained unique diagnostics and preserved evidence. This permits removing superseded prototype runtime code after checking dependencies and coverage. It does not permit dropping unique recovery tests, deleting historical evidence, live Drive actions, production persistence, merge or deployment.
+Financial position and reconciled coverage were merged in PR36. Historical monthly migration, supported owner-file ingestion and production controls remain open. Production financial-data persistence is **NO-GO** pending the separate implementation, privacy/OAuth/cost/recovery review, live synthetic acceptance and explicit owner authorization.
 
-The owner has authorized step 1 of the four-PR application plan: the synthetic-only [canonical main workspace](docs/CANONICAL_MAIN_WORKSPACE.md). Reuse the existing canonical/storage engines for saved-year browsing, auditable corrections, explicit save and reopen. The owner deploys and explores the branch themselves. This scope does not authorize merge, deployment, live Drive actions by agents, real financial data, production activation, the later financial-position model or historical migration.
+The owner also requested [app testing fixes](docs/APP_TESTING_FEEDBACK.md) for PR37: reduce save requests, make posting-status corrections auditable and usable in the editor, and explain the active format accurately. New user-facing features must work through the app when delivered. Preserve original evidence, explicit save/reopen, full verification and recovery. This does not expand the real-data, live Drive, merge or deployment permissions above.
 
-The owner has now authorized the synthetic-only follow-up to the canonical main workspace: explicitly save the exact local synthetic preview (including staged events) into a newly selected, verified empty synthetic folder, and add append-only transfer links between manually confirmed opposite-side activities. Reuse the existing storage lifecycle and canonical ledger engine. No overwrite, production financial data, agent-initiated live Drive actions, merge or deployment is authorized.
-
-The owner has authorized the synthetic-only financial-position and reconciled-coverage milestone described in [the financial-position contract](docs/FINANCIAL_POSITION.md). Add dated balances, holdings evidence, liability balances, conflict resolutions, explicit closure and evidence-based account/month coverage through the existing canonical and storage machinery. Preserve exact arithmetic, append-only history, recovery and old-ledger reads. This authorization does not permit real financial data, live Drive actions by agents, production activation, merge or deployment.
+For older owner decisions and completed milestones, consult the dated scope/evidence documents linked from [the documentation index](docs/README.md). Do not treat historical authorization text as permission to expand the current task.

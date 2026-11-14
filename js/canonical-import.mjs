@@ -136,6 +136,19 @@ function validEventMoney(value) {
   if(!value || Object.keys(value).some(k=>!['amountMinor','amountDecimal','currency'].includes(k)) || !/^[A-Z]{3}$/.test(value.currency) || (value.amountMinor===null)===(value.amountDecimal===null) || exactSignedDecimal(value)===null) fail('invalid-event-money');
   parseMoney(exactSignedDecimal(value),value.currency);
 }
+const postingValues = activity => ({lifecycleStatus:activity.lifecycleStatus,postedDate:activity.postedDate});
+function validatePostingCorrection(event, activity) {
+  const exactFields = value => value && !Array.isArray(value) && Object.keys(value).length === 2 &&
+    Object.hasOwn(value,'lifecycleStatus') && Object.hasOwn(value,'postedDate');
+  if(!exactFields(event.priorValues) || !exactFields(event.proposedValues) ||
+    !event.evidence || typeof event.evidence !== 'object' || Array.isArray(event.evidence) ||
+    typeof event.evidence.rationale !== 'string' || !event.evidence.rationale.trim()) fail('invalid-posting-status-correction');
+  if(canonicalizeJcs(event.priorValues)!==canonicalizeJcs(postingValues(activity))) fail('posting-status-history-mismatch');
+  const {lifecycleStatus,postedDate}=event.proposedValues;
+  if(!['posted','pending','unknown'].includes(lifecycleStatus) ||
+    (lifecycleStatus==='posted' ? !isCalendarDate(postedDate) : postedDate!==null)) fail('invalid-posting-status-correction');
+  if(canonicalizeJcs(event.priorValues)===canonicalizeJcs(event.proposedValues)) fail('posting-status-unchanged');
+}
 function validateHistoryEvent(e,a,byId,replay=null,activeIds=null) {
   const findActivity=activityId=>byId.activities.get(activityId)??fail('unknown-activity');
   if(e.eventType==='bank-correction') {
@@ -155,6 +168,8 @@ function validateHistoryEvent(e,a,byId,replay=null,activeIds=null) {
     if(e.confirmedPostedDate!==null && e.confirmedPostedDate!==undefined && (!isCalendarDate(e.confirmedPostedDate)||(a.postedDate!==null&&a.postedDate!==e.confirmedPostedDate))) fail('invalid-refund-posted-date');
   } else if(e.eventType==='lifecycle-transition') {
     if(a.lifecycleStatus!=='pending'||e.from!=='pending'||e.to!=='posted'||!isCalendarDate(e.effectiveDate)||(e.postedDate!==null&&!isCalendarDate(e.postedDate))||(e.settlementDate!==null&&!isCalendarDate(e.settlementDate))||byId.observations.get(e.sourceObservationId)?.activityId!==e.activityId) fail('invalid-lifecycle-event');
+  } else if(e.eventType==='posting-status-correction') {
+    validatePostingCorrection(e,a);
   } else if(e.eventType==='transfer-link') {
     const other=findActivity(e.counterpartyActivityId);
     const counterpart=replay?.get(e.counterpartyActivityId);
@@ -323,9 +338,10 @@ export function applyReviewDecision(ledger, {observationId,action,activityId=nul
     const historicalMatch=amountConflict && retainedCompositeEvidence(next,[original]).some(evidence=>sameComposite(evidence,o.candidate));
     if(amountConflict && !historicalMatch) fail('conflicting-match-requires-correction');
     o.disposition='matched';
-    // Explicitly linking old evidence must not undo a correction or infer a
+    // Identity matching does not revoke a manual posting correction or infer a
     // lifecycle transition from a row that conflicts with the current amount.
-    if(!historicalMatch&&a.lifecycleStatus==='pending'&&o.candidate.lifecycleStatus==='posted') {
+    if(!historicalMatch&&!next.events.some(event=>event.activityId===activityId&&event.eventType==='posting-status-correction')&&
+      a.lifecycleStatus==='pending'&&o.candidate.lifecycleStatus==='posted') {
       next.events.push({eventId:id(options),commandId:`review:${o.observationId}:lifecycle-transition`,eventType:'lifecycle-transition',activityId,sourceObservationId:o.observationId,recordedAt:time,from:'pending',to:'posted',effectiveDate:o.candidate.effectiveDate,postedDate:o.candidate.postedDate,settlementDate:o.candidate.settlementDate,appendOnly:true});
     }
   } else { o.disposition='rejected'; activityId=null; }
@@ -350,7 +366,9 @@ function activeActivities(ledger) {
 
 function reconciliationEvidence(ledger) {
   const active=activeActivities(ledger),replay=projectActivities(ledger);
-  return {existingActivities:active.map(activity=>replay.get(activity.activityId)),existingObservations:ledger.observations,existingCompositeEvidence:retainedCompositeEvidence(ledger,active)};
+  return {existingActivities:active.map(activity=>replay.get(activity.activityId)),existingObservations:ledger.observations,
+    existingCompositeEvidence:retainedCompositeEvidence(ledger,active),
+    manualPostingActivityIds:ledger.events.filter(event=>event.eventType==='posting-status-correction').map(event=>event.activityId)};
 }
 
 function retainedCompositeEvidence(ledger,active) {
@@ -364,6 +382,7 @@ function retainedCompositeEvidence(ledger,active) {
     if(!prior) continue;
     let current;
     if(event.eventType==='bank-correction') current={...prior,...event.proposedValues};
+    else if(event.eventType==='posting-status-correction') current={...prior,...event.proposedValues};
     else if(event.eventType==='lifecycle-transition') current={...prior,lifecycleStatus:event.to,effectiveDate:event.effectiveDate,postedDate:event.postedDate,settlementDate:event.settlementDate};
     else continue;
     history.set(event.activityId,current);
@@ -500,6 +519,10 @@ function createActivityReplay(activities) {
         result.lifecycleStatus=event.to;result.effectiveDate=event.effectiveDate;
         result.postedDate=event.postedDate;result.settlementDate=event.settlementDate;
       }
+      if(event.eventType==='posting-status-correction') {
+        result.lifecycleStatus=event.proposedValues.lifecycleStatus;
+        result.postedDate=event.proposedValues.postedDate;
+      }
       if(event.eventType==='transfer-link') {
         const other=stateFor(event.counterpartyActivityId);
         result.transferGroupId=event.transferGroupId;
@@ -606,6 +629,11 @@ function buildFinancialEvent(next,command,options,{replay,commands,activeIds,ref
   const event={eventId:id(options),commandId,commandSignature:signature,eventType:type,activityId,recordedAt:stamp(options),evidence:clone(command.evidence??null),appendOnly:true};
   if(type==='category-correction') {if(typeof command.categoryId!=='string'||!command.categoryId) fail('category-required');event.categoryId=command.categoryId;event.priorCategoryId=a.categoryId;event.prospectiveRule=prospectiveCategoryRule(next,a);}
   else if(type==='bank-correction') {if(!command.evidence) fail('correction-evidence-required');event.priorValues={amountMinor:a.amountMinor,amountDecimal:a.amountDecimal,currency:a.currency};event.proposedValues=parseMoney(command.amountText,a.currency);}
+  else if(type==='posting-status-correction') {
+    event.priorValues=postingValues(a);
+    event.proposedValues={lifecycleStatus:command.lifecycleStatus,postedDate:command.postedDate};
+    validatePostingCorrection(event,a);
+  }
   else if(type==='classification') {
     if(!['income','spending','transfer','refund','unclassified'].includes(command.activityKind)) fail('unsupported-classification');
     const value=exactSignedDecimal(a);
@@ -676,21 +704,34 @@ function summarizePeriod({ledger,replay,accounts,active,unresolved},{start,end,c
       continue;
     }
     if(date<start||date>end) continue;
-    const omit=reason=>{reasons.add(reason);excluded.push({activityId:a.activityId,reason});};
-    if(a.lifecycleStatus==='pending') {excluded.push({activityId:a.activityId,reason:'pending'});continue;}
-    if(a.lifecycleStatus!=='posted') {omit('unknown-lifecycle');continue;}
-    if(a.currency!==currency) {omit('different-currency');continue;}
-    const value=exactSignedDecimal(a);
-    if(value===null) {omit('unknown-amount');continue;}
-    if(!['income','spending','transfer','refund'].includes(a.activityKind)) {omit('unclassified-activity');continue;}
-    if((a.activityKind==='spending'&&compare(value,'0')>0)||(a.activityKind==='income'&&compare(value,'0')<0)||(a.activityKind==='refund'&&compare(value,'0')<=0)) {omit('classification-amount-conflict');continue;}
-    if(a.activityKind==='refund'&&!a.originalActivityId&&!a.categoryId) {omit('unmatched-refund');continue;}
-    if(a.activityKind==='income') income=add(income,value);
-    if(a.activityKind==='spending'||a.activityKind==='refund') spending=add(spending,negate(value));
-    // Only checking/savings cash movement; cards are liabilities, not cash accounts.
-    if(['checking','savings'].includes(accounts.get(a.accountId).accountType)&&a.activityKind!=='transfer') cash=add(cash,value);
+    const contribution=reportActivityContribution(a,accounts.get(a.accountId),currency);
+    if(contribution.reason) {
+      if(contribution.reason!=='pending') reasons.add(contribution.reason);
+      excluded.push({activityId:a.activityId,reason:contribution.reason});
+    } else {
+      income=add(income,contribution.income);spending=add(spending,contribution.spending);cash=add(cash,contribution.cash);
+    }
   }
   return {start,end,currency,income,spending,cash,complete:false,reasons:[...reasons],excluded};
+}
+
+/** Shared financial meaning for the full report and derived month index.
+ * The caller owns validated activity/account input and reporting-date selection.
+ * A missing refund posting date is handled before date/currency filtering.
+ */
+export function reportActivityContribution(a,account,currency) {
+  const omit=reason=>({reason,income:'0',spending:'0',cash:'0'});
+  if(a.lifecycleStatus==='pending') return omit('pending');
+  if(a.lifecycleStatus!=='posted') return omit('unknown-lifecycle');
+  if(a.currency!==currency) return omit('different-currency');
+  const value=exactSignedDecimal(a);
+  if(value===null) return omit('unknown-amount');
+  if(!['income','spending','transfer','refund'].includes(a.activityKind)) return omit('unclassified-activity');
+  if((a.activityKind==='spending'&&compare(value,'0')>0)||(a.activityKind==='income'&&compare(value,'0')<0)||(a.activityKind==='refund'&&compare(value,'0')<=0)) return omit('classification-amount-conflict');
+  if(a.activityKind==='refund'&&!a.originalActivityId&&!a.categoryId) return omit('unmatched-refund');
+  return {reason:null,income:a.activityKind==='income'?value:'0',
+    spending:['spending','refund'].includes(a.activityKind)?negate(value):'0',
+    cash:['checking','savings'].includes(account.accountType)&&a.activityKind!=='transfer'?value:'0'};
 }
 
 // One owner per application ledger. This is an in-memory optimization, not a

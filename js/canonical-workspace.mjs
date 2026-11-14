@@ -6,7 +6,7 @@ import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-wor
 import { getEffectiveActivities } from './canonical-import.mjs';
 import { exactSignedDecimal, isCalendarDate } from './import-reconciliation.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
-import { googleStartupMessage } from './google-startup-diagnostics.mjs';
+import { showDiagnostic, clearDiagnostic } from './app-diagnostics.mjs';
 
 const $ = id => document.getElementById(id);
 const pages = createWorkspacePages({document, window});
@@ -45,52 +45,15 @@ function scheduleSearch() {
 const storage = new DashboardSyntheticStorage({
   maintainOriginals: false,
   onStatus(status) {
+    if (!status.code) clearDiagnostic($('connection-status'));
     if (status.state !== 'ready') session.invalidate();
     $('connection-status').textContent = status.state === 'ready'
       ? 'Connected to a synthetic copy. Opening and saves verify its canonical records.'
-      : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
+      : status.code ? showDiagnostic({code: status.code}, {surface: 'workspace', target: $('connection-status')}) : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
     refresh();
   }
 });
 const session = new CanonicalWorkspaceSession({ storage });
-const messages = {
-  'canonical-ledger-required': 'This copy has no saved canonical ledger. Release it, seed a synthetic year in a new empty folder, then open that saved copy here.',
-  'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. It was not initialized or modified. Preserve it and create a new synthetic copy using fragmented version 3.',
-  'existing-copy-required': 'Choose the folder where you already saved the synthetic year. This workspace does not initialize empty folders.',
-  'correction-rationale-required': 'Explain the evidence or reason for this correction.',
-  'classification-amount-conflict': 'That classification conflicts with the amount. Income must not be negative and spending must not be positive.',
-  'category-required': 'Enter a category for this transaction.',
-  'invalid-amount': 'Enter an exact decimal amount, for example -125.50.',
-  'reopen-before-editing': 'Reopen verified saved records before editing. Your local changes have not been discarded.',
-  'authorization-cancelled': 'Google authorization was cancelled. No saved records were replaced.',
-  'picker-cancelled': 'Folder selection was cancelled. No saved records were replaced.',
-  'synthetic-folder-required': 'Choose an existing invented-data folder with “synthetic” in its name. No saved records were replaced.',
-  'base-conflict': 'The saved copy changed. Reopen verified records before deciding what to retry.',
-  'transaction-unresolved': 'The save result is uncertain. Recover if offered, then reopen saved records before retrying.',
-  'reconnect-required': 'The connection could not be verified. Reconnect and reopen saved records before editing.',
-  'verified-draft-required': 'There is no verified draft eligible for saving. Reopen saved records before editing.',
-  'verified-preview-required': 'Load a local synthetic preview with no active Drive session before saving it to a new folder.',
-  'new-empty-folder-required': 'The selected folder did not pass fresh-copy admission. No existing copy was changed; choose a newly created empty synthetic folder.',
-  'seed-readback-mismatch': 'The new copy could not be independently verified. Keep this tab open, recover if offered, then reopen before deciding what to do next.',
-  'transfer-link-rationale-required': 'Explain why these two activities represent the same transfer.',
-  'invalid-transfer-link': 'These activities cannot be linked. Confirm that both are active transfers in different accounts, with equal opposite amounts in the same currency, and that neither is already linked.',
-  'invalid-holding': 'Each holding needs a unique identifier, type, nonnegative exact quantity and value.',
-  'invalid-reconciliation-component': 'Each component needs a supported movement kind, signed exact amount and statement reference.',
-  'invalid-position-statement-coverage': 'Complete statement coverage must match the selected full month and account scope.',
-  'invalid-position-amount': 'Enter an exact decimal balance without a currency symbol or separators.',
-  'invalid-position-money': 'Enter an exact decimal amount without currency symbols or separators.',
-  'negative-holding-value': 'Enter a nonnegative statement value for each holding. Short positions are not supported.',
-  'invalid-position-month': 'Choose a calendar month before recording reconciliation evidence.',
-  'closure-requires-selected-zero-balance': 'Choose a zero balance for this account on its closure date.',
-  'invalid-statement-coverage': 'The complete statement declaration must match the selected account and calendar month.',
-  'reconciliation-requires-selected-anchors': 'Resolve conflicting balances first, then choose the selected opening and closing evidence.',
-  'invalid-account': 'Enter an invented account name, a listed institution and account type, and a three-letter uppercase currency.',
-  'invalid-position-date': 'Choose a valid effective date.',
-  'invalid-reconciliation-anchors': 'Choose the previous month-end opening balance and selected month-end closing balance for this account.',
-  'invalid-position-source': 'Add a source evidence reference.',
-  'liability-balance-must-be-positive': 'Enter a nonnegative amount owed for this liability, without a minus sign.',
-  'release-unconfirmed': 'Release was not verified. Keep this copy selected and resolve its session before switching devices.'
-};
 function announce(text, kind = 'info') {
   $('action-status').textContent = text; $('action-status').dataset.kind = kind;
   if (activeFormStatus) {
@@ -139,8 +102,11 @@ function refresh() {
   if (reviewQueueButton) reviewQueueButton.disabled = busy;
   $('transactions').setAttribute('aria-busy', String(busy));
   for (const id of ['account-filter', 'month-filter', 'transaction-search', 'review-only']) $(id).disabled = busy || !session.ledger;
-  for (const id of ['correction-type', 'classification', 'category', 'amount', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
-  $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim();
+  for (const id of ['correction-type', 'classification', 'category', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
+  const postingCorrection = $('correction-type').value === 'posting-status-correction';
+  $('posting-date').disabled = !editable || !postingCorrection || $('posting-status').value !== 'posted';
+  $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim() ||
+    (postingCorrection && $('posting-status').value === 'posted' && !isCalendarDate($('posting-date').value));
   $('previous-page').disabled = busy || !view || view.page === 0;
   $('next-page').disabled = busy || !view || view.page + 1 >= view.pages;
   const timing = $('operation-timing');
@@ -161,19 +127,23 @@ function refresh() {
   $('draft-storage-link').hidden = session.mode !== 'preview' || session.unverified || busy;
   $('data-mode').dataset.mode = session.mode;
   $('data-mode').textContent = session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
+  $('storage-format').textContent = session.mode === 'preview'
+    ? 'Local preview, no saved format yet. Saving to a new folder will use canonical v5.'
+    : session.ledger && session.store?.base
+      ? `Last verified saved format: canonical v5, ${session.store.valueCodec}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
+      : 'No saved format currently verified. New synthetic copies use canonical v5.';
 }
 async function run(message, operation, formStatus = null) {
   if (busy) return;
   // Apply a queued query before an action so cancellation leaves rows and input aligned.
   if (searchTimer !== null) { cancelSearch(); page = 0; render(); }
   activeFormStatus = formStatus;
+  clearDiagnostic($('action-status'));
   busy = true; operationStarted = Date.now(); refresh(); announce(message);
   const timer = setInterval(refresh, 1000);
   try { await operation(); }
   catch (error) {
-    const candidate = error?.code || (error instanceof TypeError ? error.message : '');
-    // Provider details and arbitrary codes are not safe user-facing diagnostics.
-    const message = Object.hasOwn(messages, candidate) ? messages[candidate] : 'Action did not complete. Check the connection and available recovery actions.';
+    const message = showDiagnostic(error, {surface: 'workspace', target: $('action-status')});
     announce(message + (session.dirty ? ' Your staged changes remain in this tab.' : ''), 'error');
   } finally { clearInterval(timer); busy = false; operationStarted = null; refresh(); activeFormStatus = null; }
 }
@@ -203,7 +173,7 @@ function render({ reset = false } = {}) {
     for (const id of ['holdings-source','holdings-date','reconcile-source','balance-source','balance-date','balance-amount','closure-source','new-account-name']) $(id).value = '';
     page = 0; selectedActivity = null; $('transaction-search').value = ''; $('review-only').checked = false; $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; pages.clearDetail(); }
   if (viewLedger !== session.ledger) {
-    const reader = createWorkspaceViewReader(session.ledger);
+    const reader = createWorkspaceViewReader(session.ledger, {monthlyIndex:session.store?.monthIndex});
     viewReader = reader; viewLedger = session.ledger;
   }
   view = viewReader.view({ accountId: $('account-filter').value, month: $('month-filter').value, query: $('transaction-search').value, reviewOnly: $('review-only').checked, page });
@@ -491,6 +461,8 @@ function showDetail(activityId, {navigate = true} = {}) {
     entry.append(node('strong', label(event.eventType)), node('p', event.recordedAt, 'review-meta'));
     if (event.eventType === 'classification') entry.append(node('p', `${label(event.priorActivityKind)} → ${label(event.activityKind)}`));
     if (event.eventType === 'category-correction') entry.append(node('p', `${event.priorCategoryId || 'No category'} → ${event.categoryId}`));
+    if (event.eventType === 'posting-status-correction') entry.append(node('p',
+      `${label(event.priorValues.lifecycleStatus)} (${event.priorValues.postedDate || 'no posting date'}) → ${label(event.proposedValues.lifecycleStatus)} (${event.proposedValues.postedDate || 'no posting date'})`));
     if (event.eventType === 'transfer-link') {
       const source = getWorkspaceActivity(session.ledger, event.activityId);
       const target = getWorkspaceActivity(session.ledger, event.counterpartyActivityId);
@@ -506,6 +478,9 @@ function showDetail(activityId, {navigate = true} = {}) {
   $('classification').value = ['income', 'spending', 'transfer', 'unclassified'].includes(activity.activityKind) ? activity.activityKind : 'unclassified';
   $('category').value = activity.categoryId || '';
   $('amount').value = activity.amountText || '';
+  $('posting-status').value = ['posted', 'pending', 'unknown'].includes(activity.lifecycleStatus) ? activity.lifecycleStatus : 'unknown';
+  $('posting-date').value = activity.postedDate || '';
+  if (activity.lifecycleStatus === 'unknown') $('correction-type').value = 'posting-status-correction';
   $('correction-rationale').value = '';
   correctionFields(); refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
 }
@@ -514,6 +489,11 @@ function correctionFields() {
   $('classification-field').hidden = type !== 'classification';
   $('category-field').hidden = type !== 'category-correction';
   $('amount-field').hidden = type !== 'bank-correction';
+  $('posting-status-field').hidden = type !== 'posting-status-correction';
+  const postingDate = type === 'posting-status-correction' && $('posting-status').value === 'posted';
+  $('posting-date-field').hidden = !postingDate;
+  $('posting-date').required = postingDate;
+  refresh();
 }
 action('preview-position', 'Preparing invented balances and reconciliation evidence locally.', async () => {
   if (!confirmReplace()) return;
@@ -649,7 +629,8 @@ action('revert-all-changes', 'Reverting all staged changes to the last verified 
   announce('All staged changes reverted to the last verified baseline. No saved records were changed.', 'success');
 });
 action('stage-correction', 'Checking your correction locally.', async () => {
-  session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value, rationale: $('correction-rationale').value });
+  session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value,
+    lifecycleStatus: $('posting-status').value, postedDate: $('posting-status').value === 'posted' ? $('posting-date').value : null, rationale: $('correction-rationale').value });
   render(); showDetail(selectedActivity);
   announce(session.mode === 'preview' ? 'Correction added to this local preview only. Source evidence is unchanged.' : 'Correction staged locally. Source evidence is unchanged. Choose Save changes to persist it.', 'success');
 });
@@ -663,6 +644,8 @@ $('close-detail').addEventListener('click', () => {
   selectedActivity = null; refresh();
 });
 $('correction-type').addEventListener('change', correctionFields);
+$('posting-status').addEventListener('change', correctionFields);
+$('posting-date').addEventListener('input', refresh);
 $('correction-rationale').addEventListener('input', refresh);
 $('transfer-counterparty').addEventListener('change', refresh);
 $('transfer-link-rationale').addEventListener('input', refresh);
@@ -678,7 +661,7 @@ window.addEventListener('online', refresh);
 refresh();
 storage.prepare().then(() => { configured = true; refresh(); }).catch(error => {
   configured = false;
-  $('connection-status').textContent = googleStartupMessage(error);
+  $('connection-status').textContent = showDiagnostic(error, {surface: 'workspace', target: $('connection-status')});
   refresh();
 });
 correctionFields(); refresh();

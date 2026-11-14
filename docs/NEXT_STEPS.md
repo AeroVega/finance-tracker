@@ -1,15 +1,16 @@
 # Next steps to Alpha
 
-**Updated:** November 10, 2026. See [project status](PROJECT_STATUS.md) for the verified source, merged PRs and deployment result. This is the active work queue; [the earlier handoff](archive/NEXT_STEPS_2026-11-08.md) is historical.
+**Updated:** November 11, 2026. See [project status](PROJECT_STATUS.md) for the verified source and merged PRs. Deployment work is deferred until closer to Alpha. This is the active work queue; [the earlier handoff](archive/NEXT_STEPS_2026-11-08.md) is historical.
 
 Alpha must let the owner import and review financial history, correct it, reconcile financial position and recover the saved data. It does not require Beta's charts, budgets, insights or projection interface. Production persistence remains **NO-GO** until the separate controls and authorization gate pass.
 
 ## Immediate next actions
 
-1. **Resolve the deployment evidence gap.** Inspect the failed `Configure GitHub Pages` step and actual Pages settings, then obtain a successful authorized deployment and confirm its full SHA in the served app. The failed main run is linked in [project status](PROJECT_STATUS.md). No deployment or settings change is authorized by this document.
-2. **Repair the acceptance checklist in a bounded code change.** Remove obsolete grouped-v2 seeding/selector steps from `prototype/acceptance-plan.mjs` and align its tests and displayed instructions with current v3 policy. Preserve unique recovery and device checks. Until then, use [the owner guide](OWNER_ACCEPTANCE.md) and mark obsolete phases blocked, not passed.
-3. **Close step 1's remaining acceptance.** Reuse the owner's accepted local browsing/correction/mobile evidence. Test the newer preview persistence and transfer-link save/reopen paths on the reviewed deployed SHA with invented data only. Record failures and exact coverage rather than repeating every historical check.
-4. **Review step 2's authorized implementation.** The [financial-position contract](FINANCIAL_POSITION.md) records the dated-balance, conflict, holdings, debt and evidence-based coverage rules. Review the [adversarial follow-up](PR36_ADVERSARIAL_REVIEW.md) and automated results, then complete owner-run synthetic save/reopen/restore and device acceptance on the reviewed source. Do not treat implementation as release or production approval.
+1. **Validate the v5 replacement slice.** Complete combined focused checks, the benchmark and final exact-source extended gate for the [existing app/store path](PARTITIONED_CANONICAL_STORAGE.md), including recovery, v5 backup/restore and safe refusal of older canonical copies. Record results in [project status](PROJECT_STATUS.md); do not infer speed or memory improvements from the new format. Bounded semantic/history auditing, selective app loading and incremental validation remain later work. Preserve full financial, history and physical verification. Schema evolution does not authorize silent migration or weaker checks.
+2. **Build the remaining production controls with invented data.** Implement designated account/database binding, full working-state cleanup and a production-capable path, then validate its privacy, authorization and recovery boundaries. Preserve NO-GO until the non-test gates and explicit owner activation decision pass.
+3. **Prepare monthly migration from the synthetic workbook.** The owner is preparing an invented 2023–2026 workbook. Use it to define monthly-summary mapping and exact reconciliation without accessing the private workbook or turning monthly totals into fabricated transactions.
+4. **Carry forward scoped acceptance evidence.** PR36 is merged and its description reports completed owner synthetic/device acceptance. Preserve that evidence rather than repeating unchanged checks. Historical acceptance gaps below should be checked against the exact paths and source accepted by the owner.
+5. **Revisit deployment near Alpha.** The checklist now targets v5; verify its changed paths on the intended source. Inspect Pages configuration and verify the served SHA when release work resumes. No deployment, settings change or real-data use is authorized by this queue.
 
 These are dependencies and review actions, not automatic permission to merge, deploy, change Google configuration or use real data.
 
@@ -32,11 +33,11 @@ Use [the workspace acceptance procedure](CANONICAL_MAIN_WORKSPACE.md#validation-
 
 ### Step 2: financial position and reconciled coverage
 
-**Synthetic implementation under review.** The owner approved the financial-position plan on November 10, 2026. The [implementation contract](FINANCIAL_POSITION.md) adds optional append-only position events through the existing canonical model and storage. Live synthetic and device acceptance remain separate.
+**Merged in PR36.** The owner approved the financial-position plan on November 10, 2026. The [implementation contract](FINANCIAL_POSITION.md) adds optional append-only position events through the existing canonical model and storage. PR36's description reports completed owner live synthetic and device acceptance. Preserve that bounded evidence; it does not authorize production activation.
 
 The contract covers dated account balances, investment holdings/values and liability balances with source, effective date, currency, freshness and missingness. Account/month reconciliation requires evidence beyond declared coverage. The scoped choices in [O1/O3 and E2/E3](PRODUCT_OPEN_DECISIONS.md) are recorded without reopening settled transfer/refund/pending rules. Remaining broader investment, reporting and debt questions stay open.
 
-**Proposed engineering acceptance criteria** for the scoped implementation, to verify in its review:
+**Engineering acceptance criteria** for the scoped implementation. The checklist below predates the PR36 completion report; retain it as the criteria, not as a claim that acceptance must be repeated:
 - [ ] Invented checking, savings, credit-card, investment and liability examples produce exact assets minus liabilities. Purchases/card payments and transfer pairs do not double-count.
 - [ ] Dated balances are separate from cash movement. Missing/stale values show their limits; unknown values never become zero or a complete net-worth total.
 - [ ] Position values retain source and correction provenance across save, independent reopen and portable restore.
@@ -91,7 +92,7 @@ Record implemented capability, automated evidence, owner/device evidence, deploy
 Read `AGENTS.md` and the relevant engineering workflow. Use a focused branch; no direct main pushes, force-pushes, merges or deployments without authorization. For application changes, run the repository's serial full suite and the relevant browser/device checks:
 
 ```sh
-node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs
+FINANCE_EXTENDED_STORAGE_TESTS=1 node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs
 ```
 
-For documentation changes, verify relative paths/anchors, current PR facts, source-supported status and `git diff --check`. Never present not-run or blocked checks as passes. Update [project status](PROJECT_STATUS.md) and this queue with each material result.
+For documentation changes, verify relative paths/anchors, current PR facts, source-supported status and `git diff --check`. Never present not-run or blocked checks as passes. Record material results in [project status](PROJECT_STATUS.md); update this queue when the next action changes.

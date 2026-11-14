@@ -90,10 +90,10 @@ test("retained copies overlap at most four operations and retain exact mappings 
   assert.equal(copy.finished[0], 3);
   assert.equal(new Set(copy.started).size, archive.objects.length);
   assert.equal(restored.objectCount, archive.objects.length);
-  assert.deepEqual(copy.publications, ["copy-preparation", "locator-catalog", "ready", "dashboard-synthetic-manifest"]);
+  assert.deepEqual(copy.publications, ["copy-preparation", "locator-catalog-segment", "locator-catalog", "ready", "dashboard-synthetic-manifest"]);
   const verified = await verifyCatalogHistory(copy.target, restored.manifest);
   const portable = await verifyCatalogArchive(archive, { validateStructure });
-  assert.deepEqual([...verified.objects.keys()], [...portable.objects.keys()]);
+  assert.deepEqual(new Set(verified.objects.keys()), new Set(portable.objects.keys()));
   for (const [key, bytes] of portable.objects) assert.deepEqual(verified.objects.get(key), bytes);
   assert.deepEqual(progress.filter((event) => event.phase === "copying-objects").map((event) => event.completed),
     Array.from({ length: archive.objects.length + 1 }, (_, index) => index));
@@ -371,8 +371,8 @@ test("copy progress contains only frozen scalar records in gate order and never 
   await backupCatalogCopy({ sourceAdapter: adapter, sourceManifestFileId: manifestFileId, withSourceLock: gate,
     assertSourceWritable: guard, targetAdapter: target, withTargetLock: gate, assertTargetWritable: guard,
     validateStructure, onProgress: (event) => progress.push(event) });
-  assert.deepEqual([...new Set(progress.map((event) => event.phase))], ["source-verification", "archive-verification",
-    "destination-preparation", "copying-objects", "destination-verification", "source-recheck", "publishing-manifest", "final-verification"]);
+  assert.deepEqual([...new Set(progress.map((event) => event.phase))], ["source-verification", "source-recheck",
+    "destination-preparation", "copying-objects", "destination-verification", "publishing-manifest", "final-verification"]);
   assert.equal(new Set(progress).size, progress.length);
   for (const event of progress) {
     assert.equal(Object.isFrozen(event), true);

@@ -1,5 +1,185 @@
 # Project status
 
+## Audit and paging efficiency, November 12, 2026
+
+**Implemented and verified locally:** canonical audits use one checked tree scan,
+and workspace pagination reuses its latest filter result. The complete extended
+suite passed 1,916/1,916 tests on Node 24.22.1, with no failures, skips or
+cancellations. Matched synthetic measurements show less audit work and faster
+search paging, with unchanged HTTP traffic. See the
+[follow-up evidence](PR37_V5_ONLY_CLEANUP.md#follow-up-remove-repeated-audit-and-paging-work).
+This does not complete selective loading or bounded whole-database memory.
+Cleanup head `ace083a8` passed both required CI jobs in
+[run 43127078947](https://github.com/AeroVega/finance-tracker/actions/runs/43127078947).
+Follow-up CI is not yet verified. No merge, manual deployment or live-data access
+was performed.
+
+## V5-only active storage, November 12, 2026
+
+**Implemented and verified locally:** active canonical storage now uses v5 only.
+Older folders and archives are refused without conversion. New migration is
+removed; existing migration-origin v5 copies retain read-only provenance
+verification and remain editable and backupable. The obsolete raw-preview Drive
+controls are retired. See the [cleanup evidence](PR37_V5_ONLY_CLEANUP.md) for
+compatibility, coverage, source-size measurements and unchanged request traffic.
+The final extended suite passed 1,906/1,906 tests on Node 24.22.1, with no failures,
+skips or cancellations. No merge, deployment or live-data acceptance was performed.
+
+## Shared privacy-safe diagnostics, November 11, 2026
+
+**Implemented in this change:** one shared error-code/message/report path across
+workspace, seeder, local preview and retained developer tools. Reports use a
+strict field allowlist, offer Copy and selectable fallback, and never upload or
+retry automatically. Asynchronous lifecycle error statuses use the same privacy
+boundary. See the [diagnostic contract](APP_DIAGNOSTICS.md) for exact coverage,
+verification and exclusions. The final local extended suite passed 2,039/2,039
+tests on Node 24.22.1 with no failures or skips. Browser-rendered checks are blocked by this
+executor's Chromium process restrictions; physical Safari, live Google and owner
+acceptance remain separate. This is not a deployment claim or production approval.
+
+## Initial-copy readback incident, November 11, 2026
+
+**User-confirmed:** deployed `56cafc2` reached four verified initialization writes
+then reported `write-unresolved`. The year-seeding phase had not started.
+[Incident analysis](PR37_ENGINEERING_REVIEW.md#initial-copy-readback-failure-on-deployed-56cafc2)
+records two distinct synthetic reproductions and the candidate's narrowly
+bounded new-page verification and safe diagnostics. The live cause is unconfirmed.
+The affected folder and marker remain untouched. Runtime candidate `6900bce`
+passed 1,999 extended tests on Node 26.13.0, with no failures, skips or
+cancellations, in 316.656 seconds. Diagnostic rendering passed desktop/mobile
+Chromium checks with external HTTPS blocked. The fix is isolated on
+`fix/pr37-immutable-readback`; PR37 and its Pages publishing branch remain at
+`56cafc2`. This is not a deployed fix or confirmed live acceptance. Earlier
+evidence follows.
+
+## PR37 engineering review, November 11, 2026
+
+**Implemented locally:** delayed session-marker verification and cancellation,
+candidate-only marker enumeration, and removal of the unused seeder layout
+setting. See [session coordination](SESSION_COORDINATION.md#delayed-marker-visibility-and-cancelled-acquisition)
+for the reproduced failure, retry/deadline contract and remaining ownership limits.
+The owner reports a seed failure on deployed `5317afdf`; temporary listing omission
+is reproduced synthetically, not confirmed as the live cause. The affected folder
+and marker have not been accessed. The unpublished `7d517671` candidate was not
+available in this environment and has not been adopted or claimed as deployed.
+
+**Verified configuration:** Pages used the feature branch as a legacy publishing
+source at initial review. After the owner changed it, the API reports `main` as
+source. Publishing PR commits no longer requires changing that setting. No merge
+or deployment is authorized. **Verified on published code/review head `c07d141`:** 1,988 extended tests
+passed on Node 26.13.0 in 326.643 seconds, with no failures, skips or
+cancellations. Syntax, documentation and desktop/mobile Chromium preview
+checks passed. Remote CI remains queued, not passed. The
+[matched measurements](PR37_ENGINEERING_REVIEW.md#validation-and-matched-measurements)
+show reduced response-body bytes, unchanged requests/uploads, and no established
+latency or memory improvement. The [engineering review](PR37_ENGINEERING_REVIEW.md) records the end-to-end
+flow, safeguard inventory, compatibility gaps and device procedure. The
+complete-ledger loading limits in the v5 section remain open.
+
+## Canonical v5 replacement slice, November 11, 2026
+
+**Implemented in the publication candidate:** the [v5 slice](PARTITIONED_CANONICAL_STORAGE.md)
+extends the existing paged store and lifecycle with coalesced canonical and locator
+updates and final-reachable new-page uploads. The current application is v5-only;
+older canonical copies and initialization markers are refused and preserved, with
+no new migration or older writer path. Existing migration-origin v5 copies remain
+supported through full read-only audit of their retained legacy provenance.
+Full logical derived
+validation accepts different valid tree topologies. Compact source/derived 2,
+locator 3, physical protocol 4 and framed transport 3 retain their meanings, with
+an explicit `canonical5-physical4` archive profile. Initialization marker 2 pins
+v5; interrupted marker-1 initialization is refused. The following test and benchmark
+results predate this v5-only cleanup and do not validate its changes.
+
+**Verified repair baseline:** the required extended suite passed 1,840 tests on
+local `1993fb6a3d0e19f9909f48277257c03cad656c41`. [Published repair `89a29b6`](https://github.com/AeroVega/finance-tracker/commit/89a29b612747cc56cefeefd4bbb6bf2a818a939a)
+passed [CI run 43029837232](https://github.com/AeroVega/finance-tracker/actions/runs/43029837232).
+That repair evidence is separate from the v5 gate. Both ordinary and required
+extended suites passed **1,972/1,972** on candidate `39b3d1e` (Node 24.22.1),
+with no failures or skips. Publication code commit `d9d04c7` has the identical
+tree. Independent review found and verified the exact-base preparation repair.
+The [matched synthetic evidence](V5_MATCHED_SYNTHETIC_EVIDENCE.md) records all
+eight successful A-B-B-A runs, input checks, counts, timing variation and limits.
+The assembled publication code also passed **1,972/1,972** in the required
+extended gate. Documentation checks passed after the final guide corrections.
+Remote CI remains separate and must be checked on the exact PR head.
+
+**Open:** full financial validation, retained-history and physical checks,
+whole-ledger workspace cloning/materialization and preparation memory remain.
+No bounded whole-database memory, selective app loading, incremental semantic
+validation or device-memory improvement is claimed. Dense mixed/retained saves
+upload substantially fewer bytes, but total requests fall only about 3% and
+timings do not establish a precise latency gain.
+PR37 remains a draft and is unmerged. **User-confirmed:** the owner tested deployed
+`5317afdf` and reported the session failure described above. Successful v5 live
+Drive/device acceptance is not established by that failed attempt. Production
+remains **NO-GO**, with invented fixtures only and no new real-data, live Drive,
+merge, deployment or production authorization. Earlier evidence follows.
+
+## Canonical v4 app integration, November 11, 2026
+
+Historical checkpoint, superseded by the v5 status above. These results describe
+the earlier v4 integration, not the current v5 slice.
+
+**Implemented locally in PR37 work:** new synthetic copies use canonical v4
+through seeding, preview/import saves, workspace corrections/reopen, interrupted
+recovery, backup, framed export/restore and explicit fresh-copy v1/v3 migration.
+The [format contract](PARTITIONED_CANONICAL_STORAGE.md) defines the compact value
+tag and the distinct physical catalog/protocol versions. Existing copies are
+not silently converted, and historical source evidence is preserved.
+
+**Verified locally:** the required extended suite passed **1,733/1,733** tests
+on Node 24.22.1, with no failures, skips or cancellations and unchanged tracked
+files during the run. Independent reviews and synthetic HTTP/controller checks
+cover the changed paths. The initial aggregate exposed a stale seeder test;
+real v4 upload/reconnect coverage replaced that gap before the passing rerun.
+Publication and CI results belong to the exact PR revision. No v4 deployment,
+live Drive or physical-device acceptance is claimed. The [owner guide](OWNER_ACCEPTANCE.md)
+and runtime checklist now describe the integrated format.
+
+**Open:** full ledger/history materialization and deterministic tree rebuilding
+remain. V4 save/reopen costs exceed the published v3 path in some measured
+workloads despite improvements within v4. Synthetic timing guides iteration;
+the owner's live Drive/device experience determines practical effectiveness.
+Selective cold loading, bounded complete semantic auditing, incremental edit
+validation, source-only index repair and production controls remain unfinished.
+Production remains **NO-GO**. The sections below retain earlier milestone evidence.
+
+## App testing follow-up, November 11, 2026
+
+**Implemented and locally verified:** the [app feedback fixes](APP_TESTING_FEEDBACK.md)
+add auditable posting-status corrections, reduce the measured two-edit save from
+209 to 132 synthetic HTTP requests, and explain the active v3 format. The final
+combined extended suite passed 1,507/1,507 tests on Node 24.22.1. Independent
+review passed. [Test scheduling](TESTING.md) avoids duplicate CI execution while
+retaining the extended storage gate. Live Google latency and device acceptance
+for these changes remain open. This follow-up does not deploy or merge PR37;
+production remains **NO-GO** and the larger storage integration is unfinished.
+
+## Storage and safety update, November 11, 2026
+
+**Verified:** [PR36](https://github.com/AeroVega/finance-tracker/pull/36) is merged
+in main `04aacf31b8aaae31fa73b10408fa22d417c0d943`. Its description reports completed
+owner synthetic/device acceptance. The baseline local Node 24.22.1 suite passes
+1,120/1,120. Financial position and reconciled coverage are implemented; the
+November 10 branch-status paragraphs below are historical.
+
+The [storage scaling and production-readiness audit](STORAGE_SCALING_AND_PRODUCTION_READINESS.md)
+records measured catalog growth, whole-ledger memory limits, safe local codec and
+token-cleanup changes, and remaining production gates. The owner subsequently authorized execution and draft publication. The
+[incremental storage foundation](SCALABLE_STORAGE_FOUNDATION.md) implements
+segmented catalogs, source-bound monthly reports, response bounds and lower-memory
+Drive backup. Full bounded loading and production controls remain unfinished.
+At that earlier checkpoint, the [paged storage milestone](PAGED_STORAGE_MILESTONE.md)
+added isolated immutable trees, a canonical v4 reference reader, framed archives
+and a root transaction prototype. The integration update above supersedes that
+checkpoint's runtime status.
+PR37 is not merged. A temporary branch preview was published to the shared Pages site at `5e9c8966`; this is not a main-branch or production release. Deployment/owner acceptance remains a separate gate.
+Historical monthly migration, supported owner-file ingestion and production
+controls remain. **Alpha is incomplete and production remains NO-GO.**
+
+## Earlier main snapshot, November 10, 2026
+
 **Verified snapshot:** November 10, 2026. Audited `main` at [`d38681ee013cbe3e52dd861264f70490935c3582`](https://github.com/AeroVega/finance-tracker/commit/d38681ee013cbe3e52dd861264f70490935c3582). This is a dated record, not a live status feed.
 
 The synthetic canonical workspace and storage foundation are implemented. **Alpha is not complete.** Financial position, reconciled coverage, monthly-history migration and production controls remain. Production financial-data persistence is **NO-GO**.
@@ -10,7 +190,7 @@ The synthetic canonical workspace and storage foundation are implemented. **Alph
 
 The workspace can stage accounts, balances, balance/holdings conflict decisions, dated holdings, cash/card reconciliation, statement-component reconciliation and closures. Manual investment/loan statements can explicitly declare the full month without a fabricated CSV import; declaration alone does not prove completeness. General provider balance/holdings file importers are outside this milestone. The legacy synthetic-year fixture remains unchanged.
 
-The [PR36 adversarial follow-up](PR36_ADVERSARIAL_REVIEW.md) corrects closure contradictions, corroborating evidence, holdings comparisons and audit-identity collisions. It improves reconciliation choices, local feedback, draft preservation and repeated financial report work. The review remains synthetic-only.
+The [PR36 adversarial follow-up](archive/PR36_ADVERSARIAL_REVIEW.md) corrects closure contradictions, corroborating evidence, holdings comparisons and audit-identity collisions. It improves reconciliation choices, local feedback, draft preservation and repeated financial report work. The review remains synthetic-only.
 
 **Verified local review tests:** 1,097/1,097 passed on Node 24.22.1, with no failures or skips. This includes 23 added review regressions across financial evidence, persistence identity checks, cached readers and editor workflows. Changed module syntax and diff checks passed.
 
@@ -45,8 +225,8 @@ The workflow in source deploys main pushes or an explicitly selected manual run.
 | --- | --- | --- |
 | Canonical activity | Account/month browsing, exact qualified reports, evidence, append-only corrections, staged undo/revert and manual transfer links. | Finish acceptance of changed save/reopen and transfer-link paths. |
 | Imports | Strict known Wells Fargo, SoFi and Fidelity fixture parsers; provenance, mapping, declared coverage, duplicate review and canonical storage in the advanced workbench. | Supported owner-file ingestion in the production-capable application, with the same validation and privacy controls. The main workspace currently does not ingest user CSVs. |
-| Storage | Synthetic ownership/session checks, immutable transaction history, recovery, backup/restore, portability and retention machinery. New canonical copies use fragmented v3; v1 remains readable; standalone grouped v2 is rejected. | Production binding, clearing, configuration/privacy/cost review and current end-to-end acceptance. Synthetic implementation is not production approval. |
-| Financial position | Known income/spending and checking/savings cash-movement reports, explicitly qualified as partial. | Dated balances, holdings/valuations, assets, liabilities, net worth and reconciliation. Cash movement is not an account balance. |
+| Storage | Synthetic ownership/session checks, immutable transaction history, recovery, backup/restore, portability and retention machinery. The current application supports canonical v5 only and safely refuses older canonical copies. | Production binding, clearing, configuration/privacy/cost review and current end-to-end acceptance. Synthetic implementation is not production approval. |
+| Financial position | PR36 adds dated balances, holdings evidence, liabilities, qualified net-worth reporting and account/month reconciliation. Owner synthetic/device acceptance is recorded in PR36. | Historical monthly migration and supported owner-file ingestion remain separate work; production activation remains gated. |
 | Coverage | Import provenance and declared intervals; unresolved source evidence stays visible. | Evidence-backed per-account and per-month reconciliation completeness. An interval or row count does not prove completeness. |
 | Historical continuity | Monthly migration requirements are settled. | Separate monthly-summary schema, converter, reconciliation and source-selection rules from January 2023. No conversion is claimed. |
 | Devices and deployment | Local automated/browser evidence and bounded owner observations exist. | Verify current served SHA, current live paths and physical-device coverage. Whole-graph loading has no demonstrated large-device capacity guarantee. |
@@ -58,7 +238,7 @@ Code evidence: [workspace model](../js/canonical-workspace-model.mjs), [workspac
 - **User-confirmed, recorded in the workspace guide:** the owner accepted PR32 local synthetic-year exploration, evidence/corrections and mobile workspace experience. Preserve that observation; do not repeat unaffected checks merely because the PR merged.
 - **Open:** the newer preview-to-Drive save, transfer-link persistence and interruption checks. The guide does not provide a new acceptance pass for these paths. Record the full tested SHA with the next result.
 - **User-confirmed, historical:** PR25, PR28 and PR30 records contain bounded live synthetic/device results. They do not validate every later screen or every interruption boundary.
-- **Verified documentation/runtime mismatch:** the [acceptance plan](../prototype/acceptance-plan.mjs) still requests grouped-v2 seeding and a v2/v3 selector. The [current year page](../prototype/synthetic-year.html) offers v3 only. Mark those obsolete steps blocked; use [the corrected owner guide](OWNER_ACCEPTANCE.md). Fixing the runtime checklist is a separate scoped code change.
+- **Implemented checklist correction:** the [acceptance plan](../prototype/acceptance-plan.mjs) now requests canonical v5 seeding and v5 backup/restore. This removes the obsolete grouped-v2 steps; it does not establish owner acceptance. Use [the current owner guide](OWNER_ACCEPTANCE.md).
 
 ## Safety and release boundary
 
