@@ -9,7 +9,7 @@ This is the short entry point. It is a navigation guide, not a substitute for te
 3. [Documentation map](README.md) — locate the single focused contract relevant to the task.
 4. Read that contract and inspect the corresponding code/tests. Read historical reports only when their specific evidence is relevant.
 
-Do not read every document or historical PR report before starting work.
+Do not read every document or historical PR report before starting work. Production financial-data persistence is **NO-GO**; use invented fixtures only unless a later explicit owner authorization changes that boundary.
 
 ## Source-of-truth hierarchy
 
