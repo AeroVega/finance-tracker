@@ -34,3 +34,20 @@ test('receipt mismatch reports field names but never their values',()=>{
  assert.deepEqual(result,{code:'hash-mismatch',reason:'metadata-changed',fields:['name','mimeType','size']});
  assert.doesNotMatch(JSON.stringify(result),/private-secret/);
 });
+
+test('MIME evidence exports fixed classes only at the immutable receipt stage',async()=>{
+  const {diagnosticMimeClass}=await import('../js/storage-write-diagnostic.mjs');
+  for(const value of ['private-canary',{},Symbol('private-canary'),{toString(){throw Error('must not coerce')}}])assert.equal(diagnosticMimeClass(value),'other');
+  for(const value of [undefined,null,''])assert.equal(diagnosticMimeClass(value),'missing');
+  assert.equal(diagnosticMimeClass('application/octet-stream'),'octet-stream');
+  const details={reason:'metadata-changed',fields:['mimeType'],stage:'immutable-create-receipt',expectedMimeClass:'octet-stream',actualMimeClass:'json'};
+  assert.deepEqual(storageWriteDiagnostic({code:'hash-mismatch',details}),{code:'hash-mismatch',...details});
+  for(const key of ['expectedMimeClass','actualMimeClass','stage']){
+    const result=storageWriteDiagnostic({code:'hash-mismatch',details:{...details,[key]:'private-canary'}});
+    assert.doesNotMatch(JSON.stringify(result),/private-canary/);
+    assert.equal(Object.hasOwn(result,key),false);
+  }
+  const result=storageWriteDiagnostic({code:'hash-mismatch',details:{...details,fields:['size']}});
+  assert.equal(Object.hasOwn(result,'stage'),false);
+  assert.equal(Object.hasOwn(result,'actualMimeClass'),false);
+});

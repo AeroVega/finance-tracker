@@ -1,3 +1,4 @@
+import {diagnosticMimeClass} from './storage-write-diagnostic.mjs';
 import {locatorDecodeProfile,decodeLocatorBytes} from './locator-codec.mjs';
 import {copyOwnedBytes} from './byte-ownership.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
@@ -333,7 +334,14 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
         const fields=mismatchFields();
         if(!fields.length)break;
         if(attempt>=2) {
-          poison('hash-mismatch','Immutable create metadata did not converge to its requested binding.',owner,{reason:'metadata-changed',fields});
+          poison('hash-mismatch','Immutable create metadata did not converge to its requested binding.',owner,{
+            reason:'metadata-changed',fields,
+            ...(fields.includes('mimeType')?{
+              stage:'immutable-create-receipt',
+              expectedMimeClass:diagnosticMimeClass('application/octet-stream'),
+              actualMimeClass:diagnosticMimeClass(m.mimeType)
+            }:{})
+          });
         }
         // Re-read only the already-created ID. Never repeat the mutation, adopt
         // a changed binding, or repair a corrupt body. Fresh reads bypass caches.

@@ -1,3 +1,4 @@
+import {MIME_DIAGNOSTIC_CLASSES} from '../js/storage-write-diagnostic.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -30,6 +31,7 @@ const context=v=>shape(v,{
   createHttp:http,createVisibilityHttp:http,createVisibilityChecks:nullable(int(100,1)),readbackHttp:http,
   reason:choice(['metadata-changed','content-size-mismatch','metadata-and-size-mismatch','metadata-unstable','object-missing','content-proof-unavailable','revalidation-limit']),
   fields:list(choice(['id','name','mimeType','parents','appProperties','size','version','trashed']),8),
+  stage:choice(['immutable-create-receipt']),expectedMimeClass:choice(MIME_DIAGNOSTIC_CLASSES),actualMimeClass:choice(MIME_DIAGNOSTIC_CLASSES),
   revalidatedObjects:int(512),revalidatedBytes:int(16*1024*1024),httpStatus:int(599,100),lastHttpStatus:int(599,100),checks:int(100,1),
   operation:x=>safeDiagnosticOperation(x)!==null,transport:choice(['aborted']),browserMessageClass:choice(['load-failed','failed-to-fetch','network-request-failed'])
 });

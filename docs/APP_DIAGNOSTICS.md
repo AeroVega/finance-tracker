@@ -29,7 +29,13 @@ clears its old panel, not its history.
   unavailable when no lifecycle existed at action start.
 - Immutable receipt failures may identify fixed metadata field names. A
   `hash-mismatch` code without these fields does not distinguish a body mismatch
-  from metadata binding/size mismatch in older builds. No field values are copied.
+  from metadata binding/size mismatch in older builds. No raw field values are copied.
+  A persistent immutable-create receipt MIME mismatch includes the fixed stage
+  `immutable-create-receipt` and `expectedMimeClass` / `actualMimeClass` enums:
+  `octet-stream`, `json`, `text-plain`, `google-workspace`, `missing`, or `other`.
+  Unknown values and MIME parameters are never exported. These classes identify
+  the refused receipt, not the reason the provider returned it. Integrity checks,
+  same-ID retry bounds and unknown-write recovery remain unchanged.
 - Ledger counts: exact only when `syntheticOnly === true`, otherwise upper
   power-of-two buckets. No record content or financial values.
 - A bounded timeline of actions, page/lifecycle/visibility events and request

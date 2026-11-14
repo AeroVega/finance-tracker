@@ -57,3 +57,13 @@ test('generated compact reference is current and deterministic',()=>{
   assert.equal(generateErrorCodeDocs(),generateErrorCodeDocs());
   assert.match(generateErrorCodeDocs(),/computed\/forwarded/);
 });
+
+test('offline validator accepts bounded MIME classes but refuses raw MIME or stage values',()=>{
+  const r=fixture('integrity');
+  r.error.chain[0].context={code:'hash-mismatch',reason:'metadata-changed',fields:['mimeType'],stage:'immutable-create-receipt',expectedMimeClass:'octet-stream',actualMimeClass:'json'};
+  assert.doesNotThrow(()=>validateDiagnosticReport(r));
+  for(const key of ['expectedMimeClass','actualMimeClass','stage']){
+    const bad=structuredClone(r);bad.error.chain[0].context[key]='private-canary';
+    assert.throws(()=>validateDiagnosticReport(bad),/Invalid or unsupported/);
+  }
+});

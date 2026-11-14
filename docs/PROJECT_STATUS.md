@@ -1,5 +1,28 @@
 # Project status
 
+## Immutable receipt MIME diagnostic, November 14, 2026
+
+**User-confirmed:** a one-change synthetic save on `0821f00` ended in
+`write-unresolved`; its persistent receipt mismatch identified only `mimeType`.
+The returned MIME value was not present, so provider-side normalization remains
+an **Open** hypothesis, not an established cause or basis for changing storage.
+
+**Implemented:** the receipt failure now reports fixed expected/actual MIME
+classes and its verification stage through the bounded diagnostic and offline
+validator. Synthetic reproduction preserves the matching byte hash, one create,
+two same-ID rechecks, poisoned verification scope and unknown-write refusal.
+The precise field contract is in [app diagnostics](APP_DIAGNOSTICS.md).
+**Verified locally:** the complete extended synthetic suite passed 2,022/2,022
+with `FINANCE_EXTENDED_STORAGE_TESTS=1`, Node 24.22.1, a 768 MiB heap and
+concurrency one (547.0 seconds). Syntax, registered-code audit, generated-reference,
+documentation and diff checks passed. Remote CI is a separate verification.
+
+This is an observability correction, not a verified fix for the live save.
+Upload MIME, integrity checks, retry counts and recovery behavior are unchanged.
+No live folder was accessed or repaired. Live validation and any resulting
+storage correction remain outstanding; do not merge or claim save acceptance
+from the diagnostic tests alone.
+
 ## Staged-save performance, November 12, 2026
 
 The owner completed a live synthetic-year seed, then reported a single staged

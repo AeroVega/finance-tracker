@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createPhysicalDriveAdapter,getOwnedLocatorDecoder} from '../js/physical-drive-adapter.mjs';
 import {partitionDigest} from '../js/canonical-partitions.mjs';
-async function fixture({persistent=false,corrupt=false,invalidate=false,field='size',recheckCorrupt=false,rejectOwnership=false,abort=false,mutateInput=false,changeDestination=false,invalidateMedia=false}={}) {
+async function fixture({persistent=false,corrupt=false,invalidate=false,field='size',mimeType='application/json',recheckCorrupt=false,rejectOwnership=false,abort=false,mutateInput=false,changeDestination=false,invalidateMedia=false}={}) {
   const bytes=new TextEncoder().encode('synthetic locator'),hash=await partitionDigest(bytes);
   const metadata={id:'synthetic-id',name:'synthetic.json',mimeType:'application/octet-stream',parents:['synthetic-folder'],trashed:false,version:'1',size:String(bytes.length),appProperties:{financeTrackerKind:'locator-page',financeTrackerTransaction:'synthetic-tx',financeTrackerHash:hash}};
-  const changed={size:'0',name:'other.json',mimeType:'application/json',appProperties:{...metadata.appProperties,financeTrackerKind:'wrong-kind'}};
+  const changed={size:'0',name:'other.json',mimeType,appProperties:{...metadata.appProperties,financeTrackerKind:'wrong-kind'}};
   let creates=0,reads=0,physical;
   const adapter={folderId:'synthetic-folder',readMetadataSnapshot:async()=>new Map(creates?[[metadata.id,structuredClone(metadata)]]:[]),
     createImmutable:async input=>{creates++;if(mutateInput){input.name='changed-input';input.fileId='changed-input-id';input.expectedSha256='0'.repeat(64);}return {readback:{metadata:{...metadata,[field]:changed[field]},bytes:corrupt?new Uint8Array(bytes.length):bytes}};},
@@ -90,4 +90,44 @@ for(const [option,code] of [['changeDestination','copy-mismatch'],['invalidateMe
   const f=await fixture({[option]:true});
   await assert.rejects(f.physical.createImmutable(f.input),{code});
   assert.equal(f.counts().creates,1);
+});
+
+for(const [mimeType,actualMimeClass] of [
+  ['application/json','json'],['text/plain','text-plain'],
+  ['application/vnd.google-apps.document','google-workspace'],[null,'missing'],
+  ['application/x-private-canary','other'],['application/json; private-canary','other']
+])test(`persistent receipt MIME class ${actualMimeClass} remains fail-closed`,async()=>{
+  const f=await fixture({persistent:true,field:'mimeType',mimeType}),owner=getOwnedLocatorDecoder(f.physical).captureRead();
+  await assert.rejects(f.physical.createImmutable(f.input),error=>{
+    assert.equal(error.code,'hash-mismatch');
+    assert.deepEqual(error.details,{reason:'metadata-changed',fields:['mimeType'],stage:'immutable-create-receipt',expectedMimeClass:'octet-stream',actualMimeClass});
+    assert.doesNotMatch(JSON.stringify(error.details),/private-canary/);
+    return true;
+  });
+  assert.throws(()=>owner.assertCurrent(),{code:'verification-scope-closed'});
+  assert.deepEqual(f.counts(),{creates:1,reads:2});
+});
+test('MIME failure survives unresolved wrapper into a valid private-safe v2 report',async()=>{
+  const {createDiagnostic}=await import('../js/app-diagnostics.mjs');
+  const {validateDiagnosticReport}=await import('../scripts/explain-diagnostic.mjs');
+  const f=await fixture({persistent:true,field:'mimeType'});
+  let failure;
+  try{await f.physical.createImmutable(f.input);}catch(error){failure=error;}
+  assert.ok(failure);
+  const wrapped={code:'write-unresolved',details:{createFailed:true,createError:failure,readbackError:{code:'verification-scope-closed'}}};
+  const report=JSON.parse(createDiagnostic(wrapped,{surface:'workspace'}).report);
+  assert.equal(report.error.writeOutcome,'unknown');assert.equal(report.error.retryable,false);
+  const context=report.error.chain.find(link=>link.code==='hash-mismatch').context;
+  assert.equal(context.stage,'immutable-create-receipt');
+  assert.equal(context.actualMimeClass,'json');assert.equal(context.expectedMimeClass,'octet-stream');
+  assert.doesNotThrow(()=>validateDiagnosticReport(report));
+  assert.doesNotMatch(JSON.stringify(report),/synthetic-id|synthetic-folder|synthetic-tx|synthetic.json/);
+});
+
+test('transient MIME mismatch converges without weakening the receipt contract',async()=>{
+  const f=await fixture({field:'mimeType'}),owner=getOwnedLocatorDecoder(f.physical).captureRead();
+  const result=await f.physical.createImmutable(f.input);
+  assert.equal(result.readback.metadata.mimeType,'application/octet-stream');
+  owner.assertCurrent();await f.physical.closeVerification(f.token);
+  assert.deepEqual(f.counts(),{creates:1,reads:1});
 });
