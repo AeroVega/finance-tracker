@@ -622,7 +622,25 @@ export function createPagedPhysicalLocators(adapter, config) {
     const candidate=await planPhysical(plan,root,'locator-catalog',PAGED_LOCATOR_ROOT_BYTES,signal);
     const writes=await verifyPlannedCatalog(plan,candidate,signal);
     await verifyPlannedIdsAbsent(plan,signal);
-    for(const record of writes)await publishPhysical(record,signal);
+    // Stage independent pages four at a time, retaining child-before-parent
+    // durability. The verified plan is bounded and every record still uses its
+    // own live guard and exact-ID readback. Never return an authority candidate
+    // while any issued write is unsettled, even when a sibling fails.
+    const levels=new Map();
+    for(const record of writes) {
+      const level=record.kind==='locator-catalog'?Infinity:JSON.parse(decoder.decode(record.bytes)).height;
+      if(!levels.has(level))levels.set(level,[]);
+      levels.get(level).push(record);
+    }
+    const concurrency=verifyBody?4:1; // Unknown/custom providers keep serial calls.
+    for(const [,records] of [...levels].sort(([a],[b])=>a-b)) {
+      for(let start=0;start<records.length;start+=concurrency) {
+        abort(signal);adapterScope();
+        const results=await Promise.allSettled(records.slice(start,start+concurrency).map(record=>publishPhysical(record,signal)));
+        const failure=results.find(result=>result.status==='rejected');
+        if(failure)throw failure.reason;
+      }
+    }
     return {fileId:candidate.fileId,sha256:candidate.sha256};
   }
   async function resolved(inputRoot, query, opts, needBytes = true) {
@@ -713,9 +731,38 @@ export function createPagedPhysicalLocators(adapter, config) {
   }
   async function verify(inputRoot, opts = {}) {
     const ref = pin(inputRoot), {signal} = options(opts, ['signal']); let objects = 0n, pages = 0n, bytes = 0n;
-    for await (const item of checkedWalk(ref, signal, true)) {
-      if (item.entry) objects++; else pages++;
-      bytes += BigInt(item.byteLength ?? item.bytes.length);
+    if(!verifyBody) {
+      for await (const item of checkedWalk(ref, signal, true)) {
+        if (item.entry) objects++; else pages++;
+        bytes += BigInt(item.byteLength ?? item.bytes.length);
+      }
+    } else {
+      const {root,bytes:rootBytes}=await readRoot(ref,signal);pages++;bytes+=BigInt(rootBytes.length);
+      const pending=[];let bodyFailed=false,bodyFailure;
+      const drain=async()=>{
+        const results=await Promise.all(pending.splice(0));
+        const failure=results.find(x=>!x.ok);if(failure)throw bodyFailure;
+        for(const result of results){objects++;bytes+=BigInt(result.length);}
+      };
+      try {
+        for(const index of INDEXES)for await(const item of traverse(root[index],index,signal)) {
+          if(item.ref){pages++;bytes+=BigInt(item.bytes.length);}
+          else if(index==='objects') {
+            const [pk,e]=item.pair;
+            if(await find(root.identities,'identities',identityKey(e),signal)!==pk || await find(root.files,'files',e.fileId,signal)!==pk)fail('index-mismatch','Locator indexes do not form a one-to-one mapping.');
+            const operation=verifyEntry(e,signal);
+            pending.push(operation.then(length=>({ok:true,length}),error=>{if(!bodyFailed){bodyFailed=true;bodyFailure=error;}return {ok:false,error};}));
+            if(pending.length===4)await drain();
+          }
+        }
+        await drain();
+      } catch(error) {
+        await Promise.all(pending);
+        // A failed body can expire the phase while the structural walk is
+        // awaiting an index read. Preserve the cause, not that follow-on error.
+        if(error?.code==='verification-scope-closed'&&bodyFailed)throw bodyFailure;
+        throw error;
+      } finally {await Promise.all(pending);}
     }
     return {entryCount:String(objects), catalogPages:String(pages), byteLength:String(bytes)};
   }

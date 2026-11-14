@@ -11,9 +11,9 @@ Read this page first. It is the navigation layer, not a replacement for detailed
 
 Do not read every historical PR report before starting a task.
 
-## Current state (November 11, 2026)
+## Current state (November 14, 2026)
 
-- PR #37 is an open draft against `main`. Check its head and [project status](PROJECT_STATUS.md) for publication, validation and deployment evidence.
+- PR #37, #38 and #40 are merged into `main`. Practical open/save performance is the next synthetic-only priority. See [project status](PROJECT_STATUS.md) for measurements, validation and deployment limits.
 - The local v5 slice uses the existing paged store and lifecycle. The application supports canonical v5 only. Canonical v1/v2/v3/v4 copies and older initialization markers are refused without migration or overwrite. Existing v5 copies created by earlier migrations remain supported through read-only verification of their retained legacy provenance. Existing data must be preserved; use a fresh empty synthetic folder for a new v5 copy.
 - Canonical v5 keeps compact source/derived version 2, locator catalog 3 and physical root protocol 4. Framed transport 3 uses the explicit `canonical5-physical4` profile. See [the glossary](STORAGE_TERMINOLOGY.md) for version meanings.
 - Canonical and locator changes are coalesced, with only final-reachable new pages prepared for upload. Full financial and retained-history/physical checks, whole-ledger workspace cloning/materialization and preparation memory remain. Bounded whole-database memory, selective app loading and incremental semantic validation are unfinished; see [project status](PROJECT_STATUS.md) for the performance gate.

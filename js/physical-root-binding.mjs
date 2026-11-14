@@ -409,8 +409,29 @@ export class PhysicalRootBinding {
     if (remaining !== 0n) fail('invalid-plan', 'Plan ended before its exact admitted count.');
   }
   async #preflight(value, tree, signal) {
-    let ordinal = 0n, generated = 0;
-    const fileIds = new Set(), identities = new Set();
+    let generated = 0;
+    const fileIds = new Set(), identities = new Set(), batch = [];
+    const concurrency = getOwnedPhysicalBodyVerifier(this.#adapter) ? 4 : 1;
+    const inspect = async e => {
+      this.#scope(); abort(signal);
+      let exists = false;
+      try { await this.#adapter.readMetadata(e.fileId, {maxBytes:PHYSICAL_ROOT_LIMITS.manifestBytes, signal}); exists = true; }
+      catch (error) { if (error?.code !== 'object-not-found') throw error; }
+      if (exists) {
+        let raw;
+        try { raw = await this.#read({fileId:e.fileId,sha256:e.sha256},e.kind,e.transactionId ?? value.transactionId,signal); }
+        catch { fail('physical-id-in-use','A planned ID is occupied by different evidence.'); }
+        if (raw.length !== e.byteLength) fail('physical-id-in-use','Staged fixed ID has the wrong size.');
+      }
+    };
+    const drain = async () => {
+      // Reads only: publication/staging cannot begin until every check settles.
+      // Custom providers retain serial calls; the owned physical adapter tracks
+      // each read's verification lifetime and rejects obsolete results.
+      const results = await Promise.allSettled(batch.splice(0).map(inspect));
+      const failure = results.find(result => result.status === 'rejected');
+      if (failure) throw failure.reason;
+    };
     for await (const e of this.#plan(value, signal)) {
       if (fileIds.has(e.fileId) || identities.has(e.kind + ':' + e.identity)) fail('invalid-plan','Duplicate planned file or typed identity.');
       fileIds.add(e.fileId); identities.add(e.kind + ':' + e.identity);
@@ -424,20 +445,13 @@ export class PhysicalRootBinding {
       if (expected && (e.identity !== e.sha256 || e.byteLength !== expected.length)) fail('invalid-plan', 'Generated evidence descriptors must preserve exact identities and lengths.');
       // Typed identity/file uniqueness is checked by the three locator indexes
       // before admission, without quadratic plan scans or whole-catalog scans.
-      this.#scope(); abort(signal);
-      let exists = false;
-      try { await this.#adapter.readMetadata(e.fileId, {maxBytes:PHYSICAL_ROOT_LIMITS.manifestBytes, signal}); exists = true; }
-      catch (error) { if (error?.code !== 'object-not-found') throw error; }
-      if (exists) {
-        let raw;
-        try { raw = await this.#read({fileId:e.fileId,sha256:e.sha256},e.kind,e.transactionId ?? value.transactionId,signal); }
-        catch { fail('physical-id-in-use','A planned ID is occupied by different evidence.'); }
-        if (raw.length !== e.byteLength) fail('physical-id-in-use','Staged fixed ID has the wrong size.');
-      }
-      ordinal++;
+      batch.push(e);
+      if (batch.length === concurrency) await drain();
     }
     if (generated !== 2) fail('invalid-plan', 'Plan must include the exact logical commit and retained base manifest before admission.');
+    await drain();
   }
+
   async #stage(value, expected, preparation, signal, allowWrites = true) {
     let generated = 0, stagingFailed = false, stagingFailure;
     const pending = [];

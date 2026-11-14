@@ -1,5 +1,18 @@
 # Project status
 
+## Local performance reconstruction, November 14, 2026
+
+PR #37, #38 and #40 are merged; the base is main at
+`be43951a7b4a09c8e54c1984b1fb41dc39401636`. A local bounded-concurrency
+candidate was reconstructed from recorded edits after its temporary checkout
+became unavailable. Original commit identity is not asserted. Fresh tests and
+benchmarks passed: 2057/2057 extended tests, zero skipped; two synthetic 400 ms
+runs measured 63.541/63.607 seconds save and 39.223/39.595 seconds reopen.
+Separate owner-anchor ratios still predict roughly 58/47 seconds
+save/open, above the owner's 30-second Alpha target. See the
+[performance report](OPEN_SAVE_PERFORMANCE.md) for evidence and limitations.
+No publication, merge, deployment or production authorization is implied.
+
 ## JSON locator MIME correction, November 14, 2026
 
 **User-confirmed:** the preserved diagnostic on `0d52766` identifies a JSON
