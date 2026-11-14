@@ -27,6 +27,7 @@ Start with [Agent quick start](AGENT_QUICK_START.md), then read [current project
 - [Financial position](FINANCIAL_POSITION.md) — dated balances, holdings, liabilities, and reconciliation.
 - [Provider import specifications](PROVIDER-IMPORT-SPECS.md) and [PR28 canonical import](PR28_CANONICAL_IMPORT.md) — supported source formats, parsing, coverage, and reconciliation.
 - [Category rule scoping](CATEGORY_RULE_SCOPING.md) — deterministic categorization behavior.
+- [Posting-status corrections](POSTING_STATUS_CORRECTIONS.md) — auditable posting-state correction events.
 
 ## Storage, persistence, and recovery
 
@@ -43,6 +44,7 @@ Start with [Agent quick start](AGENT_QUICK_START.md), then read [current project
 - [Mobile UI design](MOBILE_UI_DESIGN.md), [mobile workspace pages](MOBILE_WORKSPACE_PAGES.md), and [Apple web app](APPLE_WEB_APP.md) — interface design and device-specific behavior.
 - [Application diagnostics](APP_DIAGNOSTICS.md) and [error codes](ERROR_CODES.md) — privacy-safe error reporting and registered codes.
 - [Testing](TESTING.md) and [owner acceptance](OWNER_ACCEPTANCE.md) — automated checks and manual acceptance boundaries.
+- [Save request measurements](ACTIVE_SAVE_REQUESTS.md) and [application testing feedback](APP_TESTING_FEEDBACK.md) — historical optimization rationale and user-facing follow-up.
 
 ## Research, experiments, and evidence
 
