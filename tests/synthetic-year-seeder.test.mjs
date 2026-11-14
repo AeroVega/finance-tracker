@@ -17,8 +17,9 @@ async function fakeLifecycle() {
     async savePartitionedRoot(transaction) {
       mutations++;
       if (failure === 'before') { failure = null; throw Object.assign(new Error('Uncertain'), {code:'transaction-unresolved'}); }
-      await save(transaction);
+      const result=await save(transaction);
       if (failure === 'after') { failure = null; throw Object.assign(new Error('Lost response'), {code:'transaction-unresolved'}); }
+      return result;
     },
     async setLedger(ledger) {
       const store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
@@ -116,7 +117,8 @@ test('the complete year saves and reopens through the v5 adapter and paged/sessi
   const requestCount = setup.http.summary('year-seed').requests;
   // V5 baseline: 666 requests. The former v3 budget covered a different protocol.
   assert.ok(requestCount <= 670, `V5 seed exceeded its request budget: ${requestCount}`);
-  assert.equal(setup.http.peakMutations, 1, 'durable mutations stay serial');
+  assert.ok(setup.http.peakMutations <= 4, 'independent immutable staging stays bounded');
+  assert.ok(setup.http.requests.filter(row=>row.category==='update').every(row=>row.concurrentMutations===1), 'manifest publication stays serial');
   setup.http.phase = 'year-verify';
   assert.equal(actual.alreadySaved, false);
   assert.deepEqual(actual.ledger, (await createSyntheticFinancialYear()).ledger);

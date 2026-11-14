@@ -161,17 +161,22 @@ export function createPagedPhysicalLocators(adapter, config) {
   }
   async function readPhysical(ref, kind, maximum, signal, transactionId) {
     const owner=decodedPages?.captureRead();
-    abort(signal); adapterScope();owner?.assertCurrent();
-    const before = metadata(await readMetadata(ref.fileId, {maxBytes:PAGED_LOCATOR_ROOT_BYTES, signal}), ref, kind, transactionId, maximum);
-    abort(signal);owner?.assertCurrent();
-    const bytes = ownedBytes(await readBytes(ref.fileId, {kind:physicalKind(kind), maxBytes:maximum, signal}), maximum);
-    abort(signal);owner?.assertCurrent();
-    if (BigInt(bytes.length) !== BigInt(before.size) || await digest(bytes) !== ref.sha256) fail('hash-mismatch', 'Physical object does not match its exact bytes and size.');
-    abort(signal);owner?.assertCurrent();
-    const after = metadata(await readMetadata(ref.fileId, {maxBytes:PAGED_LOCATOR_ROOT_BYTES, signal}), ref, kind, transactionId, maximum);
-    abort(signal);owner?.assertCurrent();
-    if (before.version !== after.version || before.size !== after.size) fail('version-mismatch', 'Physical object changed during verification.');
-    return bytes;
+    for(let attempt=0;attempt<3;attempt++) {
+      if(attempt)await new Promise(resolve=>setTimeout(resolve,100*attempt));
+      abort(signal); adapterScope();owner?.assertCurrent();
+      const before = metadata(await readMetadata(ref.fileId, {maxBytes:PAGED_LOCATOR_ROOT_BYTES, signal}), ref, kind, transactionId, maximum);
+      abort(signal);owner?.assertCurrent();
+      const bytes = ownedBytes(await readBytes(ref.fileId, {kind:physicalKind(kind), maxBytes:maximum, signal}), maximum);
+      abort(signal);owner?.assertCurrent();
+      const contentMatches=BigInt(bytes.length)===BigInt(before.size)&&await digest(bytes)===ref.sha256;
+      abort(signal);owner?.assertCurrent();
+      const after = metadata(await readMetadata(ref.fileId, {maxBytes:PAGED_LOCATOR_ROOT_BYTES, signal}), ref, kind, transactionId, maximum);
+      abort(signal);owner?.assertCurrent();
+      if(before.version!==after.version||before.size!==after.size)continue;
+      if(!contentMatches)fail('hash-mismatch','Physical object does not match its exact bytes and size.');
+      return bytes;
+    }
+    fail('version-mismatch','Physical metadata did not settle across bounded byte revalidation.');
   }
   async function preparePhysical(value, kind, maximum, signal) {
     if (!allocate || !create || typeof assertWritable !== 'function') fail('read-only', 'Writes require immutable create, ID allocation and an ownership guard.');

@@ -4,18 +4,30 @@
 
 `js/app-diagnostics.mjs` owns the privacy boundary and report controls.
 `js/app-diagnostic-messages.mjs` holds fixed, reviewed explanations and next
-steps. Existing error codes are stable identifiers, not raw provider text.
-Unknown codes become `unknown`; adding a foreseeable failure requires adding a
-fixed message and a test. Surface-specific wording preserves existing recovery
-instructions without letting callers supply arbitrary report content.
+steps. `js/app-diagnostic-codes.mjs` is the source allowlist for stable internal
+codes and exception class names. Codes are identifiers, not raw provider text.
+Unknown codes remain `unknown`; errors are resolved through a bounded cause
+chain and a small list of known nested failure fields. If a broad outer code
+masks a recognized inner code, the report may include it as `causeCode`.
+Surface-specific wording preserves existing recovery instructions without
+letting callers supply arbitrary report content. A new user-facing failure still
+needs fixed explanatory copy and an appropriate regression check.
 
 The report contains only:
 
 - The fixed report schema version.
 - An allowlisted error code and page category.
 - A 40-character hexadecimal source commit, or a fixed unknown/development label.
-- For unresolved writes or ownership checks, the existing allowlisted storage or
-  session diagnostic, including bounded HTTP statuses and attempt counts.
+- For the synthetic-year page, an allowlisted operation phase and a bounded
+  count of verified durable writes.
+- For unresolved writes and selected Drive failures, bounded storage details
+  such as HTTP status and attempt count. A manifest-read mismatch may include
+  one fixed reason indicating whether metadata changed across the read, the
+  reported content size disagreed with the bytes read, or both. Ownership
+  failures retain their allowlisted session subcheck. Verification metadata
+  changes that remain after revalidation may include a fixed reason and names
+  of changed metadata fields, without the associated values. A bounded
+  exception class may be included when no code is recognized.
 
 It contains no credentials, session/folder/file/account identifiers, transaction
 records, amounts, dates, URLs, stacks, raw messages or provider response bodies.
@@ -29,6 +41,30 @@ pending clipboard callback so an old failure cannot steal focus.
 Errors do not change storage ownership, verification or recovery decisions.
 An uncertain write is still uncertain. Copying a diagnostic is not recovery or
 proof that no write happened. Existing controls continue to gate further work.
+
+## Diagnostic-code follow-up, November 12, 2026
+
+**Implemented in the working tree:** the safe code set now includes canonical
+v5 root-publication, paged-locator and Drive transport failures. Resolution
+checks a bounded cause chain and selected nested failure fields, preserving a
+recognized underlying code where available. Synthetic-year failures include
+the page phase and verified durable-write count. Adapter failures also include
+a fixed boundary label and may preserve the underlying allowlisted failure code.
+Selected Drive errors include only bounded numeric HTTP statuses and retry
+counts. Manifest-read mismatches distinguish metadata changes from reported
+size disagreement using a fixed reason enum. A version-only verification
+change triggers exact-byte revalidation; remaining metadata mismatches may list
+only fixed field names and a fixed reason. A bounded revalidation-limit report
+may include the number of files and bytes already rechecked. Unknown reports
+may include an allowlisted exception class. No messages, IDs, hashes, metadata
+values, request bodies or financial records are exposed.
+
+**Checked:** changed JavaScript modules pass `node --check`; `git diff --check`
+passes. Automated tests were not run. This is a local source change only; it
+does not alter the deployed build. The owner later reported (**User-confirmed**)
+that deployed build `a510b09` completed a synthetic-year save and verified the
+exact saved year with 71 verified durable writes in 5m06s. This owner acceptance
+does not establish production readiness or independent live-Drive verification.
 
 ## Integrated surfaces
 

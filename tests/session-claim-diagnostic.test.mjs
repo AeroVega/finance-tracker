@@ -121,3 +121,32 @@ test('independent coordinator read preserves a detailed adapter check without it
   });
   assert.equal(coordinator.canWrite, false);
 });
+
+for (const operation of ['assertCanWrite', 'heartbeat', 'resume', 'release']) test(`later ${operation} keeps safe metadata diagnostic`, async () => {
+  const http = new HttpCatalogDrive();
+  const adapter = createDriveSessionAdapter({folderId:http.folderId, accessToken:'invented-test-token', fetchImpl:http.fetch});
+  const session = new SessionCoordinator({adapter});
+  await session.start(); adapter.clear();
+  http.beforeResponse = ({category}) => {
+    if (category !== 'metadata') return;
+    const file = [...http.files.values()][0];
+    file.metadata.version = String(Number(file.metadata.version) + 1);
+  };
+  const {createDiagnostic} = await import('../js/app-diagnostics.mjs');
+  await assert.rejects(session[operation](), failure => {
+    const diagnostic = createDiagnostic(failure, {surface:'synthetic-year'});
+    assert.deepEqual(JSON.parse(diagnostic.report).detail, {code:'ownership-lost', check:'closing-version-changed'});
+    assert.match(diagnostic.message, /could not be verified/);
+    assert.ok(!diagnostic.report.includes(http.folderId));
+    return true;
+  });
+  assert.equal(session.canWrite, false);
+  assert.equal(http.mutations, 1);
+});
+
+test('ownership-lost diagnostics reject private and hostile check values', () => {
+  for (const input of [
+    {code:'ownership-lost', sessionCheck:'private-token'},
+    {code:'ownership-lost', get sessionCheck() {throw Error('private-token');}}
+  ]) assert.deepEqual(sessionClaimDiagnostic(input), {code:'ownership-lost', check:'unknown'});
+});

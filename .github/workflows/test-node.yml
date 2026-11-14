@@ -32,6 +32,7 @@ jobs:
           node --check prototype/application-storage-lifecycle-test.mjs
           node --check prototype/pr25-acceptance.mjs
           node --check js/workspace-pages.mjs
+          node --check js/workspace-chrome.mjs
           node --check js/canonical-workspace.mjs
           node --check js/canonical-workspace-model.mjs
           node --check js/canonical-workspace-session.mjs

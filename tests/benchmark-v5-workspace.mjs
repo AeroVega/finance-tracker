@@ -15,6 +15,8 @@ import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
 import {denseLedgerFixture} from './helpers/dense-ledger-fixture.mjs';
 
 const dense=process.env.V5_BENCH_DENSE==='1',coldReopen=process.env.V5_BENCH_COLD_REOPEN==='1';
+const singleEdit=process.env.V5_BENCH_SINGLE_EDIT==='1',saveLatencyMs=Number(process.env.V5_BENCH_SAVE_LATENCY_MS??0);
+assert.ok(Number.isFinite(saveLatencyMs)&&saveLatencyMs>=0);
 function sourceFingerprint() {
   const paths=['tests/benchmark-v5-workspace.mjs'];
   function visit(path){for(const entry of readdirSync(new URL('../'+path+'/',import.meta.url),{withFileTypes:true})){
@@ -27,7 +29,7 @@ function sourceFingerprint() {
 const initialFingerprint=sourceFingerprint();
 console.log(JSON.stringify({runtime:{node:process.version,v8:process.versions.v8,platform:process.platform,arch:process.arch,execArgv:process.execArgv},
   sourceFingerprint:initialFingerprint,
-  configuration:{layout:'partitions-v5',dense,coldReopen,retainedCorrections:Number(process.env.V5_BENCH_REVISIONS??0),syntheticHttpDelayMs:0,
+  configuration:{layout:'partitions-v5',dense,coldReopen,retainedCorrections:Number(process.env.V5_BENCH_REVISIONS??0),syntheticHttpDelayMs:0,saveOnlyHttpDelayMs:saveLatencyMs,singleEdit,
     physicalByteCacheBytes:8*1024*1024,
     physicalBodyFactEntries:512,physicalBodyFactSerializedBytes:1024*1024,
     locatorDecodedNodeEntries:128,locatorDecodedSerializedBytes:2*1024*1024,heartbeat:'real lifecycle timer'},
@@ -67,8 +69,10 @@ try {
   await phase('open',()=>session.loadVerified());
   const activity=getEffectiveActivities(session.ledger).find(a=>a.sourceDescription===(dense?'INVENTED FEE':'INVENTED BROKERAGE FEE'));
   stageCorrection(session,{activityId:activity.activityId,type:'classification',activityKind:'spending',rationale:'Invented benchmark classification'});
-  stageCorrection(session,{activityId:activity.activityId,type:'category-correction',categoryId:'invented-fees',rationale:'Invented benchmark category'});
-  await phase('save-two-staged-edits',()=>session.save());
+  if(!singleEdit)stageCorrection(session,{activityId:activity.activityId,type:'category-correction',categoryId:'invented-fees',rationale:'Invented benchmark category'});
+  http.latencyMs=saveLatencyMs;
+  await phase(singleEdit?'save-one-staged-edit':'save-two-staged-edits',()=>session.save());
+  http.latencyMs=0;
   await phase('no-op-save',()=>session.store.save(session.ledger));
   const revisions=Number(process.env.V5_BENCH_REVISIONS??0);assert.ok(Number.isSafeInteger(revisions)&&revisions>=0);
   for(let index=0;index<revisions;index++) {

@@ -154,15 +154,15 @@ const physicalKind = kind => kind === 'data-object' ? 'snapshot-object' : kind;
  * See ROOT_TRANSACTION_PROTOCOL.md, protocol-4 companion, for lifecycle requirements. */
 export class PhysicalRootBinding {
   #captureOperationGuard; #operationGuard=null;
-  #adapter; #folderId; #assert; #verifiers; #lineage; #baselines = new WeakMap(); #queue = Promise.resolve(); #limits; #verifySourceEvidence;
-  constructor({adapter, assertWritable, verificationPlans, lineageVerifiers = new Map(), locatorOptions = {}, verifySourceEvidence, captureOperationGuard = () => () => {}}) {
+  #adapter; #folderId; #assert; #assertStaging; #verifiers; #lineage; #baselines = new WeakMap(); #queue = Promise.resolve(); #limits; #verifySourceEvidence;
+  constructor({adapter, assertWritable, assertStaging=assertWritable, verificationPlans, lineageVerifiers = new Map(), locatorOptions = {}, verifySourceEvidence, captureOperationGuard = () => () => {}}) {
     if (!adapter || ['readMetadata', 'readBytes', 'allocateFileId', 'createImmutable', 'readManifest', 'writeManifest'].some(k => typeof adapter[k] !== 'function') ||
-        typeof assertWritable !== 'function' || !(verificationPlans instanceof Map) || !verificationPlans.size || !(lineageVerifiers instanceof Map)) fail('invalid-adapter', 'Direct physical storage, exact manifest access, ownership and verifier registries are required.');
+        typeof assertWritable !== 'function' || typeof assertStaging !== 'function' || !(verificationPlans instanceof Map) || !verificationPlans.size || !(lineageVerifiers instanceof Map)) fail('invalid-adapter', 'Direct physical storage, exact manifest access, ownership and verifier registries are required.');
     if(typeof captureOperationGuard!=='function')fail('invalid-adapter','An operation guard factory must be callable.');
     this.#captureOperationGuard=captureOperationGuard;
     this.#folderId = id(adapter.folderId);
     this.#adapter=snapshotPhysicalAdapter(adapter);
-    this.#assert = assertWritable; this.#verifiers = new Map(verificationPlans); this.#lineage = new Map(lineageVerifiers);
+    this.#assert = assertWritable; this.#assertStaging=assertStaging; this.#verifiers = new Map(verificationPlans); this.#lineage = new Map(lineageVerifiers);
     this.#verifySourceEvidence=verifySourceEvidence;
     this.#limits = copy(locatorOptions);
     if (Object.keys(this.#limits).some(k => !['maxNodeBytes', 'maxEntries', 'maxChildren'].includes(k))) fail('invalid-options', 'Only locator page budgets can be configured.');
@@ -188,14 +188,14 @@ export class PhysicalRootBinding {
     return m;
   }
   async #exact(expected, signal) { if (!same(await this.#manifest(signal), expected)) fail('base-conflict', 'The exact physical manifest changed.'); }
-  async #owned(expected, signal) {
-    this.#scope(); abort(signal); const result = await this.#assert(copy(expected), {signal}); abort(signal); this.#scope();
+  async #owned(expected, signal, staging=false) {
+    this.#scope(); abort(signal); const result = await (staging?this.#assertStaging:this.#assert)(copy(expected), {signal}); abort(signal); this.#scope();
     if (result !== undefined) fail('invalid-guard', 'Ownership must throw on failure and return undefined.');
   }
   async #guard(expected,signal) {await this.#owned(expected,signal);await this.#exact(expected,signal);this.#scope();abort(signal);}
   #tree(m, expected, signal) {
     return createPagedPhysicalLocators(this.#adapter, {...this.#limits, databaseId:m.databaseId, copyId:m.copyId, folderId:m.storageBinding.folderId,
-      assertWritable:async () => this.#owned(expected, signal)});
+      assertWritable:async () => this.#owned(expected, signal, true)});
   }
   async #read(ref, kind, transactionId, signal) {
     this.#scope(); pointer(ref); abort(signal);
@@ -212,26 +212,31 @@ export class PhysicalRootBinding {
     this.#scope(); const after = validate(await this.#adapter.readMetadata(ref.fileId, {maxBytes:PHYSICAL_ROOT_LIMITS.manifestBytes, signal})); abort(signal);
     if (before.version !== after.version || before.size !== after.size) fail('version-mismatch', 'Direct physical content changed during verification.'); return raw;
   }
-  async #mutation(expected, signal, perform, authoritative = false) {
+  async #mutation(expected, signal, perform, authoritative = false, operation = 'immutable-create') {
     this.#scope();abort(signal);
     let open = true, active = null, calls = 0, rejected = false, rejection, failed = false, failure;
     const beforeMutation = () => {
       if (!open || active) { rejected = true; rejection = new PhysicalRootError('guard-scope', 'Mutation guard is closed or overlapping.'); return Promise.reject(rejection); }
-      const pending = (authoritative ? this.#guard(expected,signal) : this.#owned(expected,signal)).then(() => { calls++; }).catch(e => { rejected = true; rejection = e; throw e; }); active = pending;
+      const pending = (authoritative ? this.#guard(expected,signal) : this.#owned(expected,signal,true)).then(() => { calls++; }).catch(e => { rejected = true; rejection = e; throw e; }); active = pending;
       pending.then(() => { if (active === pending) active = null; }, () => { if (active === pending) active = null; }); return pending;
     };
     try { await perform(beforeMutation); } catch (e) { failed = true; failure = e; }
     open = false; const unfinished = active !== null; if (active) await active.catch(() => {});
     if (rejected && calls === 0) throw rejection;
-    if (calls === 0) fail('adapter-contract', 'Every durable attempt must await a live mutation guard.');
+    if (calls === 0) {
+      if (failed) fail('adapter-precondition-failed', 'The physical adapter failed before completing its mutation guard.', {operation, failure});
+      fail('adapter-contract', 'Every durable attempt must await a live mutation guard.', {operation});
+    }
     return {failed, failure, unresolved:rejected || unfinished, guardFailure:rejection};
   }
-  async #ensure(ref, raw, kind, transactionId, expected, signal) {
+  async #ensure(ref, raw, kind, transactionId, expected, signal, knownAbsent = false) {
     raw = owned(raw); if (await digest(raw) !== ref.sha256) fail('hash-mismatch', 'Prepared bytes differ from the fixed admitted hash.');
-    try { if (!equal(await this.#read(ref, kind, transactionId, signal), raw)) fail('readback-mismatch', 'Existing fixed-ID bytes differ.'); return; }
-    catch (e) { if (e?.code !== 'object-not-found') throw e; }
+    if (!knownAbsent) {
+      try { if (!equal(await this.#read(ref, kind, transactionId, signal), raw)) fail('readback-mismatch', 'Existing fixed-ID bytes differ.'); return; }
+      catch (e) { if (e?.code !== 'object-not-found') throw e; }
+    }
     const outcome = await this.#mutation(expected, signal, beforeMutation => this.#adapter.createImmutable({fileId:ref.fileId, name:'ft-physical-' + ref.sha256 + '.bin',
-      kind:physicalKind(kind), transactionId, content:new Uint8Array(raw), expectedSha256:ref.sha256, maxBytes:PHYSICAL_ROOT_LIMITS.objectBytes, beforeMutation, signal}));
+      kind:physicalKind(kind), transactionId, content:new Uint8Array(raw), expectedSha256:ref.sha256, maxBytes:PHYSICAL_ROOT_LIMITS.objectBytes, beforeMutation, signal}), false, 'immutable-create');
     let actual;
     if (outcome.unresolved) fail('write-unresolved', 'A later failed or unfinished guard leaves an earlier create unresolved.', {reference:copy(ref), guardFailure:outcome.guardFailure});
     if (signal?.aborted) fail('write-unresolved', 'Cancellation after a guarded create requires exact-ID recovery.', {reference:copy(ref), cancelled:true});
@@ -246,7 +251,8 @@ export class PhysicalRootBinding {
   }
   async #writeManifest(expected, next, signal) {
     manifest(next); const raw = encode(next, PHYSICAL_ROOT_LIMITS.manifestBytes);
-    const outcome = await this.#mutation(expected, signal, beforeMutation => this.#adapter.writeManifest(new Uint8Array(raw), {beforeMutation, signal}), true);
+    const boundary = 'root-manifest-' + (next.pending?.state ?? 'clean');
+    const outcome = await this.#mutation(expected, signal, beforeMutation => this.#adapter.writeManifest(new Uint8Array(raw), {beforeMutation, signal}), true, boundary);
     let current;
     if (outcome.unresolved) fail('write-unresolved', 'A later failed or unfinished guard leaves an earlier manifest attempt unresolved.', {intendedManifestHash:await digest(raw), guardFailure:outcome.guardFailure});
     if (signal?.aborted) fail('write-unresolved', 'Cancellation after a guarded manifest attempt requires exact-state recovery.', {cancelled:true});
@@ -433,30 +439,46 @@ export class PhysicalRootBinding {
     if (generated !== 2) fail('invalid-plan', 'Plan must include the exact logical commit and retained base manifest before admission.');
   }
   async #stage(value, expected, preparation, signal, allowWrites = true) {
-    let generated = 0;
-    for await (const e of this.#plan(value, signal)) {
-      let deterministic;
-      if (e.kind === 'commit-record' && e.sha256 === value.logicalHead.sha256) { deterministic = encode(value.logicalCommit); generated++; }
-      if (e.kind === 'protocol-object' && e.sha256 === value.baseManifestHash) { deterministic = encode(value.baseManifest, PHYSICAL_ROOT_LIMITS.manifestBytes); generated++; }
-      let raw,verifiedLength;
-      try {
-        const verifyBody=!deterministic&&!allowWrites?getOwnedPhysicalBodyVerifier(this.#adapter):null;
-        if(verifyBody){
-          this.#scope();abort(signal);
-          const result=await verifyBody({folderId:this.#folderId,fileId:e.fileId,sha256:e.sha256,kind:physicalKind(e.kind),
-            transactionId:e.transactionId??value.transactionId,maxBytes:PHYSICAL_ROOT_LIMITS.objectBytes,signal});
-          this.#scope();abort(signal);verifiedLength=result.byteLength;
-        }else raw = await this.#read({fileId:e.fileId, sha256:e.sha256}, e.kind, e.transactionId ?? value.transactionId, signal);
+    let generated = 0, stagingFailed = false, stagingFailure;
+    const pending = [];
+    const drain = async () => {
+      await Promise.allSettled(pending.splice(0));
+      if (stagingFailed) throw stagingFailure;
+    };
+    // Preparation and plan enumeration remain serial for custom providers.
+    // Only independent fixed-ID immutable writes overlap; authority publication
+    // cannot start until every issued operation has settled, including failures.
+    try {
+      for await (const e of this.#plan(value, signal)) {
+        if (stagingFailed) throw stagingFailure;
+        let deterministic;
+        if (e.kind === 'commit-record' && e.sha256 === value.logicalHead.sha256) { deterministic = encode(value.logicalCommit); generated++; }
+        if (e.kind === 'protocol-object' && e.sha256 === value.baseManifestHash) { deterministic = encode(value.baseManifest, PHYSICAL_ROOT_LIMITS.manifestBytes); generated++; }
+        let raw,verifiedLength;
+        try {
+          const verifyBody=!deterministic&&!allowWrites?getOwnedPhysicalBodyVerifier(this.#adapter):null;
+          if(verifyBody){
+            this.#scope();abort(signal);
+            const result=await verifyBody({folderId:this.#folderId,fileId:e.fileId,sha256:e.sha256,kind:physicalKind(e.kind),
+              transactionId:e.transactionId??value.transactionId,maxBytes:PHYSICAL_ROOT_LIMITS.objectBytes,signal});
+            this.#scope();abort(signal);verifiedLength=result.byteLength;
+          }else raw = await this.#read({fileId:e.fileId, sha256:e.sha256}, e.kind, e.transactionId ?? value.transactionId, signal);
+        }
+        catch (error) {
+          if (error?.code !== 'object-not-found') throw error;
+          if (!allowWrites) fail('pending-incomplete', 'Pinned ready or completed evidence is missing; this protocol will not rewrite it.');
+          if (!deterministic && !preparation) fail('pending-incomplete', 'Supply the original preparation bytes; the pending fixed IDs must be preserved.');
+          raw = deterministic ?? owned(await preparation(query(e), {maxBytes:PHYSICAL_ROOT_LIMITS.objectBytes, signal}));
+          if (raw.length !== e.byteLength) fail('body-mismatch', 'Prepared body differs from the admitted plan.');
+          if (stagingFailed) throw stagingFailure;
+          pending.push(this.#ensure({fileId:e.fileId, sha256:e.sha256}, raw, e.kind, e.transactionId ?? value.transactionId, expected, signal, true)
+            .catch(error => { if (!stagingFailed) { stagingFailed = true; stagingFailure = error; } }));
+          if (pending.length === 4) await drain();
+        }
+        if ((verifiedLength??raw?.length) !== e.byteLength || (deterministic && !equal(raw, deterministic))) fail('body-mismatch', 'Staged body differs from the admitted plan.');
       }
-      catch (error) {
-        if (error?.code !== 'object-not-found') throw error;
-        if (!allowWrites) fail('pending-incomplete', 'Pinned ready or completed evidence is missing; this protocol will not rewrite it.');
-        if (!deterministic && !preparation) fail('pending-incomplete', 'Supply the original preparation bytes; the pending fixed IDs must be preserved.');
-        raw = deterministic ?? owned(await preparation(query(e), {maxBytes:PHYSICAL_ROOT_LIMITS.objectBytes, signal}));
-        await this.#ensure({fileId:e.fileId, sha256:e.sha256}, raw, e.kind, e.transactionId ?? value.transactionId, expected, signal);
-      }
-      if ((verifiedLength??raw?.length) !== e.byteLength || (deterministic && !equal(raw, deterministic))) fail('body-mismatch', 'Staged body differs from the admitted plan.');
-    }
+      await drain();
+    } finally { await Promise.allSettled(pending); }
     if (generated !== 2) fail('invalid-plan', 'Plan must include exact portable commit and retained base-manifest evidence.');
   }
   #result(value, locatorRoot, receiptHead) {

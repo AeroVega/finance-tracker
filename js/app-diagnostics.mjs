@@ -2,12 +2,15 @@ import { diagnosticMessages, messagesForSurface } from './app-diagnostic-message
 import { googleStartupMessage } from './google-startup-diagnostics.mjs';
 import { storageWriteDiagnostic } from './storage-write-diagnostic.mjs';
 import { sessionClaimDiagnostic } from './session-claim-diagnostic.mjs';
+import { isSafeDiagnosticCode, safeDiagnosticErrorName, safeDiagnosticOperation } from './app-diagnostic-codes.mjs';
 
 const extra = Object.freeze({
   'conflicting-match-requires-correction': 'The selected match has a different account, currency or amount, or is missing an amount. Choose a compatible activity or resolve the evidence with an explicit correction before matching.',
   'inactive-match-target': 'The selected activity is no longer active. Choose an active match target before submitting this review decision.',
 
   'recovery-required': 'Storage needs recovery before more changes can be saved. Keep this tab and folder unchanged. Use the recovery controls offered for this copy, then reopen and verify before retrying.',
+  'adapter-contract': 'The storage adapter returned without confirming its required mutation guard. Keep this tab and folder unchanged and inspect the diagnostic before retrying.',
+  'adapter-precondition-failed': 'The storage adapter failed before completing its mutation guard. The write outcome may still need recovery; keep this tab and folder unchanged and inspect the diagnostic before retrying.',
   'stale-session': 'A previous storage session appears stale. Stop every other tab or device using this copy, then use the explicit stale-session recovery control if offered. Do not delete its marker.',
   'session-active': 'Another storage session is active. Release it on the owning tab or device before opening this copy here.',
 
@@ -19,7 +22,7 @@ const extra = Object.freeze({
   'unknown': 'Action did not complete. Keep this tab and any selected folder unchanged. Copy diagnostics for inspection before retrying an operation that may have saved data.',
   'offline': 'The device is offline. Loaded records remain visible. Return online, then reopen and verify the saved copy before editing.',
   'authorization-required': 'Google authorization is unavailable. Keep your draft in this tab. Reconnect to the same copy and verify its state before retrying a save.',
-  'ownership-lost': 'This tab no longer owns the storage session. Do not save or delete session markers. Resolve the active session before reopening this copy.',
+  'ownership-lost': 'This tab’s storage session could not be verified. Writes are disabled. Preserve the folder and marker; copy diagnostics before reconnecting.',
   'not-owner': 'This tab does not own the storage session. Resolve the active session before reopening this copy.',
   'base-conflict': 'The saved copy changed. Reopen verified records before deciding what to retry.',
   'drive-network-error': 'A storage request failed to reach Google. Keep the folder unchanged and inspect its saved state before retrying any write.',
@@ -28,33 +31,70 @@ const extra = Object.freeze({
 });
 const startup = new Set(['google-config-network', 'google-config-http', 'google-config-json', 'google-config-invalid', 'google-libraries-unavailable', 'google-picker-unavailable']);
 const surfaces = new Set(['workspace', 'synthetic-year', 'import', 'local-preview', 'developer-tool', 'copy-guide']);
+const phases = new Set(['starting', 'configuration', 'connecting', 'reconnecting', 'preparing', 'checking', 'saving', 'recovering', 'reopening', 'releasing', 'verifying']);
 function read(error, key) { try { return error?.[key]; } catch { return undefined; } }
 function recognized(value) {
-  return typeof value === 'string' && (Object.hasOwn(diagnosticMessages, value) || Object.hasOwn(extra, value) || startup.has(value));
+  return typeof value === 'string' && (isSafeDiagnosticCode(value) || Object.hasOwn(diagnosticMessages, value) || Object.hasOwn(extra, value) || startup.has(value));
+}
+function errorChain(error, visit) {
+  const seen = new Set(), queue = [{value:error, depth:0}];
+  while (queue.length && seen.size < 12) {
+    const {value:current, depth} = queue.shift();
+    if (!current || seen.has(current)) continue;
+    seen.add(current);
+    const result = visit(current);
+    if (result !== undefined) return result;
+    if (depth < 4) {
+      const cause = read(current, 'cause');
+      if (cause) queue.push({value:cause, depth:depth + 1});
+      const details = read(current, 'details');
+      for (const key of ['failure', 'guardFailure', 'createError', 'readbackError', 'readFailure']) {
+        const nested = read(details, key);
+        if (nested) queue.push({value:nested, depth:depth + 1});
+      }
+    }
+  }
 }
 function errorCode(error) {
-  const code = read(error, 'code');
-  if (recognized(code)) return code;
-  // Some local validators deliberately throw a fixed code as their TypeError message.
-  const message = read(error, 'name') === 'TypeError' ? read(error, 'message') : null;
-  return recognized(message) ? message : 'unknown';
+  return errorChain(error, current => {
+    const code = read(current, 'code');
+    if (recognized(code)) return code;
+    // Some local validators deliberately throw a fixed code as their TypeError message.
+    const message = read(current, 'name') === 'TypeError' ? read(current, 'message') : null;
+    return recognized(message) ? message : undefined;
+  }) || 'unknown';
+}
+function causeCode(error, selected) {
+  return errorChain(error, current => {
+    const code = read(current, 'code');
+    return recognized(code) && code !== selected ? code : undefined;
+  });
 }
 
 /** Construct from allowlisted fields, never redact or serialize arbitrary errors. */
-export function createDiagnostic(error, { surface, build } = {}) {
+export function createDiagnostic(error, { surface, build, phase, verifiedDurableWrites } = {}) {
   const code = errorCode(error);
   const message = startup.has(code)
     // No raw status/components cross this boundary. The startup formatter accepts
     // those for its original callers, but a report uses only fixed safe copy.
     ? googleStartupMessage({code})
-    : messagesForSurface(surface)[code] || extra[code] || diagnosticMessages[code];
+    : messagesForSurface(surface)[code] || extra[code] || diagnosticMessages[code] || extra.unknown;
   const report = {
     schema: 'finance-tracker-diagnostic-v1',
     code,
     surface: surfaces.has(surface) ? surface : 'unknown',
     build: typeof build === 'string' && /^[a-f0-9]{40}$/.test(build) ? build : 'development-or-unknown'
   };
-  const detail = storageWriteDiagnostic(error) || sessionClaimDiagnostic(error);
+  if (phases.has(phase)) report.phase = phase;
+  if (Number.isSafeInteger(verifiedDurableWrites) && verifiedDurableWrites >= 0 && verifiedDurableWrites <= 100000)
+    report.verifiedDurableWrites = verifiedDurableWrites;
+  const existingDetail = storageWriteDiagnostic(error) || sessionClaimDiagnostic(error);
+  const nestedCode = causeCode(error, code);
+  const exception = code === 'unknown' ? errorChain(error, current => safeDiagnosticErrorName(current)) : null;
+  const operation = errorChain(error, current => safeDiagnosticOperation(read(read(current, 'details'), 'operation')));
+  const detail = existingDetail || nestedCode || exception || operation
+    ? {...(nestedCode ? {causeCode: nestedCode} : {}), ...(exception ? {exception} : {}), ...(operation ? {operation} : {}), ...(existingDetail || {})}
+    : null;
   if (detail) report.detail = detail;
   return Object.freeze({code, message, report: JSON.stringify(report, null, 2)});
 }
@@ -69,8 +109,8 @@ export function clearDiagnostic(target) {
   const panel = target && panels.get(target);
   if (panel) { panel.generation++; panel.root.hidden = true; panel.root.remove(); panels.delete(target); }
 }
-export function showDiagnostic(error, {surface = 'developer-tool', target, document: doc = globalThis.document, navigator: nav = globalThis.navigator} = {}) {
-  const diagnostic = createDiagnostic(error, {surface, build: doc?.getElementById('build-sha')?.textContent});
+export function showDiagnostic(error, {surface = 'developer-tool', target, phase, verifiedDurableWrites, document: doc = globalThis.document, navigator: nav = globalThis.navigator} = {}) {
+  const diagnostic = createDiagnostic(error, {surface, phase, verifiedDurableWrites, build: doc?.getElementById('build-sha')?.textContent});
   const message = `${diagnostic.message} Error code: ${diagnostic.code}.`;
   if (!target || !doc) return message;
   clearDiagnostic(target);

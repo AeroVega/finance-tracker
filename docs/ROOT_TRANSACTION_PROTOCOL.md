@@ -38,8 +38,20 @@ boundary. Every authoritative pointer update additionally checks the exact
 selected manifest. Manifest reads validate pinned ID, folder, name, kind,
 explicit non-trash state, size and version. Fresh complete metadata brackets
 check every visited immutable binding before accepting verification or publishing.
-These guards are not provider compare-and-swap and do not eliminate races after
-the final provider check.
+A version-only change triggers a bounded exact-ID content re-read and hash check
+inside a stable metadata bracket; it does not fail solely because the Drive
+version advanced. Changed bindings, missing objects, bad hashes and a version
+that does not settle within the bounded recheck still stop publication. These
+guards are not provider compare-and-swap and do not eliminate races after the
+final provider check.
+
+Guard failures distinguish a successful adapter return without an awaited
+guard (`adapter-contract`) from an adapter error before completing its guard
+(`adapter-precondition-failed`). The latter includes a fixed boundary label
+(`immutable-create` or a root-manifest state) and may preserve the underlying
+allowlisted error code for diagnostics. It does not imply that publication
+succeeded or that no mutation occurred; the transaction still requires recovery
+and verification.
 
 Private byte reuse is limited to 8 MiB. Physical body facts have independent
 512-entry/1-MiB budgets and become reusable only after successful fresh closure.

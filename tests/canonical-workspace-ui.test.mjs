@@ -47,12 +47,14 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       if (state.saveGate) await state.saveGate.promise;
       if (state.failSave) throw Object.assign(new Error('Private provider detail'), {code:'base-conflict'});
       state.writes++;
-      await saveRoot(transaction);
+      const result = await saveRoot(transaction);
+      if (state.readbackGate) await state.readbackGate.promise;
       if (state.loseResponse) {
         lifecycle.state = 'recovery-required'; lifecycle.acceptingWrites = false;
         storage.options.onStatus({state:lifecycle.state});
         throw Object.assign(new Error('Private lost commit response'), {code:'transaction-unresolved'});
       }
+      return result;
     },
     async recover() {
       state.recovers++; if (state.recoveryGate) await state.recoveryGate.promise; lifecycle.state = 'ready'; lifecycle.acceptingWrites = true;
@@ -86,13 +88,20 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     constructor(options) { super({...options, online:() => browserNavigator?.onLine !== false}); session = this; }
   }
   const page = await pageController('canonical-workspace', {DashboardSyntheticStorage:Storage,
-    CanonicalWorkspaceSession:BrowserSession, createWorkspacePages, createWorkspaceViewReader,getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,isCalendarDate,buildFinancialPosition,buildAccountMonthCoverage,createSyntheticFinancialPosition,createSyntheticFinancialYear,googleStartupMessage,TypeError},
+    CanonicalWorkspaceSession:BrowserSession, createWorkspacePages, createWorkspaceViewReader: (...args) => {
+      const reader = createWorkspaceViewReader(...args);
+      return {...reader, view(options) {
+        if (options.pageSize === 4) state.homeReads = (state.homeReads || 0) + 1;
+        return reader.view(options);
+      }};
+    },getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,isCalendarDate,buildFinancialPosition,buildAccountMonthCoverage,createSyntheticFinancialPosition,createSyntheticFinancialYear,googleStartupMessage,TypeError},
   {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs',timers});
   browserNavigator = page.navigator;
   return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,timeouts,flushSearch,
     summary:() => text(page.get('summary-cards')),
     async search(value) { page.get('transaction-search').value = value; await page.get('transaction-search').emit('input'); await flushSearch(); },
     async detail(description = 'INVENTED UTILITY') {
+      await page.navigate('#transactions');
       await page.choose('month-filter', '2025-01');
       page.get('transaction-search').value = description; await page.get('transaction-search').emit('input'); await flushSearch();
       const row = page.get('transaction-rows').children[0]; assert.ok(row, 'Expected an activity row');
@@ -546,7 +555,8 @@ test('unresolved source preview reports full scoped count and refreshes after re
   assert.equal(h.get('review-queue').children.filter(item => item.tagName === 'ARTICLE').length, 1);
   await h.choose('account-filter', emptyAccount);
   assert.match(h.get('review-summary').textContent, /0 source observations await a decision/);
-  assert.equal(h.get('review-queue').children.length, 0);
+  assert.match(text(h.get('review-queue')), /No decisions waiting/);
+  assert.match(text(h.get('review-queue')), /Check account-month coverage/);
   const rejected = ledger.observations.find(item => item.disposition === 'rejected');
   ledger = applyReviewDecision(ledger, {observationId:rejected.observationId, action:'reject', rationale:'Invented decision from advanced workbench'}, options);
   await h.replaceSavedLedger(ledger); await h.click('reopen-ledger'); await h.choose('month-filter', '2026-01');
@@ -991,12 +1001,12 @@ test('page navigation during an uncertain save preserves warning, recovery and t
   assert.match(h.get('save-state').textContent,/Recover if offered/);
 });
 
-test('review drilldown opens Activity and first-run preview opens Position without storage calls', async () => {
+test('review drilldown opens Activity and first-run preview opens Home without storage calls', async () => {
   const h = await workspacePage();
   assert.equal(h.get('workspace-scope').hidden,true);
   assert.equal(h.get('welcome-panel').hidden,false);
   await h.click('start-preview');
-  assert.equal(h.location.hash,'#position');
+  assert.equal(h.location.hash,'#overview');
   assert.equal(h.get('welcome-panel').hidden,true);
   assert.equal(h.get('workspace-scope').hidden,false);
   await h.click('preview-year'); await h.navigate('#review');
@@ -1124,4 +1134,160 @@ test('Storage distinguishes the active saved format from preview and experimenta
   assert.match(html, /canonical v5 with the explicit compact-json-v1 value codec/);
   assert.match(html, /Opening a copy still verifies and loads the complete canonical ledger/);
   assert.match(html, /Existing folders are not silently converted/);
+});
+
+
+test('Home recent activity ignores Activity search, review filter and pagination, and returns focus after inspection', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  const recent = h.get('recent-activities');
+  assert.equal(recent.children.length, 4);
+  const original = text(recent), count = h.get('attention-count').textContent;
+  await h.navigate('#transactions');
+  await h.search('a deliberately unmatched invented phrase');
+  await h.choose('review-only', true);
+  assert.equal(h.get('transaction-rows').children.length, 0);
+  assert.equal(text(recent), original);
+  assert.equal(h.get('attention-count').textContent, count);
+  await h.navigate('#overview');
+  const button = recent.children[0];
+  await button.click(); assert.equal(h.location.hash, '#activity-detail');
+  assert.match(h.get('detail-description').textContent, /Invented/i);
+  await h.click('close-detail');
+  assert.equal(h.location.hash, '#overview'); assert.equal(h.observed.focused, button);
+  assert.equal(h.state.writes, 0); assert.equal(h.state.connects.length, 0);
+});
+
+test('Home recent records follow account and month scope and preserve exact displayed source amounts', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  await h.choose('month-filter', '2025-01');
+  const account = h.get('account-filter').children.find(option => option.value && /checking/i.test(option.textContent));
+  await h.choose('account-filter', account.value);
+  const recent = h.get('recent-activities');
+  assert.ok(recent.children.length > 0 && recent.children.length <= 4);
+  for (const button of recent.children) {
+    assert.match(text(button), /2025-01-/);
+    assert.ok(text(button).includes(account.textContent));
+    assert.match(text(button), /\$[\d,]+\.\d{2}/);
+  }
+  assert.match(h.get('overview-review-title').textContent, /records|unresolved/);
+  assert.equal(h.state.writes, 0);
+});
+
+
+test('transaction rows open from their text while selection and bubbled button clicks remain safe', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const row = h.get('transaction-rows').children[0], button = row.children.at(-1).children[0];
+  h.window.getSelection = () => ({toString: () => 'Selected source description'});
+  await row.emit('click', {target:row.children[1]});
+  assert.equal(h.location.hash, '#transactions');
+  h.window.getSelection = () => ({toString: () => ''});
+  await row.emit('click', {target:row.children[1]});
+  assert.equal(h.location.hash, '#activity-detail');
+  await h.click('close-detail'); assert.equal(h.location.hash, '#transactions');
+  await row.emit('click', {target:button});
+  assert.equal(h.location.hash, '#transactions');
+  await button.click(); assert.equal(h.location.hash, '#activity-detail');
+  assert.equal(h.state.writes, 0);
+});
+
+test('an account with no activity shows an honest Home empty state and a separate coverage action', async () => {
+  const h = await workspacePage(); await h.click('start-preview');
+  const loan = h.get('account-filter').children.find(option => /auto loan/i.test(option.textContent));
+  await h.choose('account-filter', loan.value);
+  assert.match(text(h.get('recent-activities')), /No activity/);
+  assert.equal(h.get('attention-count').textContent, '0');
+  assert.match(h.get('overview-review-title').textContent, /Coverage still needs separate reconciliation/);
+  assert.match(text(h.get('review-queue')), /Check account-month coverage/);
+  assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: reopening the same Home record preserves an unfinished transaction edit', async () => {
+  const h = await workspacePage(); await h.click('start-preview');
+  await h.get('recent-activities').children[0].click();
+  h.get('correction-rationale').value = 'INVENTED unfinished explanation';
+  await h.get('correction-rationale').emit('input');
+  await h.navigate('#overview'); await h.get('recent-activities').children[0].click();
+  assert.equal(h.get('correction-rationale').value, 'INVENTED unfinished explanation');
+  assert.equal(h.observed.confirmations.length, 0);
+  assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: cancelling replacement or close keeps the unfinished editor and staged graph', async () => {
+  const h = await workspacePage(); await h.click('start-preview');
+  const recent = h.get('recent-activities'); await recent.children[0].click();
+  const title = h.get('detail-title').textContent, graph = structuredClone(h.modelSession.ledger);
+  h.get('correction-rationale').value = 'INVENTED keep this unfinished edit';
+  await h.get('correction-rationale').emit('input');
+  h.observed.confirm = false;
+  await h.navigate('#overview'); await recent.children[1].click();
+  assert.equal(h.get('detail-title').textContent, title);
+  assert.equal(h.get('correction-rationale').value, 'INVENTED keep this unfinished edit');
+  await recent.children[0].click(); await h.click('close-detail');
+  assert.equal(h.location.hash, '#activity-detail');
+  assert.ok(h.observed.confirmations.length >= 2);
+  h.observed.confirm = true; await h.click('close-detail');
+  assert.equal(h.location.hash, '#overview');
+  assert.deepEqual(h.modelSession.ledger, graph); assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: Home identifies unknown posting status as excluded rather than just needing review', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.detail('INVENTED BROKERAGE FEE');
+  const broker = h.modelSession.ledger.accounts.find(account => account.accountType === 'brokerage');
+  await h.choose('account-filter', broker.accountId); await h.navigate('#overview');
+  assert.match(text(h.get('recent-activities')), /Unknown status · excluded/);
+  assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: pending classified spending is labeled as excluded in both Home and Activity', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.detail('INVENTED BROKERAGE FEE');
+  await h.choose('posting-status', 'pending');
+  h.get('correction-rationale').value = 'INVENTED pending evidence'; await h.get('correction-rationale').emit('input');
+  await h.click('stage-correction');
+  await h.choose('correction-type', 'classification'); await h.choose('classification', 'spending');
+  h.get('correction-rationale').value = 'INVENTED fee classification'; await h.get('correction-rationale').emit('input');
+  await h.click('stage-correction');
+  const broker = h.modelSession.ledger.accounts.find(account => account.accountType === 'brokerage');
+  await h.choose('account-filter', broker.accountId);
+  assert.match(text(h.get('recent-activities')), /Pending · excluded/);
+  assert.match(text(h.get('transaction-rows')), /Pending · excluded/);
+  assert.equal(h.state.writes, 0);
+});
+
+test('adversarial: unstaged editor text participates in replacement and unload guards, clean editors do not', async () => {
+  const h = await workspacePage(); await h.click('start-preview');
+  await h.get('recent-activities').children[0].click();
+  let prevented = false;
+  await h.event('beforeunload', {preventDefault() { prevented = true; }});
+  assert.equal(prevented, false);
+  h.get('correction-rationale').value = 'INVENTED unsent explanation';
+  await h.get('correction-rationale').emit('input');
+  await h.event('beforeunload', {preventDefault() { prevented = true; }});
+  assert.equal(prevented, true);
+  const graph = structuredClone(h.modelSession.ledger);
+  h.observed.confirm = false; await h.click('preview-year');
+  assert.deepEqual(h.modelSession.ledger, graph);
+  assert.equal(h.get('correction-rationale').value, 'INVENTED unsent explanation');
+  h.observed.confirm = true; await h.click('close-detail');
+  prevented = false;
+  await h.event('beforeunload', {preventDefault() { prevented = true; }});
+  assert.equal(prevented, false); assert.equal(h.state.writes, 0);
+});
+
+
+test('Home reads stay cached during Activity filtering and invalidate with scope or ledger changes', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  const initial = h.state.homeReads;
+  await h.search('INVENTED'); await h.click('next-page');
+  await h.choose('review-only', true); await h.search('UTILITY');
+  assert.equal(h.state.homeReads, initial);
+  await h.choose('month-filter', '2025-01');
+  assert.equal(h.state.homeReads, initial + 1);
+  const account = h.get('account-filter').children.find(option => option.value && /checking/i.test(option.textContent));
+  await h.choose('account-filter', account.value);
+  assert.equal(h.state.homeReads, initial + 2);
+  await h.choose('review-only', false);
+  const beforeEdit = h.state.homeReads;
+  await h.stageAmount('-151.00');
+  assert.equal(h.state.homeReads, beforeEdit + 1);
+  assert.equal(h.modelSession.dirty, true);
 });

@@ -156,6 +156,7 @@ export class ApplicationStorageLifecycle {
       onReadFailure: error => this.pauseAfterReadFailure(error),
       cryptoImpl: this.crypto,
       isOnline: this.isOnline,
+      assertStaging: () => this.coordinator.assertCanStage({ online: this.isOnline() }),
       assertWritable: () => this.coordinator.assertCanWrite({ online: this.isOnline() })
     });
   }

@@ -229,9 +229,10 @@ test("release waits for queued writes and blocks new writes during handoff", asy
   const adapter = new MemorySessionAdapter();
   const session = coordinator(adapter, now);
   await session.start();
-  let finishWrite;
-  const pending = session.withWrite(() => new Promise((resolve) => { finishWrite = resolve; }));
-  await Promise.resolve();
+  let finishWrite, signalAdmitted;
+  const admitted = new Promise(resolve => { signalAdmitted = resolve; });
+  const pending = session.withWrite(() => new Promise((resolve) => { finishWrite = resolve; signalAdmitted(); }));
+  await admitted;
   const releasing = session.release();
   const blocked = session.withWrite(() => undefined);
   await expectCode(blocked, "not-owner");

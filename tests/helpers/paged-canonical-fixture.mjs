@@ -18,6 +18,7 @@ export async function createPagedFixture() {
       const next={...manifest,root:rootHash,revision:commit.revision};
       await verifyPartitionedCanonicalCommit({manifest:next,commit,readObject:async q=>objects.get(q.sha256)});
       Object.assign(manifest,next);commits.push(commit);
+      return {status:'committed',manifest:structuredClone(manifest)};
     }};
   return {lifecycle,objects,commits,get manifest(){return manifest;},async reset(){objects.clear();objects.set(initial,EMPTY_CANONICAL_BYTES.slice());commits.length=0;Object.assign(manifest,{root:initial,revision:'0',pending:null});},ledger:replayFixture(2).ledger};
 }

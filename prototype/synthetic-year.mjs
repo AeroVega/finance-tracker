@@ -3,7 +3,7 @@ import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
 
 const $ = id => document.getElementById(id);
-let busy = false, configured = false, writes = 0, started = 0, phase = '', timer = null;
+let busy = false, configured = false, writes = 0, started = 0, phase = '', phaseCode = 'starting', timer = null;
 const messages = {
   preparing: 'Preparing the invented year locally…',
   checking: 'Checking the selected copy and existing canonical records…',
@@ -40,7 +40,7 @@ const storage = new DashboardSyntheticStorage({
   afterMutation: () => { writes += 1; progress(); }
 });
 const seeder = new SyntheticYearSeeder({ onProgress: state => {
-  phase = messages[state] || 'Checking…'; result(phase); progress();
+  phaseCode = state; phase = messages[state] || 'Checking…'; result(phase); progress();
 } });
 function previewResult(recipe) {
   const ledger = recipe.ledger;
@@ -56,16 +56,17 @@ async function verify() {
 async function run(operation) {
   if (busy) return;
   busy = true; writes = 0; started = Date.now(); phase = 'Starting…';
+  phaseCode = 'starting';
   clearDiagnostic($('result'));
   refresh(); progress();
   timer = setInterval(progress, 1000);
   try { await operation(); }
   catch (error) {
-    result(showDiagnostic(error, {surface: 'synthetic-year', target: $('result')}), 'error');
+    result(showDiagnostic(error, {surface: 'synthetic-year', target: $('result'), phase: phaseCode, verifiedDurableWrites: writes}), 'error');
   } finally { clearInterval(timer); timer = null; progress(); busy = false; refresh(); }
 }
 $('preview').addEventListener('click', () => run(async () => {
-  phase = 'Preparing local preview…'; progress(); previewResult(await seeder.preview());
+  phaseCode = 'preparing'; phase = 'Preparing local preview…'; progress(); previewResult(await seeder.preview());
   result('Invented year prepared locally. No Google connection or Drive write was requested.');
 }));
 $('upload').addEventListener('click', () => {
@@ -73,24 +74,26 @@ $('upload').addEventListener('click', () => {
   void run(async () => {
     result('Choose your newly created empty synthetic folder.');
     // Keep the Google authorization invocation in the user activation path.
-    phase = 'Acquiring the storage session and verifying initial setup…'; progress();
+    phaseCode = 'connecting'; phase = 'Acquiring the storage session and verifying initial setup…'; progress();
     await storage.connect({ requireEmpty: true, canonicalLayout: 'partitions-v5' });
     await seeder.admitFreshConnection(storage.lifecycle);
     await verify();
   });
 });
 $('reconnect').addEventListener('click', () => run(async () => {
+  phaseCode = 'reconnecting';
   result('Choose the same synthetic year folder to verify it.');
   await storage.connect({ requireExisting: true });
   await verify();
 }));
 $('verify').addEventListener('click', () => run(verify));
-$('recover').addEventListener('click', () => run(async () => { await storage.lifecycle.recover(); await verify(); }));
+$('recover').addEventListener('click', () => run(async () => { phaseCode = 'recovering'; await storage.lifecycle.recover(); await verify(); }));
 $('stale').addEventListener('click', () => {
   if (!confirm('Confirm all prior tabs and devices using this synthetic folder have stopped.')) return;
-  void run(async () => { await storage.recoverStaleSession(); await verify(); });
+  void run(async () => { phaseCode = 'recovering'; await storage.recoverStaleSession(); await verify(); });
 });
 $('release').addEventListener('click', () => run(async () => {
+  phaseCode = 'releasing';
   const released = await storage.release();
   if (released?.released !== true) throw Object.assign(new Error('release-unconfirmed'), { code: 'release-unconfirmed' });
   result('Storage session released and verified. Saved records are unchanged. You can now open another tool.','success');
@@ -109,6 +112,6 @@ refresh();
 storage.prepare().then(() => {
   configured = true; $('configuration').textContent = 'Google setup loaded. Nothing uploads until you choose a folder and confirm.'; refresh();
 }).catch(error => {
-  $('configuration').textContent = showDiagnostic(error, {surface: 'synthetic-year', target: $('configuration')});
+  $('configuration').textContent = showDiagnostic(error, {surface: 'synthetic-year', target: $('configuration'), phase: 'configuration'});
   refresh();
 });

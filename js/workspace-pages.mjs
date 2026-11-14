@@ -1,9 +1,9 @@
 /* Page navigation keeps the ledger and every editor mounted. It never reads or
    writes financial storage. Hashes contain page names only, never record IDs. */
 const pages = {
-  overview: {title:'Overview', description:'Your known cash flow, with the evidence in reach.', group:'overview', period:true},
+  overview: {title:'Home', description:'Your known cash flow, with the evidence in reach.', group:'overview', period:true},
   transactions: {title:'Activity', description:'Follow a transaction from its source to its correction history.', group:'transactions', period:true},
-  position: {title:'Financial position', description:'Dated balances. Clear evidence. Missing values stay unknown.', group:'position', date:true},
+  position: {title:'Accounts', description:'Dated balances. Clear evidence. Missing values stay unknown.', group:'position', date:true},
   holdings: {title:'Holdings', description:'What your investment statements actually support.', group:'position', date:true},
   review: {title:'Review', description:'Give uncertain records a deliberate second look.', group:'review', period:true},
   reconciliation: {title:'Reconciliation', description:'Check a month against its opening and closing evidence.', group:'review', period:true},
@@ -48,6 +48,8 @@ export function createWorkspacePages({document, window}) {
     syncScope();
     $('month-scope').hidden = !info.period;
     $('position-date-scope').hidden = !info.date;
+    $('scope-period-title').hidden = Boolean(info.date);
+    $('scope-position-title').hidden = !info.date;
     $('scope-help').textContent = info.date
       ? 'Account and date apply to balances and holdings. The activity period is separate.'
       : 'Account and period apply across Overview, Activity and Review. Search changes activity rows only.';
@@ -59,6 +61,22 @@ export function createWorkspacePages({document, window}) {
     if (current !== page) window.history[replace ? 'replaceState' : 'pushState'](null, '', '#' + page);
     apply(page, {focus});
   }
+  // Route links before the browser performs an anchor jump. Otherwise it can
+  // overwrite the previous page's scroll position or skip the filter header.
+  document.addEventListener('click', event => {
+    if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target?.closest?.('a[href^="#"]');
+    if (!link || link.getAttribute('download') !== null) return;
+    const target = link.getAttribute('target');
+    if (target && target !== '_self') return;
+    const page = link.getAttribute('href').slice(1);
+    if (!Object.hasOwn(pages, page)) return;
+    event.preventDefault();
+    if (current === page) {
+      window.scrollTo?.({top:0, behavior:'instant'});
+      $('page-title').focus({preventScroll:true});
+    } else go(page);
+  });
   window.addEventListener('hashchange', () => apply(window.location.hash.slice(1)));
   // pushState routes also participate in browser Back/Forward.
   window.addEventListener('popstate', () => apply(window.location.hash.slice(1)));
@@ -70,7 +88,7 @@ export function createWorkspacePages({document, window}) {
     get revision() { return revision; },
     openDetail({navigate = true} = {}) {
       detailAvailable = true; $('resume-detail').hidden = false;
-      if (navigate) { if (current !== 'activity-detail') detailReturn = current === 'review' ? 'review' : 'transactions'; go('activity-detail'); }
+      if (navigate) { if (current !== 'activity-detail') detailReturn = ['overview', 'review'].includes(current) ? current : 'transactions'; go('activity-detail'); }
     },
     closeDetail() { detailAvailable = false; $('resume-detail').hidden = true; go(detailReturn, {replace:true}); },
     clearDetail() {

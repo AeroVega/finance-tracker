@@ -54,7 +54,7 @@ test('physical media bounds and per-attempt guard failures reject before mutatio
  assert.equal(drive.mutations,before); await app.release();
 });
 
-test('selected manifest requires exact name, kind, explicit nontrash and stable metadata version',async()=>{
+test('selected manifest requires exact name, kind, explicit nontrash and a stable read bracket',async()=>{
  const drive=new HttpCatalogDrive(), app=lifecycle(drive); await app.start();
  const metadata=drive.files.get(app.manifestFileId).metadata, original=structuredClone(metadata);
  for(const corrupt of [m=>{delete m.trashed;},m=>{m.name='other';},m=>{m.appProperties.financeTrackerKind='other';}]) {
@@ -63,7 +63,8 @@ test('selected manifest requires exact name, kind, explicit nontrash and stable 
  }
  app.engine.physical.invalidateReadCache();
  let altered=false; drive.beforeResponse=({category,fileId})=>{if(category==='media'&&fileId===app.manifestFileId&&!altered){altered=true;metadata.version=String(Number(metadata.version)+1);}};
- await assert.rejects(app.engine.physical.readManifest(),{code:'manifest-version-mismatch'}); drive.beforeResponse=null;
+ const beforeMedia=drive.requests.filter(r=>r.category==='media'&&r.fileId===app.manifestFileId).length;
+ await app.engine.physical.readManifest();assert.equal(altered,true);assert.equal(drive.requests.filter(r=>r.category==='media'&&r.fileId===app.manifestFileId).length,beforeMedia+2,'version change triggers a stable reread');drive.beforeResponse=null;
  await app.release();
 });
 
@@ -78,15 +79,21 @@ test('private physical byte reuse is gated by fresh metadata and changed version
  await app.release();
 });
 
-test('scope closure catches midway metadata changes and escaped readers cannot reuse authority',async()=>{
+test('scope closure catches midway hash-binding changes and escaped readers cannot reuse authority',async()=>{
  const drive=new HttpCatalogDrive(), app=lifecycle(drive); await app.start();
  const snapshot=await app.readPartitionedSnapshot(); await snapshot.store.read(snapshot.rootHash);
  const file=[...drive.files.values()].find(f=>f.metadata.appProperties?.financeTrackerHash===snapshot.rootHash);
+ const originalHash=file.metadata.appProperties.financeTrackerHash;
+ file.metadata.appProperties.financeTrackerHash='0'.repeat(64);
  file.metadata.version=String(Number(file.metadata.version)+1);
- // Owned evidence remains provisional until final closure.
+ // A version-only change with identical bytes is revalidated separately. This
+ // changes the actual immutable binding; provisional evidence cannot hide it.
  await snapshot.store.read(snapshot.rootHash);
  await assert.rejects(app.assertCurrentManifest(snapshot.manifest),{code:'verification-metadata-changed'});
  assert.equal(app.state,'recovery-required'); await assert.rejects(snapshot.store.read(snapshot.rootHash),{code:'verification-scope-closed'});
+ // Repair the injected corruption before demonstrating verified recovery.
+ file.metadata.appProperties.financeTrackerHash=originalHash;
+ file.metadata.version=String(Number(file.metadata.version)+1);
  await app.recover(); const next=await app.readPartitionedSnapshot(); await app.assertCurrentManifest(next.manifest);
  await assert.rejects(next.store.read(next.rootHash),{code:'verification-scope-closed'}); await app.release();
 });
@@ -118,12 +125,12 @@ test('initialization selection metadata changes stop before staging or publicati
 test('eight MiB byte eviction never removes the complete scope metadata witnesses',async()=>{
  const files=new Map();let reads=0;
  for(let n=0;n<129;n++) {const bytes=new Uint8Array(65536);new DataView(bytes.buffer).setUint32(0,n);const id='invented-cache-'+n;
-  files.set(id,{bytes,metadata:{id,name:id,trashed:false,parents:['invented-folder'],version:'1',size:String(bytes.length),appProperties:{financeTrackerKind:'snapshot-object',financeTrackerHash:await partitionDigest(bytes)}}});}
+  files.set(id,{bytes,metadata:{id,name:id,trashed:false,parents:['invented-folder'],version:'1',size:String(bytes.length),appProperties:{financeTrackerKind:'protocol-object',financeTrackerHash:await partitionDigest(bytes)}}});}
  const adapter={folderId:'invented-folder',readMetadata:async id=>structuredClone(files.get(id).metadata),readBytes:async id=>{reads++;return files.get(id).bytes.slice();},readMetadataSnapshot:async()=>new Map([...files].map(([id,f])=>[id,structuredClone(f.metadata)]))};
  const physical=createPhysicalDriveAdapter(adapter,{manifestFileId:'unused',assertWritable:async()=>{}}), token=await physical.beginVerification();
  for(const id of files.keys()){await physical.readMetadata(id,{maxBytes:16384});await physical.readBytes(id,{maxBytes:65536});}
  assert.equal(reads,129);await physical.readMetadata('invented-cache-0',{maxBytes:16384});await physical.readBytes('invented-cache-0',{maxBytes:65536});assert.equal(reads,130,'first body was evicted');
- files.get('invented-cache-1').metadata.version='2';await assert.rejects(physical.closeVerification(token),{code:'verification-metadata-changed'});
+ for(let n=1;n<=33;n++)files.get(`invented-cache-${n}`).metadata.version='2';const beforeReverify=reads;await physical.closeVerification(token);assert.equal(reads,beforeReverify+33,'more than32 version-only changes trigger exact-byte revalidation');
 });
 
 test('scope invalidation while opening or draining cannot return a successful proof',async()=>{
@@ -135,7 +142,7 @@ test('scope invalidation while opening or draining cannot return a successful pr
  const closing=physical.closeVerification(token);physical.invalidateReadCache();finish();await assert.rejects(closing,{code:'verification-scope-closed'});
 });
 
-test('concurrent manifest assertions share the same unsettled closure and rejection',async()=>{
+test('concurrent manifest assertions share the same unsettled closure and revalidation',async()=>{
  const drive=new HttpCatalogDrive(),app=lifecycle(drive);await app.start();const snapshot=await app.readPartitionedSnapshot();await snapshot.store.read(snapshot.rootHash);
  const file=[...drive.files.values()].find(f=>f.metadata.appProperties?.financeTrackerHash===snapshot.rootHash);file.metadata.version='2';
  const original=app.transactionAdapter.readMetadataSnapshot.bind(app.transactionAdapter);let unblock,entered;
@@ -144,8 +151,8 @@ test('concurrent manifest assertions share the same unsettled closure and reject
  const first=app.assertCurrentManifest(snapshot.manifest).then(()=> 'success',e=>e.code);await started;
  let settled=false;const second=app.assertCurrentManifest(snapshot.manifest).then(()=>{settled=true;return 'success';},e=>{settled=true;return e.code;});
  await new Promise(resolve=>setTimeout(resolve,10));assert.equal(settled,false);
- unblock();assert.equal(await first,'verification-metadata-changed');assert.equal(await second,'verification-metadata-changed');assert.equal(app.state,'recovery-required');
- app.transactionAdapter.readMetadataSnapshot=original;await app.recover();await app.release();
+ unblock();assert.equal(await first,'success');assert.equal(await second,'success');assert.notEqual(app.state,'recovery-required');
+ app.transactionAdapter.readMetadataSnapshot=original;await app.release();
 });
 
 test('manifest cache always reads fresh strict metadata and refetches changed versions',async()=>{
@@ -221,4 +228,17 @@ test('missing v5 verifier registration refuses a copy before any financial write
   setIntervalImpl:()=>1,clearIntervalImpl:()=>{},lifecycleTarget:null});
  await assert.rejects(old.start(),{code:'verification-plan-unavailable'});assert.deepEqual(financial(),before);
  await assert.rejects(old.release(),{code:'recovery-required'});
+});
+
+test('snapshot scan bypass preserves cached bodies and checks uncached metadata witnesses',async()=>{
+ const files=new Map();let reads=0;
+ for(let n=0;n<129;n++) {const bytes=new Uint8Array(65536);new DataView(bytes.buffer).setUint32(0,n);const id='invented-cache-'+n;
+  files.set(id,{bytes,metadata:{id,name:id,trashed:false,parents:['invented-folder'],version:'1',size:String(bytes.length),appProperties:{financeTrackerKind:'snapshot-object',financeTrackerHash:await partitionDigest(bytes)}}});}
+ const adapter={folderId:'invented-folder',readMetadata:async id=>structuredClone(files.get(id).metadata),readBytes:async id=>{reads++;return files.get(id).bytes.slice();},readMetadataSnapshot:async()=>new Map([...files].map(([id,f])=>[id,structuredClone(f.metadata)]))};
+ const physical=createPhysicalDriveAdapter(adapter,{manifestFileId:'unused',assertWritable:async()=>{}}), token=await physical.beginVerification();
+ for(const id of files.keys()){await physical.readMetadata(id,{maxBytes:16384});await physical.readBytes(id,{maxBytes:65536});}
+ assert.equal(reads,129);await physical.readMetadata('invented-cache-0',{maxBytes:16384});await physical.readBytes('invented-cache-0',{maxBytes:65536});assert.equal(reads,129,'scan does not evict the first cached snapshot');
+ await physical.readMetadata('invented-cache-128');await physical.readBytes('invented-cache-128',{maxBytes:65536});assert.equal(reads,130,'overflow snapshot bypassed admission');
+ files.get('invented-cache-0').metadata.version='2';files.get('invented-cache-128').metadata.version='2';
+ const beforeReverify=reads;await physical.closeVerification(token);assert.equal(reads,beforeReverify+2,'both cached and bypassed bodies require exact revalidation after metadata changes');
 });

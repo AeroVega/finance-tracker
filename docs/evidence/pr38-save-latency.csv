@@ -1,0 +1,19 @@
+run,variant,activities,latency_ms,elapsed_ms,requests,uploaded_bytes,downloaded_bytes,network_concurrency,mutations,source_fingerprint,note
+A1,baseline,253,100,30654.2,276,207020,922186,1,22,bf91d0bbaa2f7b70bf2aedd9a0abcc25e7102f824e475b49bc0cb339f8643502,
+B1,first_candidate,253,100,18278.989,198,207020,638800,4,22,eb4fa6bd393eb6137cc06218df569ddff9a742b64383ea5777d5638b18d02cca,
+B2,first_candidate,253,100,18407.566,198,207020,638800,4,22,eb4fa6bd393eb6137cc06218df569ddff9a742b64383ea5777d5638b18d02cca,
+A2,baseline,253,100,30840.042,276,207020,922186,1,22,bf91d0bbaa2f7b70bf2aedd9a0abcc25e7102f824e475b49bc0cb339f8643502,Short focused tests overlapped; omitted from timing summary
+C1,before_scan_cache_change,253,100,17998.97,186,207020,638776,4,22,748764672d43ba6aabc5f0a334f1284b943f4b581363fc7f4b3b0d1ba368e755,
+C2,before_scan_cache_change,253,100,17834.648,186,207020,638776,4,22,748764672d43ba6aabc5f0a334f1284b943f4b581363fc7f4b3b0d1ba368e755,
+A3,baseline,253,100,30924.385,276,207020,922186,1,22,bf91d0bbaa2f7b70bf2aedd9a0abcc25e7102f824e475b49bc0cb339f8643502,
+A4,baseline,253,400,116757.833,290,207448,925994,2,24,bf91d0bbaa2f7b70bf2aedd9a0abcc25e7102f824e475b49bc0cb339f8643502,
+C3,before_scan_cache_change,253,400,66343.387,193,207234,640680,4,23,748764672d43ba6aabc5f0a334f1284b943f4b581363fc7f4b3b0d1ba368e755,
+C4,before_scan_cache_change,253,400,66491.279,193,207234,640680,4,23,748764672d43ba6aabc5f0a334f1284b943f4b581363fc7f4b3b0d1ba368e755,
+A5,baseline,253,400,117208.838,290,207448,925994,2,24,bf91d0bbaa2f7b70bf2aedd9a0abcc25e7102f824e475b49bc0cb339f8643502,
+denseA,baseline,2340,0,18421.41,1936,327129,57382962,1,33,bf91d0bbaa2f7b70bf2aedd9a0abcc25e7102f824e475b49bc0cb339f8643502,Single-run dense workload check
+denseC,before_scan_cache_change,2340,0,12661.38,1159,327129,33254593,3,33,748764672d43ba6aabc5f0a334f1284b943f4b581363fc7f4b3b0d1ba368e755,Single-run dense workload check
+final100a,final_candidate,253,100,18168.725,186,207020,638776,4,22,b9c24afc170faee5beda64a125a4266e529ea5af03ad3d7f2d4066cd7404e953,Final exact source; no concurrent test workload
+final100b,final_candidate,253,100,18198.339,186,207020,638776,4,22,b9c24afc170faee5beda64a125a4266e529ea5af03ad3d7f2d4066cd7404e953,Final exact source; no concurrent test workload
+final400a,final_candidate,253,400,66282.189,193,207234,640680,4,23,b9c24afc170faee5beda64a125a4266e529ea5af03ad3d7f2d4066cd7404e953,Final exact source; no concurrent test workload
+final400b,final_candidate,253,400,66549.866,193,207234,640680,4,23,b9c24afc170faee5beda64a125a4266e529ea5af03ad3d7f2d4066cd7404e953,Final exact source; no concurrent test workload
+finalDense,final_candidate,2340,0,12458.178,361,327129,8449373,4,33,b9c24afc170faee5beda64a125a4266e529ea5af03ad3d7f2d4066cd7404e953,Final exact source; dense timing single-run observation

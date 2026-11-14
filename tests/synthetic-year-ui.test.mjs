@@ -17,7 +17,7 @@ import { pageController, deferred } from './helpers/page-controller.mjs';
 // The physical v5 fixture controls cancellation, busy and failure ordering.
 // The real HTTP lifecycle/controller test below covers connection orchestration.
 async function yearPage() {
-  const state = { connectionError: null, saveGate: null, readbackGate: null, loseCommitResponse: false, releaseVerified: true, connects: [], writes: 0, releases: 0, snapshotReads: 0 };
+  const state = { connectionError: null, saveGate: null, readbackGate: null, postCommitPending: false, loseCommitResponse: false, releaseVerified: true, connects: [], writes: 0, releases: 0, snapshotReads: 0 };
   const physical = await createPagedFixture();
   const {manifest,objects} = physical;
   const readSnapshot = physical.lifecycle.readPartitionedSnapshot, saveRoot = physical.lifecycle.savePartitionedRoot;
@@ -29,19 +29,23 @@ async function yearPage() {
     async readObject(path) { return objects[path]; },
     async readPartitionedSnapshot() {
       state.snapshotReads++;
-      if (manifest.revision > 0 && state.readbackGate) await state.readbackGate.promise;
       return readSnapshot();
     },
     async savePartitionedRoot(transaction) {
       assert.deepEqual(transaction.expectedBase, manifest);
       if (state.saveGate) await state.saveGate.promise;
       state.writes++;
-      await saveRoot(transaction);
+      const result=await saveRoot(transaction);
       await storage.options.afterMutation();
       if (state.loseCommitResponse) {
         state.loseCommitResponse = false; lifecycle.state = 'recovery-required'; lifecycle.acceptingWrites = false;
         throw Object.assign(new Error('Invented lost response after commit'), { code: 'transaction-unresolved' });
       }
+      // Model lifecycle final publication/readback verification, not a redundant
+      // store reload. The UI must remain pending until the verified result returns.
+      state.postCommitPending=true;
+      try {if(state.readbackGate)await state.readbackGate.promise;return result;}
+      finally {state.postCommitPending=false;}
     }
   };
   class Storage {
@@ -104,7 +108,7 @@ test('pending upload disables repeated clicks and never reports success before c
 test('committed upload is not successful while post-commit readback is still pending', async () => {
   const h = await yearPage(); h.state.readbackGate = deferred();
   await h.choose('empty-confirmed', true); await h.click('upload');
-  await h.until(() => h.state.writes === 1 && h.state.snapshotReads >= 2);
+  await h.until(() => h.state.writes === 1 && h.state.postCommitPending);
   assert.equal(h.manifest.revision, '1'); assert.equal(h.get('preview').disabled, true);
   assert.notEqual(h.get('result').dataset.state, 'success');
   h.state.readbackGate.resolve(); await h.until(() => !h.get('preview').disabled);

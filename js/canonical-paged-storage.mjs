@@ -145,7 +145,8 @@ export class PagedCanonicalLedgerStore {
       if(same(ledger,this.ledger)) {await this.lifecycle.assertCurrentManifest(this.base);return structuredClone(this.ledger);}
       const expectedBase=structuredClone(this.base),baseLedger=structuredClone(this.ledger),semanticVersion=this.semanticVersion;
       this.base=null;
-      await this.lifecycle.savePartitionedRoot({expectedBase,semanticVersion,operation:'synthetic-canonical-import',transactionId:this.crypto.randomUUID(),
+      let preparedAudit,preparedRoot;
+      const committed=await this.lifecycle.savePartitionedRoot({expectedBase,semanticVersion,operation:'synthetic-canonical-import',transactionId:this.crypto.randomUUID(),
         prepare:async({rootHash:baseRootHash,semanticVersion:verifiedVersion,store})=>{
           const profile=canonicalProfileForVerifier(verifiedVersion);
           if(profile.verifier!==semanticVersion)fail('canonical-profile-mismatch');
@@ -163,14 +164,24 @@ export class PagedCanonicalLedgerStore {
             const raw=await preparationStore.read(hash,options);reachable.add(hash);return raw;
           }},rootHash);
           if(!same(audited.ledger,ledger))fail('canonical-preparation-mismatch');
+          preparedAudit=audited;preparedRoot=rootHash;
           const objects=[];
           for(const sha256 of reachable)if(prepared.has(sha256))objects.push({kind:'data-object',identity:sha256,sha256,byteLength:prepared.get(sha256).length});
           objects.sort((a,b)=>a.sha256<b.sha256?-1:a.sha256>b.sha256?1:0);
           return {rootHash,objects,preparationStore};
         }});
-      const verified=await this.loadVerified();
-      if(!same(verified,ledger)){this.base=null;fail('canonical-readback-mismatch');}
-      return verified;
+      // The lifecycle has independently verified these exact prepared bytes,
+      // their financial graph/history, durable publication and closing metadata.
+      // Reopening here repeated that whole audit without new user work. Adopt
+      // only the locally audited ledger bound to the exact committed root.
+      if(!preparedAudit||committed?.manifest?.root!==preparedRoot||committed.manifest.pending!==null||
+         committed.manifest.databaseId!==expectedBase.databaseId||committed.manifest.copyId!==expectedBase.copyId||
+         committed.manifest.revision!==String(BigInt(expectedBase.revision)+1n)||
+         !['committed','already-committed'].includes(committed.status))fail('canonical-readback-mismatch');
+      this.base=structuredClone(committed.manifest);this.ledger=preparedAudit.ledger;
+      this.reader=null;this.valueCodec=preparedAudit.valueCodec??null;
+      this.monthIndex=createCanonicalMonthIndex(this.ledger);this.monthIndexStatus='verified';
+      return structuredClone(this.ledger);
     }finally{this.busy=false;}
   }
 }

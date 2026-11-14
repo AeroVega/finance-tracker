@@ -1,5 +1,10 @@
 # Focused mobile workspace pages
 
+The [PR38 mobile/tablet design](MOBILE_UI_DESIGN.md) supersedes the visual
+decisions below while retaining this mounted-page architecture. The Overview
+and Position routes are now labeled Home and Accounts. Earlier test results
+below describe their original revision.
+
 **Implemented, November 10, 2026:** the owner requested feature-focused pages after reviewing the iPhone dashboard. This presentation change stays within PR36's synthetic-only scope. It does not change financial calculations, storage formats, production permissions or deployment behavior.
 
 ## Design decision

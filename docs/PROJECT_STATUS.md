@@ -1,5 +1,134 @@
 # Project status
 
+## Staged-save performance, November 12, 2026
+
+The owner completed a live synthetic-year seed, then reported a single staged
+change taking over two minutes to save. The PR38 follow-up removes redundant
+readbacks, repeated staging ownership requests and an automatic second reopen;
+it bounds independent immutable uploads to four and prevents full snapshot scans
+from flushing the 8 MiB byte cache. Publication still verifies remote ownership,
+exact base, financial history and durable bytes. No storage-format change or
+real-data operation is included.
+
+See [the measured comparison and limitations](PR38_SAVE_PERFORMANCE.md) before
+interpreting this as a live speed guarantee. Physical Safari/Drive validation
+remains the next owner check; ten-second saves are not established.
+
+## Safe diagnostic code follow-up, November 12, 2026
+
+**Implemented in the local `feat/apple-pwa-ui` working tree:** synthetic-year
+reports now retain allowlisted canonical v5 root, locator and Drive transport
+codes through bounded causes, include the page phase and verified durable-write
+count, and distinguish a missing adapter guard from a failure before the guard
+with a bounded operation label and underlying code. A manifest read mismatch
+also reports a fixed reason for metadata changing across the read, a declared
+size disagreement, or both. The diagnostic remains privacy-safe. The owner
+reported (**User-confirmed**) `manifest-version-mismatch` during `connecting`
+after 8 verified durable writes on build `4d1dfe7`; code inspection (**Verified**)
+shows that this code covers the two manifest read checks, but the report did not
+distinguish them. `node --check` and `git diff --check` pass for the added reason.
+Automated tests were not run. This change is not in the deployed build; the next
+report from a build containing it can distinguish the mismatch category, but will
+not establish the provider-side cause by itself.
+
+The owner then reported (**User-confirmed**) `adapter-precondition-failed` with
+cause `verification-metadata-changed` at `root-manifest-admitted`, after 66
+verified durable writes on build `1845971`. The guard compares metadata used in
+the verification phase with a fresh folder listing before publication. The
+report does not identify which file or metadata field differed. The working tree
+now adds a privacy-safe missing/changed reason and allowlisted field names; the
+updated diagnostic has not yet been built or deployed. A mismatch classification
+does not by itself establish why Drive returned different metadata or prove
+whether recovery is needed.
+
+On build `9db2acf`, the owner reported (**User-confirmed**) that the only changed
+field was Drive `version`. The application now treats version-only changes as
+revalidation triggers in immutable reads, locator reads, manifest reads and
+verification closure. It retries a stable metadata bracket, and at verification
+closure rereads exact immutable bytes and checks their stored size and SHA-256.
+(**Implemented in the working tree; JavaScript syntax and diff checks passed;
+automated tests not run; not deployed.**) Other
+metadata changes, missing objects, hash mismatches and unsettled versions still
+stop publication. Google documents [`version`](https://developers.google.com/workspace/drive/api/reference/rest/v3/files)
+as advancing for any server-side change, including invisible changes; it is
+therefore a freshness signal, not a content hash. Rechecks are bounded and do
+not provide provider-side compare-and-swap. Verification closure allows up to
+512 version-changed files and 16 MiB of re-read content per phase; a higher
+count/byte limit remains an explicit stop with bounded counts in diagnostics.
+
+The owner reports (**User-confirmed**) that deployed build `a510b09` completed
+synthetic-year seeding and verified the exact saved year: 71 verified durable
+writes in 5m06s. This acceptance followed the version-only revalidation change.
+It confirms the reported synthetic operation succeeded; it is not independent
+live-Drive instrumentation or production approval.
+
+## Combined PR37 storage and PR38 interface, November 12, 2026
+
+**Implemented:** merge PR37 head `8e340b3` into PR38 head `75e295e`, preserving
+both histories. The combined branch retains the v5-only storage, session fixes,
+shared diagnostics and audit/paging improvements with PR38's mobile interface.
+A bounded Home-view cache prevents its recent-record read from evicting Activity's
+filtered-page cache on every render; ledger, account and month changes invalidate it.
+
+**Verified locally:** the final complete extended suite passes **1,927/1,927**
+on Node 24.22.1 in 529.786 seconds, with no failures, skips or cancellations.
+The new Home-cache regression fails before the integration fix and passes after;
+it covers search/pagination reuse and scope/correction invalidation. The initial
+combined controller, routing and diagnostic subset passed 90/90. Runtime syntax
+and documentation checks pass. Independent integration review found no remaining
+blocker. Earlier sections below record their original revision's evidence, not
+validation of this combined tree.
+
+**Open:** rendered Chromium checks could not launch because this executor refuses
+browser process sockets (`EPERM`), including the permitted elevated retry. Earlier
+PR38 render results do not validate this merge. Physical Safari, Home Screen and
+live Drive behavior require owner acceptance. No manual deployment, main merge,
+PR closure or real-data operation was performed; production remains **NO-GO**.
+
+## PR38 adversarial review, November 11, 2026
+
+**Implemented:** preserve unfinished transaction edits on same-record reentry,
+confirm destructive editor changes, expose excluded posting states, control
+route-link scroll behavior and make chrome scroll in short phone windows.
+The [adversarial review](PR38_ADVERSARIAL_REVIEW.md) records the four confirmed
+findings, baseline reproductions, what works well and the implemented suggestions.
+**Verified:** 2,009/2,009 extended tests pass on Node 24.22.1 in 318.394 seconds,
+with no failures, skips or cancellations. All 82 focused controller/routing
+checks, nine rendered layouts, a separate posting-state flow, syntax,
+documentation and diff checks pass. Four regressions fail for the expected
+reasons at the isolated reviewed head and pass after repair.
+Physical Apple-device behavior remains **Unverified**. No merge,
+deployment or live Drive operation was performed.
+
+## Mobile and tablet design at 1874860 in PR38, November 11, 2026
+
+**Implemented on `feat/apple-pwa-ui`:** Home with recent scoped source activity
+and review status, an expandable filter row, tappable transaction records,
+balances before editors, correction-first detail and a compact tablet rail.
+The [design contract](MOBILE_UI_DESIGN.md) connects the first-party finance-app
+research to the implementation and acceptance checks. The Apple installation
+foundation remains in place. **Verified:** 2,003/2,003 extended tests pass on
+Node 24.22.1 in 350.519 seconds, with no failures, skips or cancellations. The
+76 focused controller/routing tests, eight Chromium layouts, tablet-to-phone
+resize checks, anonymous assets, syntax, documentation and diff checks pass.
+Physical Apple-device behavior remains **Unverified**. Financial calculations and storage
+are unchanged. No merge, deployment or live Drive operation was performed.
+
+## Apple web app UI, November 11, 2026
+
+Initial foundation at `2198a61`, before the design follow-up above.
+**Implemented on a separate branch from `feat/scalable-storage-foundation`:**
+install metadata and opaque icons, additive safe-area spacing, a sticky mobile
+header, measured tab/draft clearance, touch feedback and enlarged-text wrapping.
+Financial logic and persistence are unchanged. The focused
+[UI contract and browser evidence](APPLE_WEB_APP.md) records seven passing Chromium
+layout scenarios and local anonymous asset checks. **Verified:** the required
+extended suite passed 1,999/1,999 tests on Node 24.22.1 in 335.845 seconds, with
+no failures, skips or cancellations. Syntax, documentation and diff checks pass.
+The complete run used the outer executor after sandboxed child-process tests
+reported `EPERM`. Physical Apple-device
+appearance, keyboard and Home Screen behavior remain **Unverified**. This work
+does not deploy or merge the storage branch, or expand production authorization.
 ## Audit and paging efficiency, November 12, 2026
 
 **Implemented and verified locally:** canonical audits use one checked tree scan,
