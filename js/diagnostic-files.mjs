@@ -43,6 +43,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/google-config-validation.mjs",
   "js/google-config.js",
   "js/google-startup-diagnostics.mjs",
+  "js/immutable-content-type.mjs",
   "js/immutable-page-tree.mjs",
   "js/import-reconciliation.mjs",
   "js/legacy-canonical-evidence.mjs",

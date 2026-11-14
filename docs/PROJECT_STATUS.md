@@ -1,5 +1,27 @@
 # Project status
 
+## JSON locator MIME correction, November 14, 2026
+
+**User-confirmed:** the preserved diagnostic on `0d52766` identifies a JSON
+receipt where the immutable verifier expected octet-stream, in the paged locator
+write path. **Verified:** locator roots/pages are canonical JSON, but both their
+transport and receipt verifier previously used a blanket binary MIME contract.
+The provider-side reason for returning JSON despite that request remains open.
+
+**Implemented:** a shared exact-kind policy requests and verifies JSON for
+`locator-catalog` and `locator-catalog-page` only. Other immutable payloads retain
+the binary contract. No broad MIME allowance, weaker hash/ownership check, retry
+increase or rewrite of historical objects was added. The
+[paged storage contract](PAGED_STORAGE_MILESTONE.md#immutable-locator-mime-contract)
+records old-copy and HTTP 409 compatibility. Synthetic tests reproduce the prior
+failure with matching bytes and a JSON receipt, and cover both MIME headers,
+legacy reads, native-Google refusal, changed bytes/bindings and unknown outcomes.
+**Verified locally:** 2,045/2,045 extended synthetic tests passed on Node 24.22.1
+in 564.7 seconds, concurrency one and 768 MiB heap. The focused integration
+suite passed 87/87; independent review found no blocker. Syntax, registered-code
+audit, generated reference, documentation and diff checks passed.
+Live initialization and one-change save/reopen remain unverified on this fix.
+
 ## Synthetic-year diagnostic forwarding, November 14, 2026
 
 **User-confirmed:** a synthetic-year initialization attempt on `e07ed7e`

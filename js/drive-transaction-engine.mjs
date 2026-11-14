@@ -1,3 +1,4 @@
+import { immutableContentType } from './immutable-content-type.mjs';
 import { markRequestEndpoint } from './drive-request-metrics.mjs';
 import { createDriveResponseLimits, readBoundedDriveBytes, readBoundedDriveJson, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
 import { copyOwnedBytes } from "./byte-ownership.mjs";
@@ -298,14 +299,15 @@ export class GoogleDriveTransactionAdapter {
     const actualHash = await hashBytes(bytes, this.crypto);
     if (actualHash !== expectedSha256) fail("content-hash-mismatch", "The bytes do not match the planned SHA-256.", { name });
     const boundary = `ft-${fileId.replace(/[^a-zA-Z0-9]/g, "")}`;
+    const mimeType = immutableContentType(kind);
     const metadata = {
       id: fileId,
       name,
-      mimeType: "application/octet-stream",
+      mimeType,
       parents: [this.folderId],
       appProperties: { [TAG + "Kind"]: kind, [TAG + "Transaction"]: transactionId, [TAG + "Hash"]: actualHash }
     };
-    const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`);
+    const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`);
     const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
     const body = joinBytes([head, bytes, tail]);
     const url = `${UPLOAD}/files?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`;

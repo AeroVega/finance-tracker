@@ -1,3 +1,4 @@
+import {immutableContentType} from './immutable-content-type.mjs';
 import {diagnosticMimeClass} from './storage-write-diagnostic.mjs';
 import {locatorDecodeProfile,decodeLocatorBytes} from './locator-codec.mjs';
 import {copyOwnedBytes} from './byte-ownership.mjs';
@@ -310,7 +311,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       // Own the request before awaiting the adapter; a caller must not change
       // the binding against which its detached GET receipt is checked.
       const expected={fileId:input.fileId,name:input.name,kind:input.kind,transactionId:input.transactionId,
-        sha256:input.expectedSha256,maxBytes:Math.min(input.maxBytes??65536,65536)};
+        sha256:input.expectedSha256,mimeType:immutableContentType(input.kind),maxBytes:Math.min(input.maxBytes??65536,65536)};
       const result=await adapter.createImmutable(input);
       liveRead(owner,input.signal);
       if(!result?.readback)return result; // Generic adapters retain independent readback.
@@ -319,7 +320,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       const mismatchFields=()=>{
         const fields=[];
         if(m.name!==expected.name)fields.push('name');
-        if(m.mimeType!=='application/octet-stream')fields.push('mimeType');
+        if(m.mimeType!==expected.mimeType)fields.push('mimeType');
         if(m.appProperties?.financeTrackerKind!==expected.kind||
            m.appProperties?.financeTrackerTransaction!==expected.transactionId||
            m.appProperties?.financeTrackerHash!==expected.sha256)fields.push('appProperties');
@@ -338,7 +339,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
             reason:'metadata-changed',fields,
             ...(fields.includes('mimeType')?{
               stage:'immutable-create-receipt',
-              expectedMimeClass:diagnosticMimeClass('application/octet-stream'),
+              expectedMimeClass:diagnosticMimeClass(expected.mimeType),
               actualMimeClass:diagnosticMimeClass(m.mimeType)
             }:{})
           });

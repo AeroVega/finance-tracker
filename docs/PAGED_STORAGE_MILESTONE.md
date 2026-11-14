@@ -157,3 +157,27 @@ node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs
 ```
 
 No merge, deployment, live service or real-data validation is implied.
+
+
+## Immutable locator MIME contract
+
+New immutable objects with internal kinds `locator-catalog` and
+`locator-catalog-page` are canonical JSON. The shared
+`js/immutable-content-type.mjs` policy selects `application/json` for both the
+Drive upload metadata/media header and the detached create-receipt verifier.
+Other immutable kinds retain `application/octet-stream`, regardless of filename
+or a caller-supplied MIME property. Native Google Workspace types, arbitrary
+text types and parameterized alternatives are not accepted as new receipts.
+
+Historical locator reads remain compatible with previously verified
+`application/octet-stream` objects. No existing file is rewritten, migrated or
+renamed. Fresh metadata witnesses still include MIME, so a change during a
+verification bracket is refused. Hash, exact ID, size, typed binding, ownership,
+cancellation and bounded same-ID readback checks remain mandatory.
+
+A create conflict (HTTP 409) is checked against the same newly requested MIME
+contract and exact bytes. A matching JSON object can be verified without another
+write; an old octet-stream object at that same ID is not silently adopted or
+rewritten. It remains an unresolved write requiring evidence preservation. This
+does not change independent historical reads or authorize recovery of an
+already-ambiguous folder.
