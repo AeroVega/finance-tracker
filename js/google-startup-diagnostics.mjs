@@ -1,11 +1,4 @@
-const messages = Object.freeze({
-  "google-config-network": "Google deployment configuration could not be reached because the request failed. Local preview still works; saved copies are unavailable until the configuration can be loaded.",
-  "google-config-http": "Google deployment configuration could not be loaded (HTTP {status}). Local preview still works; saved copies are unavailable.",
-  "google-config-json": "The deployed Google configuration file is not valid JSON. Local preview still works; saved copies are unavailable.",
-  "google-config-invalid": "The deployed Google configuration is incomplete or invalid. Check the Google deployment settings. Local preview still works.",
-  "google-libraries-unavailable": "Google's browser libraries did not load ({components}). This is a Google script/network or browser-blocking problem, not a missing deployment configuration. Local preview still works.",
-  "google-picker-unavailable": "Google Picker could not initialize. The deployment configuration was loaded, but the Picker library failed. Check Google script access and browser content blockers. Local preview still works."
-});
+import {startupMessageTemplates as messages} from './error-registry.mjs';
 
 export function googleStartupError(code, message, details = {}) {
   return Object.assign(new Error(message), { code, ...details });

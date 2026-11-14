@@ -41,3 +41,5 @@ Update [project status](PROJECT_STATUS.md) for material implementation/evidence 
 Use **Verified** for inspectable source/test evidence, **User-confirmed** for attributed owner decisions/observations, **Hypothesis** for unproven explanations and **Open** for unresolved work. Preserve dates and source revisions. When documents conflict, use the newest dated status evidence, the focused technical contract for behavior, and [AGENTS.md](../AGENTS.md) for permissions. Flag and fix stale summaries rather than silently combining them.
 
 - [Shared application diagnostics](APP_DIAGNOSTICS.md) — safe reports, codes, clipboard fallback and coverage limits.
+
+- [Diagnostic code index](ERROR_CODES.md): generated code/kind reference; fixed explanations remain in the registry.

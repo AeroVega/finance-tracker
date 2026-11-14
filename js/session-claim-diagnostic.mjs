@@ -6,7 +6,8 @@ const CHECKS = new Set([
   'closing-properties-missing', 'closing-version-invalid',
   'closing-id-changed', 'closing-name-changed', 'closing-mime-changed',
   'closing-parents-changed', 'closing-session-property-changed',
-  'closing-version-changed', 'coordinator-read-failed', 'coordinator-record-changed'
+  'closing-version-changed', 'coordinator-read-failed', 'coordinator-record-changed',
+  'coordinator-recovery-write-failed', 'coordinator-heartbeat-write-failed', 'coordinator-claim-write-failed'
 ]);
 
 export function sessionClaimDiagnostic(error) {

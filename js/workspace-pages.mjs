@@ -10,7 +10,7 @@ const pages = {
   storage: {title:'Storage', description:'Your saved copy, local draft and recovery controls.', group:'storage'},
   'activity-detail': {title:'Transaction detail', description:'Inspect the evidence before making a change.', group:'transactions'}
 };
-export function createWorkspacePages({document, window}) {
+export function createWorkspacePages({document, window, onNavigate = () => {}}) {
   const $ = id => document.getElementById(id);
   const scrollPositions = new Map();
   let current = null, revision = 0, loaded = false, detailAvailable = false, detailReturn = 'transactions';
@@ -28,6 +28,7 @@ export function createWorkspacePages({document, window}) {
     if (current === target) return;
     if (current) scrollPositions.set(current, window.scrollY || 0);
     current = target; revision++;
+    try { onNavigate(target); } catch { /* Observational only; navigation must not depend on diagnostics. */ }
     const info = pages[target];
     for (const key of Object.keys(pages)) $(key).hidden = key !== target;
     for (const key of ['overview','transactions','position','review','storage']) {

@@ -1,3 +1,4 @@
+import {leaveBreadcrumb} from '../js/error-reporting.mjs';
 import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
 import { sessionClaimDiagnostic } from '../js/session-claim-diagnostic.mjs';
 import { storageWriteDiagnostic } from '../js/storage-write-diagnostic.mjs';
@@ -9,10 +10,13 @@ import { ApplicationStorageLifecycle } from '../js/application-storage-lifecycle
 import { initializePagedCanonicalCopy, inspectPagedCanonicalCopy } from '../js/paged-application-storage.mjs';
 import { canonicalPartitionVerificationPlans } from '../js/canonical-paged-storage.mjs';
 import { GoogleDriveTransactionAdapter } from '../js/drive-transaction-engine.mjs';
-import { requireEmptySyntheticFolder } from '../js/dashboard-synthetic-storage.mjs';
+import { DashboardSyntheticStorage, requireEmptySyntheticFolder } from '../js/dashboard-synthetic-storage.mjs';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
 import { HttpCatalogDrive } from './helpers/http-catalog-drive.mjs';
 import { pageController, deferred } from './helpers/page-controller.mjs';
+
+const findNode=(node,predicate)=>predicate(node)?node:node.children.map(child=>findNode(child,predicate)).find(Boolean);
+const diagnosticText=panel=>findNode(panel,node=>node.tagName==='TEXTAREA').value;
 
 // The physical v5 fixture controls cancellation, busy and failure ordering.
 // The real HTTP lifecycle/controller test below covers connection orchestration.
@@ -53,7 +57,15 @@ async function yearPage() {
     async prepare() {}
     async connect(options) {
       state.connects.push(options);
-      if (state.connectionError) throw typeof state.connectionError === 'string' ? Object.assign(new Error('Private provider detail must not appear'), { code: state.connectionError }) : state.connectionError;
+      if (state.connectionError) {
+        const error=typeof state.connectionError === 'string' ? Object.assign(new Error('Private provider detail must not appear'), {code:state.connectionError}) : state.connectionError;
+        if(state.forwardConnectionError) {
+          const dashboard=new DashboardSyntheticStorage({diagnosticSurface:this.options.diagnosticSurface,onStatus:this.options.onStatus});
+          const failed={diagnosticSurface:dashboard.diagnosticSurface,onStatus:status=>dashboard.publish(status.state,status.message,'error',{code:status.code},status.reportId)};
+          ApplicationStorageLifecycle.prototype.publish.call(failed,'recovery-required','private-status-canary',error.code,error);
+        }
+        throw error;
+      }
       assert.ok(options.requireEmpty || options.requireExisting);
       if (options.requireEmpty) assert.equal(manifest.revision, '0', 'Fresh upload must not replace a saved copy');
       if (options.requireExisting) assert.ok(manifest.revision > 0, 'Reconnect requires the saved copy');
@@ -327,9 +339,14 @@ test('unresolved setup shows safe readback cause and never initiates automatic r
   await h.upload();
   assert.equal(h.state.connects.length, 1);
   assert.equal(h.diagnostics().length, 1);
-  assert.match(h.diagnostics()[0].children[1].children[0].value, /object-not-found/);
-  assert.match(h.diagnostics()[0].children[1].children[0].value, /completed/);
-  assert.doesNotMatch(h.diagnostics()[0].children[1].children[0].value, /private-/);
+  const panel=h.diagnostics()[0], report=JSON.parse(diagnosticText(panel));
+  assert.equal(panel.attributes.role,'alert');
+  assert.equal(findNode(panel,node=>node.tagName==='DETAILS').open,true);
+  assert.equal(report.error.kind,'integrity');
+  assert.equal(report.error.code,'write-unresolved');
+  assert.match(diagnosticText(panel), /object-not-found/);
+  assert.match(diagnosticText(h.diagnostics()[0]), /completed/);
+  assert.doesNotMatch(diagnosticText(h.diagnostics()[0]), /private-/);
   assert.match(h.get('result').textContent, /Preserve this folder and leave this tab open/);
   assert.doesNotMatch(h.get('result').textContent, /reconnect to verify before retrying/);
   await new Promise(setImmediate);
@@ -348,14 +365,82 @@ test('unconfirmed session shows only a fixed check and does not retry or reconne
   await h.upload();
   assert.equal(h.state.connects.length, 1);
   assert.equal(h.diagnostics().length, 1);
-  assert.deepEqual(JSON.parse(h.diagnostics()[0].children[1].children[0].value).detail,
+  assert.deepEqual(JSON.parse(diagnosticText(h.diagnostics()[0])).error.chain[0].context,
     {code: 'ownership-unknown', check: 'closing-version-changed'});
   assert.match(h.get('result').textContent, /Preserve this folder and marker/);
-  assert.doesNotMatch(h.diagnostics()[0].children[1].children[0].value + h.get('result').textContent, /private-/);
+  assert.doesNotMatch(diagnosticText(h.diagnostics()[0]) + h.get('result').textContent, /private-/);
   await new Promise(setImmediate);
   assert.equal(h.state.connects.length, 1);
   assert.equal(h.state.writes, 0);
   assert.equal(h.intervals.size, 0);
   await h.click('preview'); await h.until(() => !h.get('preview').disabled);
   assert.equal(h.diagnostics().length, 0);
+});
+
+test('synthetic-year status panel preserves lifecycle MIME cause instead of replacing it with code only',async()=>{
+  leaveBreadcrumb({e:'action.start',actionId:'workspace-action'});
+  const h=await yearPage();
+  const dashboard=new DashboardSyntheticStorage({diagnosticSurface:h.storage.options.diagnosticSurface,onStatus:h.storage.options.onStatus});
+  const error=Object.assign(new Error('private-provider-canary'),{code:'write-unresolved',details:{
+    createFailed:true,
+    createError:Object.assign(new Error('private-mime-canary'),{code:'hash-mismatch',details:{reason:'metadata-changed',fields:['mimeType'],stage:'immutable-create-receipt',expectedMimeClass:'octet-stream',actualMimeClass:'json'}}),
+    readbackError:Object.assign(new Error('private-readback-canary'),{code:'verification-scope-closed'})
+  }});
+  const lifecycle={diagnosticSurface:dashboard.diagnosticSurface,onStatus:status=>dashboard.publish(status.state,status.message,'error',{code:status.code},status.reportId)};
+  ApplicationStorageLifecycle.prototype.publish.call(lifecycle,'recovery-required','private-status-canary','write-unresolved',error);
+  assert.equal(h.diagnostics().length,1);
+  const report=JSON.parse(diagnosticText(h.diagnostics()[0]));
+  assert.equal(report.where.surface,'synthetic-year');
+  assert.equal(report.state.lifecycle,'recovery-required');
+  assert.equal(report.error.chain[0].name,'Error');
+  assert.equal(report.error.chain[0].context.create,'hash-mismatch');
+  assert.equal(report.error.chain[0].context.readback,'verification-scope-closed');
+  assert.equal(report.error.chain.find(link=>link.code==='hash-mismatch').context.actualMimeClass,'json');
+  assert.equal(report.error.writeOutcome,'unknown');assert.equal(report.error.retryable,false);
+  assert.doesNotMatch(diagnosticText(h.diagnostics()[0]),/private-.*canary/);
+  assert.equal(h.state.connects.length,0);assert.equal(h.state.writes,0);
+});
+
+for(const acceptedStack of [false,true])test(`connection status and catch preserve rich report with acceptedStack=${acceptedStack}`,async()=>{
+  leaveBreadcrumb({e:'action.start',actionId:'workspace-action'});
+  const h=await yearPage();
+  const error=Object.assign(new Error('private-provider-canary'),{code:'write-unresolved',details:{createFailed:true,
+    createError:Object.assign(new Error('private-create-canary'),{code:'hash-mismatch',details:{reason:'metadata-changed',fields:['mimeType'],stage:'immutable-create-receipt',expectedMimeClass:'octet-stream',actualMimeClass:'json'}}),
+    readbackError:Object.assign(new Error('private-readback-canary'),{code:'verification-scope-closed'})}});
+  error.stack=acceptedStack?`Error: private-canary\n    at synthetic (${new URL('../js/paged-physical-locators.mjs',import.meta.url).href}:245:13)`:undefined;
+  error.details.createError.stack=undefined;error.details.readbackError.stack=undefined;
+  h.state.connectionError=error;h.state.forwardConnectionError=true;
+  await h.upload();
+  assert.equal(h.diagnostics().length,2);
+  const reports=h.diagnostics().map(panel=>JSON.parse(diagnosticText(panel)));
+  assert.equal(reports[0].reportId,reports[1].reportId);
+  for(const report of reports){
+    assert.equal(report.where.surface,'synthetic-year');assert.equal(report.state.lifecycle,'recovery-required');
+    assert.equal(report.error.chain[0].name,'Error');
+    assert.equal(report.error.chain[0].context.create,'hash-mismatch');
+    assert.equal(report.error.chain[0].context.readback,'verification-scope-closed');
+    assert.equal(report.error.chain.find(link=>link.code==='hash-mismatch').context.actualMimeClass,'json');
+    assert.equal(report.error.frames.length,acceptedStack?1:0);
+    assert.equal(report.error.writeOutcome,'unknown');assert.equal(report.error.retryable,false);
+    assert.doesNotMatch(JSON.stringify(report),/private-.*canary/);
+  }
+  assert.equal(h.state.connects.length,1);assert.equal(h.state.writes,0);assert.equal(h.intervals.size,0);
+});
+
+test('separate synthetic-year actions cannot reuse an earlier no-stack diagnostic',async()=>{
+  const h=await yearPage(),ids=[];
+  // No Drive: exercise separate preview failures through the real run boundary.
+  const preview=SyntheticYearSeeder.prototype.preview;
+  try {
+    for(const check of ['closing-version-changed','coordinator-read-failed']){
+      SyntheticYearSeeder.prototype.preview=async()=>{const error=Object.assign(new Error('private-canary'),{code:'ownership-unknown',sessionCheck:check});error.stack=undefined;throw error;};
+      await h.click('preview');await h.until(()=>!h.get('preview').disabled);
+      const report=JSON.parse(diagnosticText(h.diagnostics()[0]));
+      assert.equal(report.error.chain[0].context.check,check);
+      assert.equal(report.where.actionId,'workspace-action');
+      ids.push(report.reportId);
+    }
+  }finally{SyntheticYearSeeder.prototype.preview=preview;}
+  assert.notEqual(ids[0],ids[1]);
+  assert.equal(h.state.connects.length,0);assert.equal(h.state.writes,0);
 });

@@ -1,4 +1,6 @@
 import { createDiagnostic, diagnosticMessage } from './app-diagnostics.mjs';
+import { reportError, getReport } from './error-reporting.mjs';
+import { SURFACES } from './diagnostic-context.mjs';
 import { withSourceEvidenceVerification } from "./paged-canonical-backup.mjs";
 import { inspectPagedCanonicalCopy, initializePagedCanonicalCopy } from "./paged-application-storage.mjs";
 import { canonicalPartitionVerificationPlans } from "./canonical-paged-storage.mjs";
@@ -203,7 +205,8 @@ export async function findOrCreateManifest(adapter, guard) {
 }
 
 export class DashboardSyntheticStorage {
-  constructor({ onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {}, afterMutation = null, maintainOriginals = true } = {}) {
+  constructor({ diagnosticSurface = 'workspace', onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {}, afterMutation = null, maintainOriginals = true } = {}) {
+    this.diagnosticSurface = SURFACES.has(diagnosticSurface) ? diagnosticSurface : 'workspace';
     this.onStatus = onStatus;
     this.onSnapshot = onSnapshot;
     this.onDiagnostic = onDiagnostic;
@@ -234,9 +237,13 @@ export class DashboardSyntheticStorage {
     return this.readyPromise;
   }
 
-  publish(state, message, kind = "info", error = null) {
-    const safe = kind === "error" ? createDiagnostic(error) : null;
-    this.onStatus({ state, message: safe ? diagnosticMessage({code: safe.code}) : message, kind, ...(safe ? {code: safe.code} : {}) });
+  publish(state, message, kind = "info", error = null, reportId = null) {
+    let diagnostic;
+    try { if (kind === "error") diagnostic = getReport(reportId) || reportError(error, {surface: this.diagnosticSurface, state}); }
+    catch { /* best-effort: reporting must not change connection behavior */ }
+    const safe = diagnostic || (kind === "error" ? createDiagnostic(error) : null);
+    this.onStatus({ state, message: safe ? diagnosticMessage({code: safe.code}) : message, kind,
+      ...(safe ? {code: safe.code} : {}), ...(diagnostic ? {reportId: diagnostic.id} : {}) });
   }
 
   token() {
@@ -329,6 +336,7 @@ export class DashboardSyntheticStorage {
       }
       if (!this.lifecycle) {
         this.lifecycle = new ApplicationStorageLifecycle({
+          diagnosticSurface: this.diagnosticSurface,
           syntheticOnly: true,
           catalogProtocol: true,
           afterMutation: this.afterMutation,
@@ -341,7 +349,7 @@ export class DashboardSyntheticStorage {
           // Keep this provider synchronous; an async wrapper becomes Bearer [object Promise].
           accessToken: () => this.token(),
           makeManifest: manifestBuilder,
-          onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info", {code: status.code}),
+          onStatus: (status) => this.publish(status.state, status.message, status.code ? "error" : "info", {code: status.code}, status.reportId),
           onDiagnostic: (entry) => this.onDiagnostic(entry)
         });
       }

@@ -1,0 +1,55 @@
+{
+  "schema": "finance-tracker-diagnostic-v2",
+  "reportId": "0102030405061",
+  "generatedAt": "2026-11-12T14:00:00.000Z",
+  "uptimeMs": 1200,
+  "build": {
+    "commit": null,
+    "source": "development"
+  },
+  "error": {
+    "code": "ownership-unknown",
+    "area": "session",
+    "kind": "integrity",
+    "retryable": false,
+    "writeOutcome": "unknown",
+    "chain": [
+      {
+        "depth": 0,
+        "name": "Error",
+        "code": "ownership-unknown",
+        "context": {
+          "code": "ownership-unknown",
+          "check": "closing-version-changed"
+        }
+      }
+    ],
+    "frames": [],
+    "foreignFrames": 0,
+    "chainTruncated": false
+  },
+  "where": {
+    "surface": "workspace",
+    "actionId": "save-ledger",
+    "page": "storage"
+  },
+  "state": {},
+  "breadcrumbs": [
+    {
+      "t": 1200,
+      "e": "action.start",
+      "actionId": "save-ledger"
+    },
+    {
+      "t": 1200,
+      "e": "action.fail",
+      "actionId": "save-ledger",
+      "code": "ownership-unknown"
+    }
+  ],
+  "env": {
+    "visibility": "visible",
+    "online": true
+  },
+  "truncated": []
+}

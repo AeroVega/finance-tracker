@@ -1,5 +1,72 @@
 # Project status
 
+## JSON locator MIME correction, November 14, 2026
+
+**User-confirmed:** the preserved diagnostic on `0d52766` identifies a JSON
+receipt where the immutable verifier expected octet-stream, in the paged locator
+write path. **Verified:** locator roots/pages are canonical JSON, but both their
+transport and receipt verifier previously used a blanket binary MIME contract.
+The provider-side reason for returning JSON despite that request remains open.
+
+**Implemented:** a shared exact-kind policy requests and verifies JSON for
+`locator-catalog` and `locator-catalog-page` only. Other immutable payloads retain
+the binary contract. No broad MIME allowance, weaker hash/ownership check, retry
+increase or rewrite of historical objects was added. The
+[paged storage contract](PAGED_STORAGE_MILESTONE.md#immutable-locator-mime-contract)
+records old-copy and HTTP 409 compatibility. Synthetic tests reproduce the prior
+failure with matching bytes and a JSON receipt, and cover both MIME headers,
+legacy reads, native-Google refusal, changed bytes/bindings and unknown outcomes.
+**Verified locally:** 2,045/2,045 extended synthetic tests passed on Node 24.22.1
+in 564.7 seconds, concurrency one and 768 MiB heap. The focused integration
+suite passed 87/87; independent review found no blocker. Syntax, registered-code
+audit, generated reference, documentation and diff checks passed.
+Live initialization and one-change save/reopen remain unverified on this fix.
+
+## Synthetic-year diagnostic forwarding, November 14, 2026
+
+**User-confirmed:** a synthetic-year initialization attempt on `e07ed7e`
+reported `write-unresolved` without its underlying cause. **Verified:** the
+controller replaced a lifecycle report with a code-only object. That loses the
+cause chain and state; without accepted stack frames the final catch can also
+reuse the degraded report through deduplication.
+
+**Implemented:** select the synthetic-year reporting surface and forward the
+existing lifecycle report ID at the connection-status boundary. Both visible
+panels retain the already-sanitized report. Operation breadcrumbs separate
+subsequent attempts from earlier no-stack reports. Controller regressions cover
+accepted and absent stack frames and consecutive failures with different safe
+context. No storage, ownership, retry or recovery behavior was
+changed. This restores diagnostic evidence; it does not establish the cause of
+the initialization failure or repair the unresolved folder.
+
+**Verified locally:** 2,026/2,026 extended synthetic tests passed on Node 24.22.1
+in 561.2 seconds, with concurrency one and a 768 MiB heap. The focused seeder and
+diagnostic suite passed 32/32; syntax, registered-code audit, generated reference,
+documentation and diff checks passed. Remote CI and live validation are separate.
+
+## Immutable receipt MIME diagnostic, November 14, 2026
+
+**User-confirmed:** a one-change synthetic save on `0821f00` ended in
+`write-unresolved`; its persistent receipt mismatch identified only `mimeType`.
+The returned MIME value was not present, so provider-side normalization remains
+an **Open** hypothesis, not an established cause or basis for changing storage.
+
+**Implemented:** the receipt failure now reports fixed expected/actual MIME
+classes and its verification stage through the bounded diagnostic and offline
+validator. Synthetic reproduction preserves the matching byte hash, one create,
+two same-ID rechecks, poisoned verification scope and unknown-write refusal.
+The precise field contract is in [app diagnostics](APP_DIAGNOSTICS.md).
+**Verified locally:** the complete extended synthetic suite passed 2,022/2,022
+with `FINANCE_EXTENDED_STORAGE_TESTS=1`, Node 24.22.1, a 768 MiB heap and
+concurrency one (547.0 seconds). Syntax, registered-code audit, generated-reference,
+documentation and diff checks passed. Remote CI is a separate verification.
+
+This is an observability correction, not a verified fix for the live save.
+Upload MIME, integrity checks, retry counts and recovery behavior are unchanged.
+No live folder was accessed or repaired. Live validation and any resulting
+storage correction remain outstanding; do not merge or claim save acceptance
+from the diagnostic tests alone.
+
 ## Staged-save performance, November 12, 2026
 
 The owner completed a live synthetic-year seed, then reported a single staged
@@ -378,3 +445,69 @@ The accepted production policy requires working financial data and tokens in mem
 PR27's later decision removes a separate real-data smoke-test prerequisite. Synthetic test evidence still must be accompanied by actual OAuth/configuration review, live synthetic acceptance, recovery/privacy/cost review, residual-risk acceptance and explicit production authorization. January 1, 2027 remains a conditional v1.0.0 target.
 
 Continue with [next steps](NEXT_STEPS.md). The broader product scope remains in the [roadmap](ROADMAP.md).
+
+## Diagnostic v2 follow-up — November 13, 2026
+
+**Implemented:** the focused `feat/actionable-diagnostics` branch starts at PR38
+`7aa553eeab83d898b9a6bb43dfb8a68c298ae70a`. It consolidates code recognition and
+fixed copy; preserves sanitized reports across status publishers and native
+causes at transport/session boundaries; adds bounded source locations, action,
+request, lifecycle and environment context; and integrates tiered diagnostic UI,
+recent history, a manual developer self-test, startup fallback and offline triage.
+It does not rewrite the storage error hierarchy or change ownership, retry,
+verification or recovery decisions. Existing cancellation codes are retained;
+reports can identify the underlying native abort. The literal-code audit finds
+628 codes with zero unregistered literal sites, and explicitly lists 40 dynamic
+forwarding sites rather than claiming those are statically proven.
+
+**Verified baseline:** Node 24.22.1, extended suite at `7aa553e` passed 1,950 tests
+in 481.7 seconds. The [approximate baseline audit](evidence/error-code-audit-baseline.txt)
+found 420 unrecognized codes out of 621. The new lexical audit has broader coverage,
+so these two scan totals are not identical populations.
+
+**Verified candidate:** diagnostic-focused checks at `37e6a7f` passed 50 tests.
+Syntax, code audit, generated-reference freshness and documentation checks passed.
+Independent reviews found and fixed changing-getter/array-method privacy bypasses,
+stale cross-attempt deduplication, and tool-surface forwarding. The final extended
+suite at `85edca6` passed **1,993/1,993 tests** in **485.4 seconds**, Node 24.22.1.
+Nine initial integration failures were outdated v1 field/DOM assertions; the
+updated tests retain exact metadata, privacy, mutation and false-success checks.
+
+**Not deployed or owner-accepted:** Chromium launch is blocked by this executor's
+socket restrictions; rendered checks were added but are unverified. Physical
+Safari stack capture, clipboard/selection, panel layout and live Google integration
+remain owner acceptance. No merge, deployment or live Drive operation was performed.
+Production financial-data persistence remains **NO-GO**.
+
+**Publication scope:** owner requested Copy/Select only; the optional OS Share
+button and its capability field were removed. All prototype files are unchanged from PR38. Startup fallback, diagnostic styling
+and status report-ID forwarding are integrated in the main app only; legacy
+prototype status-only error paths retain their previous context limitations.
+
+**Verified reduced scope:** the exact Copy/Select-only, main-app integration tree
+at `760ef91` passed the complete extended suite: **1,994/1,994 tests**, Node
+24.22.1, **495.3 seconds**. All prototype files match the PR38 base byte-for-byte.
+Publication is pending approval review of diagnostics-related synthetic test
+updates; no branch, PR, deployment or merge has been published for this follow-up.
+
+
+## PR40 save receipt investigation — November 13, 2026
+
+**User-confirmed:** PR40 diagnostics build `311b542` was deployed and a staged
+synthetic save failed. The report locates the first failure in immutable-create
+receipt checking; `verification-scope-closed` is a subsequent invalidation of the
+captured locator read capability. The older broad `hash-mismatch` check cannot
+distinguish metadata fields from body corruption. The precise live cause remains
+unconfirmed; no owner Drive folder was inspected or modified.
+
+**Implemented candidate:** correct-body receipt metadata gets at most two fresh
+reads of the same already-created ID before refusal. Every original binding,
+size and body hash must match; corrupt bodies, lost ownership/cancellation and
+persistent metadata mismatch still fail. No write is retried. Fixed field labels
+make persistent failures more specific, and current-action request metrics are
+separate from lifecycle aggregates. Focused synthetic checks reproduce stale-size
+receipt convergence and retained refusal behavior. The complete extended suite at
+`5688c04` passed **2,012/2,012 tests** (Node 24.22.1,497.6seconds). Code-audit,
+generated-reference and documentation checks passed. The candidate is not yet
+deployed or live-verified; preserve the affected folder rather than retrying it
+on the strength of synthetic tests.

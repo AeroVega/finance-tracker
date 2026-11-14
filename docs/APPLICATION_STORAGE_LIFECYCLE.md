@@ -54,7 +54,7 @@ The complete Node contract workflow now runs node --test tests/*.test.mjs on pul
 
 **Open:** the initiating event behind the reported spontaneous release has not been established. There is no idle-release timer in the application. `pagehide` can request automatic release, but its status text differed from the supplied screenshot. Do not infer a deliberate click from that screenshot.
 
-The dashboard's expandable diagnostic panel keeps a bounded, in-memory event history (release source, safe state transitions, browser event booleans, and source build). It does not persist or upload diagnostics, tokens, file IDs, folder names, CSV rows, or financial values. Reload clears the history. Diagnostic observers cannot change storage behavior.
+The main workspace's Recovery and advanced tools keeps bounded, in-memory shared reports and typed action, lifecycle, request and browser-event breadcrumbs. It does not persist or upload diagnostics, tokens, file IDs, folder names, CSV rows, or financial values. Reload clears the history. Diagnostic observers cannot change storage behavior.
 
 **Open:** these checks do not establish that the live Drive metadata HTTP 404 is fixed. Confirm the browser source commit, retain the sanitized create outcome and exact action (save versus recovery), and use the procedure in `DRIVE_TRANSACTION_ENGINE_TESTING.md`. Real iOS Safari lifecycle and live synthetic Drive tests remain necessary; no live account operations were performed for this patch.
 
