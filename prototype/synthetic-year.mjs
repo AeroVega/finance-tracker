@@ -1,3 +1,4 @@
+import { leaveBreadcrumb } from '../js/error-reporting.mjs';
 import { showDiagnostic, clearDiagnostic } from '../js/app-diagnostics.mjs';
 import { DashboardSyntheticStorage } from '../js/dashboard-synthetic-storage.mjs';
 import { SyntheticYearSeeder } from '../js/synthetic-year-seeder.mjs';
@@ -32,9 +33,10 @@ function progress() {
 }
 const storage = new DashboardSyntheticStorage({
   maintainOriginals: false,
+  diagnosticSurface: 'synthetic-year',
   onStatus: status => {
     if (!status.code) clearDiagnostic($('connection'));
-    $('connection').textContent = status.state === 'ready' ? 'Synthetic storage connected. Use the year result below to confirm the upload.' : status.code ? showDiagnostic({code: status.code}, {surface: 'synthetic-year', target: $('connection')}) : status.message;
+    $('connection').textContent = status.state === 'ready' ? 'Synthetic storage connected. Use the year result below to confirm the upload.' : status.code ? showDiagnostic({code: status.code}, {surface: 'synthetic-year', target: $('connection'), state: status.state, reportId: status.reportId}) : status.message;
     refresh();
   },
   afterMutation: () => { writes += 1; progress(); }
@@ -55,14 +57,16 @@ async function verify() {
 }
 async function run(operation) {
   if (busy) return;
+  leaveBreadcrumb({e:'action.start',actionId:'workspace-action'});
   busy = true; writes = 0; started = Date.now(); phase = 'Starting…';
   phaseCode = 'starting';
   clearDiagnostic($('result'));
   refresh(); progress();
   timer = setInterval(progress, 1000);
-  try { await operation(); }
+  try { await operation(); leaveBreadcrumb({e:'action.ok',actionId:'workspace-action'}); }
   catch (error) {
     result(showDiagnostic(error, {surface: 'synthetic-year', target: $('result'), phase: phaseCode, verifiedDurableWrites: writes}), 'error');
+    leaveBreadcrumb({e:'action.fail',actionId:'workspace-action'});
   } finally { clearInterval(timer); timer = null; progress(); busy = false; refresh(); }
 }
 $('preview').addEventListener('click', () => run(async () => {

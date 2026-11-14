@@ -1,5 +1,27 @@
 # Project status
 
+## Synthetic-year diagnostic forwarding, November 14, 2026
+
+**User-confirmed:** a synthetic-year initialization attempt on `e07ed7e`
+reported `write-unresolved` without its underlying cause. **Verified:** the
+controller replaced a lifecycle report with a code-only object. That loses the
+cause chain and state; without accepted stack frames the final catch can also
+reuse the degraded report through deduplication.
+
+**Implemented:** select the synthetic-year reporting surface and forward the
+existing lifecycle report ID at the connection-status boundary. Both visible
+panels retain the already-sanitized report. Operation breadcrumbs separate
+subsequent attempts from earlier no-stack reports. Controller regressions cover
+accepted and absent stack frames and consecutive failures with different safe
+context. No storage, ownership, retry or recovery behavior was
+changed. This restores diagnostic evidence; it does not establish the cause of
+the initialization failure or repair the unresolved folder.
+
+**Verified locally:** 2,026/2,026 extended synthetic tests passed on Node 24.22.1
+in 561.2 seconds, with concurrency one and a 768 MiB heap. The focused seeder and
+diagnostic suite passed 32/32; syntax, registered-code audit, generated reference,
+documentation and diff checks passed. Remote CI and live validation are separate.
+
 ## Immutable receipt MIME diagnostic, November 14, 2026
 
 **User-confirmed:** a one-change synthetic save on `0821f00` ended in

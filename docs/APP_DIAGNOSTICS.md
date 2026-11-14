@@ -67,9 +67,14 @@ Shared styles use 16px textareas and 44px controls. Recent problems and the manu
 **Test error reporting (developer)** control are in Recovery and advanced tools.
 
 The main app has a small classic startup script that catches known app-entry
-resource failures before modules load. Legacy prototype files are unchanged. They do not receive this boot fallback,
-the new stylesheet or report-ID forwarding; status-only errors there can still
-lose rich cause context. Main-app reporting is the integration target. It can show a fixed `module-load-failed` fallback, not a complete
+resource failures before modules load. The synthetic-year controller now forwards
+lifecycle report IDs and selects the `synthetic-year` surface, so its connection
+status and final catch preserve the same sanitized cause chain even without
+accepted stack frames. Its operation boundary starts a fresh diagnostic action,
+so separate attempts cannot inherit a recent no-stack failure report. Other
+legacy prototype controllers remain unchanged and
+can still lose rich cause context through status-only errors. Prototype pages do
+not receive the main app's boot fallback or new stylesheet. It can show a fixed `module-load-failed` fallback, not a complete
 report when the reporter itself is unavailable. A crash, OS termination or tab
 death loses in-memory history. No complete crash-reporting claim is made.
 
