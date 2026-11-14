@@ -1,45 +1,49 @@
 # Agent quick start
 
-Read this page first. It is the navigation layer, not a replacement for detailed contracts.
+This is the short entry point. It is a navigation guide, not a substitute for technical contracts.
 
-## Read in this order
+## Read only what you need
 
-1. [Contributor rules](../AGENTS.md) — privacy, permissions, branch workflow and engineering guardrails.
-2. [Project status](PROJECT_STATUS.md) — latest dated implementation, review, CI and deployment facts.
-3. [Next steps](NEXT_STEPS.md) — current Alpha dependency order and acceptance gates.
-4. Read only the contract for the code being changed. Use [the documentation index](README.md) to find it, and [the storage terminology glossary](STORAGE_TERMINOLOGY.md) when version names or verification states are ambiguous. Historical PR reports live in [the archive](archive/README.md).
+1. [Current project state](CURRENT_STATE.md) — implementation baseline, recent merges, verification, open gates, and authorization.
+2. [Contributor and agent rules](../AGENTS.md) — privacy, permissions, branch workflow, and engineering guardrails.
+3. [Documentation map](README.md) — locate the single focused contract relevant to the task.
+4. Read that contract and inspect the corresponding code/tests. Read historical reports only when their specific evidence is relevant.
 
-Do not read every historical PR report before starting a task.
+Do not read every document or historical PR report before starting work. Production financial-data persistence is **NO-GO**; use invented fixtures only unless a later explicit owner authorization changes that boundary.
 
-## Current state (November 11, 2026)
+## Source-of-truth hierarchy
 
-- PR #37 is an open draft against `main`. Check its head and [project status](PROJECT_STATUS.md) for publication, validation and deployment evidence.
-- The local v5 slice uses the existing paged store and lifecycle. The application supports canonical v5 only. Canonical v1/v2/v3/v4 copies and older initialization markers are refused without migration or overwrite. Existing v5 copies created by earlier migrations remain supported through read-only verification of their retained legacy provenance. Existing data must be preserved; use a fresh empty synthetic folder for a new v5 copy.
-- Canonical v5 keeps compact source/derived version 2, locator catalog 3 and physical root protocol 4. Framed transport 3 uses the explicit `canonical5-physical4` profile. See [the glossary](STORAGE_TERMINOLOGY.md) for version meanings.
-- Canonical and locator changes are coalesced, with only final-reachable new pages prepared for upload. Full financial and retained-history/physical checks, whole-ledger workspace cloning/materialization and preparation memory remain. Bounded whole-database memory, selective app loading and incremental semantic validation are unfinished; see [project status](PROJECT_STATUS.md) for the performance gate.
-- Financial position and reconciled coverage were merged in PR36. Historical monthly-summary migration, supported owner-file ingestion and production controls remain open.
-- Production financial-data persistence is **NO-GO**. Use invented fixtures only. No real records, private workbook, live owner Drive operations, production activation, merge or deployment are authorized by the PR37 storage scope.
-
-## Source-of-truth rules
-
-| Question | Authoritative source |
+| Question | Authority |
 | --- | --- |
-| What is implemented and verified now? | [Project status](PROJECT_STATUS.md), with commit/PR and evidence scope |
-| What should be done next? | [Next steps](NEXT_STEPS.md) |
-| What behavior must a module preserve? | Its focused contract linked from [the index](README.md) |
-| What did the owner authorize? | [AGENTS.md](../AGENTS.md) and the dated scope document |
-| What was true on an earlier date? | Historical/acceptance report, only for that revision |
+| What is true on current `main`? | [CURRENT_STATE.md](CURRENT_STATE.md), grounded in the named commit and checks |
+| What is allowed now? | [AGENTS.md](../AGENTS.md) plus the explicit authorization recorded in CURRENT_STATE.md |
+| What behavior/invariant must code preserve? | The focused module or format contract, linked from [the index](README.md) |
+| What is the next project-level priority? | [NEXT_STEPS.md](NEXT_STEPS.md) |
+| What is the intended product scope? | [PRODUCT_DEFINITION.md](PRODUCT_DEFINITION.md) |
+| What is unresolved at product/architecture level? | [PRODUCT_OPEN_DECISIONS.md](PRODUCT_OPEN_DECISIONS.md) and [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) |
+| What happened on an earlier revision? | Dated evidence in [PROJECT_STATUS.md](PROJECT_STATUS.md), PR reports, or [the archive](archive/README.md) |
 
-If sources disagree, prefer the newest dated evidence for status, the focused contract for technical behavior, and AGENTS.md for permissions. Flag the contradiction and correct the stale summary; do not silently combine incompatible claims.
+If sources disagree, do not silently combine them. Report the conflict and correct the stale source. Current state never overrides a focused technical invariant; historical reports never override current implementation or permissions.
 
-## Vocabulary and evidence
+## Essential terminology
 
-- **Canonical layout version**: financial-record representation. The [format contract](PARTITIONED_CANONICAL_STORAGE.md) defines new-copy defaults and supported profiles. Opening an existing copy does not migrate it.
-- **Locator catalog version**: physical storage index/root format, separate from canonical layout.
-- **Root protocol and archive versions**: publication/recovery and portability formats. Canonical v5 uses physical protocol 4 and framed transport 3 with the explicit `canonical5-physical4` profile. These subsystem versions do not imply canonical v4 support.
-- **Implemented** means code exists. **Verified** means the stated check passed on the named revision. **Owner-accepted** means the owner performed the stated acceptance. **Deployed** means a deployment completed and its served SHA was checked. None implies another.
-- Hash integrity proves bytes under a root, not completeness or financial correctness of unread records.
+- **Canonical layout version** describes the financial-record representation.
+- **Locator catalog version** describes a storage index/root representation; it is not the canonical layout version.
+- **Physical root protocol** describes publication/recovery behavior.
+- **Framed transport/archive profile** describes backup/restore representation.
+- The active application writes canonical v5. Exact supported legacy-read behavior, subsystem versions, and refusal/recovery rules are defined in [PARTITIONED_CANONICAL_STORAGE.md](PARTITIONED_CANONICAL_STORAGE.md) and [STORAGE_TERMINOLOGY.md](STORAGE_TERMINOLOGY.md). Never infer compatibility from a version number alone.
+
+## Evidence vocabulary
+
+- **Implemented:** code exists on the named revision.
+- **Verified:** a stated check passed on that exact revision.
+- **Owner-accepted:** the owner performed the described acceptance.
+- **Deployed:** the deployment workflow completed.
+- **Deployed and verified:** the served build identity was independently checked.
+- **Open / Unverified:** the evidence does not establish completion.
+
+Hash integrity proves bytes covered by a root; it does not prove completeness or financial correctness of unread records.
 
 ## Documentation maintenance
 
-Keep this page short. Put detailed invariants in one focused contract, measurements in the report that produced them, and current state in PROJECT_STATUS.md. Link rather than copy. Date historical evidence and never promote old test counts or acceptance results to current status. Remove superseded instructions from active guides; archive only material with historical value.
+Keep this page short. Put mutable status in CURRENT_STATE.md, priorities in NEXT_STEPS.md, product intent in PRODUCT_DEFINITION.md, and each technical invariant in one focused contract. Keep measured results with their dated evidence. Link rather than duplicate. Archive completed reports only when they retain historical value.
