@@ -1,5 +1,28 @@
 # Project status
 
+## Verified retained-history CPU progress, November 14, 2026
+
+A bounded private complete-tree memo avoids repeated structural verification only
+inside the same owned physical phase. All receipt, history, union, guard and final
+metadata checks remain. No storage format, migration, concurrency or retry policy
+changes were made.
+
+Two matched synthetic five-edit-history CPU pairs improved mean save from 6.953
+to 4.935 seconds and open from 5.138 to 4.128 seconds, with identical request counts,
+categories and byte totals. The benchmark now fixes financial/storage fixture IDs
+and event times; real session/lease clocks remain. These are zero-delay CPU results,
+not live latency or achievement of the 30-second goal.
+
+The full extended run passed 2096/2096 tests in 451.8 seconds. A subsequent test-only
+boundary addition and comment clarification passed all 14 dedicated tests; no
+executable production change followed the full run. Independent source review
+found no blocker. Details and limitations are in the
+[complete-tree phase memo note](COMPLETE_TREE_PHASE_MEMO.md).
+
+This is branch progress only. No merge, deployment, remote CI pass, live provider
+acceptance or real-data use is claimed.
+
+
 ## Verified open/save progress, November 14, 2026
 
 Selected code `00cd939` passed **2083/2083 extended synthetic tests**, zero

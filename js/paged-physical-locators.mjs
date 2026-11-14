@@ -131,6 +131,10 @@ function entry(value) {
  * createImmutable must call beforeMutation immediately before EACH mutation attempt,
  * settle all attempts before returning, and never overwrite an existing file.
  */
+// Complete verification results are private, bounded and valid only inside one
+// factory-owned physical verification phase. No caller can mint a result.
+const completeTreeMemos=new WeakMap();
+const MEMO_ROOTS=64,MEMO_KEY_BYTES=65536;
 export function createPagedPhysicalLocators(adapter, config) {
   options(config, ['databaseId', 'copyId', 'folderId', 'assertWritable', 'maxNodeBytes', 'maxEntries', 'maxChildren']);
   const databaseId = identifier(config.databaseId), copyId = identifier(config.copyId), folderId = identifier(config.folderId);
@@ -587,9 +591,10 @@ export function createPagedPhysicalLocators(adapter, config) {
       if(files.has(e.fileId))fail('duplicate-physical-locator','A physical file cannot identify multiple immutable objects.');
       proposed.set(pk,e);identities.set(ik,pk);files.set(e.fileId,pk);
     }
-    // Full fresh physical verification remains mandatory, including for no-op
-    // batches. Run it after input consumption so an iterator cannot alter an old
-    // object after verification and have that changed body silently retained.
+    // Verify after consuming input, including no-op batches. Generic providers
+    // perform complete fresh work. An owned active phase may reuse a complete
+    // prior observation, whose metadata witnesses still must pass the closing
+    // inventory before publication; an iterator cannot authorize changed bytes.
     await verify(ref,{signal});const {root}=await readRoot(ref,signal);
     const ordered=values=>[...values].sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
     const existing={
@@ -729,7 +734,7 @@ export function createPagedPhysicalLocators(adapter, config) {
       for await (const item of checkedWalk(ref, signal)) yield {...item, reference:{...item.reference}, bytes:new Uint8Array(item.bytes)};
     })();
   }
-  async function verify(inputRoot, opts = {}) {
+  async function verifyComplete(inputRoot, opts = {}) {
     const ref = pin(inputRoot), {signal} = options(opts, ['signal']); let objects = 0n, pages = 0n, bytes = 0n;
     if(!verifyBody) {
       for await (const item of checkedWalk(ref, signal, true)) {
@@ -784,6 +789,40 @@ export function createPagedPhysicalLocators(adapter, config) {
       } finally {await Promise.all(pending);}
     }
     return {entryCount:String(objects), catalogPages:String(pages), byteLength:String(bytes)};
+  }
+  async function verify(inputRoot,opts={}) {
+    if(!verifyBody||!decodedPages?.captureVerification)return verifyComplete(inputRoot,opts);
+    const ref=pin(inputRoot),{signal}=options(opts,['signal']);
+    abort(signal);adapterScope();
+    const owner=decodedPages.captureVerification();
+    if(!owner)return verifyComplete(ref,{signal});
+    const memoKey=canonicalizeJcs([ref.fileId,ref.sha256,databaseId,copyId,folderId,maxNodeBytes,maxEntries,maxChildren]);
+    const cost=new TextEncoder().encode(memoKey).length;
+    try {
+      owner.assertCurrent();
+      let memo=completeTreeMemos.get(owner.identity);
+      const hit=memo?.entries.get(memoKey);
+      if(hit){abort(signal);adapterScope();owner.assertCurrent();return {...hit};}
+      const result=await verifyComplete(ref,{signal});
+      abort(signal);adapterScope();owner.assertCurrent();
+      if(cost<=MEMO_KEY_BYTES) {
+        memo=completeTreeMemos.get(owner.identity);
+        if(!memo){memo={entries:new Map(),bytes:0};completeTreeMemos.set(owner.identity,memo);}
+        if(!memo.entries.has(memoKey)) {
+          while(memo.entries.size>=MEMO_ROOTS||memo.bytes+cost>MEMO_KEY_BYTES){
+            const first=memo.entries.keys().next().value;
+            memo.entries.delete(first);memo.bytes-=new TextEncoder().encode(first).length;
+          }
+          memo.entries.set(memoKey,Object.freeze({...result}));memo.bytes+=cost;
+        }
+      }
+      return {...result};
+    }catch(error){
+      completeTreeMemos.delete(owner.identity);
+      // This token may invalidate only its own still-current phase, never a
+      // successor opened while this verification was awaiting a body.
+      owner.invalidate();throw error;
+    }
   }
   return Object.freeze({build, set, setMany, get, readObject, entries, page, inspect, walk, verify,
     limits:Object.freeze({maxNodeBytes, maxEntries, maxChildren, maxObjectBytes:PAGED_LOCATOR_MAX_BYTES, maxRootBytes:PAGED_LOCATOR_ROOT_BYTES})});

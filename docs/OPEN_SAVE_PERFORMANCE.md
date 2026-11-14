@@ -302,3 +302,24 @@ Provider quotas were not verified for the actual Cloud project. Google's current
 notes project-dependent quota rules and additional backend rate limiting. A wider
 local read cap does not prove absence of live throttling. No retry, billing or
 quota-setting changes are included; the separate cost/production review remains.
+
+
+## Same-phase complete-tree CPU reuse
+
+The latest follow-up reuses only successful complete owned locator-tree checks
+within their existing physical verification phase. It preserves every receipt,
+union, history, ownership and publication check, plus closing metadata witnesses.
+Generic readers and reads outside an owned scope remain uncached. Publication,
+closure, failure and decoder invalidation retire reuse; no durable proof or TTL
+is introduced. See the [phase memo contract and validation](COMPLETE_TREE_PHASE_MEMO.md).
+
+A corrected deterministic financial/storage benchmark, with five prior synthetic
+edits and zero artificial request delay, measured mean save elapsed time of 6.953 to
+4.935 seconds and open of 5.138 to 4.128 seconds across two interleaved pairs.
+Requests, categories and transferred bytes matched. This reduces retained-history
+CPU work, not network round trips; it does not establish the 30-second live goal.
+The older random-input delayed comparison is excluded from the gain claim.
+
+Validation: 2096/2096 extended tests passed, then all 14 dedicated tests passed
+after adding one iterator/publication-boundary regression and a comment-only
+clarification. No executable production change followed the aggregate run.
