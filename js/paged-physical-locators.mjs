@@ -131,6 +131,10 @@ function entry(value) {
  * createImmutable must call beforeMutation immediately before EACH mutation attempt,
  * settle all attempts before returning, and never overwrite an existing file.
  */
+// Complete verification results are private, bounded and valid only inside one
+// factory-owned physical verification phase. No caller can mint a result.
+const completeTreeMemos=new WeakMap();
+const MEMO_ROOTS=64,MEMO_KEY_BYTES=65536;
 export function createPagedPhysicalLocators(adapter, config) {
   options(config, ['databaseId', 'copyId', 'folderId', 'assertWritable', 'maxNodeBytes', 'maxEntries', 'maxChildren']);
   const databaseId = identifier(config.databaseId), copyId = identifier(config.copyId), folderId = identifier(config.folderId);
@@ -587,9 +591,10 @@ export function createPagedPhysicalLocators(adapter, config) {
       if(files.has(e.fileId))fail('duplicate-physical-locator','A physical file cannot identify multiple immutable objects.');
       proposed.set(pk,e);identities.set(ik,pk);files.set(e.fileId,pk);
     }
-    // Full fresh physical verification remains mandatory, including for no-op
-    // batches. Run it after input consumption so an iterator cannot alter an old
-    // object after verification and have that changed body silently retained.
+    // Verify after consuming input, including no-op batches. Generic providers
+    // perform complete fresh work. An owned active phase may reuse a complete
+    // prior observation, whose metadata witnesses still must pass the closing
+    // inventory before publication; an iterator cannot authorize changed bytes.
     await verify(ref,{signal});const {root}=await readRoot(ref,signal);
     const ordered=values=>[...values].sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0);
     const existing={
@@ -622,7 +627,25 @@ export function createPagedPhysicalLocators(adapter, config) {
     const candidate=await planPhysical(plan,root,'locator-catalog',PAGED_LOCATOR_ROOT_BYTES,signal);
     const writes=await verifyPlannedCatalog(plan,candidate,signal);
     await verifyPlannedIdsAbsent(plan,signal);
-    for(const record of writes)await publishPhysical(record,signal);
+    // Stage independent pages four at a time, retaining child-before-parent
+    // durability. The verified plan is bounded and every record still uses its
+    // own live guard and exact-ID readback. Never return an authority candidate
+    // while any issued write is unsettled, even when a sibling fails.
+    const levels=new Map();
+    for(const record of writes) {
+      const level=record.kind==='locator-catalog'?Infinity:JSON.parse(decoder.decode(record.bytes)).height;
+      if(!levels.has(level))levels.set(level,[]);
+      levels.get(level).push(record);
+    }
+    const concurrency=verifyBody?4:1; // Unknown/custom providers keep serial calls.
+    for(const [,records] of [...levels].sort(([a],[b])=>a-b)) {
+      for(let start=0;start<records.length;start+=concurrency) {
+        abort(signal);adapterScope();
+        const results=await Promise.allSettled(records.slice(start,start+concurrency).map(record=>publishPhysical(record,signal)));
+        const failure=results.find(result=>result.status==='rejected');
+        if(failure)throw failure.reason;
+      }
+    }
     return {fileId:candidate.fileId,sha256:candidate.sha256};
   }
   async function resolved(inputRoot, query, opts, needBytes = true) {
@@ -711,13 +734,95 @@ export function createPagedPhysicalLocators(adapter, config) {
       for await (const item of checkedWalk(ref, signal)) yield {...item, reference:{...item.reference}, bytes:new Uint8Array(item.bytes)};
     })();
   }
-  async function verify(inputRoot, opts = {}) {
+  async function verifyComplete(inputRoot, opts = {}) {
     const ref = pin(inputRoot), {signal} = options(opts, ['signal']); let objects = 0n, pages = 0n, bytes = 0n;
-    for await (const item of checkedWalk(ref, signal, true)) {
-      if (item.entry) objects++; else pages++;
-      bytes += BigInt(item.byteLength ?? item.bytes.length);
+    if(!verifyBody) {
+      for await (const item of checkedWalk(ref, signal, true)) {
+        if (item.entry) objects++; else pages++;
+        bytes += BigInt(item.byteLength ?? item.bytes.length);
+      }
+    } else {
+      const {root,bytes:rootBytes}=await readRoot(ref,signal);pages++;bytes+=BigInt(rootBytes.length);
+      const pending=[];let bodyFailed=false,bodyFailure;
+      const drain=async()=>{
+        const results=await Promise.all(pending.splice(0));
+        const failure=results.find(x=>!x.ok);if(failure)throw bodyFailure;
+        for(const result of results){objects++;bytes+=BigInt(result.length);}
+      };
+      try {
+        for(const index of INDEXES)for await(const item of traverse(root[index],index,signal)) {
+          if(item.ref){pages++;bytes+=BigInt(item.bytes.length);}
+          else if(index==='objects') {
+            const [pk,e]=item.pair;
+            // These two distinct immutable indexes are independent. Drain both
+            // before accepting their mappings or starting this entry's body.
+            let lookupFailed=false,lookupFailure;
+            const lookup=promise=>promise.catch(error=>{
+              if(!lookupFailed || (lookupFailure?.code==='verification-scope-closed'&&error?.code!=='verification-scope-closed')) {
+                lookupFailed=true;lookupFailure=error;
+              }
+              throw error;
+            });
+            if(pending.length<7) {
+              const matches=await Promise.allSettled([
+                lookup(find(root.identities,'identities',identityKey(e),signal)),
+                lookup(find(root.files,'files',e.fileId,signal))
+              ]);
+              if(lookupFailed)throw lookupFailure;
+              if(matches.some(result=>result.value!==pk))fail('index-mismatch','Locator indexes do not form a one-to-one mapping.');
+            } else {
+              // Seven admitted body reads leave room for only one index read.
+              if(await find(root.identities,'identities',identityKey(e),signal)!==pk || await find(root.files,'files',e.fileId,signal)!==pk)fail('index-mismatch','Locator indexes do not form a one-to-one mapping.');
+            }
+            const operation=verifyEntry(e,signal);
+            pending.push(operation.then(length=>({ok:true,length}),error=>{if(!bodyFailed){bodyFailed=true;bodyFailure=error;}return {ok:false,error};}));
+            if(pending.length===8)await drain();
+          }
+        }
+        await drain();
+      } catch(error) {
+        await Promise.all(pending);
+        // A failed body can expire the phase while the structural walk is
+        // awaiting an index read. Preserve the cause, not that follow-on error.
+        if(error?.code==='verification-scope-closed'&&bodyFailed)throw bodyFailure;
+        throw error;
+      } finally {await Promise.all(pending);}
     }
     return {entryCount:String(objects), catalogPages:String(pages), byteLength:String(bytes)};
+  }
+  async function verify(inputRoot,opts={}) {
+    if(!verifyBody||!decodedPages?.captureVerification)return verifyComplete(inputRoot,opts);
+    const ref=pin(inputRoot),{signal}=options(opts,['signal']);
+    abort(signal);adapterScope();
+    const owner=decodedPages.captureVerification();
+    if(!owner)return verifyComplete(ref,{signal});
+    const memoKey=canonicalizeJcs([ref.fileId,ref.sha256,databaseId,copyId,folderId,maxNodeBytes,maxEntries,maxChildren]);
+    const cost=new TextEncoder().encode(memoKey).length;
+    try {
+      owner.assertCurrent();
+      let memo=completeTreeMemos.get(owner.identity);
+      const hit=memo?.entries.get(memoKey);
+      if(hit){abort(signal);adapterScope();owner.assertCurrent();return {...hit};}
+      const result=await verifyComplete(ref,{signal});
+      abort(signal);adapterScope();owner.assertCurrent();
+      if(cost<=MEMO_KEY_BYTES) {
+        memo=completeTreeMemos.get(owner.identity);
+        if(!memo){memo={entries:new Map(),bytes:0};completeTreeMemos.set(owner.identity,memo);}
+        if(!memo.entries.has(memoKey)) {
+          while(memo.entries.size>=MEMO_ROOTS||memo.bytes+cost>MEMO_KEY_BYTES){
+            const first=memo.entries.keys().next().value;
+            memo.entries.delete(first);memo.bytes-=new TextEncoder().encode(first).length;
+          }
+          memo.entries.set(memoKey,Object.freeze({...result}));memo.bytes+=cost;
+        }
+      }
+      return {...result};
+    }catch(error){
+      completeTreeMemos.delete(owner.identity);
+      // This token may invalidate only its own still-current phase, never a
+      // successor opened while this verification was awaiting a body.
+      owner.invalidate();throw error;
+    }
   }
   return Object.freeze({build, set, setMany, get, readObject, entries, page, inspect, walk, verify,
     limits:Object.freeze({maxNodeBytes, maxEntries, maxChildren, maxObjectBytes:PAGED_LOCATOR_MAX_BYTES, maxRootBytes:PAGED_LOCATOR_ROOT_BYTES})});

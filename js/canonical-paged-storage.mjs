@@ -1,3 +1,4 @@
+import {createOwnedPreparationReader} from './owned-preparation-reader.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {updatePartitionedCanonicalLedger,partitionDigest,createPartitionObjectIO} from './canonical-partitions.mjs';
 import {createCanonicalPartitionReader} from './canonical-partition-reader.mjs';
@@ -168,7 +169,11 @@ export class PagedCanonicalLedgerStore {
           const objects=[];
           for(const sha256 of reachable)if(prepared.has(sha256))objects.push({kind:'data-object',identity:sha256,sha256,byteLength:prepared.get(sha256).length});
           objects.sort((a,b)=>a.sha256<b.sha256?-1:a.sha256>b.sha256?1:0);
-          return {rootHash,objects,preparationStore};
+          // Only reachable newly prepared bytes are needed by the transaction.
+          // Snapshot them into a pure owned reader: no base-store fallback or
+          // arbitrary callback can run during its later staging reads.
+          const read=createOwnedPreparationReader(objects.map(d=>[d.sha256,prepared.get(d.sha256)]));
+          return {rootHash,objects,preparationStore:Object.freeze({read})};
         }});
       // The lifecycle has independently verified these exact prepared bytes,
       // their financial graph/history, durable publication and closing metadata.
