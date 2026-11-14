@@ -10,6 +10,7 @@ Production financial-data persistence remains **NO-GO**. Code, tests, owner acce
 | --- | --- |
 | [Project status](PROJECT_STATUS.md) | Dated implementation, PR/CI/deployment facts and evidence limits. |
 | [Next steps](NEXT_STEPS.md) | Alpha dependency order and measurable completion gates. |
+| [Visualization and investigation design](VISUALIZATION_AND_INVESTIGATION_DESIGN.md) | Owner-confirmed Home dashboard direction, connected investigation behavior, chart semantics and implementation handoff. |
 | [Storage scaling audit](STORAGE_SCALING_AND_PRODUCTION_READINESS.md) | Capacity findings, measurements and remaining safeguards. |
 | [App testing follow-up](APP_TESTING_FEEDBACK.md) | Posting-status editor, save request reduction and remaining acceptance. |
 | [Test commands](TESTING.md) | Focused, ordinary and required extended checks. |
@@ -27,7 +28,7 @@ Production financial-data persistence remains **NO-GO**. Code, tests, owner acce
 - [Fragmented canonical storage](FRAGMENTED_CANONICAL_STORAGE.md): historical v3 layout, not a supported application path. The application supports canonical v5 only and refuses older copies. See the glossary for distinct subsystem versions.
 - [Storage terminology](STORAGE_TERMINOLOGY.md): canonical/catalog/protocol/archive version names and verification vocabulary.
 - [Segmented locator catalogs](SEGMENTED_LOCATOR_CATALOG.md), [monthly index](CANONICAL_MONTH_INDEX.md) and [Drive response bounds](DRIVE_RESPONSE_BOUNDS.md): PR37 active-path contracts.
-- [Immutable page trees](IMMUTABLE_PAGE_TREE.md), [partitioned canonical storage](PARTITIONED_CANONICAL_STORAGE.md), [framed backup](FRAMED_BACKUP_STREAM.md) and [root transaction protocol](ROOT_TRANSACTION_PROTOCOL.md): current v5 and physical-protocol contracts, with original prototype formats and remaining materialization limits distinguished.
+- [Immutable page trees](IMMUTABLE_PAGE_TREE.md), [partitioned canonical storage](PARTITIONED_CANONICAL_STORAGE.md), [framed backup](FRAMED_BACKUP_STREAM.md) and [root transaction protocol](ROOT_TRANSACTION_PROTOCOL.md): current v5 and physical-protocol contracts, with original prototype formats and remaining materialization limits.
 - [Backup and restore](DRIVE_BACKUP_AND_RESTORE.md), [original-source retention](ORIGINAL_SOURCE_RETENTION.md) and [Google configuration](GOOGLE_DRIVE_CONFIGURATION.md): operational requirements.
 
 ## Evidence and history
