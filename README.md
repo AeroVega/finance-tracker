@@ -12,7 +12,7 @@ A second-generation personal finance tracker built around trustworthy financial 
 
 The authoritative implementation and authorization snapshot is [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md), checked against `main` at `be43951a7b4a09c8e54c1984b1fb41dc39401636` on November 14, 2026.
 
-PR #37 (incremental storage), PR #38 (mobile/tablet workspace), and PR #40 (privacy-safe diagnostics) are merged. The application writes canonical v5 and refuses older canonical copies without migration or overwrite. Full ledger/history materialization and semantic validation remain; v5 does not establish bounded whole-database memory or selective loading.
+PR #37 (incremental storage), PR #38 (mobile/tablet workspace), and PR #40 (privacy-safe diagnostics) are merged. Financial position and reconciled coverage were implemented in PR36. The application writes canonical v5 and refuses older canonical copies without migration or overwrite. Full ledger/history materialization and semantic validation remain; v5 does not establish bounded whole-database memory or selective loading.
 
 Node CI passed on the current main SHA. The initial Pages push workflow failed, then a manual deployment and Pages build/deployment completed successfully. The served SHA has not been independently checked. Physical Apple-device and current live Google Drive acceptance remain open.
 
