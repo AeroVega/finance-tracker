@@ -31,7 +31,7 @@ for (const interrupted of [false,true]) test(`bounded immutable staging ${interr
     assert.deepEqual(await h.driver.reopen(),ledger);
     assert.ok(peak>1,`expected overlapping immutable writes, got ${peak}`);
   }
-  assert.ok(peak<=4,`bounded immutable create concurrency: ${peak}`);
+  assert.ok(peak<=8,`bounded immutable create concurrency: ${peak}`);
   h.http.beforeResponse=null;
   if(!interrupted)await h.driver.release();
 });

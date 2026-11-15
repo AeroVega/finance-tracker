@@ -1,3 +1,4 @@
+import {isNativeDriveSessionAdapter} from './drive-session-adapter.mjs';
 import { sessionClaimDiagnostic } from "./session-claim-diagnostic.mjs";
 
 export const SESSION_FORMAT = "finance-tracker-session";
@@ -5,6 +6,16 @@ export const SESSION_VERSION = 1;
 export const DEFAULT_SESSION_TTL_MS = 120_000;
 // Keep native failures private; inspect() remains a bounded status interface.
 const inspectionCauses = new WeakMap();
+const nativeCoordinators=new WeakMap(),ownershipCapabilities=new WeakMap();
+// These helpers touch only private bookkeeping. They do not invoke callbacks or
+// change public coordinator state/results.
+const retireOwnership=coordinator=>{const state=nativeCoordinators.get(coordinator);if(state)state.epoch=Object.freeze({});};
+const recordOwned=(coordinator,record,sessionId)=>{const state=nativeCoordinators.get(coordinator);if(state){if(sessionId!==undefined)state.sessionId=sessionId;state.record=record;}};
+const observeInspection=(coordinator,result,sessionId)=>{
+  const state=nativeCoordinators.get(coordinator);
+  if(state&&state.sessionId!==null&&(sessionId===undefined||sessionId!==state.sessionId))retireOwnership(coordinator);
+  return result;
+};
 
 export class SessionCoordinationError extends Error {
   constructor(code, message, cause) {
@@ -89,11 +100,12 @@ export class SessionCoordinator {
     this.sessionQueue = Promise.resolve();
     this.activeWrites = 0;
     this.releaseFinalizing = false;
+    if(new.target===SessionCoordinator&&isNativeDriveSessionAdapter(this.adapter))nativeCoordinators.set(this,{epoch:Object.freeze({}),adapter:this.adapter,queue:this.sessionQueue,sessionId:null,record:null,disabled:false,now:this.now,createSessionId:this.createSessionId,staleAfterMs:this.staleAfterMs,clockSkewMs:this.clockSkewMs});
   }
 
   cancelPending() {
     this.operationGeneration++;
-    this.ownership = "unknown";
+    retireOwnership(this);this.ownership = "unknown";
     this.heartbeatStop?.();
     this.adapter.cancelPending?.();
   }
@@ -124,21 +136,21 @@ export class SessionCoordinator {
         sessionCheck: sessionClaimDiagnostic(error)?.check || "coordinator-read-failed"
       };
       inspectionCauses.set(result, error);
-      return result;
+      return observeInspection(this,result);
     }
-    if (record === null) return { status: "absent", record: null };
-    if (!validRecord(record)) return { status: "ambiguous", record: null };
+    if (record === null) return observeInspection(this,{ status: "absent", record: null });
+    if (!validRecord(record)) return observeInspection(this,{ status: "ambiguous", record: null });
 
     const now = this.now();
     if (record.heartbeatAt > now + this.clockSkewMs) {
-      return { status: "ambiguous", record };
+      return observeInspection(this,{ status: "ambiguous", record });
     }
-    if (record.state === "released") return { status: "released", record };
+    if (record.state === "released") return observeInspection(this,{ status: "released", record });
     if (now - record.heartbeatAt >= this.staleAfterMs ||
         record.expiresAt <= now) {
-      return { status: "stale", record };
+      return observeInspection(this,{ status: "stale", record });
     }
-    return { status: "active", record };
+    return observeInspection(this,{ status: "active", record },nativeCoordinatorCurrent(this)?record.sessionId:undefined);
   }
 
   makeRecord(sessionId, state = "active", startedAt = this.now()) {
@@ -160,12 +172,12 @@ export class SessionCoordinator {
     try {
       actual = await this.adapter.read();
     } catch (cause) {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail(failureCode, "Session ownership could not be verified after the write. All writes are disabled.",
         sessionClaimDiagnostic(cause)?.check || "coordinator-read-failed", cause);
     }
     if (!sameRecord(actual, expected)) {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail(failureCode, "The session record changed or could not be verified. All writes are disabled.", "coordinator-record-changed");
     }
   }
@@ -174,8 +186,10 @@ export class SessionCoordinator {
   // full transaction queue: a slow upload must not starve its own heartbeat.
   withSessionOperation(operation) {
     const assertCurrent = this.operationGuard();
-    const run = this.sessionQueue.then(() => { assertCurrent(); return operation(); });
-    this.sessionQueue = run.catch(() => undefined);
+    const queue=this.sessionQueue;
+    const run = queue.then(() => { assertCurrent(); return operation(); });
+    const nextQueue=run.catch(() => undefined);this.sessionQueue = nextQueue;
+    const owned=nativeCoordinators.get(this);if(owned){if(queue!==owned.queue)owned.disabled=true;owned.queue=nextQueue;}
     return run;
   }
 
@@ -188,12 +202,13 @@ export class SessionCoordinator {
     const assertCurrent = this.operationGuard();
     if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (this.canWrite) return this.session;
+    retireOwnership(this);
     const current = await this.inspect();
     assertCurrent();
     if (current.status === "active") fail("session-active", "Another active session is already registered. End that session before switching devices.");
     if (current.status === "stale") fail("stale-session", "A session appears stale. Automatic takeover is disabled; use the explicit stale-session recovery flow.");
     if (current.status === "ambiguous" || current.status === "unknown") {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       if (current.errorCode === "authorization-required") {
         fail("authorization-required", "Google authorization is required to inspect the existing Drive session. Reconnect to Google; no session or stored data was changed. Writes remain disabled.", current.sessionCheck, inspectionCauses.get(current));
       }
@@ -201,15 +216,16 @@ export class SessionCoordinator {
       fail("ownership-unknown", "The existing session state cannot be trusted. Writes are disabled." + detail, current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
     }
 
-    const record = this.makeRecord(String(this.createSessionId()));
+    const requestedSessionId=String(this.createSessionId());
+    const record = this.makeRecord(requestedSessionId);
     this.session = record;
-    this.ownership = "unknown";
+    retireOwnership(this);this.ownership = "unknown";
     try {
       assertCurrent();
       await this.adapter.write(record);
       assertCurrent();
     } catch (cause) {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       assertCurrent();
       const detail = typeof cause?.code === "string" && /^[a-z][a-z0-9-]{0,95}$/.test(cause.code) ? " (" + cause.code + ")" : "";
       fail("ownership-unknown", "The session claim could not be confirmed" + detail + ". Preserve the folder and marker. Do not retry creation or switch devices.",
@@ -218,7 +234,7 @@ export class SessionCoordinator {
     await this.verifyWrittenRecord(record, "ownership-unknown");
     assertCurrent();
     this.session = record;
-    this.ownership = "owned";
+    this.ownership = "owned";recordOwned(this, record, requestedSessionId);
     return record;
   }
 
@@ -228,6 +244,7 @@ export class SessionCoordinator {
   }
 
   async _recoverStale(options) {
+    retireOwnership(this);
     const assertCurrent = this.operationGuard();
     if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (!options || options.confirm !== true) {
@@ -236,7 +253,7 @@ export class SessionCoordinator {
     const current = await this.inspect();
     assertCurrent();
     if (current.status !== "stale") {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail("not-stale", "The session is not conclusively stale. Recovery was refused.");
     }
 
@@ -247,31 +264,32 @@ export class SessionCoordinator {
       latest = await this.adapter.read();
       assertCurrent();
     } catch (cause) {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail("ownership-unknown", "The stale session could not be rechecked. Recovery was refused.", "coordinator-read-failed", cause);
     }
     if (!sameRecord(latest, current.record) ||
         this.now() - latest.heartbeatAt < this.staleAfterMs ||
         latest.state !== "active") {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail("ownership-unknown", "The session changed during stale-session recovery. Writes remain disabled.", "coordinator-record-changed");
     }
 
-    const record = this.makeRecord(String(this.createSessionId()));
+    const requestedSessionId=String(this.createSessionId());
+    const record = this.makeRecord(requestedSessionId);
     this.session = record;
-    this.ownership = "unknown";
+    retireOwnership(this);this.ownership = "unknown";
     try {
       assertCurrent();
       await this.adapter.write(record);
       assertCurrent();
     } catch (cause) {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail("ownership-unknown", "The recovery write could not be confirmed. Writes are disabled.", "coordinator-recovery-write-failed", cause);
     }
     await this.verifyWrittenRecord(record, "ownership-unknown");
     assertCurrent();
     this.session = record;
-    this.ownership = "owned";
+    this.ownership = "owned";recordOwned(this, record, requestedSessionId);
     return record;
   }
 
@@ -281,6 +299,7 @@ export class SessionCoordinator {
   }
 
   async _resume() {
+    retireOwnership(this);
     const assertCurrent = this.operationGuard();
     if (this.releasing) fail("not-owner", "Session handoff is in progress.");
     if (!this.session) fail("no-session-context", "This page has no prior session identity to revalidate.");
@@ -289,23 +308,23 @@ export class SessionCoordinator {
     assertCurrent();
     if (current.status === "active" && current.record.sessionId === expectedSessionId) {
       this.session = current.record;
-      this.ownership = "owned";
+      this.ownership = "owned";recordOwned(this, current.record, expectedSessionId);
       return this.session;
     }
     if (current.status === "stale" && current.record.sessionId === expectedSessionId) {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail("stale-session", "This session's heartbeat expired. Use explicit stale-session recovery before writing.");
     }
     if (current.status === "released" && current.record.sessionId === expectedSessionId) {
       this.session = null;
-      this.ownership = "released";
+      retireOwnership(this);this.ownership = "released";
       fail("session-released", "This session has already been released.");
     }
     if (current.status === "unknown" && current.errorCode === "authorization-required") {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail("authorization-required", "Google authorization is required to revalidate this Drive session. Reconnect to Google; the existing session and stored data were not changed. Writes remain disabled.");
     }
-    this.ownership = "unknown";
+    retireOwnership(this);this.ownership = "unknown";
     fail("ownership-lost", "The prior session identity could not be revalidated. Writes remain disabled.", current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
   }
 
@@ -314,7 +333,7 @@ export class SessionCoordinator {
       if (!this.canWrite || this.releaseFinalizing) fail("not-owner", "This session does not own an available active session record.");
       const current = await this.inspect();
       if (current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
-        this.ownership = "unknown";
+        retireOwnership(this);this.ownership = "unknown";
         fail("ownership-lost", "Session ownership is no longer verified. Writes are disabled.", current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
       }
 
@@ -329,12 +348,12 @@ export class SessionCoordinator {
       try {
         await this.adapter.write(record);
       } catch (cause) {
-        this.ownership = "unknown";
+        retireOwnership(this);this.ownership = "unknown";
         fail("ownership-unknown", "The heartbeat could not be confirmed. Writes are disabled until ownership is re-established.", "coordinator-heartbeat-write-failed", cause);
       }
       await this.verifyWrittenRecord(record, "ownership-unknown");
       if (!this.canWrite) fail("ownership-unknown", "Ownership was lost while verifying the heartbeat.", "coordinator-record-changed");
-      this.session = record;
+      this.session = record;recordOwned(this,record);
       return record;
     });
   }
@@ -359,7 +378,7 @@ export class SessionCoordinator {
     const timer = setIntervalImpl(async () => {
       if (stopped) return;
       if (!isOnline()) {
-        this.ownership = "unknown";
+        retireOwnership(this);this.ownership = "unknown";
         stopped = true;
         clearIntervalImpl(timer);
         this.heartbeatStop = null;
@@ -391,12 +410,12 @@ export class SessionCoordinator {
     // Immutable staging cannot change the authoritative root. Within an already
     // remotely verified write, use the live local lease; publication still
     // performs a fresh remote ownership check. Heartbeat failures invalidate it.
-    if(!online){this.ownership="unknown";fail("offline","Offline writes are prohibited.");}
+    if(!online){retireOwnership(this);this.ownership="unknown";fail("offline","Offline writes are prohibited.");}
     if(!this.canWrite||this.#admittedWrites<1||this.releaseFinalizing)
       fail("not-owner","Immutable staging requires an active verified write.");
     const now=this.now();
     if(this.session.expiresAt<=now||now-this.session.heartbeatAt>=this.staleAfterMs||this.session.heartbeatAt>now+this.clockSkewMs){
-      this.ownership="unknown";fail("stale-session","The local session lease expired. Reconnect before writing.");
+      retireOwnership(this);this.ownership="unknown";fail("stale-session","The local session lease expired. Reconnect before writing.");
     }
   }
 
@@ -410,7 +429,7 @@ export class SessionCoordinator {
 
   async _assertCanWrite(options) {
     if (options && options.online === false) {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail("offline", "Offline writes are prohibited. Reconnect and re-establish the session before writing.");
     }
     if (!this.canWrite || this.releaseFinalizing || (this.releasing && this.activeWrites === 0)) {
@@ -418,7 +437,7 @@ export class SessionCoordinator {
     }
     const current = await this.inspect();
     if (!this.canWrite || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
-      this.ownership = "unknown";
+      retireOwnership(this);this.ownership = "unknown";
       fail("ownership-lost", "The active session could not be verified. Writes are disabled.", current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
     }
     return true;
@@ -455,10 +474,10 @@ export class SessionCoordinator {
       await this.writeQueue;
       return await this.withSessionOperation(async () => {
         await beforeRelease();
-        this.releaseFinalizing = true;
+        retireOwnership(this);this.releaseFinalizing = true;
         const current = await this.inspect();
         if (!this.canWrite || current.status !== "active" || current.record.sessionId !== this.session.sessionId) {
-          this.ownership = "unknown";
+          retireOwnership(this);this.ownership = "unknown";
           fail("ownership-lost", "The session cannot be safely released because ownership is no longer verified.", current.sessionCheck || "coordinator-record-changed", inspectionCauses.get(current));
         }
         if (this.heartbeatStop) this.heartbeatStop();
@@ -470,12 +489,12 @@ export class SessionCoordinator {
         try {
           await this.adapter.write(record);
         } catch {
-          this.ownership = "unknown";
+          retireOwnership(this);this.ownership = "unknown";
           fail("release-unconfirmed", "Session release could not be confirmed. Do not switch devices yet.");
         }
         await this.verifyWrittenRecord(record, "release-unconfirmed");
         this.session = null;
-        this.ownership = "released";
+        retireOwnership(this);this.ownership = "released";
         return { released: true };
       });
     } finally {
@@ -483,4 +502,65 @@ export class SessionCoordinator {
       this.releaseFinalizing = false;
     }
   }
+}
+
+// Capture native descriptor identities once; accessors are compared, never
+// executed, when deciding whether a custom coordinator can enter this path.
+const nativeDescriptors=Object.getOwnPropertyDescriptors(SessionCoordinator.prototype);
+const ownValue=(object,key)=>{if(object===null||object===undefined)return undefined;const d=Object.getOwnPropertyDescriptor(object,key);return d&&Object.hasOwn(d,'value')?d.value:undefined;};
+function nativeCoordinatorCurrent(coordinator) {
+  const state=nativeCoordinators.get(coordinator);
+  if(!state||state.disabled||Object.getPrototypeOf(coordinator)!==SessionCoordinator.prototype)return false;
+  for(const [key,expected]of Object.entries(nativeDescriptors)){
+    if(key==='constructor')continue;
+    if(Object.hasOwn(coordinator,key))return false;
+    const actual=Object.getOwnPropertyDescriptor(SessionCoordinator.prototype,key);
+    if(!actual||actual.value!==expected.value||actual.get!==expected.get||actual.set!==expected.set)return false;
+  }
+  return ownValue(coordinator,'adapter')===state.adapter&&isNativeDriveSessionAdapter(state.adapter)&&
+    ownValue(coordinator,'sessionQueue')===state.queue&&
+    ownValue(coordinator,'session')===state.record&&ownValue(coordinator,'now')===state.now&&
+    ownValue(coordinator,'createSessionId')===state.createSessionId&&
+    ownValue(coordinator,'staleAfterMs')===state.staleAfterMs&&ownValue(coordinator,'clockSkewMs')===state.clockSkewMs;
+}
+export const getNativeOwnershipCapability=guard=>ownershipCapabilities.get(guard)??null;
+export function createNativeOwnershipGuard(coordinator,{isOnline=()=>true}={}) {
+  if(!nativeCoordinatorCurrent(coordinator)||typeof isOnline!=='function')return null;
+  const guard=async()=>{await coordinator.assertCanWrite({online:isOnline()});};
+  const capability=Object.freeze({
+    isCurrent:()=>nativeCoordinatorCurrent(coordinator),
+    capture(){
+      if(!nativeCoordinatorCurrent(coordinator))fail('verification-scope-closed','Native ownership behavior changed.');
+      const state=nativeCoordinators.get(coordinator),epoch=state.epoch,
+        sessionId=ownValue(state.record,'sessionId'),generation=ownValue(coordinator,'operationGeneration');
+      let failure=null;
+      const check=()=>{
+        if(failure)throw failure;
+        try{
+          const online=isOnline();
+          if(!nativeCoordinatorCurrent(coordinator))fail('verification-scope-closed','Native ownership behavior changed.');
+          const now=Reflect.apply(state.now,coordinator,[]);
+          if(!nativeCoordinatorCurrent(coordinator)||state.epoch!==epoch||
+             ownValue(coordinator,'operationGeneration')!==generation||
+             ownValue(coordinator,'ownership')!=='owned'||!sessionId||
+             ownValue(state.record,'sessionId')!==sessionId||
+             ownValue(coordinator,'releaseFinalizing')||
+             (ownValue(coordinator,'releasing')&&ownValue(coordinator,'activeWrites')===0)||!online)
+            fail('verification-scope-closed','Native ownership lifetime changed.');
+          const expiresAt=ownValue(state.record,'expiresAt'),heartbeatAt=ownValue(state.record,'heartbeatAt');
+          if(!Number.isFinite(now)||!Number.isSafeInteger(expiresAt)||!Number.isSafeInteger(heartbeatAt)||
+             expiresAt<=now||now-heartbeatAt>=state.staleAfterMs||heartbeatAt>now+state.clockSkewMs)
+            fail('stale-session','The local session lease expired during receipt verification.');
+        }catch(error){failure=error;throw error;}
+      };
+      check();return check;
+    }
+  });
+  ownershipCapabilities.set(guard,capability);return guard;
+}
+export function wrapNativeOwnershipGuard(guard) {
+  const wrapper=async()=>{await guard();};
+  const capability=ownershipCapabilities.get(guard);
+  if(capability)ownershipCapabilities.set(wrapper,capability);
+  return wrapper;
 }

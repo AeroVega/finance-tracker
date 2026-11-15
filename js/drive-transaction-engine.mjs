@@ -53,6 +53,20 @@ function joinBytes(parts) {
   return result;
 }
 
+const nativeReadAdapters=new WeakSet();
+const nativeReadDescriptors=new Map();
+export function getNativeDriveReadCheck(adapter) {
+  if(!nativeReadAdapters.has(adapter))return null;
+  const check=()=>{
+    if(Object.getPrototypeOf(adapter)!==GoogleDriveTransactionAdapter.prototype||Object.getOwnPropertyDescriptor(adapter,'onRequest')?.value!==null)
+      fail('verification-scope-closed','Native read transport changed.');
+    for(const [key,descriptor] of nativeReadDescriptors){
+      if(Object.hasOwn(adapter,key)||Object.getOwnPropertyDescriptor(GoogleDriveTransactionAdapter.prototype,key)?.value!==descriptor.value)
+        fail('verification-scope-closed','Native read control flow changed.');
+    }
+  };
+  try{check();return check;}catch{return null;}
+}
 export class GoogleDriveTransactionAdapter {
   #captureMutationGuard; #onExpiredMutation; #pendingMutations=new Set(); #mutationScopes=new WeakMap();
   constructor({ accessToken, folderId, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
@@ -80,6 +94,7 @@ export class GoogleDriveTransactionAdapter {
     this.generatedFileIds = [];
     this.seenGeneratedFileIds = new Set();
     this.fileIdRefill = null;
+    if(new.target===GoogleDriveTransactionAdapter)nativeReadAdapters.add(this);
   }
 
   #mutationGuard() {
@@ -912,3 +927,5 @@ export class DriveTransactionEngine {
 }
 
 export { canonicalizeJcs };
+
+for(const key of Object.getOwnPropertyNames(GoogleDriveTransactionAdapter.prototype)){if(key!=='constructor')nativeReadDescriptors.set(key,Object.getOwnPropertyDescriptor(GoogleDriveTransactionAdapter.prototype,key));}

@@ -14,7 +14,7 @@ const BEFORE_SMALL_COMMITS = [201, 279, 357, 435, 513, 591, 669, 747, 825, 903];
 function assertConcurrency(http, { requireParallel = false } = {}) {
   if (requireParallel) assert.ok(http.peakConcurrency > 1, 'independent immutable reads should overlap');
   assert.ok(http.peakConcurrency <= 8, 'immutable read concurrency must remain bounded');
-  assert.ok(http.peakMutations <= 4, 'independent immutable writes remain bounded');
+  assert.ok(http.peakMutations <= 8, 'native owned immutable writes remain bounded at eight');
   assert.ok(http.requests.filter(row=>row.category==='update').every(row=>row.concurrentMutations===1), 'manifest publication must not overlap another mutation');
   assert.equal(http.active, 0, 'no background HTTP requests may outlive the operation');
 }
@@ -156,7 +156,7 @@ test('fresh batch metadata follows every HTTP listing page and returns detached 
   assertConcurrency(h.http, { requireParallel: false });
   h.lifecycle.engine.invalidateHistory();
   assert.deepEqual(await h.driver.reopen(), ledger);
-  assertConcurrency(h.http); // A cold read still overlaps up to four downloads.
+  assertConcurrency(h.http); // A cold read still overlaps up to eight downloads.
   await h.lifecycle.release();
 });
 

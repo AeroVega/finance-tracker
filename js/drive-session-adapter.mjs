@@ -2,6 +2,10 @@ import { createDriveResponseLimits, readBoundedDriveJson, discardDriveResponse, 
 import { DRIVE_FILES_ENDPOINT, DRIVE_UPLOAD_ENDPOINT, listFolderChildren } from "./drive-feasibility-spike.mjs";
 import { SessionCoordinationError } from "./session-coordination.mjs";
 
+const nativeSessionAdapters=new WeakSet();
+// Lookup only: callers cannot register arbitrary session readers.
+export const isNativeDriveSessionAdapter=adapter=>nativeSessionAdapters.has(adapter);
+
 export const SESSION_MARKER_NAME = "finance-tracker-active-session.json";
 export const SESSION_MARKER_PROPERTY = "financeTrackerSession";
 
@@ -367,7 +371,8 @@ export function createDriveSessionAdapter(options) {
     await readBackExpected(record, previousRecord, epoch, signal);
   }
 
-  return Object.freeze({ read: () => read(), write, clear,
+  const result=Object.freeze({ read: () => read(), write, clear,
     cancelPending() { operationGeneration++; for (const controller of pending) controller.abort(); clear(); }
   });
+  nativeSessionAdapters.add(result);return result;
 }

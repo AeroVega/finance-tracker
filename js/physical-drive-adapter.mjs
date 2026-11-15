@@ -1,3 +1,4 @@
+import {getNativeDriveReadCheck} from './drive-transaction-engine.mjs';
 import {immutableContentType} from './immutable-content-type.mjs';
 import {diagnosticMimeClass} from './storage-write-diagnostic.mjs';
 import {locatorDecodeProfile,decodeLocatorBytes} from './locator-codec.mjs';
@@ -26,17 +27,20 @@ function ownedBytes(raw,maximum) {
 }
 export const PAGED_MANIFEST_NAME='ft-synthetic-paged-manifest.json';
 export const PAGED_MANIFEST_KIND='paged-canonical-manifest';
-const ownedBodyVerifiers=new WeakMap(),ownedLocatorDecoders=new WeakMap();
+const ownedBodyVerifiers=new WeakMap(),ownedLocatorDecoders=new WeakMap(),ownedAuditRunners=new WeakMap();
+export const getOwnedReceiptAuditRunner=adapter=>ownedAuditRunners.get(adapter)??null;
 export const getOwnedLocatorDecoder=adapter=>ownedLocatorDecoders.get(adapter)??null;
 // Lookup only. There is deliberately no public registration or proof-mint API.
 export const getOwnedPhysicalBodyVerifier=adapter=>ownedBodyVerifiers.get(adapter)??null;
 // Construct a fixed method snapshot, never register a caller-supplied target or
 // verifier. Only factory-owned sources can transfer their existing capability.
 export function snapshotPhysicalAdapter(adapter) {
-  const view=Object.fromEntries(['readMetadata','readBytes','allocateFileId','createImmutable','readManifest','writeManifest'].map(k=>[k,adapter[k].bind(adapter)]));
+  const audit=ownedAuditRunners.get(adapter);
+  const view=Object.fromEntries(['readMetadata','readBytes','allocateFileId','createImmutable','readManifest','writeManifest'].map(k=>[k,audit?Function.prototype.bind.call(adapter[k],adapter):adapter[k].bind(adapter)]));
   Object.defineProperty(view,'folderId',{get:()=>adapter.folderId});
   const verifier=ownedBodyVerifiers.get(adapter);if(verifier)ownedBodyVerifiers.set(view,verifier);
   const decoder=ownedLocatorDecoders.get(adapter);if(decoder)ownedLocatorDecoders.set(view,decoder);
+  if(audit)ownedAuditRunners.set(view,audit);
   return Object.freeze(view);
 }
 
@@ -46,7 +50,7 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
   // separate single-entry cache gated by strict fresh metadata on every read.
   const cache = new Map(), metadata = new Map(); let cacheBytes=0;
   const cacheBudget=8*1024*1024,maxVersionRevalidations=512,maxVersionRevalidationBytes=16*1024*1024;
-  let scope=null, generation=0, manifestCache=null;
+  let scope=null, generation=0, manifestCache=null,receiptAudit=null;
   const proofEntryBudget=512, proofByteBudget=1024*1024, selectedFolderId=adapter.folderId;
   const decodedNodes=new Map();let decodedBytes=0,decodeEpoch=0;
   const clearDecoded=()=>{decodeEpoch++;decodedNodes.clear();decodedBytes=0;};
@@ -207,13 +211,26 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       try {
       liveRead(owner,opts?.signal);let value;
       if(current) {
-        value=current.used.get(id)??current.opening.get(id);
+        const witnessed=current.used.get(id);
+        value=witnessed??current.opening.get(id);
         if(!value)value=await missing(()=>adapter.readMetadata(id,opts),owner);
-        liveRead(owner,opts?.signal);value=structuredClone(value);current.used.set(id,structuredClone(value));
+        liveRead(owner,opts?.signal);
+        // Existing private witnesses are already owned; only detach the return.
+        // First observations still take an independent private copy.
+        value=structuredClone(value);
+        if(!witnessed)current.used.set(id,structuredClone(value));
       } else {value=await missing(()=>adapter.readMetadata(id,opts),owner);liveRead(owner,opts?.signal);}
       validateMetadata(value,id,owner);
-      if(opts?.maxBytes !== undefined && encode(value).length>opts.maxBytes) poison('byte-limit','Physical metadata exceeds its requested bound.',owner);
-      metadata.delete(id); metadata.set(id,canonicalizeJcs(value));
+      let serialized;
+      if(current) {
+        // Scoped metadata is a detached JSON-compatible observation. Reuse its
+        // canonical representation for the byte bound and fingerprint.
+        if(opts?.maxBytes !== undefined) {
+          serialized=canonicalizeJcs(value);
+          if(enc.encode(serialized).length>opts.maxBytes)poison('byte-limit','Physical metadata exceeds its requested bound.',owner);
+        }
+      } else if(opts?.maxBytes !== undefined && encode(value).length>opts.maxBytes) poison('byte-limit','Physical metadata exceeds its requested bound.',owner);
+      metadata.delete(id); metadata.set(id,serialized??canonicalizeJcs(value));
       while(metadata.size>128) metadata.delete(metadata.keys().next().value);
       return value;
       }catch(error){if(currentOwner(owner)){clearFacts();if(current&&error?.code!=='object-not-found'){current.failed=error;resetProofs(current);}}throw error;}
@@ -492,7 +509,8 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
       const key=canonicalizeJcs([expected,profile]),hit=decodedNodes.get(key);
       if(hit){decodedNodes.delete(key);decodedNodes.set(key,hit);return structuredClone(hit.value);}
       const value=decodeLocatorBytes(bytes,profile);live();
-      const owned=structuredClone(value),cost=bytes.length;
+      // The decoder returns a fresh JSON graph with no caller-visible aliases.
+      const owned=value,cost=bytes.length;
       while(decodedNodes.size>=128||decodedBytes+cost>2*1024*1024){const first=decodedNodes.keys().next().value;if(first===undefined)break;decodedBytes-=decodedNodes.get(first).cost;decodedNodes.delete(first);}
       if(cost<=2*1024*1024){decodedNodes.set(key,{value:owned,cost});decodedBytes+=cost;}
       return structuredClone(owned);
@@ -501,6 +519,28 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
     if(current){current.pending.add(operation);operation.then(()=>current.pending.delete(operation),()=>current.pending.delete(operation));}
     return operation;
   }});
+  const nativeReadCheck=getNativeDriveReadCheck(adapter);
+  if(nativeReadCheck)ownedAuditRunners.set(physical,Object.freeze({
+    eligible(){try{nativeReadCheck();return true;}catch{return false;}},
+    capture(){
+      const owner=capture();
+      return ()=>{if(!currentOwner(owner)||owner.current?.closing||owner.current?.phaseClosing)fail('verification-scope-closed','Receipt audit expired.');nativeReadCheck();liveRead(owner);};
+    },
+    async run(check,operation){
+      nativeReadCheck();
+      if(receiptAudit&&currentOwner(receiptAudit.owner))fail('verification-scope-closed','Receipt audit cannot overlap.');
+      const owner=capture();let failure;
+      const audit={owner,check(){
+        if(failure)throw failure;
+        try{if(!currentOwner(owner))fail('verification-scope-closed','Receipt audit expired.');nativeReadCheck();check();}
+        catch(error){failure=error;throw error;}
+      }};
+      audit.check();receiptAudit=audit;
+      try{const result=await operation();audit.check();return result;}
+      catch(error){failure??=error;throw failure;}
+      finally{if(receiptAudit===audit)receiptAudit=null;}
+    }
+  }));
   ownedLocatorDecoders.set(physical,locatorDecoder);
   ownedBodyVerifiers.set(physical,physical.verifyImmutableObject);
   return Object.freeze(physical);

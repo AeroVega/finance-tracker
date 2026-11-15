@@ -3,7 +3,7 @@
 **Checked:** 2026-11-15  
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)  
 **Authoritative branch:** `main`  
-**Main baseline:** [`363260eb868444917a92aaefc4952c6bf775d76f`](https://github.com/AeroVega/finance-tracker/commit/363260eb868444917a92aaefc4952c6bf775d76f)
+**Main baseline:** [`5dcaabbd7d5b4fc1b8a56257914eea1a953d1fca`](https://github.com/AeroVega/finance-tracker/commit/5dcaabbd7d5b4fc1b8a56257914eea1a953d1fca)
 
 This page is the concise, mutable snapshot for agents. The detailed [project status log](PROJECT_STATUS.md) and PR records retain historical evidence; they do not replace this current snapshot.
 
@@ -14,6 +14,7 @@ This page is the concise, mutable snapshot for agents. The detailed [project sta
 - **PR #40 — merged:** bounded privacy-safe diagnostics, registered error-code handling, cause/context preservation, tiered main-app diagnostic UI, startup fallback, offline triage, and Copy/Select-only behavior. Prototype files were intentionally unchanged.
 - PR #41 and #42 added the centralized documentation/navigation and visualization design handoff. Their changes from the earlier `be43951a` baseline are documentation only.
 - PR #43 adds bounded owned reads/staging and phase-scoped complete-tree verification memoization. It merged on 2026-11-15 as `363260e`. Merge is not a claim of live acceptance or a verified served build. See [performance evidence](OPEN_SAVE_PERFORMANCE.md) for exact validation scope.
+- **PR #44 — merged:** corrected retained-save latency measurement and fixed-label benchmark telemetry, merged as `5dcaabb`. It changes tests, benchmarks and documentation, not application runtime.
 - Do not describe PR37 or PR38 as open/draft, or PR40 as unpublished.
 
 ## Active storage contract
@@ -25,6 +26,9 @@ Keep version namespaces distinct: canonical v5; compact source/derived version 2
 The active path coalesces canonical and locator changes and prepares only final-reachable new pages for upload. This does **not** mean the app has bounded whole-database memory or selective financial loading. Full ledger/history materialization, semantic and physical verification, workspace cloning, and preparation memory remain. Incremental financial validation and bounded whole-database memory remain open.
 
 ## Verification and deployment evidence
+
+- **PR44 head `ef337ab`:** exact tree passed 2,104/2,104 local extended tests and required remote checks before merge. Main `5dcaabb` has a successful [Pages workflow](https://github.com/AeroVega/finance-tracker/actions/runs/43739103439); this records pipeline success, not independent served-asset identity.
+- **Tier1 candidate:** the current branch carries the previously validated `5ad8abe` runtime onto this main baseline. That runtime passed 2,138/2,138 extended tests before integration. The integrated runtime/test tree passed 2,145/2,145 extended tests at `1afa62f`; exact-head remote CI remains a separate gate. See [Tier1 scope and evidence](TIER1_SAVE_PERFORMANCE.md).
 
 - **PR43 reconciled head `92c6bd9`:** local extended suite 2,097/2,097 passed; [remote Node CI43692062845](https://github.com/AeroVega/finance-tracker/actions/runs/43692062845) succeeded. The merged tree matches this tested tree; this is not a claim that the separate main workflow or browser deployment was independently verified.
 
@@ -44,7 +48,8 @@ The active path coalesces canonical and locator changes and prepares only final-
 
 ## Remaining project work
 
-- Tier0 save-measurement work is in progress on a fresh branch from merged main. See [measurement scope](TIER0_SAVE_MEASUREMENT.md); complexity observations are explicitly not enforced budgets.
+- Tier0 measurement work is merged in PR44. See [measurement scope](TIER0_SAVE_MEASUREMENT.md); complexity observations are explicitly not enforced budgets.
+- Review and test the bounded [Tier1 candidate](TIER1_SAVE_PERFORMANCE.md) separately. It excludes experimental closed-phase structural certificates and body-fact transfer. No sub-30-second live acceptance is established.
 
 - Complete the open/save performance gate: under 30 seconds per operation for Alpha, under 10 seconds later. The current optimizations do not establish that target or production acceptance. Preserve full integrity checks and distinguish local benchmarks from live synthetic results.
 
