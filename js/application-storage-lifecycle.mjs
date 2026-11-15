@@ -4,7 +4,7 @@ import { SURFACES } from './diagnostic-context.mjs';
 import {PagedApplicationStorage,isObsoletePagedVerificationFailure,currentPagedVerificationFailure} from './paged-application-storage.mjs';
 import { GoogleDriveTransactionAdapter, DriveTransactionEngine } from "./drive-transaction-engine.mjs";
 import { createDriveSessionAdapter } from "./drive-session-adapter.mjs";
-import { SessionCoordinator } from "./session-coordination.mjs";
+import { SessionCoordinator, createNativeOwnershipGuard } from "./session-coordination.mjs";
 import { CatalogTransactionEngine } from "./catalog-transaction-engine.mjs";
 import { verifyCatalogHistory } from "./catalog-storage.mjs";
 import { resolveSnapshotLocators } from "./drive-locator-catalog.mjs";
@@ -160,6 +160,9 @@ export class ApplicationStorageLifecycle {
       }}:{})
     });
     this.transactionAdapter=transactionAdapter;
+    const nativeCoordinator=this.coordinator,nativeSessionAdapter=this.sessionAdapter;let nativeEngine;
+    const nativeOwnership=(this.pagedCanonical&&!this.factories.createSessionAdapter&&!this.factories.createCoordinator&&!this.factories.createTransactionAdapter&&!this.factories.createEngine)
+      ?createNativeOwnershipGuard(nativeCoordinator,{isOnline:()=>this.engine===nativeEngine&&this.coordinator===nativeCoordinator&&this.sessionAdapter===nativeSessionAdapter&&this.transactionAdapter===transactionAdapter&&!this.factories.createCoordinator&&!this.factories.createSessionAdapter&&!this.factories.createTransactionAdapter&&!this.factories.createEngine&&this.isOnline()}):null;
     this.engine = (this.factories.createEngine || ((options) => new (this.pagedCanonical ? PagedApplicationStorage : this.catalogProtocol ? CatalogTransactionEngine : DriveTransactionEngine)(options)))({
       adapter: this.transactionAdapter,
       verificationPlans: this.verificationPlans,
@@ -167,8 +170,9 @@ export class ApplicationStorageLifecycle {
       cryptoImpl: this.crypto,
       isOnline: this.isOnline,
       assertStaging: () => this.coordinator.assertCanStage({ online: this.isOnline() }),
-      assertWritable: () => this.coordinator.assertCanWrite({ online: this.isOnline() })
+      assertWritable: nativeOwnership ?? (() => this.coordinator.assertCanWrite({ online: this.isOnline() }))
     });
+    nativeEngine=this.engine;
   }
 
   attachLifecycleListeners() {

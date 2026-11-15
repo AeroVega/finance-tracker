@@ -117,7 +117,7 @@ test('the complete year saves and reopens through the v5 adapter and paged/sessi
   const requestCount = setup.http.summary('year-seed').requests;
   // V5 baseline: 666 requests. The former v3 budget covered a different protocol.
   assert.ok(requestCount <= 670, `V5 seed exceeded its request budget: ${requestCount}`);
-  assert.ok(setup.http.peakMutations <= 4, 'independent immutable staging stays bounded');
+  assert.ok(setup.http.peakMutations <= 8, 'native owned immutable staging stays bounded at eight');
   assert.ok(setup.http.requests.filter(row=>row.category==='update').every(row=>row.concurrentMutations===1), 'manifest publication stays serial');
   setup.http.phase = 'year-verify';
   assert.equal(actual.alreadySaved, false);

@@ -85,3 +85,12 @@ verification gates.
 
 The canonical save path may use [owned preparation readers](OWNED_PREPARATION_READERS.md)
 for bounded stage probes. Arbitrary preparation callbacks retain serial probing.
+
+## Unmerged receipt-audit experiment
+
+The [owned first/final receipt-audit note](OWNED_RECEIPT_AUDIT.md) specifies a
+local experimental observation contract. Eligible native read-only chains retain
+first/final remote guards, not every intermediate remote sample. This is not
+literal equivalence of previous network-error timing and does not change content
+verification, final closure, or the generic/custom guard contract. It has not
+received production acceptance.

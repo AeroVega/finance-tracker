@@ -1,5 +1,7 @@
+import {isOwnedPagedOperationFactory} from './paged-application-storage.mjs';
+import {getNativeOwnershipCapability} from './session-coordination.mjs';
 import {bindPreparationRead,getOwnedPreparationReader} from './owned-preparation-reader.mjs';
-import {snapshotPhysicalAdapter,getOwnedPhysicalBodyVerifier} from './physical-drive-adapter.mjs';
+import {snapshotPhysicalAdapter,getOwnedPhysicalBodyVerifier,getOwnedReceiptAuditRunner} from './physical-drive-adapter.mjs';
 /** Synthetic v4 publication. Logical commits are portable; admission,
  * locators and receipts are copy-local. This does not change root protocol v3. */
 import {canonicalizeJcs} from './transaction-protocol.mjs';
@@ -460,7 +462,7 @@ export class PhysicalRootBinding {
     const batch = [];
     const stageBatch = async () => {
       let readFailure, readFailed = false;
-      // Own at most four descriptors/complete bodies. A missing read is local
+      // Own at most eight descriptors/complete bodies. A missing read is local
       // to this batch, not a reusable absence proof. No writes overlap probes.
       const results = await Promise.all(batch.splice(0).map(async item => {
         try {
@@ -511,7 +513,7 @@ export class PhysicalRootBinding {
       if (e.kind === 'commit-record' && e.sha256 === value.logicalHead.sha256) { deterministic = encode(value.logicalCommit); generated++; }
       if (e.kind === 'protocol-object' && e.sha256 === value.baseManifestHash) { deterministic = encode(value.baseManifest, PHYSICAL_ROOT_LIMITS.manifestBytes); generated++; }
       batch.push({entry:e, deterministic});
-      if (batch.length === 4) await stageBatch();
+      if (batch.length === 8) await stageBatch();
     }
     await stageBatch();
     if (generated !== 2) fail('invalid-plan', 'Plan must include exact portable commit and retained base-manifest evidence.');
@@ -564,7 +566,7 @@ export class PhysicalRootBinding {
   #result(value, locatorRoot, receiptHead) {
     return {...value.baseManifest, revision:value.logicalCommit.revision, root:value.logicalCommit.root, headCommit:copy(value.logicalHead), locatorRoot:copy(locatorRoot), receiptHead:copy(receiptHead), pending:null};
   }
-  async #candidate(value, locatorRoot, expected, phase, signal, verifyReceipts = true) {
+  async #candidate(value, locatorRoot, expected, phase, signal, verifyReceipts = true, deferReceiptGuard = false, receiptBoundary = null) {
     const tree = this.#tree(value.baseManifest, expected, signal);
     const base = await tree.verify(value.baseManifest.locatorRoot, {signal}), candidate = await tree.verify(locatorRoot, {signal});
     if (count(candidate.entryCount) !== count(base.entryCount) + count(value.objectCount)) fail('candidate-mismatch', 'Candidate contains omitted or unauthorized additions.');
@@ -601,7 +603,7 @@ export class PhysicalRootBinding {
     // Receipt-edge checks run after the caller's complete selected-history audit.
     // That audit checks every historical root and change. Repeating whole
     // semantic prefixes per receipt would multiply work without adding a check.
-    await this.#guard(expected, signal);
+    if(!deferReceiptGuard){receiptBoundary?.();await this.#guard(expected, signal);receiptBoundary?.();}
   }
   async #receiptValue(value, locatorRoot) {
     return {format:RECEIPT, version:4, databaseId:value.baseManifest.databaseId, copyId:value.baseManifest.copyId, transactionId:value.transactionId,
@@ -610,16 +612,35 @@ export class PhysicalRootBinding {
       locatorRoot:copy(locatorRoot), root:value.logicalCommit.root, headCommit:copy(value.logicalHead), revision:value.logicalCommit.revision};
   }
   async #receiptChain(selected, expected, signal) {
-    let m = selected;
-    while (m.receiptHead !== null) {
-      const raw = await this.#read(m.receiptHead, 'protocol-object', undefined, signal), receipt = decode(raw), value = copy(receipt.intent);
-      await this.#binding(value);
-      if (!same(m, this.#result(value, m.locatorRoot, m.receiptHead))) fail('receipt-mismatch', 'Clean manifest differs from its immutable receipt result.');
-      await this.#checkReceipt(value, m.locatorRoot, m.receiptHead, signal);
-      await this.#stage(value, expected, null, signal, false);
-      await this.#candidate(value, m.locatorRoot, expected, 'verify-retained-receipt', signal, false);
-      m = value.baseManifest;
-    }
+    const capability=getNativeOwnershipCapability(this.#assert),runner=getOwnedReceiptAuditRunner(this.#adapter);
+    const native=isOwnedPagedOperationFactory(this.#captureOperationGuard)&&!!capability&&!!runner&&capability.isCurrent()&&runner.eligible();
+    const firstBoundary=native?()=>{
+      abort(signal);this.#scope();
+      if(!capability.isCurrent()||!runner.eligible())fail('verification-scope-closed','Native receipt control flow changed.');
+    }:null;
+    const visit=async(m,first,bracket)=>{
+      while(m.receiptHead!==null){
+        this.#scope();abort(signal);bracket?.();
+        const raw=await this.#read(m.receiptHead,'protocol-object',undefined,signal),receipt=decode(raw),value=copy(receipt.intent);
+        await this.#binding(value);
+        if(!same(m,this.#result(value,m.locatorRoot,m.receiptHead)))fail('receipt-mismatch','Clean manifest differs from its immutable receipt result.');
+        await this.#checkReceipt(value,m.locatorRoot,m.receiptHead,signal);
+        await this.#stage(value,expected,null,signal,false);
+        const final=value.baseManifest.receiptHead===null;
+        // Only the native, privately bracketed intermediate receipt omits a
+        // remote observation. Structural/body/index checks remain identical.
+        await this.#candidate(value,m.locatorRoot,expected,'verify-retained-receipt',signal,false,!!bracket&&!final,bracket??firstBoundary);
+        this.#scope();abort(signal);bracket?.();
+        m=value.baseManifest;
+        if(first&&native&&!final){
+          const owned=capability.capture(),physical=runner.capture();
+          const check=()=>{abort(signal);owned();physical();};
+          return runner.run(check,()=>visit(m,false,check));
+        }
+        first=false;
+      }
+    };
+    await visit(selected,true,null);
   }
   async #checkReceipt(value, locatorRoot, ref, signal) {
     if (!same(decode(await this.#read(ref, 'protocol-object', value.transactionId, signal)), await this.#receiptValue(value, locatorRoot))) fail('receipt-mismatch', 'Pinned receipt does not bind the exact intent, candidate and logical result.');

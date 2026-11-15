@@ -1,3 +1,4 @@
+import {wrapNativeOwnershipGuard} from './session-coordination.mjs';
 import {bindPreparationRead,typedPreparationRead} from './owned-preparation-reader.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {partitionDigest} from './canonical-partitions.mjs';
@@ -11,7 +12,8 @@ import {createPhysicalDriveAdapter,PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND} from
 export {createPhysicalDriveAdapter,PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND} from './physical-drive-adapter.mjs';
 export const PAGED_INITIALIZATION_FORMAT = 'finance-tracker-paged-initialization';
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
-const failureOwners=new WeakMap();
+const failureOwners=new WeakMap(),ownedOperationFactories=new WeakSet();
+export const isOwnedPagedOperationFactory=fn=>ownedOperationFactories.has(fn);
 export const isObsoletePagedVerificationFailure=error=>error!==null&&typeof error==='object'&&failureOwners.get(error)?.()===true;
 export function currentPagedVerificationFailure(error) {return error!==null&&typeof error==='object'&&failureOwners.has(error)?Object.assign(new Error('Current application verification failed.',{cause:error}),{code:error.code}):error;}
 function obsolete(error) {
@@ -100,7 +102,7 @@ export class PagedApplicationStorage {
       if(this.#selectedManifest!==undefined&&value!==this.#selectedManifest){this.invalidateHistory();fail('copy-mismatch','Selected manifest cannot change within an application session.');}
       this.#selectedManifest=value;
     }});
-    Object.defineProperty(this,'assertWritable',{value:async()=>{await assertWritable();}});
+    Object.defineProperty(this,'assertWritable',{value:wrapNativeOwnershipGuard(assertWritable)});
     Object.defineProperty(this,'assertStaging',{value:async()=>{await assertStaging();}});
     this.verificationPlans=verificationPlans;this.#plans=verificationPlans;
     this.#planEntries=[...Map.prototype.entries.call(verificationPlans)];
@@ -151,9 +153,11 @@ export class PagedApplicationStorage {
   binding(manifestFileId=this.manifestFileId) {
     this.#checkPlans();this.manifestFileId=manifestFileId;
     if(!this.#physical)this.#physical=createPhysicalDriveAdapter(this.adapter,{manifestFileId,assertWritable:this.assertWritable});
+    const captureOperationGuard=()=>{const context=this.#current;return ()=>this.#assertOpen(context);};
+    ownedOperationFactories.add(captureOperationGuard);
     if(!this.engine)this.engine=new PhysicalRootBinding({adapter:this.physical,assertWritable:this.assertWritable,assertStaging:this.assertStaging,
       verificationPlans:this.#plans,verifySourceEvidence:this.#plans.verifySourceEvidence,
-      captureOperationGuard:()=>{const context=this.#current;return ()=>this.#assertOpen(context);}});
+      captureOperationGuard});
     return this.engine;
   }
   async #begin() {

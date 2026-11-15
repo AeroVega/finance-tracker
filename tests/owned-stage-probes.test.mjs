@@ -59,12 +59,12 @@ for(const mode of ['success','generic','permission','cancel-probe','callback-err
     await assert.rejects(binding.testStage(value,manifest,selected,controller.signal));
     assert.deepEqual(calls,expectedCalls.slice(0,calls.length));
     if(['permission','cancel-probe'].includes(mode)){
-      assert.equal(calls.length,0);assert.equal(seen.size,4);
+      assert.equal(calls.length,0);assert.equal(seen.size,8);
       assert.equal(h.http.requests.slice(before).filter(r=>r.category==='create').length,0);
     }
   }
-  assert.equal(probes,0);assert.equal(inPreparation,0);assert.ok(peak<=4);
-  if(trusted)assert.equal(peak,4);if(mode==='generic')assert.equal(peak,1);
+  assert.equal(probes,0);assert.equal(inPreparation,0);assert.ok(peak<=8);
+  if(trusted)assert.equal(peak,8);if(mode==='generic')assert.equal(peak,1);
   assert.deepEqual(h.http.json(h.manifestFileId),manifest);
   assert.equal(h.http.requests.slice(before).filter(r=>r.category==='update').length,0);
   const count=h.http.requests.length;await delay(40);assert.equal(h.http.requests.length,count,'all issued work must drain');

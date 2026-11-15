@@ -48,7 +48,8 @@ test('active two-edit workspace saves reuse GET bytes with fresh checks as retai
     // V5 has physical publication/receipt checks rather than the catalog
     // writer's request budget. Six retained full-year saves measure 285..337.
     assert.ok(metrics.requests <= 350, JSON.stringify(metrics));
-    assert.ok(metrics.peakMutations <= 4);
+    assert.ok(metrics.peakMutations <= 8, 'native owned immutable staging stays bounded at eight');
+    assert.ok(h.http.requests.filter(row => row.phase === h.http.phase && row.category === 'update').every(row => row.concurrentMutations === 1), 'manifest publication stays serial within the save phase');
     assert.ok(metrics.peakConcurrency <= 8);
     counts.push(metrics.requests);
     h.http.phase = 'reopen';
