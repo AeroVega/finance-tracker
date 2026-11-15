@@ -10,6 +10,10 @@ design and repairs unfinished-editor transitions, posting-status clarity,
 route scrolling and short-window editing space. The results below describe
 the initial redesign; [project status](PROJECT_STATUS.md) has current checks.
 
+For the later owner-confirmed Home dashboard and investigation direction, see
+[Visualization and investigation design](VISUALIZATION_AND_INVESTIGATION_DESIGN.md).
+That handoff describes design intent, not implemented chart behavior.
+
 ## Research and choice
 
 First-party sources consulted November 11, 2026:
