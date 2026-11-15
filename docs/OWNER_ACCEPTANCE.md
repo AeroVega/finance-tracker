@@ -1,40 +1,27 @@
-# Owner acceptance center
+# Owner acceptance
 
-**Current guide, November 11, 2026.** Use this guide with the [canonical workspace checks](CANONICAL_MAIN_WORKSPACE.md#validation-and-owner-acceptance). The owner already accepted PR32 local exploration, evidence/corrections and mobile experience. The newer Drive-preview persistence and transfer-link paths remain open; do not repeat unaffected accepted checks without reason.
+**Current acceptance guide:** 2026-11-14. The exact implementation baseline, CI/deployment evidence, and permission boundary are in [CURRENT_STATE.md](CURRENT_STATE.md). Recheck the current source SHA before attributing any manual observation to a build.
 
-**Integrated v5 checks:** the [checklist page](../prototype/acceptance.html) now covers v5 seeding and backup/file restore. It replaces the obsolete grouped-v2 selector steps. Earlier results do not validate the changed storage paths; record the exact source and device for each new observation.
+## Outstanding acceptance
 
-**Deployment prerequisite:** main's audited Pages run failed before upload. Confirm a successful authorized deployment and full served SHA before attributing new results to it. See [project status](PROJECT_STATUS.md). This guide does not authorize a deployment.
+- [ ] Verify the deployed application reports the intended full source SHA. A successful Pages workflow alone does not prove which SHA a browser is serving.
+- [ ] On physical iPhone and iPad Safari, exercise the current mobile workspace and PR40 diagnostic presentation, including text selection and clipboard behavior. Browser emulation and Node tests are not device acceptance.
+- [ ] Using invented data and a fresh empty synthetic Drive folder, recheck current synthetic-year initialization and one-change save/reopen. Preserve the exact bounded diagnostic report and source/build identity if it fails. Do not infer a provider-side cause from a diagnostic label.
+- [ ] Verify backup/export and restore on separate fresh synthetic destinations, preserving uncertain or failed destinations rather than reusing them.
 
-## Focused mobile pages
+## Existing evidence
 
-The [new navigation and layout acceptance](MOBILE_WORKSPACE_PAGES.md#owner-acceptance-on-the-intended-commit) covers the PR36 redesign. Its affected mobile checks need fresh acceptance despite the narrower earlier PR32 pass. Use **Storage** for opening/reconnecting a saved copy, previews, undo/revert, release, recovery and the served source SHA.
+- PR32's local workspace exploration/evidence/correction experience was owner-accepted for its tested scope.
+- PR36's financial-position and reconciled-coverage implementation is merged; its recorded owner synthetic/device acceptance applies to the paths tested at that revision.
+- PR37's storage foundation, PR38's mobile/tablet integration, and PR40's diagnostics are merged. Their CI and local tests are not a substitute for current physical-device or live-service acceptance.
+- The latest main Node contract workflow passed. A main Pages push attempt failed, followed by successful manual deployment and Pages build/deployment workflows. The served SHA still needs independent confirmation.
 
-## Run order
+## Procedures and boundaries
 
-1. Confirm the full deployed SHA against the intended successful Pages deployment and select the actual browser. Repeat separately on physical iPhone and iPad Safari; emulation is not device acceptance.
-2. Use a separate DEVICE folder for preview-only layout, touch, focus, text enlargement and coverage-calendar checks. Verify release. Test real OAuth/folder-picker cancellation with no active session.
-3. Use a fresh empty synthetic folder to save/release/reconnect the small invented year as canonical v5. Older canonical copies are unsupported. If testing refusal with an invented old copy, verify that it remains unchanged. Never migrate or overwrite it.
-4. Reconnect a completed year, briefly disconnect this device while idle, check the offline controls, then reconnect and verify the same saved year.
-5. Run assisted canonical import and its separate reconnect verification in a fresh IMPORT source.
-6. Rehearse actual paused-tab close/recovery using the separate disposable INTERRUPTION folder and existing verifier.
-7. Reuse the completed YEAR-V5 source in the [paged copy guide](../prototype/pr25-acceptance.html?guide=v5). Make a direct backup and export an actual framed file. Release the source, then restore the selected saved file without reconnecting it. Separately restore the direct backup. Each destination must be a distinct new empty synthetic folder. Reopen restored primaries in the main workspace and verify the exact records, corrections and history. Preserve failed or uncertain destinations; never reuse them.
-8. Release and close device A before reconnecting an exact completed YEAR-V5 source on device B. Use the year tool’s deterministic reconnect verification, not Upload. Verify release on B too. The import runner’s reconnect comparison requires the same tab that completed its run and cannot be used for cross-device validation.
+Use the current [canonical workspace acceptance checks](CANONICAL_MAIN_WORKSPACE.md#validation-and-owner-acceptance), [synthetic financial year procedure](SYNTHETIC_FINANCIAL_YEAR.md), [backup/restore contract](DRIVE_BACKUP_AND_RESTORE.md), [mobile workspace acceptance](MOBILE_WORKSPACE_PAGES.md), and [diagnostic contract](APP_DIAGNOSTICS.md). The interactive [acceptance checklist](../prototype/acceptance.html) is a checklist aid, not an automatic assertion of success.
 
-The underlying tools contain their observations and verification controls. See [PR28 canonical import](PR28_CANONICAL_IMPORT.md), [synthetic year](SYNTHETIC_FINANCIAL_YEAR.md) and [canonical storage](PARTITIONED_CANONICAL_STORAGE.md) for the changed paths. [PR30 evidence](archive/PR30_PERFORMANCE_INTEGRATION.md) remains historical. Do not duplicate engine results by marking a manual selection as an automatic assertion.
+Record each result as **User-confirmed** with the exact source SHA, device/browser, operation, destination class (synthetic only), outcome, and any report ID. Pass, Fail, and Blocked are distinct outcomes. Do not mark a step Pass when its required source or prerequisite is missing.
 
-## Safe continuity and reporting
+## Production boundary
 
-Only fixed plan/source/browser/manual-status fields are stored in this tab's sessionStorage. Navigation Back and reload retain those choices when the full source SHA and plan match. No folder, token, file, record, free text or log is collected. The report is an allowlisted JSON object, not a dump of page state. Copy/download it before closing the checklist tab. Browser storage failure is disclosed; no durable persistence is promised.
-
-Changing browser, changing source confirmation or starting a fresh checklist clears observations. Changing an observation clears only its dependent phases. Independent checks can proceed even when another is blocked. The copy phase needs the completed v5 year source. A source mismatch or missing full stamp prevents restoring prior evidence. The source stamp identifies the loaded page, not a continuous deployment monitor: recheck every tool's full SHA and reload this center if Pages changes while a tab is open. Back-forward cache cannot establish that the remote deployment stayed unchanged. A fresh run clears checklist choices only, never Drive data.
-
-Pass means **User-confirmed manual observation**, never automatic proof. Fail and Blocked are first-class outcomes. Missing source/browser or required source preparation prevents choosing Pass for that phase; links remain available for inspection. Programmatic reports from the underlying tools remain separate and should be copied with their own source context.
-
-## Boundaries
-
-**Open:** current changed-path physical Safari/live-service acceptance and device capacity until actually run and attributed to a source SHA. Earlier bounded owner observations remain valid for their tested scope, not every later path. Small-year acceptance does not validate large datasets; the adapter reconstructs full graphs. Sequential handoff does not prove concurrent safety. Interruption rehearsal is one canonical boundary, not every failure point or iOS process termination.
-
-No Google libraries, autoconnection, Drive operations or financial engines are loaded by this center. Following a tool link does not authorize production data. Owner-chosen synthetic folders and explicit existing controls are still required. Keep every completed or failed copy separate and preserve uncertain destinations. Session/recovery maintenance may write even when no financial records are added. Production remains **NO-GO**. No merge, deployment or live Drive action is part of this implementation.
-
-**Verified locally:** `node --test tests/acceptance-plan.test.mjs` covers report/status sanitization, full-source confirmation, stale-state resets, prerequisites, tool paths and static safety boundaries. These tests do not claim device or Google acceptance.
+This guide authorizes no deployment, merge, production configuration change, or real-data operation. Use invented fixtures only. Production financial-data persistence remains **NO-GO** pending the separate implementation and review of account/OAuth binding, privacy, cost, backup/recovery, live synthetic acceptance, and explicit owner authorization. A separate real-financial-data smoke test is not required.
