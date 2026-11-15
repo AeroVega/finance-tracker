@@ -184,9 +184,10 @@ for(const boundary of ['application','physical','folder','plans'])for(const meth
  await f.app.recover();await f.app.release();
 });
 
-for(const boundary of ['application','physical'])for(const category of ['create','update'])for(const withSuccessor of [false,true])for(const lostResponse of [false,true])
- test(`an issued ${category} with ${lostResponse?'lost':'successful'} response requires recovery after ${boundary} expiry ${withSuccessor?'with':'without'} a successor`,async()=>{
-  const f=await warmFixture();let enter,resolve,once=true;const entered=new Promise(r=>enter=r),gate=new Promise(r=>resolve=r);
+for(const legacy of [false,true])for(const boundary of ['application','physical'])for(const category of ['create','update'])for(const withSuccessor of [false,true])for(const lostResponse of [false,true])
+ test(`${legacy?'legacy':'native'}: an issued ${category} with ${lostResponse?'lost':'successful'} response requires recovery after ${boundary} expiry ${withSuccessor?'with':'without'} a successor`,async()=>{
+  const f=await warmFixture();if(legacy){const create=f.app.transactionAdapter.createImmutable.bind(f.app.transactionAdapter);f.app.transactionAdapter.createImmutable=(...args)=>create(...args);}
+  let enter,resolve,once=true;const entered=new Promise(r=>enter=r),gate=new Promise(r=>resolve=r);
   f.drive.beforeResponse=async info=>{if(once&&info.category===category){once=false;enter();await gate;}};
   const old=f.app.savePartitionedRoot({expectedBase:f.manifest,rootHash:f.manifest.root,objects:[],preparationStore:{read:()=>assert.fail('unused')}}).then(()=>null,error=>error);
   await entered;const mutations=f.drive.mutations,requests=f.drive.requests.filter(r=>['create','update'].includes(r.category)).length;
@@ -197,7 +198,7 @@ for(const boundary of ['application','physical'])for(const category of ['create'
   assert.equal(f.drive.mutations,mutations+1,'The already-issued mutation may complete exactly once.');
   assert.equal(f.drive.requests.filter(r=>['create','update'].includes(r.category)).length,requests,'Expired continuations cannot dispatch a later mutation.');
   assert.equal(f.app.state,'recovery-required');assert.equal(f.app.engine.recoveryRequired,true);await assert.rejects(f.app.requireReady());
-  if(category==='update')assert.equal(f.drive.json(f.app.manifestFileId).pending?.state,'admitted');
+  if(category==='update')assert.equal(f.drive.json(f.app.manifestFileId).pending?.state,legacy?'admitted':'published');
   f.drive.reboot();f.drive.beforeResponse=null;
   if(!withSuccessor){await f.app.recover();await rawSnapshot(f.app);await f.app.release();}
  });

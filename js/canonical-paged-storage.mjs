@@ -9,6 +9,9 @@ import {PAGED_CANONICAL_LAYOUT,PAGED_CANONICAL_VERIFIER,canonicalProfileForVerif
 
 const fail = code => { throw Object.assign(new Error(code),{code}); };
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
+const ownedCanonicalVerifiers=new WeakSet();
+// Identity lookup only; callers cannot register verifier callbacks.
+export const isOwnedCanonicalVerifier=verify=>ownedCanonicalVerifiers.has(verify);
 
 /** The current workspace requires a complete ledger. This is a materializing
  * semantic audit, not a bounded-memory audit. Explicit expansion budgets protect
@@ -101,6 +104,7 @@ export function canonicalPartitionVerificationPlans() {
       throw error;
     }
   };
+  ownedCanonicalVerifiers.add(verify);
   const plans=new Map([[PAGED_CANONICAL_VERIFIER,verify]]);
   Object.defineProperties(plans,{
     beginVerification:{value:()=>{if(active)fail('semantic-scope-open');audited.clear();verifiedEdges.clear();active=Object.freeze({});return active;}},
