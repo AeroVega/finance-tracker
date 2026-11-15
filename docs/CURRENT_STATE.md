@@ -3,7 +3,7 @@
 **Checked:** 2026-11-15  
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)  
 **Authoritative branch:** `main`  
-**Main baseline before PR43 reconciliation:** [`bfcb45ac08fcbb1bf757e1242e13e2fc18741391`](https://github.com/AeroVega/finance-tracker/commit/bfcb45ac08fcbb1bf757e1242e13e2fc18741391)
+**Main baseline:** [`363260eb868444917a92aaefc4952c6bf775d76f`](https://github.com/AeroVega/finance-tracker/commit/363260eb868444917a92aaefc4952c6bf775d76f)
 
 This page is the concise, mutable snapshot for agents. The detailed [project status log](PROJECT_STATUS.md) and PR records retain historical evidence; they do not replace this current snapshot.
 
@@ -13,7 +13,7 @@ This page is the concise, mutable snapshot for agents. The detailed [project sta
 - **PR #38 — merged:** mobile/tablet workspace redesign and associated interaction fixes.
 - **PR #40 — merged:** bounded privacy-safe diagnostics, registered error-code handling, cause/context preservation, tiered main-app diagnostic UI, startup fallback, offline triage, and Copy/Select-only behavior. Prototype files were intentionally unchanged.
 - PR #41 and #42 added the centralized documentation/navigation and visualization design handoff. Their changes from the earlier `be43951a` baseline are documentation only.
-- PR #43 adds bounded owned reads/staging and phase-scoped complete-tree verification memoization. It is under reconciliation/review here, not yet recorded as merged or deployed. See [performance evidence](OPEN_SAVE_PERFORMANCE.md) for exact validation scope.
+- PR #43 adds bounded owned reads/staging and phase-scoped complete-tree verification memoization. It merged on 2026-11-15 as `363260e`. Merge is not a claim of live acceptance or a verified served build. See [performance evidence](OPEN_SAVE_PERFORMANCE.md) for exact validation scope.
 - Do not describe PR37 or PR38 as open/draft, or PR40 as unpublished.
 
 ## Active storage contract
@@ -25,6 +25,8 @@ Keep version namespaces distinct: canonical v5; compact source/derived version 2
 The active path coalesces canonical and locator changes and prepares only final-reachable new pages for upload. This does **not** mean the app has bounded whole-database memory or selective financial loading. Full ledger/history materialization, semantic and physical verification, workspace cloning, and preparation memory remain. Incremental financial validation and bounded whole-database memory remain open.
 
 ## Verification and deployment evidence
+
+- **PR43 reconciled head `92c6bd9`:** local extended suite 2,097/2,097 passed; [remote Node CI43692062845](https://github.com/AeroVega/finance-tracker/actions/runs/43692062845) succeeded. The merged tree matches this tested tree; this is not a claim that the separate main workflow or browser deployment was independently verified.
 
 - **Node CI:** [run 43561156605](https://github.com/AeroVega/finance-tracker/actions/runs/43561156605), Node contract tests on the historical `be43951a` baseline — success. This is not CI evidence for the reconciled PR43 head.
 - **Pages push workflow:** run 43561156654 failed. A subsequent manual deployment run [43561726496](https://github.com/AeroVega/finance-tracker/actions/runs/43561726496) completed successfully; the Pages build/deployment run [43561306077](https://github.com/AeroVega/finance-tracker/actions/runs/43561306077) also succeeded.
@@ -41,6 +43,8 @@ The active path coalesces canonical and locator changes and prepares only final-
 - Preserve the $0 recurring-cost constraint, permanent manual file imports, no stored bank passwords, and no unauthorized scraping.
 
 ## Remaining project work
+
+- Tier0 save-measurement work is in progress on a fresh branch from merged main. See [measurement scope](TIER0_SAVE_MEASUREMENT.md); complexity observations are explicitly not enforced budgets.
 
 - Complete the open/save performance gate: under 30 seconds per operation for Alpha, under 10 seconds later. The current optimizations do not establish that target or production acceptance. Preserve full integrity checks and distinguish local benchmarks from live synthetic results.
 
