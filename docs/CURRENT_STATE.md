@@ -1,9 +1,9 @@
 # Current project state
 
-**Checked:** 2026-11-14  
+**Checked:** 2026-11-15  
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)  
 **Authoritative branch:** `main`  
-**Baseline commit:** [`be43951a7b4a09c8e54c1984b1fb41dc39401636`](https://github.com/AeroVega/finance-tracker/commit/be43951a7b4a09c8e54c1984b1fb41dc39401636)
+**Main baseline before PR43 reconciliation:** [`bfcb45ac08fcbb1bf757e1242e13e2fc18741391`](https://github.com/AeroVega/finance-tracker/commit/bfcb45ac08fcbb1bf757e1242e13e2fc18741391)
 
 This page is the concise, mutable snapshot for agents. The detailed [project status log](PROJECT_STATUS.md) and PR records retain historical evidence; they do not replace this current snapshot.
 
@@ -12,7 +12,9 @@ This page is the concise, mutable snapshot for agents. The detailed [project sta
 - **PR #37 — merged:** incremental storage foundation, segmented locator catalogs, monthly indexes, bounded Drive response/recovery safeguards, and canonical v5 replacement work.
 - **PR #38 — merged:** mobile/tablet workspace redesign and associated interaction fixes.
 - **PR #40 — merged:** bounded privacy-safe diagnostics, registered error-code handling, cause/context preservation, tiered main-app diagnostic UI, startup fallback, offline triage, and Copy/Select-only behavior. Prototype files were intentionally unchanged.
-- The current main tree is the merge commit above. Do not describe PR37 or PR38 as open/draft, or PR40 as unpublished.
+- PR #41 and #42 added the centralized documentation/navigation and visualization design handoff. Their changes from the earlier `be43951a` baseline are documentation only.
+- PR #43 adds bounded owned reads/staging and phase-scoped complete-tree verification memoization. It is under reconciliation/review here, not yet recorded as merged or deployed. See [performance evidence](OPEN_SAVE_PERFORMANCE.md) for exact validation scope.
+- Do not describe PR37 or PR38 as open/draft, or PR40 as unpublished.
 
 ## Active storage contract
 
@@ -24,7 +26,7 @@ The active path coalesces canonical and locator changes and prepares only final-
 
 ## Verification and deployment evidence
 
-- **Node CI:** [run 43561156605](https://github.com/AeroVega/finance-tracker/actions/runs/43561156605), Node contract tests on the current main commit — success.
+- **Node CI:** [run 43561156605](https://github.com/AeroVega/finance-tracker/actions/runs/43561156605), Node contract tests on the historical `be43951a` baseline — success. This is not CI evidence for the reconciled PR43 head.
 - **Pages push workflow:** run 43561156654 failed. A subsequent manual deployment run [43561726496](https://github.com/AeroVega/finance-tracker/actions/runs/43561726496) completed successfully; the Pages build/deployment run [43561306077](https://github.com/AeroVega/finance-tracker/actions/runs/43561306077) also succeeded.
 - The workflow result establishes a successful deployment pipeline, **not independent verification of the SHA currently served to a browser**.
 - PR40's published PR description records 1,994/1,994 extended tests on its exact reduced-scope local code and successful remote Node CI for the merged main SHA. Earlier PR37/PR38 test counts apply only to their named revisions.
@@ -39,6 +41,8 @@ The active path coalesces canonical and locator changes and prepares only final-
 - Preserve the $0 recurring-cost constraint, permanent manual file imports, no stored bank passwords, and no unauthorized scraping.
 
 ## Remaining project work
+
+- Complete the open/save performance gate: under 30 seconds per operation for Alpha, under 10 seconds later. The current optimizations do not establish that target or production acceptance. Preserve full integrity checks and distinguish local benchmarks from live synthetic results.
 
 1. Validate the latest integrated application on physical iPhone/iPad Safari and recheck the synthetic Google Drive initialization and one-change save/reopen path using the current build. Use diagnostics to preserve evidence; do not infer or guess provider causes.
 2. Complete the distinct historical monthly-summary migration from 2023 onward, first against invented workbook fixtures. Preserve monthly granularity and provenance; never manufacture transactions from aggregates.

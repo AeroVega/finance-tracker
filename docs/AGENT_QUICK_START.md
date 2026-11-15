@@ -47,3 +47,5 @@ Hash integrity proves bytes covered by a root; it does not prove completeness or
 ## Documentation maintenance
 
 Keep this page short. Put mutable status in CURRENT_STATE.md, priorities in NEXT_STEPS.md, product intent in PRODUCT_DEFINITION.md, and each technical invariant in one focused contract. Keep measured results with their dated evidence. Link rather than duplicate. Archive completed reports only when they retain historical value.
+
+For the open/save performance gate, read [performance evidence](OPEN_SAVE_PERFORMANCE.md); synthetic timings are not live acceptance.

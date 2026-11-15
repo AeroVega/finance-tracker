@@ -454,7 +454,27 @@ export function createPhysicalDriveAdapter(adapter, {manifestFileId, assertWrita
 
     }
   };
-  const locatorDecoder=Object.freeze({invalidate:clearDecoded,captureRead:()=>{
+  const verificationIdentities=new WeakMap();
+  const captureVerification=()=>{
+    if(!scope)return null;
+    const owner=capture(),epoch=decodeEpoch;
+    const assertCurrent=()=>{
+      liveRead(owner);
+      if(epoch!==decodeEpoch||owner.current.closing||owner.current.phaseClosing)
+        fail('verification-scope-closed','Complete-tree verification phase expired.');
+    };
+    assertCurrent();
+    let state=verificationIdentities.get(owner.current);
+    if(!state||state.phase!==owner.phase||state.epoch!==owner.epoch||state.decodeEpoch!==epoch){
+      state={phase:owner.phase,epoch:owner.epoch,decodeEpoch:epoch,identity:Object.freeze({})};
+      verificationIdentities.set(owner.current,state);
+    }
+    const identity=state.identity;
+    return Object.freeze({identity,assertCurrent,invalidate:()=>{
+      if(currentOwner(owner)&&epoch===decodeEpoch)clearDecoded();
+    }});
+  };
+  const locatorDecoder=Object.freeze({captureVerification,invalidate:clearDecoded,captureRead:()=>{
     const owner=capture(),epoch=decodeEpoch;
     return Object.freeze({assertCurrent:()=>liveRead(owner),invalidate:()=>{if(currentOwner(owner)&&epoch===decodeEpoch)clearDecoded();}});
   },decode:input=>{

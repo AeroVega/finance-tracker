@@ -49,7 +49,7 @@ test('active two-edit workspace saves reuse GET bytes with fresh checks as retai
     // writer's request budget. Six retained full-year saves measure 285..337.
     assert.ok(metrics.requests <= 350, JSON.stringify(metrics));
     assert.ok(metrics.peakMutations <= 4);
-    assert.ok(metrics.peakConcurrency <= 4);
+    assert.ok(metrics.peakConcurrency <= 8);
     counts.push(metrics.requests);
     h.http.phase = 'reopen';
     await h.session.reopen();

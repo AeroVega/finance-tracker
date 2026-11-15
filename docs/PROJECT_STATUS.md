@@ -1,5 +1,65 @@
 # Project status
 
+## Verified retained-history CPU progress, November 14, 2026
+
+A bounded private complete-tree memo avoids repeated structural verification only
+inside the same owned physical phase. All receipt, history, union, guard and final
+metadata checks remain. No storage format, migration, concurrency or retry policy
+changes were made.
+
+Two matched synthetic five-edit-history CPU pairs improved mean save from 6.953
+to 4.935 seconds and open from 5.138 to 4.128 seconds, with identical request counts,
+categories and byte totals. The benchmark now fixes financial/storage fixture IDs
+and event times; real session/lease clocks remain. These are zero-delay CPU results,
+not live latency or achievement of the 30-second goal.
+
+The full extended run passed 2096/2096 tests in 451.8 seconds. A subsequent test-only
+boundary addition and comment clarification passed all 14 dedicated tests; no
+executable production change followed the full run. Independent source review
+found no blocker. Details and limitations are in the
+[complete-tree phase memo note](COMPLETE_TREE_PHASE_MEMO.md).
+
+This is branch progress only. No merge, deployment, remote CI pass, live provider
+acceptance or real-data use is claimed.
+
+
+## Verified open/save progress, November 14, 2026
+
+Selected code `00cd939` passed **2083/2083 extended synthetic tests**, zero
+failures/skips, in 484.5 seconds; syntax, diagnostic-code, generated reference,
+documentation and independent source reviews passed. The first aggregate run's
+preparation-reader expectation was corrected by separately testing the expiring
+base reader and immutable no-fallback output map, then rerunning the full suite.
+
+The candidate combines owned immutable preparation readers, bounded cross-index
+lookups and eight owned verification/preflight read slots. Writes and staging
+probes remain at four; generic callbacks preserve their original serial behavior.
+Two artificial 400 ms runs averaged **58.201 seconds save / 34.921 seconds open**,
+about 8.4% / 11.1% faster than the published preservation checkpoint control.
+Requests and exact saved/reopened graph checks are unchanged. Separate process
+memory samples showed no conspicuous increase, not a browser-memory guarantee.
+
+Owner-anchor ratios still predict roughly **53 seconds save / 41 seconds open**,
+not the 30-second Alpha goal or live acceptance. The unsafe combined-open
+experiment was rejected and is not included. See [performance evidence and
+limits](OPEN_SAVE_PERFORMANCE.md). Work targets the existing
+`perf/open-save-preservation-2026-11-14` branch only; no merge, deployment or
+real-data use follows from these local checks. Production remains **NO-GO**.
+
+
+## Local performance reconstruction, November 14, 2026
+
+PR #37, #38 and #40 are merged; the base is main at
+`be43951a7b4a09c8e54c1984b1fb41dc39401636`. A local bounded-concurrency
+candidate was reconstructed from recorded edits after its temporary checkout
+became unavailable. Original commit identity is not asserted. Fresh tests and
+benchmarks passed: 2057/2057 extended tests, zero skipped; two synthetic 400 ms
+runs measured 63.541/63.607 seconds save and 39.223/39.595 seconds reopen.
+Separate owner-anchor ratios still predict roughly 58/47 seconds
+save/open, above the owner's 30-second Alpha target. See the
+[performance report](OPEN_SAVE_PERFORMANCE.md) for evidence and limitations.
+No publication, merge, deployment or production authorization is implied.
+
 ## JSON locator MIME correction, November 14, 2026
 
 **User-confirmed:** the preserved diagnostic on `0d52766` identifies a JSON

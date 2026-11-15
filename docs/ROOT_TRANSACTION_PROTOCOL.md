@@ -82,3 +82,6 @@ no-search restart, streamed plan preparation, byte ownership and verifier
 lifetimes. Generic archive decoding retains its separate format tests.
 Repository-wide checks, live synthetic acceptance and deployment are separate
 verification gates.
+
+The canonical save path may use [owned preparation readers](OWNED_PREPARATION_READERS.md)
+for bounded stage probes. Arbitrary preparation callbacks retain serial probing.

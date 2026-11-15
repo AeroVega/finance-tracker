@@ -1,12 +1,14 @@
 # Next steps
 
 **Updated:** 2026-11-14  
-**Current baseline:** [main at `be43951a`](CURRENT_STATE.md)  
+**Current baseline:** [current main and scoped evidence](CURRENT_STATE.md)  
 **Release target:** 2027-01-01 for v1.0.0, conditional on all release gates.
 
 This file is the active dependency/acceptance queue. It does not grant permission to merge, deploy, change production configuration, or use real financial data. The [current state](CURRENT_STATE.md) is authoritative for implementation and authorization. The [product definition](PRODUCT_DEFINITION.md) owns the detailed v1.0.0 scope.
 
 ## Immediate priorities
+
+- **Make open/save practical without weakening verification.** Target under 30 seconds per operation for Alpha and under 10 seconds later. See [performance evidence](OPEN_SAVE_PERFORMANCE.md). Keep synthetic measurements, predictions and live acceptance separate; preserve full financial, retained-history and physical verification.
 
 1. **Validate the latest integrated app.** Recheck synthetic-year initialization and one-change save/reopen on the current main build, using the bounded diagnostics to preserve exact evidence. Confirm physical iPhone/iPad Safari behavior for the changed workspace and diagnostics. Do not infer a provider-side cause from a diagnostic category alone.
 2. **Finish the Alpha financial-history path.** Implement and verify the distinct monthly-summary migration from January 2023 using invented workbook fixtures first. Preserve source granularity, provenance, month coverage, and reconciliation results; never convert monthly totals into fabricated transaction rows.
