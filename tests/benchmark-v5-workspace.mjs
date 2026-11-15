@@ -12,6 +12,7 @@ import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {getEffectiveActivities,summarizeLedger} from '../js/canonical-import.mjs';
 import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
+import {withSaveLatency,summarizeRequests,complexityObservation} from './helpers/benchmark-save-metrics.mjs';
 import {denseLedgerFixture} from './helpers/dense-ledger-fixture.mjs';
 
 const dense=process.env.V5_BENCH_DENSE==='1',coldReopen=process.env.V5_BENCH_COLD_REOPEN==='1';
@@ -53,10 +54,10 @@ function stageCorrection(session,command) {
   try {session.correct(command);} finally {crypto.randomUUID=randomUUID;globalThis.Date=RealDate;}
 }
 async function phase(name,operation) {
-  http.phase=name;const start=performance.now(),cpuStart=process.cpuUsage(),memoryBefore=process.memoryUsage();let status='failed';
+  http.phase=name;const requestStart=http.requests.length;const start=performance.now(),cpuStart=process.cpuUsage(),memoryBefore=process.memoryUsage();let status='failed';
   try {const result=await operation();status='verified';return result;}
-  finally {console.log(JSON.stringify({phase:name,status,ms:performance.now()-start,cpuMicroseconds:process.cpuUsage(cpuStart),
-    memoryBefore,memoryAfter:process.memoryUsage(),cumulativeProcessMaxRssKiB:process.resourceUsage().maxRSS,files:http.files.size,...http.summary(name)}));}
+  finally {console.log(JSON.stringify({phase:name,status,effectiveDelayMs:http.latencyMs,ms:performance.now()-start,cpuMicroseconds:process.cpuUsage(cpuStart),
+    memoryBefore,memoryAfter:process.memoryUsage(),cumulativeProcessMaxRssKiB:process.resourceUsage().maxRSS,files:http.files.size,...http.summary(name),requestMetrics:summarizeRequests(http.requests.slice(requestStart))}));}
 }
 try {
   await phase('initialize',()=>app.start());
@@ -70,14 +71,14 @@ try {
   const activity=getEffectiveActivities(session.ledger).find(a=>a.sourceDescription===(dense?'INVENTED FEE':'INVENTED BROKERAGE FEE'));
   stageCorrection(session,{activityId:activity.activityId,type:'classification',activityKind:'spending',rationale:'Invented benchmark classification'});
   if(!singleEdit)stageCorrection(session,{activityId:activity.activityId,type:'category-correction',categoryId:'invented-fees',rationale:'Invented benchmark category'});
-  http.latencyMs=saveLatencyMs;
-  await phase(singleEdit?'save-one-staged-edit':'save-two-staged-edits',()=>session.save());
-  http.latencyMs=0;
+  await withSaveLatency(http,saveLatencyMs,()=>phase(singleEdit?'save-one-staged-edit':'save-two-staged-edits',()=>session.save()));
+  console.log(JSON.stringify({complexity:complexityObservation({fixture:dense?'dense-one-year':'standard-one-year',revision:0,metrics:summarizeRequests(http.requests.filter(row=>row.phase===(singleEdit?'save-one-staged-edit':'save-two-staged-edits')))})}));
   await phase('no-op-save',()=>session.store.save(session.ledger));
   const revisions=Number(process.env.V5_BENCH_REVISIONS??0);assert.ok(Number.isSafeInteger(revisions)&&revisions>=0);
   for(let index=0;index<revisions;index++) {
     stageCorrection(session,{activityId:activity.activityId,type:'bank-correction',amountText:String(-100-index),rationale:'Invented retained revision'});
-    await phase('retained-save-'+(index+1),()=>session.save());
+    await withSaveLatency(http,saveLatencyMs,()=>phase('retained-save-'+(index+1),()=>session.save()));
+    console.log(JSON.stringify({complexity:complexityObservation({fixture:dense?'dense-one-year':'standard-one-year',revision:index+1,metrics:summarizeRequests(http.requests.filter(row=>row.phase==='retained-save-'+(index+1)))})}));
   }
   const expected=structuredClone(session.ledger);await phase('reopen',()=>session.reopen());
   assert.deepEqual(session.ledger,expected);assert.deepEqual(session.ledger.activities,ledger.activities);
