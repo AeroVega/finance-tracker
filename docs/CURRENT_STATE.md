@@ -7,6 +7,16 @@
 
 This page is the concise, mutable snapshot for agents. The detailed [project status log](PROJECT_STATUS.md) and PR records retain historical evidence; they do not replace this current snapshot.
 
+## PR46 fresh-copy test-build update (2026-11-16)
+
+This branch now routes the Dashboard and workspace to **full-snapshot v1**, a fresh-copy single-user synthetic experiment. The canonical-v5 storage description below records the earlier main baseline, not this branch's active application route. Main has since advanced to `f183cdc`; PR46 is separate and must not be described as merged or deployed from local tests.
+
+The new format uses one full immutable ledger snapshot and a small commit envelope per save, retaining published/clean acknowledgement, full ancestry audit on open/recovery and current/new-transition validation during saves. See [the focused contract and measurements](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). Use a new empty synthetic folder. Old copies are unsupported by this route, not migrated or deleted. Legacy modules remain for regression testing; removing them is separate work.
+
+**Limitations:** legacy import and backup/restore are unavailable for this format. It is a performance/recovery test build, not Alpha-ready or approved for real financial data. The 8 MiB encoded snapshot limit is not a browser memory bound. Full-history open and storage grow with retained full snapshots; iPhone/iPad Safari and live Drive acceptance remain open.
+
+The owner authorized implementing and updating PR46 for their own deployment/test, not an agent merge or deployment. Repository settings and existing folders must remain unchanged. The final exact-head validation evidence belongs in the focused contract; historical results below do not validate this new route.
+
 ## What is on main
 
 - **PR #37 — merged:** incremental storage foundation, segmented locator catalogs, monthly indexes, bounded Drive response/recovery safeguards, and canonical v5 replacement work.

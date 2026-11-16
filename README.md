@@ -10,6 +10,8 @@ A second-generation personal finance tracker built around trustworthy financial 
 
 ## Current state
 
+**PR46 test branch:** The main Dashboard now uses a fresh-copy full-snapshot v1 format. Use a new empty synthetic folder. Old copies, import, and backup/restore are not supported in this experiment. See [current branch state](docs/CURRENT_STATE.md#pr46-fresh-copy-test-build-update-2026-11-16) and [the format contract](docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). The main-baseline description below is historical context for this branch, not its active storage route.
+
 The authoritative implementation and authorization snapshot is [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md), checked against `main` at `be43951a7b4a09c8e54c1984b1fb41dc39401636` on November 14, 2026.
 
 PR #37 (incremental storage), PR #38 (mobile/tablet workspace), and PR #40 (privacy-safe diagnostics) are merged. Financial position and reconciled coverage were implemented in PR36. The application writes canonical v5 and refuses older canonical copies without migration or overwrite. Full ledger/history materialization and semantic validation remain; v5 does not establish bounded whole-database memory or selective loading.

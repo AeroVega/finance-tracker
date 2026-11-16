@@ -55,6 +55,7 @@ function scheduleSearch() {
   searchTimer = setTimeout(() => { searchTimer = null; if (!busy) { page = 0; render(); } }, 120);
 }
 const storage = new DashboardSyntheticStorage({
+  fullSnapshot:true,
   maintainOriginals: false,
   onStatus(status) {
     if (!status.code) clearDiagnostic($('connection-status'));
@@ -70,7 +71,7 @@ registerContextProvider('workspace', () => ({
   lifecycle: storage.lifecycle?.state,
   ownership: storage.lifecycle?.coordinator?.canWrite === true ? 'owner' : 'unknown',
   busy, dirty: session.dirty, needsReopen: session.needsReopen,
-  profile: session.store?.base ? 'canonical5-physical4' : undefined,
+  profile: undefined,
   ledger: session.ledger ? {
     syntheticOnly: session.ledger.syntheticOnly === true,
     accounts: session.ledger.accounts.length, activities: session.ledger.activities.length,
@@ -177,10 +178,10 @@ function refresh() {
   $('data-mode').dataset.mode = session.mode;
   $('data-mode').textContent = session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
   $('storage-format').textContent = session.mode === 'preview'
-    ? 'Local preview, no saved format yet. Saving to a new folder will use canonical v5.'
+    ? 'Local preview, no saved format yet. Saving to a new folder will use full-snapshot v1. Old-format folders are unsupported.'
     : session.ledger && session.store?.base
-      ? `Last verified saved format: canonical v5, ${session.store.valueCodec}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
-      : 'No saved format currently verified. New synthetic copies use canonical v5.';
+      ? `Last verified saved format: ${session.store.valueCodec}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
+      : 'No saved format currently verified. New synthetic copies use full-snapshot v1; old formats are unsupported.';
 }
 async function run(message, operation, formStatus = null, actionId = 'workspace-action') {
   if (busy) return;

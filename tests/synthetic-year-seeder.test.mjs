@@ -154,8 +154,13 @@ test('year UI is opt-in, has recovery and release, and cannot ingest user CSVs',
   assert.match(js, /beforeunload/);
   assert.doesNotMatch(js, /localStorage|sessionStorage|console\./);
   const dashboard = readFileSync(new URL('../js/dashboard-synthetic-storage.mjs', import.meta.url),'utf8');
-  assert.ok(dashboard.indexOf('if (requireEmpty) await requireEmptySyntheticFolder') < dashboard.indexOf('this.lifecycle = new ApplicationStorageLifecycle'));
-  assert.ok(dashboard.indexOf('if (requireExisting && !inspected.manifestFileId)') < dashboard.indexOf('this.lifecycle = new ApplicationStorageLifecycle'));
+  const emptyCheck=dashboard.indexOf('if (requireEmpty) await requireEmptySyntheticFolder');
+  const existingCheck=dashboard.indexOf('if (requireExisting && !inspected.manifestFileId)');
+  assert.ok(emptyCheck>=0&&existingCheck>=0,'both admission checks remain explicit');
+  for(const constructor of ['new FullSnapshotApplication(', 'new ApplicationStorageLifecycle(']){
+    const construction=dashboard.indexOf(constructor);assert.ok(construction>=0,constructor);
+    assert.ok(emptyCheck<construction&&existingCheck<construction,'folder checks precede '+constructor);
+  }
 });
 
 

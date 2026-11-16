@@ -31,7 +31,7 @@ If sources disagree, do not silently combine them. Report the conflict and corre
 - **Locator catalog version** describes a storage index/root representation; it is not the canonical layout version.
 - **Physical root protocol** describes publication/recovery behavior.
 - **Framed transport/archive profile** describes backup/restore representation.
-- The active application writes canonical v5. Exact supported legacy-read behavior, subsystem versions, and refusal/recovery rules are defined in [PARTITIONED_CANONICAL_STORAGE.md](PARTITIONED_CANONICAL_STORAGE.md) and [STORAGE_TERMINOLOGY.md](STORAGE_TERMINOLOGY.md). Never infer compatibility from a version number alone.
+- On the PR46 fresh-copy test branch, the application uses [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). The earlier main path writes canonical v5, documented in [PARTITIONED_CANONICAL_STORAGE.md](PARTITIONED_CANONICAL_STORAGE.md) and [STORAGE_TERMINOLOGY.md](STORAGE_TERMINOLOGY.md). Check CURRENT_STATE before choosing a format or testing route; never infer compatibility from a version number alone.
 
 ## Evidence vocabulary
 

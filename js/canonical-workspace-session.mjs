@@ -54,7 +54,7 @@ export class CanonicalWorkspaceSession {
     this.invalidate();
     if (!this.ready()) fail('reconnect-required');
     const lifecycle = this.storage.lifecycle;
-    const store = new CanonicalLedgerStore({ lifecycle });
+    const store = (this.storage.createLedgerStore?.()??new CanonicalLedgerStore({ lifecycle }));
     const ledger = await store.load();
     if (!ledger) fail('canonical-ledger-required');
     if (lifecycle !== this.storage.lifecycle || !this.ready()) fail('reconnect-required');
@@ -187,11 +187,11 @@ export class CanonicalWorkspaceSession {
         const lifecycle = this.storage.lifecycle;
         if (!this.ready() || !lifecycle) fail('reconnect-required');
         const genesis = await lifecycle.readManifest();
-        if (!lifecycle.pagedCanonical || genesis.syntheticOnly !== true ||
-          genesis.revision !== '0' || genesis.pending !== null || genesis.role !== 'primary') {
+        if ((!lifecycle.fullSnapshot&&!lifecycle.pagedCanonical) || genesis.syntheticOnly !== true ||
+          genesis.revision !== '0' || genesis.pending !== null || (!lifecycle.fullSnapshot&&genesis.role !== 'primary')) {
           fail('new-empty-folder-required');
         }
-        store = new CanonicalLedgerStore({ lifecycle });
+        store = (this.storage.createLedgerStore?.()??new CanonicalLedgerStore({ lifecycle }));
         const existing = await store.load();
         if (existing !== null || !store.base || canonicalizeJcs(store.base) !== canonicalizeJcs(genesis)) {
           fail('new-empty-folder-required');
@@ -203,7 +203,7 @@ export class CanonicalWorkspaceSession {
         await store.save(proposal);
         writeVerified = true;
         if (!this.ready() || lifecycle !== this.storage.lifecycle) fail('reconnect-required');
-        const verifier = new CanonicalLedgerStore({ lifecycle });
+        const verifier = (this.storage.createLedgerStore?.()??new CanonicalLedgerStore({ lifecycle }));
         const reopened = await verifier.load();
         if (!reopened || canonicalizeJcs(reopened) !== canonicalizeJcs(proposal)) fail('seed-readback-mismatch');
         this.store = verifier;

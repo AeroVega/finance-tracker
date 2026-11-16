@@ -1126,18 +1126,18 @@ test('Storage distinguishes the active saved format from preview and experimenta
   assert.match(h.get('storage-format').textContent, /No saved format currently verified/);
   await h.click('preview-year');
   assert.match(h.get('storage-format').textContent, /Local preview, no saved format yet/);
-  assert.match(h.get('storage-format').textContent, /new folder will use canonical v5/);
+  assert.match(h.get('storage-format').textContent, /new folder will use full-snapshot v1/);
   await h.click('open-ledger');
-  assert.match(h.get('storage-format').textContent, /Last verified saved format: canonical v5, compact-json-v1/);
+  assert.match(h.get('storage-format').textContent, /Last verified saved format: compact-json-v1/);
   await h.click('release-ledger');
   assert.match(h.get('storage-format').textContent, /No saved format currently verified/);
   await h.click('preview-year');
   await h.click('save-preview');
-  assert.match(h.get('storage-format').textContent, /Last verified saved format: canonical v5, compact-json-v1/);
+  assert.match(h.get('storage-format').textContent, /Last verified saved format: compact-json-v1/);
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /canonical v5 with the explicit compact-json-v1 value codec/);
-  assert.match(html, /Opening a copy still verifies and loads the complete canonical ledger/);
-  assert.match(html, /Existing folders are not silently converted/);
+  assert.match(html, /one complete canonical ledger snapshot and a small commit envelope/);
+  assert.match(html, /Opening and recovery verify retained history/);
+  assert.match(html, /Old-format folders are unsupported and are never silently converted/);
 });
 
 
