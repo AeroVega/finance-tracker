@@ -9,7 +9,9 @@ import {PAGED_CANONICAL_LAYOUT,PAGED_CANONICAL_VERIFIER,canonicalProfileForVerif
 
 const fail = code => { throw Object.assign(new Error(code),{code}); };
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
-const ownedCanonicalVerifiers=new WeakSet();
+const ownedCanonicalVerifiers=new WeakSet(),ownedCanonicalPreparations=new WeakSet();
+export const isOwnedCanonicalPreparation=fn=>ownedCanonicalPreparations.has(fn);
+const ownPreparation=fn=>{ownedCanonicalPreparations.add(fn);return fn;};
 // Identity lookup only; callers cannot register verifier callbacks.
 export const isOwnedCanonicalVerifier=verify=>ownedCanonicalVerifiers.has(verify);
 
@@ -152,7 +154,7 @@ export class PagedCanonicalLedgerStore {
       this.base=null;
       let preparedAudit,preparedRoot;
       const committed=await this.lifecycle.savePartitionedRoot({expectedBase,semanticVersion,operation:'synthetic-canonical-import',transactionId:this.crypto.randomUUID(),
-        prepare:async({rootHash:baseRootHash,semanticVersion:verifiedVersion,store})=>{
+        prepare:ownPreparation(async({rootHash:baseRootHash,semanticVersion:verifiedVersion,store})=>{
           const profile=canonicalProfileForVerifier(verifiedVersion);
           if(profile.verifier!==semanticVersion)fail('canonical-profile-mismatch');
           const prepared=new Map();
@@ -178,7 +180,7 @@ export class PagedCanonicalLedgerStore {
           // arbitrary callback can run during its later staging reads.
           const read=createOwnedPreparationReader(objects.map(d=>[d.sha256,prepared.get(d.sha256)]));
           return {rootHash,objects,preparationStore:Object.freeze({read})};
-        }});
+        })});
       // The lifecycle has independently verified these exact prepared bytes,
       // their financial graph/history, durable publication and closing metadata.
       // Reopening here repeated that whole audit without new user work. Adopt

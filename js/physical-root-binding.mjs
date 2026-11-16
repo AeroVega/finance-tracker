@@ -1,6 +1,6 @@
-import {isOwnedCanonicalVerifier} from './canonical-paged-storage.mjs';
-import {PAGED_CANONICAL_VERIFIER} from './paged-canonical-format.mjs';
-import {isOwnedPagedOperationFactory} from './paged-application-storage.mjs';
+import {isOwnedCanonicalVerifier,verifyPartitionedCanonicalCommit,readVerifiedPartitionedLedger} from './canonical-paged-storage.mjs';
+import {PAGED_CANONICAL_VERIFIER,canonicalProfileForVerifier} from './paged-canonical-format.mjs';
+import {isOwnedPagedOperationFactory,getOwnedSaveBaseline} from './paged-application-storage.mjs';
 import {getNativeOwnershipCapability} from './session-coordination.mjs';
 import {bindPreparationRead,getOwnedPreparationReader} from './owned-preparation-reader.mjs';
 import {snapshotPhysicalAdapter,getOwnedPhysicalBodyVerifier,getOwnedReceiptAuditRunner} from './physical-drive-adapter.mjs';
@@ -16,6 +16,9 @@ export const PHYSICAL_ROOT_LIMITS = Object.freeze({objectBytes:65536, manifestBy
 const publicationObservations=new WeakMap();
 export const readPublicationObservation=result=>{const value=publicationObservations.get(result);return value?{...value}:null;};
 const rememberPublication=(result,value)=>{try{publicationObservations.set(result,Object.freeze({...value}));}catch{}return result;};
+const incrementalTreeGuards=new WeakMap(),ownedFullBaselines=new WeakMap();
+export const isOwnedFullBaseline=(handle,engine,m)=>{const proof=ownedFullBaselines.get(handle);return !!proof&&proof.engine===engine&&same(proof.manifest,m);};
+export const getIncrementalTreeGuard=guard=>incrementalTreeGuards.get(guard)??null;
 const INTENT = 'finance-tracker-copy-root-intent', PLAN = 'finance-tracker-copy-object-plan', RECEIPT = 'finance-tracker-copy-root-receipt';
 const encoder = new TextEncoder(), decoder = new TextDecoder('utf-8', {fatal:true});
 const typed = Object.getPrototypeOf(Uint8Array.prototype), nativeLength = Object.getOwnPropertyDescriptor(typed, 'byteLength').get;
@@ -161,6 +164,7 @@ const physicalKind = kind => kind === 'data-object' ? 'snapshot-object' : kind;
  * readManifest/writeManifest and direct physical methods have separate contracts.
  * See ROOT_TRANSACTION_PROTOCOL.md, protocol-4 companion, for lifecycle requirements. */
 export class PhysicalRootBinding {
+  #incremental=null;
   #captureOperationGuard; #operationGuard=null;
   #adapter; #folderId; #assert; #assertStaging; #verifiers; #lineage; #baselines = new WeakMap(); #queue = Promise.resolve(); #limits; #verifySourceEvidence;
   constructor({adapter, assertWritable, assertStaging=assertWritable, verificationPlans, lineageVerifiers = new Map(), locatorOptions = {}, verifySourceEvidence, captureOperationGuard = () => () => {}}) {
@@ -184,11 +188,11 @@ export class PhysicalRootBinding {
     const result=this.#queue.then(async()=>{
       this.#operationGuard=guard;
       try {this.#scope();const result=await fn();this.#scope();return result;}
-      finally {this.#operationGuard=null;}
+      finally {this.#operationGuard=null;this.#incremental=null;}
     });
     this.#queue=result.catch(()=>{});return result;
   }
-  #scope() { if(this.#operationGuard?.()!==undefined)fail('invalid-guard','Operation guards must throw on failure and return undefined.'); if (this.#adapter.folderId !== this.#folderId) fail('copy-mismatch', 'The original adapter changed its physical destination.'); }
+  #scope() { this.#incremental?.(); if(this.#operationGuard?.()!==undefined)fail('invalid-guard','Operation guards must throw on failure and return undefined.'); if (this.#adapter.folderId !== this.#folderId) fail('copy-mismatch', 'The original adapter changed its physical destination.'); }
   async #manifest(signal) {
     this.#scope(); abort(signal); const raw = owned(await this.#adapter.readManifest({maxBytes:PHYSICAL_ROOT_LIMITS.manifestBytes, signal}), PHYSICAL_ROOT_LIMITS.manifestBytes);
     this.#scope();abort(signal); const m = manifest(decode(raw, PHYSICAL_ROOT_LIMITS.manifestBytes));
@@ -201,9 +205,25 @@ export class PhysicalRootBinding {
     if (result !== undefined) fail('invalid-guard', 'Ownership must throw on failure and return undefined.');
   }
   async #guard(expected,signal) {await this.#owned(expected,signal);await this.#exact(expected,signal);this.#scope();abort(signal);}
+  #localReadAudit(expected,nativeGuard,signal) {
+    const runner=getOwnedReceiptAuditRunner(this.#adapter);
+    let pinned=copy(expected),phase=runner.capture();
+    const check=value=>{
+      nativeGuard();this.#scope();abort(signal);phase();
+      if(!same(value,pinned))fail('base-conflict','Local audit belongs to another expected manifest.');
+    };
+    check(expected);
+    return Object.freeze({check,afterOwnPublication:value=>{
+      nativeGuard();this.#scope();abort(signal);
+      // Only the caller's completed own publication may rotate physical phase.
+      const next=runner.capture();next();nativeGuard();
+      pinned=copy(value);phase=next;check(value);
+    }});
+  }
   #tree(m, expected, signal) {
-    return createPagedPhysicalLocators(this.#adapter, {...this.#limits, databaseId:m.databaseId, copyId:m.copyId, folderId:m.storageBinding.folderId,
-      assertWritable:async () => this.#owned(expected, signal, true)});
+    const assertWritable=async()=>this.#owned(expected,signal,true);
+    if(this.#incremental){const check=this.#incremental;incrementalTreeGuards.set(assertWritable,()=>{this.#scope();abort(signal);check();});}
+    return createPagedPhysicalLocators(this.#adapter, {...this.#limits, databaseId:m.databaseId, copyId:m.copyId, folderId:m.storageBinding.folderId,assertWritable});
   }
   async #read(ref, kind, transactionId, signal) {
     this.#scope(); pointer(ref); abort(signal);
@@ -288,7 +308,7 @@ export class PhysicalRootBinding {
     if (unfinished) fail('unfinished-verification-read', 'Verifier returned with an unsettled read.'); abort(signal); return result;
   }
   async #domain(tree, root, baseRoot, m, c, base, phase, signal) {
-    const fn = this.#verifiers.get(c.semanticVersion);
+    const fn = this.#incremental ? verifyPartitionedCanonicalCommit : this.#verifiers.get(c.semanticVersion);
     if (!fn) fail('verification-plan-unavailable', 'A retained semantic verifier is unavailable.');
     const result = await this.#scoped(tree, root, baseRoot, signal, reads => fn({...reads, manifest:copy(m), commit:copy(c), baseManifest:base ? copy(base) : null, phase, signal}));
     if (result !== undefined) fail('invalid-verification-result', 'Domain verification must throw on failure and return undefined.');
@@ -336,22 +356,62 @@ export class PhysicalRootBinding {
       return copy(m);
     });
   }
+  #captureIncremental(m) {
+    if(m.sourceEvidence||!isOwnedCanonicalVerifier(this.#verifiers.get(PAGED_CANONICAL_VERIFIER))||
+      !getNativeOwnershipCapability(this.#assert)?.isCurrent()||!getOwnedReceiptAuditRunner(this.#adapter)?.eligible())return null;
+    const native=getNativeOwnershipCapability(this.#assert),physical=getOwnedReceiptAuditRunner(this.#adapter);
+    const baseline=getOwnedSaveBaseline(this.#captureOperationGuard)?.(m);
+    if(!baseline)return null;
+    let failure=null;
+    const check=()=>{if(failure)throw failure;try {
+      baseline();
+      if(!native.isCurrent()||!physical.eligible())fail('verification-scope-closed','Incremental native composition changed.');
+      baseline();
+      if(!native.isCurrent()||!physical.eligible())fail('verification-scope-closed','Incremental native composition changed.');
+    }catch(error){failure=error;throw error;}};
+    check();return check;
+  }
+  async #currentState(tree,m,signal) {
+    const c=commit(decode(await tree.readObject(m.locatorRoot,{kind:'commit-record',sha256:m.headCommit.sha256},{signal})));
+    if(m.headCommit.format!==PORTABLE_COMMIT_FORMAT||m.headCommit.version!==4||c.databaseId!==m.databaseId||
+      c.revision!==m.revision||c.root!==m.root||c.semanticVersion!==PAGED_CANONICAL_VERIFIER)fail('history-mismatch','Current commit does not match the selected state.');
+    // Migration-origin semantics remain on their original complete verifier.
+    if(c.operation==='migrate-legacy-v5') {await this.#domain(tree,m.locatorRoot,null,m,c,null,'history',signal);return;}
+    await this.#scoped(tree,m.locatorRoot,null,signal,async({readObject})=>{
+      const current=await readVerifiedPartitionedLedger({read:(sha256,options)=>readObject({kind:'data-object',sha256},options)},c.root,{signal});
+      const profile=canonicalProfileForVerifier(c.semanticVersion);
+      if(current.ledger!==null&&current.version!==profile.version)fail('canonical-profile-mismatch','Current ledger profile differs from its commit.');
+      if(c.revision==='0') {
+        if(c.operation!=='genesis'||c.previousRoot!==null||current.ledger!==null||c.changeEvidenceRoot!==null)fail('canonical-genesis-mismatch','Current genesis is invalid.');
+      }else if(c.operation!=='synthetic-canonical-import'||c.changeEvidenceRoot!==null||c.previousRoot===null)
+        fail('canonical-commit-mismatch','Current canonical commit is invalid.');
+      // Historical previous→current transition was audited at open. The new
+      // current→candidate transition is still audited before/after publication.
+    });
+  }
   verifyBaseline({signal,expectedManifest} = {}) {
     const expected = expectedManifest === undefined ? undefined : copy(expectedManifest);
     return this.#enqueue(async () => {
       const m = await this.#manifest(signal); manifest(m, true);
       if (expected !== undefined && canonicalizeJcs(expected) !== canonicalizeJcs(m)) fail('base-conflict', 'Reopen the current root before saving.');
       if (m.role !== 'primary') fail('read-only-copy', 'A backup copy cannot supply a writable baseline.');
+      this.#incremental=this.#captureIncremental(m);
       await this.#guard(m, signal); const tree = this.#tree(m, m, signal);
-      await tree.verify(m.locatorRoot, {signal}); await this.#history(tree, m.locatorRoot, m, signal);
-      await this.#receiptChain(m, m, signal); await this.#guard(m, signal);
-      const handle = Object.freeze({}); this.#baselines.set(handle, copy(m)); return handle;
+      await tree.verify(m.locatorRoot, {signal});
+      let allOwned=false;
+      if(this.#incremental)await this.#currentState(tree,m,signal);
+      else {allOwned=await this.#history(tree,m.locatorRoot,m,signal);await this.#receiptChain(m,m,signal);}
+      await this.#guard(m, signal);
+      const handle = Object.freeze({}); this.#baselines.set(handle, copy(m));
+      if(allOwned)ownedFullBaselines.set(handle,{engine:this,manifest:copy(m)});
+      return handle;
     });
   }
   prepare({verifiedBase, root, transactionId, operation, semanticVersion, changeEvidenceRoot = null, objects, preparationStore, signal}) {
     const base = this.#baselines.get(verifiedBase), args = copy({root, transactionId, operation, semanticVersion, changeEvidenceRoot});
     const read = bindPreparationRead(preparationStore);
     return this.#enqueue(async () => {
+      if(base&&getOwnedPreparationReader(read))this.#incremental=this.#captureIncremental(base);
       if (!base) fail('verified-baseline-required', 'Use a privately verified baseline from this binding instance.');
       if (!this.#verifiers.has(args.semanticVersion)) fail('verification-plan-unavailable', 'The requested semantic verifier is unavailable.');
       if (!read || !objects || (!objects[Symbol.iterator] && !objects[Symbol.asyncIterator])) fail('invalid-preparation', 'A typed preparation reader and descriptor stream are required.');
@@ -574,7 +634,8 @@ export class PhysicalRootBinding {
   #result(value, locatorRoot, receiptHead) {
     return {...value.baseManifest, revision:value.logicalCommit.revision, root:value.logicalCommit.root, headCommit:copy(value.logicalHead), locatorRoot:copy(locatorRoot), receiptHead:copy(receiptHead), pending:null};
   }
-  async #candidate(value, locatorRoot, expected, phase, signal, verifyReceipts = true, deferReceiptGuard = false, receiptBoundary = null) {
+  async #candidate(value, locatorRoot, expected, phase, signal, verifyReceipts = true, deferReceiptGuard = false, receiptBoundary = null, audit = null) {
+    audit?.check(expected);
     const tree = this.#tree(value.baseManifest, expected, signal);
     const base = await tree.verify(value.baseManifest.locatorRoot, {signal}), candidate = await tree.verify(locatorRoot, {signal});
     if (count(candidate.entryCount) !== count(base.entryCount) + count(value.objectCount)) fail('candidate-mismatch', 'Candidate contains omitted or unauthorized additions.');
@@ -604,14 +665,14 @@ export class PhysicalRootBinding {
     } finally {await retained.return?.();}
     if (verifyReceipts) {
       const logical = {...value.baseManifest, revision:value.logicalCommit.revision, root:value.logicalCommit.root, headCommit:value.logicalHead, locatorRoot, pending:null};
-      await this.#history(tree, locatorRoot, logical, signal);
+      if(!this.#incremental)await this.#history(tree, locatorRoot, logical, signal);
       await this.#domain(tree, locatorRoot, value.baseManifest.locatorRoot, logical, value.logicalCommit, value.baseManifest, phase, signal);
-      await this.#receiptChain(value.baseManifest, expected, signal);
+      if(!this.#incremental)await this.#receiptChain(value.baseManifest, expected, signal,audit);
     }
     // Receipt-edge checks run after the caller's complete selected-history audit.
     // That audit checks every historical root and change. Repeating whole
     // semantic prefixes per receipt would multiply work without adding a check.
-    if(!deferReceiptGuard){receiptBoundary?.();await this.#guard(expected, signal);receiptBoundary?.();}
+    if(!deferReceiptGuard){receiptBoundary?.();if(audit)audit.check(expected);else await this.#guard(expected, signal);receiptBoundary?.();}
   }
   async #receiptValue(value, locatorRoot) {
     return {format:RECEIPT, version:4, databaseId:value.baseManifest.databaseId, copyId:value.baseManifest.copyId, transactionId:value.transactionId,
@@ -619,9 +680,10 @@ export class PhysicalRootBinding {
       previousReceiptHead:copy(value.baseManifest.receiptHead), planRoot:copy(value.planRoot), objectCount:value.objectCount,
       locatorRoot:copy(locatorRoot), root:value.logicalCommit.root, headCommit:copy(value.logicalHead), revision:value.logicalCommit.revision};
   }
-  async #receiptChain(selected, expected, signal) {
+  async #receiptChain(selected, expected, signal,audit=null) {
+    audit?.check(expected);
     const capability=getNativeOwnershipCapability(this.#assert),runner=getOwnedReceiptAuditRunner(this.#adapter);
-    const native=isOwnedPagedOperationFactory(this.#captureOperationGuard)&&!!capability&&!!runner&&capability.isCurrent()&&runner.eligible();
+    const native=!audit&&isOwnedPagedOperationFactory(this.#captureOperationGuard)&&!!capability&&!!runner&&capability.isCurrent()&&runner.eligible();
     const firstBoundary=native?()=>{
       abort(signal);this.#scope();
       if(!capability.isCurrent()||!runner.eligible())fail('verification-scope-closed','Native receipt control flow changed.');
@@ -637,7 +699,7 @@ export class PhysicalRootBinding {
         const final=value.baseManifest.receiptHead===null;
         // Only the native, privately bracketed intermediate receipt omits a
         // remote observation. Structural/body/index checks remain identical.
-        await this.#candidate(value,m.locatorRoot,expected,'verify-retained-receipt',signal,false,!!bracket&&!final,bracket??firstBoundary);
+        await this.#candidate(value,m.locatorRoot,expected,'verify-retained-receipt',signal,false,!!bracket&&!final,bracket??firstBoundary,audit);
         this.#scope();abort(signal);bracket?.();
         m=value.baseManifest;
         if(first&&native&&!final){
@@ -648,12 +710,13 @@ export class PhysicalRootBinding {
         first=false;
       }
     };
-    await visit(selected,true,null);
+    await visit(selected,true,audit?()=>audit.check(expected):null);
   }
   async #checkReceipt(value, locatorRoot, ref, signal) {
     if (!same(decode(await this.#read(ref, 'protocol-object', value.transactionId, signal)), await this.#receiptValue(value, locatorRoot))) fail('receipt-mismatch', 'Pinned receipt does not bind the exact intent, candidate and logical result.');
   }
-  async #resume(current, value, preparation, signal, preparedCandidate = null, nativeGuard = null) {
+  async #resume(current, value, preparation, signal, preparedCandidate = null, nativeGuard = null,audit=null) {
+    audit?.check(current);
     const admitted = await this.#binding(value);
     if (current.pending?.state === 'admitted') {
       if (!same(current, admitted)) fail('pending-mismatch', 'Admitted manifest differs from its exact intent.');
@@ -672,7 +735,7 @@ export class PhysicalRootBinding {
     if (!same(current, ready) && !same(current, published)) fail('pending-mismatch', 'Pending manifest differs from the pinned ready or published state.');
     await this.#stage(value, current, null, signal, false);
     await this.#checkReceipt(value, pending.locatorRoot, pending.receipt, signal);
-    await this.#candidate(value, pending.locatorRoot, current, pending.state === 'ready' ? 'before-publication' : 'before-finalization', signal);
+    await this.#candidate(value, pending.locatorRoot, current, pending.state === 'ready' ? 'before-publication' : 'before-finalization', signal,true,false,null,audit);
     if (same(current, ready)) {
       current = await this.#writeManifest(current, published, signal, nativeGuard);
       await this.#checkReceipt(value, pending.locatorRoot, pending.receipt, signal);
@@ -705,12 +768,19 @@ export class PhysicalRootBinding {
     const value = copy(input), preparation = bindPreparationRead(preparationStore),nativeGuard=this.#nativePublishedGuard(value,signal,observation);
     return this.#enqueue(async () => {
       nativeGuard?.();
-      const admitted = await this.#binding(value); let current = await this.#manifest(signal), preparedCandidate = null;
+      const admitted = await this.#binding(value); let current = await this.#manifest(signal), preparedCandidate = null,audit=null;
       if (same(current, value.baseManifest)) {
-        // A caller may resume after process restart, so reverify the clean base.
+        if(nativeGuard&&getOwnedPreparationReader(preparation))this.#incremental=this.#captureIncremental(current);
+        // Cold/recovery callers retain full history; owned loaded saves defer historical-only bodies.
         await this.#guard(current, signal); const tree = this.#tree(current, current, signal);
-        await tree.verify(current.locatorRoot, {signal}); const nativeHistory=await this.#history(tree, current.locatorRoot, current, signal);
-        await this.#receiptChain(current, current, signal);
+        await tree.verify(current.locatorRoot, {signal});
+        // Reduced saves already validated current state in verifyBaseline. The
+        // mandatory prepublication candidate audit independently rereads both
+        // exact base and candidate ledgers plus their transition. Corruption
+        // discovered there may leave unreachable staged objects, never authority.
+        const nativeHistory=this.#incremental?true:await this.#history(tree,current.locatorRoot,current,signal);
+        if(nativeGuard&&nativeHistory&&getOwnedPreparationReader(preparation))audit=this.#localReadAudit(current,nativeGuard,signal);
+        if(!this.#incremental)await this.#receiptChain(current, current, signal,audit);
         await this.#preflight(value, tree, signal);
         // All admitted bytes are durable before the manifest can name this intent.
         // An interrupted pre-stage retains evidence and leaves the exact old root.
@@ -726,10 +796,11 @@ export class PhysicalRootBinding {
           nativeGuard();
           const receipt=await this.#newObject(encode(await this.#receiptValue(value,preparedCandidate)),'protocol-object',value.transactionId,current,signal);
           await this.#checkReceipt(value,preparedCandidate,receipt,signal);
-          await this.#candidate(value,preparedCandidate,current,'before-publication',signal);
+          await this.#candidate(value,preparedCandidate,current,'before-publication',signal,true,false,null,audit);
           nativeGuard();
           const published={...this.#result(value,preparedCandidate,receipt),pending:{state:'published',intent:copy(value),locatorRoot:copy(preparedCandidate),receipt:copy(receipt)}};
           current=await this.#writeManifest(current,published,signal,nativeGuard);
+          audit?.afterOwnPublication(current);
         } else {
           if(nativeGuard&&!nativeHistory)observation.reason='custom-history';
           await this.#candidate(value,preparedCandidate,current,'before-admission',signal);
@@ -744,7 +815,8 @@ export class PhysicalRootBinding {
         nativeGuard?.();
         return rememberPublication({status:'already-committed', transactionId:value.transactionId, manifest:copy(current)},observation);
       }
-      const result=await this.#resume(current, value, preparation, signal, preparedCandidate,nativeGuard);
+      const result=await this.#resume(current, value, preparation, signal, preparedCandidate,nativeGuard,audit);
+      if(audit){nativeGuard();await this.#guard(result.manifest,signal);nativeGuard();}
       nativeGuard?.();return rememberPublication(result,observation);
     });
   }

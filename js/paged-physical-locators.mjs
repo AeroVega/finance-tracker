@@ -1,3 +1,4 @@
+import {getIncrementalTreeGuard} from './physical-root-binding.mjs';
 export {PagedLocatorError} from './locator-codec.mjs';
 import {createLocatorCodec,PagedLocatorError} from './locator-codec.mjs';
 import {getOwnedPhysicalBodyVerifier,getOwnedLocatorDecoder} from './physical-drive-adapter.mjs';
@@ -146,6 +147,7 @@ export function createPagedPhysicalLocators(adapter, config) {
     !Number.isSafeInteger(maxChildren) || maxChildren < 3 || maxChildren > 128) fail('invalid-options', 'Limits are 4096..65536 bytes, 2..128 entries and 3..128 children.');
   const readMetadata = adapter.readMetadata.bind(adapter), readBytes = adapter.readBytes.bind(adapter);
   const allocate = adapter.allocateFileId?.bind(adapter), create = adapter.createImmutable?.bind(adapter), assertWritable = config.assertWritable;
+  const incremental=getIncrementalTreeGuard(assertWritable);
   const catalogTransaction = 'paged-locators';
   const decodedPages=getOwnedLocatorDecoder(adapter);
   function adapterScope() {
@@ -692,7 +694,7 @@ export function createPagedPhysicalLocators(adapter, config) {
     return (async function* () {
       const {root} = await readRoot(ref, signal);
       for await (const item of traverse(root.objects, 'objects', signal)) if (item.pair) {
-        const e = item.pair[1]; await verifyEntry(e, signal); yield clone(e);
+        const e = item.pair[1]; if(incremental)incremental();else await verifyEntry(e, signal); yield clone(e);
       }
     })();
   }
@@ -774,6 +776,7 @@ export function createPagedPhysicalLocators(adapter, config) {
               // Seven admitted body reads leave room for only one index read.
               if(await find(root.identities,'identities',identityKey(e),signal)!==pk || await find(root.files,'files',e.fileId,signal)!==pk)fail('index-mismatch','Locator indexes do not form a one-to-one mapping.');
             }
+            if(incremental){incremental();objects++;continue;}
             const operation=verifyEntry(e,signal);
             pending.push(operation.then(length=>({ok:true,length}),error=>{if(!bodyFailed){bodyFailed=true;bodyFailure=error;}return {ok:false,error};}));
             if(pending.length===8)await drain();
@@ -788,9 +791,11 @@ export function createPagedPhysicalLocators(adapter, config) {
         throw error;
       } finally {await Promise.all(pending);}
     }
+    incremental?.();
     return {entryCount:String(objects), catalogPages:String(pages), byteLength:String(bytes)};
   }
   async function verify(inputRoot,opts={}) {
+    if(incremental){incremental();return verifyComplete(inputRoot,opts);}
     if(!verifyBody||!decodedPages?.captureVerification)return verifyComplete(inputRoot,opts);
     const ref=pin(inputRoot),{signal}=options(opts,['signal']);
     abort(signal);adapterScope();
