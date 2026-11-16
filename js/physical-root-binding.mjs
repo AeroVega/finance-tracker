@@ -13,6 +13,9 @@ export const PHYSICAL_ROOT_VERSION = 4;
 export const PHYSICAL_MANIFEST_FORMAT = 'finance-tracker-physical-root-manifest';
 export const PORTABLE_COMMIT_FORMAT = 'finance-tracker-portable-root-commit';
 export const PHYSICAL_ROOT_LIMITS = Object.freeze({objectBytes:65536, manifestBytes:16384, planEntries:32});
+const publicationObservations=new WeakMap();
+export const readPublicationObservation=result=>{const value=publicationObservations.get(result);return value?{...value}:null;};
+const rememberPublication=(result,value)=>{try{publicationObservations.set(result,Object.freeze({...value}));}catch{}return result;};
 const INTENT = 'finance-tracker-copy-root-intent', PLAN = 'finance-tracker-copy-object-plan', RECEIPT = 'finance-tracker-copy-root-receipt';
 const encoder = new TextEncoder(), decoder = new TextDecoder('utf-8', {fatal:true});
 const typed = Object.getPrototypeOf(Uint8Array.prototype), nativeLength = Object.getOwnPropertyDescriptor(typed, 'byteLength').get;
@@ -678,13 +681,17 @@ export class PhysicalRootBinding {
     current = await this.#writeManifest(current, final, signal, nativeGuard);
     return {status:'committed', transactionId:value.transactionId, manifest:copy(current)};
   }
-  #nativePublishedGuard(value,signal) {
-    if(value.baseManifest?.sourceEvidence||value.logicalCommit?.operation!=='synthetic-canonical-import'||
-       value.verificationPlan!==PAGED_CANONICAL_VERIFIER||!isOwnedCanonicalVerifier(this.#verifiers.get(PAGED_CANONICAL_VERIFIER))||
-       !isOwnedPagedOperationFactory(this.#captureOperationGuard))return null;
+  #nativePublishedGuard(value,signal,observation) {
+    const decline=reason=>{observation.reason=reason;return null;};
+    if(value.baseManifest?.sourceEvidence)return decline('source-evidence');
+    if(value.logicalCommit?.operation!=='synthetic-canonical-import')return decline('unsupported-operation');
+    if(value.verificationPlan!==PAGED_CANONICAL_VERIFIER||!isOwnedCanonicalVerifier(this.#verifiers.get(PAGED_CANONICAL_VERIFIER)))return decline('custom-verifier');
+    if(!isOwnedPagedOperationFactory(this.#captureOperationGuard))return decline('custom-operation');
     const native=getNativeOwnershipCapability(this.#assert),physical=getOwnedReceiptAuditRunner(this.#adapter);
-    if(!native||!physical)return null;
-    if(!native.isCurrent()||!physical.eligible())return null;
+    if(!native)return decline('custom-owner');
+    if(!physical)return decline('custom-transport');
+    if(!native.isCurrent())return decline('custom-owner');
+    if(!physical.eligible())return decline('custom-transport');
     // Capture the application before environmental ownership callbacks can reenter.
     const operation=this.#captureOperationGuard(),owned=native.capture();
     const check=()=>{operation();abort(signal);owned();
@@ -694,7 +701,8 @@ export class PhysicalRootBinding {
     check();return check;
   }
   transact({intent:input, preparationStore, signal}) {
-    const value = copy(input), preparation = bindPreparationRead(preparationStore),nativeGuard=this.#nativePublishedGuard(value,signal);
+    const observation={path:'legacy',reason:'nonfresh'};
+    const value = copy(input), preparation = bindPreparationRead(preparationStore),nativeGuard=this.#nativePublishedGuard(value,signal,observation);
     return this.#enqueue(async () => {
       nativeGuard?.();
       const admitted = await this.#binding(value); let current = await this.#manifest(signal), preparedCandidate = null;
@@ -712,6 +720,7 @@ export class PhysicalRootBinding {
           for await (const e of self.#plan(value,signal)) yield locatorEntry(e);
         })(), {signal});
         if(nativeGuard && nativeHistory) {
+          observation.path='native';observation.reason='none';
           // Receipt and all candidate evidence are durable before the first
           // authority update. Retain the existing published quarantine state.
           nativeGuard();
@@ -722,6 +731,7 @@ export class PhysicalRootBinding {
           const published={...this.#result(value,preparedCandidate,receipt),pending:{state:'published',intent:copy(value),locatorRoot:copy(preparedCandidate),receipt:copy(receipt)}};
           current=await this.#writeManifest(current,published,signal,nativeGuard);
         } else {
+          if(nativeGuard&&!nativeHistory)observation.reason='custom-history';
           await this.#candidate(value,preparedCandidate,current,'before-admission',signal);
           current = await this.#writeManifest(current, admitted, signal, nativeGuard);
         }
@@ -732,10 +742,10 @@ export class PhysicalRootBinding {
         await this.#stage(value, current, null, signal, false);
         await this.#candidate(value, current.locatorRoot, current, 'retry-completed', signal);
         nativeGuard?.();
-        return {status:'already-committed', transactionId:value.transactionId, manifest:copy(current)};
+        return rememberPublication({status:'already-committed', transactionId:value.transactionId, manifest:copy(current)},observation);
       }
       const result=await this.#resume(current, value, preparation, signal, preparedCandidate,nativeGuard);
-      nativeGuard?.();return result;
+      nativeGuard?.();return rememberPublication(result,observation);
     });
   }
   recover({preparationStore, signal} = {}) {

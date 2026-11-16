@@ -3,7 +3,7 @@ import {bindPreparationRead,typedPreparationRead} from './owned-preparation-read
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {partitionDigest} from './canonical-partitions.mjs';
 import {EMPTY_CANONICAL_BYTES, PAGED_CANONICAL_VERIFIER, canonicalProfileForVerifier} from './paged-canonical-format.mjs';
-import {PhysicalRootBinding, validatePhysicalRootManifest, createPhysicalRootManifest, createPortableLogicalCommit, PORTABLE_COMMIT_FORMAT, PHYSICAL_MANIFEST_FORMAT} from './physical-root-binding.mjs';
+import {readPublicationObservation,PhysicalRootBinding, validatePhysicalRootManifest, createPhysicalRootManifest, createPortableLogicalCommit, PORTABLE_COMMIT_FORMAT, PHYSICAL_MANIFEST_FORMAT} from './physical-root-binding.mjs';
 import {createPagedPhysicalLocators} from './paged-physical-locators.mjs';
 const enc = new TextEncoder(), dec = new TextDecoder();
 const encode = x => enc.encode(canonicalizeJcs(x));
@@ -12,6 +12,8 @@ import {createPhysicalDriveAdapter,PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND} from
 export {createPhysicalDriveAdapter,PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND} from './physical-drive-adapter.mjs';
 export const PAGED_INITIALIZATION_FORMAT = 'finance-tracker-paged-initialization';
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
+let successfulPublicationSequence=0;
+export const currentSuccessfulPublicationSequence=()=>successfulPublicationSequence;
 const failureOwners=new WeakMap(),ownedOperationFactories=new WeakSet();
 export const isOwnedPagedOperationFactory=fn=>ownedOperationFactories.has(fn);
 export const isObsoletePagedVerificationFailure=error=>error!==null&&typeof error==='object'&&failureOwners.get(error)?.()===true;
@@ -92,6 +94,8 @@ export async function initializePagedCanonicalCopy({adapter, guard, cryptoImpl =
 }
 
 export class PagedApplicationStorage {
+  #publicationSummary=null;
+  get lastSuccessfulPublication(){return this.#publicationSummary?{...this.#publicationSummary}:null;}
   #physical; #selectedManifest; #plans; #planEntries; #beginSemantic; #endSemantic;
   #generation=Object.freeze({});
   #current=null; #closures=new WeakMap(); #results=new WeakMap(); #snapshots=new WeakMap();
@@ -352,7 +356,9 @@ export class PagedApplicationStorage {
     if(!same(result.manifest,after))fail('base-conflict','Root changed after transaction closure.');
     await this.assertWritable();this.#live(context);
     context.manifest=structuredClone(result.manifest);this.#results.set(result,context);
-    this.recoveryRequired=false;return result;
+    this.recoveryRequired=false;
+    try{const observation=readPublicationObservation(result);if(observation)this.#publicationSummary=Object.freeze({...observation,sequence:++successfulPublicationSequence});}catch{}
+    return result;
     }catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
   }
 }

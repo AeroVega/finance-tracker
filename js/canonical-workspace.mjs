@@ -1,3 +1,5 @@
+import {currentSuccessfulPublicationSequence} from './paged-application-storage.mjs';
+import {successfulActionSummary} from './success-metrics.mjs';
 import { createWorkspacePages } from './workspace-pages.mjs';
 import { createSyntheticFinancialPosition } from './synthetic-financial-position.mjs';
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
@@ -77,6 +79,7 @@ registerContextProvider('workspace', () => ({
 }));
 registerContextProvider('requests', () => storage.lifecycle?.requestMetrics?.snapshot());
 let actionRequestWindow = null;
+$('clear-success-metrics')?.addEventListener('click',()=>{$('success-metrics').textContent='No successful action recorded in this tab.';});
 registerContextProvider('actionRequests', () => actionRequestWindow?.snapshot());
 let diagnosticHistoryKey = '';
 function refreshDiagnosticHistory() {
@@ -186,11 +189,20 @@ async function run(message, operation, formStatus = null, actionId = 'workspace-
   activeFormStatus = formStatus;
   // Observation only: never let metrics block an action or replace its failure.
   try { actionRequestWindow = storage.lifecycle?.requestMetrics?.openWindow() ?? null; } catch { actionRequestWindow = null; }
+  const measuredLifecycle=storage.lifecycle;
+  let priorPublication;try{priorPublication=currentSuccessfulPublicationSequence();}catch{}
   leaveBreadcrumb({e:'action.start', actionId});
   clearDiagnostic($('action-status'));
   busy = true; operationStarted = Date.now(); refresh(); announce(message);
   const timer = setInterval(refresh, 1000);
-  try { await operation(); leaveBreadcrumb({e:'action.ok', actionId}); }
+  try { const completed=await operation(); leaveBreadcrumb({e:'action.ok', actionId});
+    try {
+      const observed=storage.lifecycle?.engine?.lastSuccessfulPublication;
+      const publication=observed&&observed.sequence>priorPublication?observed:null;
+      const summary=successfulActionSummary({actionId,elapsedMs:Math.max(0,Date.now()-operationStarted),requests:storage.lifecycle===measuredLifecycle?actionRequestWindow?.close():null,manifestPatches:storage.lifecycle===measuredLifecycle?actionRequestWindow?.manifestPatches():null,publication,purposes:storage.lifecycle===measuredLifecycle?actionRequestWindow?.purposes():null});
+      if(completed===true&&summary)$('success-metrics').textContent=JSON.stringify(summary,null,2);
+    }catch{/* Success observations cannot change the action outcome. */}
+  }
   catch (error) {
     leaveBreadcrumb({e:'action.fail', actionId});
     const message = showDiagnostic(error, {surface: 'workspace', target: $('action-status'), actionId, page: pages.current});
@@ -688,7 +700,7 @@ $('month-filter').addEventListener('change', () => {
 action('open-ledger', 'Opening and verifying your saved synthetic copy. This can take time while retained history is checked.', async () => {
   if (!confirmReplace()) return;
   const navigationRevision = pages.revision;
-  await session.open(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Saved canonical records opened and verified. Browse locally; nothing is saved until you choose Save changes.', 'success');
+  await session.open(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Saved canonical records opened and verified. Browse locally; nothing is saved until you choose Save changes.', 'success'); return true;
 });
 action('preview-year', 'Preparing the invented year locally. No Google connection or Drive write.', async () => {
   if (!confirmReplace()) return;
@@ -696,14 +708,14 @@ action('preview-year', 'Preparing the invented year locally. No Google connectio
   session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Local synthetic preview ready. Open your saved copy to save corrections to Drive.', 'success');
 });
 action('save-preview', 'Saving this exact local preview into a newly selected, empty synthetic Drive folder and independently verifying it. Keep this tab open.', async () => {
-  await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success');
+  await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success'); return true;
 });
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
-  await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success');
+  await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
 });
 action('reopen-ledger', 'Reopening and verifying saved records. No new financial commit is made.', async () => {
   if (!confirmReplace()) return;
-  await session.reopen(); render({ reset: true }); announce('Saved records reopened and verified.', 'success');
+  await session.reopen(); render({ reset: true }); announce('Saved records reopened and verified.', 'success'); return true;
 });
 action('release-ledger', 'Closing and verifying the storage session.', async () => {
   if (session.dirty && !window.confirm('Close the storage session without saving? Your draft stays in this tab only. Reconnecting will require reopening saved records.')) { announce('Release cancelled. Your local draft and session are unchanged.'); return; }

@@ -1,5 +1,5 @@
 import { immutableContentType } from './immutable-content-type.mjs';
-import { markRequestEndpoint } from './drive-request-metrics.mjs';
+import { markRequestPurpose, markRequestEndpoint, markManifestRequest, transferManifestRequest } from './drive-request-metrics.mjs';
 import { createDriveResponseLimits, readBoundedDriveBytes, readBoundedDriveJson, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
 import { copyOwnedBytes } from "./byte-ownership.mjs";
 import {
@@ -140,6 +140,7 @@ export class GoogleDriveTransactionAdapter {
       headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
     };
     markRequestEndpoint(requestOptions, endpointClass);
+    transferManifestRequest(options,requestOptions);
     if(scope){if(!scope.active)fail("verification-scope-closed","Mutation scope is closed.");scope.guard();}
     guard?.();
     // Only private accounting remains between the final fence and fetch.
@@ -166,7 +167,7 @@ export class GoogleDriveTransactionAdapter {
     while (this.generatedFileIds.length === 0) {
       if (!this.fileIdRefill) {
         this.fileIdRefill = (async () => {
-          const response = await this.request(`${API}/files/generateIds?count=${FILE_ID_BATCH_SIZE}&space=drive`, {}, {endpointClass:"files.generateIds"});
+          const response = await this.request(`${API}/files/generateIds?count=${FILE_ID_BATCH_SIZE}&space=drive`, markRequestPurpose({},"id-generation"), {endpointClass:"files.generateIds"});
           const result = await readBoundedDriveJson(response, { kind: "generated-ids", limits: this.responseLimits });
           if (!Array.isArray(result?.ids) || result.ids.length !== FILE_ID_BATCH_SIZE ||
               result.ids.some((id) => typeof id !== "string" || !id.trim() || this.seenGeneratedFileIds.has(id)) ||
@@ -192,7 +193,7 @@ export class GoogleDriveTransactionAdapter {
         fields: "nextPageToken,incompleteSearch,files(id,name,mimeType,parents,appProperties,size,version,trashed)"
       });
       if (pageToken) query.set("pageToken", pageToken);
-      const response = await this.request(`${API}/files?${query}`, {}, {endpointClass:"files.list"});
+      const response = await this.request(`${API}/files?${query}`, markRequestPurpose({},"inventory-list"), {endpointClass:"files.list"});
       const page = await readBoundedDriveJson(response, { kind: "list-page", limits: this.responseLimits });
       if (page?.incompleteSearch !== false || !Array.isArray(page.files) || page.files.length > 1000 ||
           (page.nextPageToken != null && typeof page.nextPageToken !== "string")) {
@@ -245,7 +246,7 @@ export class GoogleDriveTransactionAdapter {
 
   async readMetadata(fileId, { maxBytes, signal } = {}) {
     const query = new URLSearchParams({ fields: "id,name,mimeType,parents,appProperties,size,version,trashed" });
-    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?${query}`, { signal }, {endpointClass:"files.get"});
+    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?${query}`, markRequestPurpose({ signal },"metadata"), {endpointClass:"files.get"});
     const metadata = await readBoundedDriveJson(response, { kind: "metadata", limits: this.responseLimits, maxBytes });
     if (!metadata || metadata.id !== fileId || metadata.trashed || !Array.isArray(metadata.parents) || !metadata.parents.includes(this.folderId)) {
       fail("object-location-mismatch", "A transaction file is missing, trashed, or outside the selected database folder.", { fileId });
@@ -254,7 +255,7 @@ export class GoogleDriveTransactionAdapter {
   }
 
   async readBytes(fileId, { kind = "stored-object", maxBytes, signal } = {}) {
-    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?alt=media`, { signal }, {endpointClass:"files.get"});
+    const response = await this.request(`${API}/files/${encodeURIComponent(fileId)}?alt=media`, markRequestPurpose({ signal },"media"), {endpointClass:"files.get"});
     return readBoundedDriveBytes(response, { kind, limits: this.responseLimits, maxBytes });
   }
 
@@ -329,12 +330,12 @@ export class GoogleDriveTransactionAdapter {
     let ambiguousCreateFailure = null;
     let createResponseSummary = null;
     try {
-      const createResponse = await this.request(url, {
+      const createResponse = await this.request(url, markRequestPurpose({
         signal,
         method: "POST",
         headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
         body
-      }, {allowStatuses:[409],beforeMutation,mutationScope,endpointClass:"files.create"});
+      },"immutable-create"), {allowStatuses:[409],beforeMutation,mutationScope,endpointClass:"files.create"});
       createResponseSummary = { status: createResponse.status };
       if (createResponse.ok) {
         const returnedMetadata = await readBoundedDriveJson(createResponse, { kind: "metadata", limits: this.responseLimits });
@@ -417,11 +418,11 @@ export class GoogleDriveTransactionAdapter {
     const metadata = { mimeType: MIME_JSON };
     const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${MIME_JSON}\r\n\r\n`);
     const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
-    const published = await this.request(`${UPLOAD}/files/${encodeURIComponent(manifestFileId)}?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`, {
+    const published = await this.request(`${UPLOAD}/files/${encodeURIComponent(manifestFileId)}?uploadType=multipart&fields=id,name,mimeType,parents,appProperties`, markManifestRequest(markRequestPurpose({
       method: "PATCH",
       headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
       body: joinBytes([head, bytes, tail])
-    }, {beforeMutation,mutationScope,endpointClass:"files.update"});
+    },"manifest-patch")), {beforeMutation,mutationScope,endpointClass:"files.update"});
     await discardDriveResponse(published);
     const visible = await this.readBytes(manifestFileId, { kind: "manifest" });
     if (new TextDecoder().decode(visible) !== content) {

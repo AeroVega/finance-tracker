@@ -9,7 +9,18 @@ const statuses = ['http2xx', 'http3xx', 'http4xx', 'http5xx', 'httpOther', 'netw
 const methods = ['get', 'post', 'patch', 'delete', 'otherMethod'];
 // Endpoint classes come from the code constructing the request, not from URLs.
 // Weak metadata never changes the request options passed to fetch.
-const requestEndpoints = new WeakMap();
+const requestEndpoints = new WeakMap(), manifestRequests = new WeakSet(), requestPurposes = new WeakMap();
+export const REQUEST_PURPOSES=Object.freeze(['metadata','media','owner-list','inventory-list','id-generation','immutable-create','manifest-patch','session-create','session-patch','unknown']);
+const purposeFields=Object.freeze(['count','completed','headerMs','maxHeaderMs','http404','http409','http429','other4xx','networkErrors']);
+export function markRequestPurpose(options,purpose){try{if(REQUEST_PURPOSES.includes(purpose))requestPurposes.set(options,purpose);}catch{}return options;}
+export function safePurposeMetrics(input){try{
+ if(!Array.isArray(input)||input.length!==REQUEST_PURPOSES.length)return null;
+ return REQUEST_PURPOSES.map((purpose,index)=>{const row=input[index];if(row.purpose!==purpose)throw 0;const out={purpose};for(const field of purposeFields){const value=row[field];if(!Number.isSafeInteger(value)||value<0)throw 0;out[field]=value;}
+ if(out.completed>out.count||out.maxHeaderMs>out.headerMs||out.http404+out.http409+out.http429+out.other4xx+out.networkErrors>out.completed)throw 0;return out;});
+}catch{return null;}}
+const emptyPurposes=()=>REQUEST_PURPOSES.map(purpose=>({purpose,...Object.fromEntries(purposeFields.map(field=>[field,0]))}));
+export function markManifestRequest(options){try{manifestRequests.add(options);}catch{}return options;}
+export function transferManifestRequest(from,to){try{if(manifestRequests.has(from))manifestRequests.add(to);if(requestPurposes.has(from))requestPurposes.set(to,requestPurposes.get(from));}catch{}}
 const endpoints = new Set(['files.get', 'files.list', 'files.create', 'files.update', 'files.generateIds']);
 export function markRequestEndpoint(options, endpoint) {
   try { if (options && typeof options === 'object' && endpoints.has(endpoint)) requestEndpoints.set(options, endpoint); }
@@ -55,7 +66,7 @@ export function createDriveRequestMetrics({ now = () => globalThis.performance.n
     try { const time = now(); if (typeof time === 'number' && Number.isFinite(time)) lastTime = Math.max(lastTime, time); } catch { /* metrics must not affect fetch */ }
     return lastTime;
   };
-  const makeBucket = () => ({ values: Object.fromEntries(REQUEST_METRIC_FIELDS.map(field => [field, 0])), start: clock(), end: null });
+  const makeBucket = () => ({ values: Object.fromEntries(REQUEST_METRIC_FIELDS.map(field => [field, 0])), start: clock(), end: null, manifestPatches:0, purposes:emptyPurposes() });
   const overall = makeBucket(), windows = new Set(), listeners = new Set(), recent = [];
   const snapshot = bucket => ({ ...bucket.values, elapsedMs: Math.round((bucket.end ?? clock()) - bucket.start) });
   const notify = () => { for (const listener of listeners) { try { listener(); } catch { /* observational only */ } } };
@@ -68,6 +79,8 @@ export function createDriveRequestMetrics({ now = () => globalThis.performance.n
       const bucket = makeBucket(); windows.add(bucket);
       return Object.freeze({
         snapshot: () => snapshot(bucket),
+        manifestPatches: () => bucket.manifestPatches,
+        purposes: () => safePurposeMetrics(bucket.purposes),
         close() { if (bucket.end === null) { bucket.end = clock(); windows.delete(bucket); } return snapshot(bucket); }
       });
     },
@@ -78,10 +91,12 @@ export function createDriveRequestMetrics({ now = () => globalThis.performance.n
           let method = args[1]?.method ?? args[0]?.method ?? 'GET';
           method = typeof method === 'string' ? method.toLowerCase() : '';
           const category = methods.includes(method) && method !== 'otherMethod' ? method : 'otherMethod';
-          measurement = { started: clock(), endpoint: requestEndpoints.get(args[1]) || 'unknown', method: category === 'otherMethod' ? 'other' : category, buckets: [overall, ...windows] };
+          measurement = { purpose:requestPurposes.get(args[1]) || 'unknown', started: clock(), endpoint: requestEndpoints.get(args[1]) || 'unknown', method: category === 'otherMethod' ? 'other' : category, buckets: [overall, ...windows] };
           for (const bucket of measurement.buckets) {
             const value = bucket.values;
             value.requests++; value.inFlight++; value[category]++;
+            bucket.purposes[REQUEST_PURPOSES.indexOf(measurement.purpose)].count++;
+            if(category==='patch'&&manifestRequests.has(args[1]))bucket.manifestPatches++;
             value.peakConcurrency = Math.max(value.peakConcurrency, value.inFlight);
           }
         });
@@ -98,6 +113,9 @@ export function createDriveRequestMetrics({ now = () => globalThis.performance.n
             const value = bucket.values;
             value.inFlight--; value.completed++; value[category]++;
             value.requestMs += duration; value.maxRequestMs = Math.max(value.maxRequestMs, duration);
+            const purpose=bucket.purposes[REQUEST_PURPOSES.indexOf(measurement.purpose)];
+            purpose.completed++;purpose.headerMs+=duration;purpose.maxHeaderMs=Math.max(purpose.maxHeaderMs,duration);
+            if(rejected)purpose.networkErrors++;else if([404,409,429].includes(statusCode))purpose['http'+statusCode]++;else if(statusCode>=400&&statusCode<500)purpose.other4xx++;
           }
           const entry = Object.freeze({ e: 'request', ep: measurement.endpoint, m: measurement.method,
             s: statusCode, ms: Math.min(duration, 86_400_000), outcome: rejected ? 'network-error' : statusCode >= 200 && statusCode < 400 ? 'ok' : 'http-error' });

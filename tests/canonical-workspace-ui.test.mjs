@@ -388,6 +388,7 @@ test('a positive spending correction stays visible in review with its financial 
 
 test('cancelled reopening explicitly announces cancellation without suggesting ongoing work', async () => {
   const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
+  const previousSuccess=h.get('success-metrics').textContent;
   h.observed.confirm = false;
   h.get('transaction-search').value = 'nothing matches'; await h.get('transaction-search').emit('input');
   await h.click('reopen-ledger');
@@ -397,6 +398,7 @@ test('cancelled reopening explicitly announces cancellation without suggesting o
   assert.doesNotMatch(h.get('action-status').textContent, /Reopening and verifying/);
   assert.equal(h.modelSession.dirty, true);
   assert.equal(h.intervals.size, 0);
+  assert.equal(h.get('success-metrics').textContent,previousSuccess);
 });
 
 test('recovery controls are disabled offline and reject manually dispatched clicks', async () => {
@@ -1338,4 +1340,13 @@ test('failed save reports its own request window and clears it before the next a
   const reopened = JSON.parse(find(h.diagnostics().at(-1), 'TEXTAREA').value);
   assert.equal(reopened.where.actionId, 'open-ledger');
   assert.equal(reopened.actionRequests.requests, 0);
+});
+
+test('successful storage timing stays tab-local, labels unavailable counts and clears explicitly',async()=>{
+ const h=await workspacePage();await h.click('open-ledger');
+ const summary=JSON.parse(h.get('success-metrics').textContent);
+ assert.equal(summary.action,'open');assert.equal(summary.requestCoverage,'unavailable');
+ assert.equal(summary.requests,null);assert.equal(summary.manifestPatches,null);assert.equal(summary.path,'unavailable');
+ assert.equal(h.session.size,0);assert.doesNotMatch(JSON.stringify(summary),/invented|ledgerId|copyId|rootHash|https:/);
+ await h.click('clear-success-metrics');assert.match(h.get('success-metrics').textContent,/No successful action/);
 });

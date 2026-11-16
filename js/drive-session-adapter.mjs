@@ -1,3 +1,4 @@
+import {markRequestPurpose} from './drive-request-metrics.mjs';
 import { createDriveResponseLimits, readBoundedDriveJson, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
 import { DRIVE_FILES_ENDPOINT, DRIVE_UPLOAD_ENDPOINT, listFolderChildren } from "./drive-feasibility-spike.mjs";
 import { SessionCoordinationError } from "./session-coordination.mjs";
@@ -82,9 +83,9 @@ export function createDriveSessionAdapter(options) {
     try { return await operation(controller.signal); }
     finally { clearTimeout(timer); pending.delete(controller); }
   }
-  const request = (signal, url, init = {}) => {
+  const request = (signal, url, init = {}, purpose = "unknown") => {
     signal.throwIfAborted();
-    return fetchImpl(url, {...init, signal});
+    return fetchImpl(url, markRequestPurpose({...init, signal},purpose));
   };
   // Private failed-bracket observations are never ownership evidence.
   const changedVersionRecords = new WeakMap();
@@ -171,7 +172,7 @@ export function createDriveSessionAdapter(options) {
     try {
       response = await request(signal,
         DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(file.id) + "?alt=media",
-        { method: "GET", cache: "no-store", headers: authHeaders(accessToken) }
+        { method: "GET", cache: "no-store", headers: authHeaders(accessToken) }, "media"
       );
     } catch (cause) {
       throw error("network-error", "The session marker could not be read from Google Drive.", undefined, cause);
@@ -193,7 +194,7 @@ export function createDriveSessionAdapter(options) {
       try {
         closingResponse = await request(signal, DRIVE_FILES_ENDPOINT + "/" + encodeURIComponent(file.id) +
           "?fields=id,name,mimeType,parents,appProperties,version,trashed",
-          { method: "GET", cache: "no-store", headers: authHeaders(accessToken) });
+          { method: "GET", cache: "no-store", headers: authHeaders(accessToken) }, "metadata");
       } catch (cause) { throw error("network-error", "The session marker version could not be confirmed.", undefined, cause); }
       if (!closingResponse?.ok) {
         await discardDriveResponse(closingResponse);
@@ -234,7 +235,7 @@ export function createDriveSessionAdapter(options) {
       response = await request(signal, DRIVE_FILES_ENDPOINT + "/generateIds?count=1&space=drive", {
         method: "GET",
         headers: authHeaders(accessToken)
-      });
+      }, "id-generation");
     } catch (cause) {
       throw error("network-error", "Google Drive could not generate a session marker ID.", undefined, cause);
     }
@@ -329,7 +330,7 @@ export function createDriveSessionAdapter(options) {
               "Content-Type": "multipart/related; boundary=" + boundary
             }),
             body
-          }
+          }, "session-create"
         );
       } catch {
         // Resolve a lost create response only by exact folder scan and read-back.
@@ -357,7 +358,7 @@ export function createDriveSessionAdapter(options) {
             "Content-Type": "application/json"
           }),
           body: JSON.stringify(record)
-        }
+        }, "session-patch"
       );
     } catch {
       // A lost update response is resolved only if the exact new record is visible.

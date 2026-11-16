@@ -65,6 +65,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/stack-frames.mjs",
   "js/storage-diagnostics.mjs",
   "js/storage-write-diagnostic.mjs",
+  "js/success-metrics.mjs",
   "js/synthetic-application-structure.mjs",
   "js/synthetic-financial-position.mjs",
   "js/synthetic-financial-year.mjs",
