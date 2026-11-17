@@ -17,8 +17,8 @@ function detectFormat(bytes) {
   } catch {
     return { status: 'unrecognized', reason: 'invalid-source-encoding', candidates: [] };
   }
-  if (text.includes('\\0')) return { status: 'unrecognized', reason: 'invalid-source-encoding', candidates: [] };
-  const first = text.replace(/^\\uFEFF/, '').split(/\\r\\n|\\n|\\r/).find(line => line.trim() !== '');
+  if (text.includes('\0')) return { status: 'unrecognized', reason: 'invalid-source-encoding', candidates: [] };
+  const first = text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/).find(line => line.trim() !== '');
   if (first === undefined) return { status: 'unrecognized', reason: 'empty-input', candidates: [] };
   const matches = FORMATS.filter(format => {
     const headers = first.split(',');
@@ -87,8 +87,8 @@ export async function previewProviderCsv({ bytes, ledger, accountMappings, cover
     };
   }
 
-  const accounts = summarize(parsed.records, sourceKeys);
   const sourceKeys = [...new Set([...parsed.sourceAccountKeys, ...parsed.records.map(record => record.sourceAccountKey).filter(key => key !== null)])];
+  const accounts = summarize(parsed.records, sourceKeys);
   const missingAccountMappings = sourceKeys.filter(key => !accountMappings?.[key]);
   const missingCoverage = sourceKeys
     .map(key => accountMappings?.[key])
