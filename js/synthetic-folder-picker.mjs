@@ -9,6 +9,7 @@ export function chooseSyntheticFolder({ config, token, title = "Choose a fresh s
       .setOrigin(location.origin).setTitle(title).setCallback(async (data) => {
         const action = classifyPickerAction(data?.action, google.picker.Action);
         if (action === "pending") return;
+        if (action === "error") return reject(storageError("google-picker-unavailable", "Google Picker reported an error."));
         if (action === "cancelled") return reject(storageError("selection-cancelled", "Folder selection cancelled."));
         try {
           const id = data.docs?.[0]?.id;

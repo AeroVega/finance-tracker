@@ -70,7 +70,7 @@ class FullSnapshotStorage {
   this.adapter.assertMutationsSettled();if(this.#busy)fail('operation-in-progress');this.#busy=true;
   try{return await this.coordinator.withWrite(async()=>{
    const guard=createNativeOwnershipGuard(this.coordinator);if(!guard)fail('verification-scope-closed');
-   const owner=getNativeOwnershipCapability(guard).capture(),transport=getNativeDriveReadCheck(this.adapter);if(!transport)fail('verification-scope-closed');const context={owner,transport,adapter:this.adapter,coordinator:this.coordinator,epoch:this.#epoch,used:new Map(),revalidationBytes:0,revalidationReads:0};this.#context=context;
+   const owner=getNativeOwnershipCapability(guard).capture(),transport=getNativeDriveReadCheck(this.adapter);if(!transport)fail('verification-scope-closed');const context={owner,transport,adapter:this.adapter,coordinator:this.coordinator,epoch:this.#epoch,used:new Map(),revalidationBytes:0,revalidationReads:0,manifestRevalidationReads:0};this.#context=context;
    try{const result=await operation();this.#capture()();return result;}
    finally{if(this.#context===context)this.#context=null;}
   });}catch(error){this.#recoveryRequired=true;this.invalidate();throw error;}finally{this.#busy=false;}
@@ -113,10 +113,25 @@ class FullSnapshotStorage {
   this.#remember(ref,kind,transactionId,after);return {value:JSON.parse(dec.decode(raw)),metadata:after};
  }
  async #selected(){
-  const check=this.#capture();check();const before=this.#metadata(await this.adapter.readMetadata(this.#manifestId),this.#manifestId,MANIFEST);check();
+  const check=this.#capture();check();
+  let before=this.#metadata(await this.adapter.readMetadata(this.#manifestId),this.#manifestId,MANIFEST);check();
   if(before.name!==FULL_SNAPSHOT_MANIFEST_NAME)fail('manifest-metadata-mismatch');
   const raw=await this.adapter.readBytes(this.#manifestId,{kind:'manifest',maxBytes:FULL_SNAPSHOT_LIMITS.manifestBytes});check();
-  const after=await this.adapter.readMetadata(this.#manifestId);check();if(!same(before,after)||before.size!==String(raw.length))fail('manifest-version-mismatch');
+  const mismatch=(reason,after)=>{const error=new AppError('manifest-version-mismatch');error.details={reason,fields:changedFields(before,after)};throw error;};
+  if(before.size!==String(raw.length))mismatch('content-size-mismatch',before);
+  let after=this.#metadata(await this.adapter.readMetadata(this.#manifestId),this.#manifestId,MANIFEST);check();
+  // The first actual body is the authority anchor. A server-only version change
+  // may settle, but a different body never becomes this read's authority.
+  for(let attempt=0;!same(before,after);attempt++){
+   if(!sameExceptVersion(before,after)||BigInt(after.version)<=BigInt(before.version))mismatch('metadata-changed',after);
+   if(attempt>=3)mismatch('metadata-unstable',after);
+   if(this.#context.manifestRevalidationReads>=8)mismatch('revalidation-limit',after);
+   this.#context.manifestRevalidationReads++;
+   before=after;
+   const reread=await this.adapter.readBytes(this.#manifestId,{kind:'manifest',maxBytes:FULL_SNAPSHOT_LIMITS.manifestBytes});check();
+   if(reread.length!==raw.length||reread.some((value,index)=>value!==raw[index]))mismatch('content-changed',before);
+   after=this.#metadata(await this.adapter.readMetadata(this.#manifestId),this.#manifestId,MANIFEST);check();
+  }
   return manifest(JSON.parse(dec.decode(raw)));
  }
  async #exact(expected){await this.#owned();if(!same(await this.#selected(),expected))fail('base-conflict');this.#capture()();}

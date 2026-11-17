@@ -69,9 +69,9 @@ export function storageWriteDiagnostic(error) {
       const result = {code:candidate};
       if(candidate==='manifest-version-mismatch') {
         const reason=read(detail,'reason');
-        if(['metadata-changed','content-size-mismatch','metadata-and-size-mismatch','metadata-unstable'].includes(reason))result.reason=reason;
+        if(['metadata-changed','content-size-mismatch','metadata-and-size-mismatch','metadata-unstable','content-changed','revalidation-limit'].includes(reason))result.reason=reason;
       }
-      if(candidate==='verification-metadata-changed'||candidate==='hash-mismatch') {
+      if(candidate==='verification-metadata-changed'||candidate==='hash-mismatch'||candidate==='manifest-version-mismatch') {
         const reason=read(detail,'reason');
         if(['object-missing','metadata-changed','content-proof-unavailable','metadata-unstable','revalidation-limit'].includes(reason))result.reason=reason;
         const fields=read(detail,'fields');

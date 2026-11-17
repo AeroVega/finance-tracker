@@ -23,6 +23,7 @@ const PRODUCTION_FOLDER_NAME = "finance-tracker-database";
 export function classifyPickerAction(action, pickerActions) {
   if (action === pickerActions.PICKED) return "picked";
   if (action === pickerActions.CANCEL) return "cancelled";
+  if (pickerActions.ERROR !== undefined && action === pickerActions.ERROR) return "error";
   // Google Picker emits LOADED before the user chooses a folder. It is not a
   // terminal result; keep the picker open and wait for PICKED or CANCEL.
   return "pending";
@@ -288,6 +289,7 @@ export class DashboardSyntheticStorage {
           .setCallback(async (data) => {
             const pickerResult = classifyPickerAction(data?.action, window.google.picker.Action);
             if (pickerResult === "pending") return;
+            if (pickerResult === "error") return reject(googleStartupError("google-picker-unavailable", "Google Picker reported an error."));
             if (pickerResult === "cancelled") return reject(new Error("Folder selection cancelled."));
             const item = data.docs?.[0];
             if (!item?.id) return reject(new Error("Google Picker returned no folder."));

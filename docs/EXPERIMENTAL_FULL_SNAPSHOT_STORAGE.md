@@ -70,3 +70,20 @@ fresh-seed diagnostic; the live diagnostic did not identify the changed field,
 so that exact live cause is not proven. Changed-field diagnostics now contain
 allowlisted field names, not file IDs or metadata values. Preserve any affected
 folder and do not infer that a failed seed can be retried from HTTP success alone.
+
+### Manifest version convergence
+
+Manifest authority is still exact, but a version-only metadata change can now
+settle without falsely reporting a changed manifest. The first actual manifest
+body anchors the read. At most three additional media reads may establish an
+unchanged byte-for-byte body inside a stable metadata bracket. All non-version
+metadata must remain exact and versions must increase. A different body fails,
+even if it is valid JSON or a plausible later revision. Each operation permits
+at most eight extra manifest reads, each capped at 16 KiB. Ownership and scope
+checks, expected-manifest comparisons and publication readback remain required.
+
+Synthetic tests reproduce version-only failure after the clean publication and
+prove recovery does not establish a verified save baseline. A successful recovery
+or release does not prove the intended local preview was saved. Diagnostic request
+counts cover the current connection lifecycle; an earlier released connection's
+requests are not included. Do not infer folder content from PATCH counts.

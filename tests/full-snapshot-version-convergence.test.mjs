@@ -98,11 +98,11 @@ test('recovery cannot bless changed snapshot bytes behind a version-only metadat
  }finally{await cleanup(h);}
 });
 
-test('manifest metadata drift remains strict rather than using immutable convergence',async()=>{
+test('manifest non-version metadata drift remains strict',async()=>{
  const h=await setup();try{
   let changed=false;
   h.http.beforeResponse=({category,fileId,row})=>{
-   if(!changed&&category==='media'&&row.kind==='finance-tracker-full-snapshot-manifest'){bump(h.http.files.get(fileId));changed=true;}
+   if(!changed&&category==='media'&&row.kind==='finance-tracker-full-snapshot-manifest'){const file=h.http.files.get(fileId);bump(file);file.metadata.appProperties.extra='unexpected';changed=true;}
   };
   await assert.rejects(h.store.save(h.ledger),{code:'manifest-version-mismatch'});
   assert.equal(changed,true);assert.equal(patches(h.http).length,0);
