@@ -2,7 +2,7 @@
 
 **Checked:** 2026-11-17
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
-**Main baseline:** `ae10e45cad6650e068afe512fe15986d0d66c0d3` (PR47 cleanup)
+**Main baseline:** `2bc738b45b38ccc8024396d8577c1e6da3dabe1d` (PR47 cleanup plus PR48 CSV preview)
 **Active work:** test-first recovery and portable backup/restore on a separate branch; not yet merged or deployed.
 
 This is the concise current direction and permission boundary. [Project status](PROJECT_STATUS.md) retains dated historical evidence; the focused [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
