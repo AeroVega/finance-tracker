@@ -33,6 +33,7 @@ The function returns a preview object. It does not mutate the supplied ledger, p
 - `rows`: source row count, parsed row count, parser-ignored rows, valid rows, and rows requiring review.
 - `accounts[]`: source account key, row counts, review count, valid-date row count, and min/max valid effective date observed for that source account.
 - `requirements.accountMappings[]`: source account keys that still need explicit mapping.
+- `requirements.sourceAccountIdentityRows[]`: row ordinals whose source account identity is missing; these rows cannot be mapped until their source evidence is resolved.
 - `requirements.declaredCoverage[]`: mapped canonical account IDs that still need declared coverage.
 - `canonicalValidation`: `not-run`, `passed`, or `failed`. It is run only when a ledger, all required mappings, and coverage declarations are supplied. It calls the existing `prepareCanonicalImport` validation/reconciliation path and discards the proposed ledger.
 
