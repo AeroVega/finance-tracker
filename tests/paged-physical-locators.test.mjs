@@ -454,6 +454,7 @@ test('allocation-free UTF-8 admission preserves exact prior locator wire bytes a
   .replace('utf8ByteLength(JSON.stringify(x))','encoder.encode(JSON.stringify(x)).length')
   .replace('used += utf8ByteLength(piece);','used += encoder.encode(piece).length;')
   .replaceAll("'./locator-codec.mjs'",JSON.stringify(new URL('../js/locator-codec.mjs',import.meta.url).href))
+  .replace("'./physical-root-binding.mjs'",JSON.stringify(new URL('../js/physical-root-binding.mjs',import.meta.url).href))
   .replace("'./physical-drive-adapter.mjs'",JSON.stringify(new URL('../js/physical-drive-adapter.mjs',import.meta.url).href))
   .replace("'./transaction-protocol.mjs'",JSON.stringify(new URL('../js/transaction-protocol.mjs',import.meta.url).href));
  const old=await import('data:text/javascript;base64,'+Buffer.from(prior).toString('base64'));

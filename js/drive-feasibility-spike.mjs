@@ -1,3 +1,4 @@
+import {markRequestPurpose} from './drive-request-metrics.mjs';
 import { createDriveResponseLimits, readBoundedDriveJson, readBoundedDriveBytes, discardDriveResponse, assertResponseSize } from "./drive-response-transport.mjs";
 export const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
 export const DRIVE_UPLOAD_ENDPOINT = "https://www.googleapis.com/upload/drive/v3/files";
@@ -60,10 +61,12 @@ export async function listFolderChildren(options) {
   const limits = createDriveResponseLimits(settings.responseLimits);
   const headers = authHeaders(settings.accessToken);
   const quote = value => "'" + String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+  let purpose='inventory-list';
   let query = quote(folderId) + " in parents and trashed = false";
   // Session ownership needs every candidate marker, not every ledger object.
   // Match either identifying field so malformed/name-only markers remain visible.
   if (settings.markerFilter) {
+    purpose='owner-list';
     const {name, property, value} = settings.markerFilter;
     if (![name, property, value].every(value => typeof value === "string" && value.length > 0)) {
       throw new DriveFeasibilityError("invalid-filter", "A complete marker filter is required.");
@@ -85,7 +88,7 @@ export async function listFolderChildren(options) {
 
     let response;
     try {
-      response = await fetchImpl(DRIVE_FILES_ENDPOINT + "?" + params.toString(), { method: "GET", headers, cache: "no-store", ...(settings.signal ? {signal: settings.signal} : {}) });
+      response = await fetchImpl(DRIVE_FILES_ENDPOINT + "?" + params.toString(), markRequestPurpose({ method: "GET", headers, cache: "no-store", ...(settings.signal ? {signal: settings.signal} : {}) },purpose));
     } catch {
       throw new DriveFeasibilityError("network-error", "Could not reach Google Drive while listing the selected folder.");
     }

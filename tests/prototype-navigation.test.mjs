@@ -50,7 +50,9 @@ test('specialist diagnostics remain reachable without crowding the main checklis
     assert.ok(hub.includes(page), page + ' remains discoverable');
     assert.ok(existsSync(resolve(root, 'prototype', page)));
   }
-  assert.match(read('index.html'), /prototype\/acceptance.html/);
+  const workspace=read('index.html');
+  assert.doesNotMatch(workspace, /href="prototype\/acceptance.html"/);
+  assert.match(workspace, /aria-disabled="true" title="Legacy acceptance tooling is unavailable for full-snapshot copies"/);
 });
 
 test('superseded runtime is removed while historical design and probe regression remain', () => {

@@ -1,3 +1,5 @@
+import {currentSuccessfulPublicationSequence} from './paged-application-storage.mjs';
+import {successfulActionSummary} from './success-metrics.mjs';
 import { createWorkspacePages } from './workspace-pages.mjs';
 import { createSyntheticFinancialPosition } from './synthetic-financial-position.mjs';
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
@@ -27,6 +29,7 @@ function money(value, currency) {
   return `${negative ? '-' : ''}${currency === 'USD' ? '$' : currency + ' '}${BigInt(whole).toLocaleString('en-US')}.${fraction.padEnd(2, '0')}`;
 }
 const monthLabel = month => new Date(month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+let freshYearLedger = null;
 let busy = false, configured = false, page = 0, selectedActivity = null, view = null, operationStarted = null;
 let viewLedger = null, viewReader = null, homeView = null, searchTimer = null, composingSearch = false;
 const reviewButtons = new Map();
@@ -53,6 +56,7 @@ function scheduleSearch() {
   searchTimer = setTimeout(() => { searchTimer = null; if (!busy) { page = 0; render(); } }, 120);
 }
 const storage = new DashboardSyntheticStorage({
+  fullSnapshot:true,
   maintainOriginals: false,
   onStatus(status) {
     if (!status.code) clearDiagnostic($('connection-status'));
@@ -68,7 +72,7 @@ registerContextProvider('workspace', () => ({
   lifecycle: storage.lifecycle?.state,
   ownership: storage.lifecycle?.coordinator?.canWrite === true ? 'owner' : 'unknown',
   busy, dirty: session.dirty, needsReopen: session.needsReopen,
-  profile: session.store?.base ? 'canonical5-physical4' : undefined,
+  profile: undefined,
   ledger: session.ledger ? {
     syntheticOnly: session.ledger.syntheticOnly === true,
     accounts: session.ledger.accounts.length, activities: session.ledger.activities.length,
@@ -77,6 +81,7 @@ registerContextProvider('workspace', () => ({
 }));
 registerContextProvider('requests', () => storage.lifecycle?.requestMetrics?.snapshot());
 let actionRequestWindow = null;
+$('clear-success-metrics')?.addEventListener('click',()=>{$('success-metrics').textContent='No successful action recorded in this tab.';});
 registerContextProvider('actionRequests', () => actionRequestWindow?.snapshot());
 let diagnosticHistoryKey = '';
 function refreshDiagnosticHistory() {
@@ -115,6 +120,8 @@ function refresh() {
   $('start-preview').disabled = busy || Boolean(lifecycle);
   $('welcome-panel').hidden = Boolean(session.ledger);
   $('overview-loaded').hidden = !session.ledger;
+  $('create-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(lifecycle) || session.unverified || (session.mode !== 'preview' && !freshYearLedger);
+  $('create-ledger').textContent = session.mode === 'preview' ? 'Save preview to a new folder' : 'Create new synthetic year';
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false;
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
   $('preview-position').disabled = busy || Boolean(lifecycle);
@@ -174,10 +181,10 @@ function refresh() {
   $('data-mode').dataset.mode = session.mode;
   $('data-mode').textContent = session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
   $('storage-format').textContent = session.mode === 'preview'
-    ? 'Local preview, no saved format yet. Saving to a new folder will use canonical v5.'
+    ? 'Local preview, no saved format yet. Saving to a new folder will use full-snapshot v1. Old-format folders are unsupported.'
     : session.ledger && session.store?.base
-      ? `Last verified saved format: canonical v5, ${session.store.valueCodec}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
-      : 'No saved format currently verified. New synthetic copies use canonical v5.';
+      ? `Last verified saved format: ${session.store.valueCodec}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
+      : 'No saved format currently verified. New synthetic copies use full-snapshot v1; old formats are unsupported.';
 }
 async function run(message, operation, formStatus = null, actionId = 'workspace-action') {
   if (busy) return;
@@ -186,11 +193,20 @@ async function run(message, operation, formStatus = null, actionId = 'workspace-
   activeFormStatus = formStatus;
   // Observation only: never let metrics block an action or replace its failure.
   try { actionRequestWindow = storage.lifecycle?.requestMetrics?.openWindow() ?? null; } catch { actionRequestWindow = null; }
+  const measuredLifecycle=storage.lifecycle;
+  let priorPublication;try{priorPublication=currentSuccessfulPublicationSequence();}catch{}
   leaveBreadcrumb({e:'action.start', actionId});
   clearDiagnostic($('action-status'));
   busy = true; operationStarted = Date.now(); refresh(); announce(message);
   const timer = setInterval(refresh, 1000);
-  try { await operation(); leaveBreadcrumb({e:'action.ok', actionId}); }
+  try { const completed=await operation(); leaveBreadcrumb({e:'action.ok', actionId});
+    try {
+      const observed=storage.lifecycle?.engine?.lastSuccessfulPublication;
+      const publication=observed&&observed.sequence>priorPublication?observed:null;
+      const summary=successfulActionSummary({actionId,elapsedMs:Math.max(0,Date.now()-operationStarted),requests:storage.lifecycle===measuredLifecycle?actionRequestWindow?.close():null,manifestPatches:storage.lifecycle===measuredLifecycle?actionRequestWindow?.manifestPatches():null,publication,purposes:storage.lifecycle===measuredLifecycle?actionRequestWindow?.purposes():null});
+      if(completed===true&&summary)$('success-metrics').textContent=JSON.stringify(summary,null,2);
+    }catch{/* Success observations cannot change the action outcome. */}
+  }
   catch (error) {
     leaveBreadcrumb({e:'action.fail', actionId});
     const message = showDiagnostic(error, {surface: 'workspace', target: $('action-status'), actionId, page: pages.current});
@@ -685,25 +701,36 @@ $('month-filter').addEventListener('change', () => {
   if (!changeReconciliationScope('month-filter', view?.scope.month || '')) return;
   updateStatementEditor();
 });
+action('create-ledger', 'Preparing and saving an invented year to a new empty synthetic folder. Keep this tab open.', async () => {
+  const navigationRevision = pages.revision;
+  // Reuse an existing preview, including edits, rather than replacing its data.
+  if (session.mode !== 'preview') {
+    if ((session.dirty || hasUnfinishedDetail()) && !window.confirm('Replace your local draft with a new invented year? This discards unsaved corrections in this tab before folder selection. Existing saved folders are unchanged.')) return;
+    session.preview(freshYearLedger);
+  } else if (!confirmDiscardDetail()) return;
+  render({ reset: true });
+  await session.savePreviewToNewCopy(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview');
+  announce('Synthetic year created in the new folder and independently verified. Use Open saved synthetic year next time.', 'success'); return true;
+});
 action('open-ledger', 'Opening and verifying your saved synthetic copy. This can take time while retained history is checked.', async () => {
   if (!confirmReplace()) return;
   const navigationRevision = pages.revision;
-  await session.open(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Saved canonical records opened and verified. Browse locally; nothing is saved until you choose Save changes.', 'success');
+  await session.open(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Saved canonical records opened and verified. Browse locally; nothing is saved until you choose Save changes.', 'success'); return true;
 });
 action('preview-year', 'Preparing the invented year locally. No Google connection or Drive write.', async () => {
   if (!confirmReplace()) return;
   const navigationRevision = pages.revision;
-  session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Local synthetic preview ready. Open your saved copy to save corrections to Drive.', 'success');
+  session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Local synthetic preview ready. Choose Save preview to a new folder to save this preview and any corrections to Drive.', 'success');
 });
 action('save-preview', 'Saving this exact local preview into a newly selected, empty synthetic Drive folder and independently verifying it. Keep this tab open.', async () => {
-  await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success');
+  await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success'); return true;
 });
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
-  await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success');
+  await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
 });
 action('reopen-ledger', 'Reopening and verifying saved records. No new financial commit is made.', async () => {
   if (!confirmReplace()) return;
-  await session.reopen(); render({ reset: true }); announce('Saved records reopened and verified.', 'success');
+  await session.reopen(); render({ reset: true }); announce('Saved records reopened and verified.', 'success'); return true;
 });
 action('release-ledger', 'Closing and verifying the storage session.', async () => {
   if (session.dirty && !window.confirm('Close the storage session without saving? Your draft stays in this tab only. Reconnecting will require reopening saved records.')) { announce('Release cancelled. Your local draft and session are unchanged.'); return; }
@@ -765,6 +792,11 @@ window.addEventListener('beforeunload', event => { if (busy || session.dirty || 
 window.addEventListener('offline', () => { session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
 refresh();
+// Prepare only invented data ahead of the click so OAuth starts within the
+// user's create-button gesture, without awaiting fixture generation first.
+createSyntheticFinancialYear().then(recipe => { freshYearLedger = recipe.ledger; refresh(); }).catch(error => {
+  $('connection-status').textContent = showDiagnostic(error, {surface: 'workspace', target: $('connection-status'), page: pages.current});
+});
 storage.prepare().then(() => { configured = true; refresh(); }).catch(error => {
   configured = false;
   $('connection-status').textContent = showDiagnostic(error, {surface: 'workspace', target: $('connection-status'), page: pages.current});

@@ -33,10 +33,12 @@ for(const kind of ['receipt','plan','body','index'])test('long native audit reje
   await assert.rejects(h.lifecycle.engine.readSnapshot());noNewWrites(h,start);
  }finally{await close(h);}
 });
-for(const change of ['owner','root','control-flow'])test('save cannot stage after '+change+' changes during intermediate receipt read',async()=>{
+for(const change of ['owner','root','control-flow'])test('full-fallback save cannot stage after '+change+' changes during intermediate receipt read',async()=>{
  const h=await setup();let forgedCalls=0;
  try{
   const middleId=h.receipts[1].ref.fileId;h.correct('pending');
+  // Exercise the full-history fallback, not the approved reduced-save path.
+  h.lifecycle.engine.invalidateHistory();
   let entered=false,after=-1;
   h.http.beforeResponse=async({category,fileId})=>{
    if(entered||category!=='media'||fileId!==middleId)return;

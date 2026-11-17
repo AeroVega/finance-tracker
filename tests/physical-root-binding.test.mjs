@@ -4,7 +4,7 @@ import {createHash, webcrypto} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
 import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import {createPagedPhysicalLocators} from '../js/paged-physical-locators.mjs';
-import {PhysicalRootBinding, createPortableLogicalCommit, createPhysicalRootManifest, PORTABLE_COMMIT_FORMAT, PHYSICAL_ROOT_LIMITS} from '../js/physical-root-binding.mjs';
+import {PhysicalRootBinding,isOwnedFullBaseline, createPortableLogicalCommit, createPhysicalRootManifest, PORTABLE_COMMIT_FORMAT, PHYSICAL_ROOT_LIMITS} from '../js/physical-root-binding.mjs';
 
 const enc = new TextEncoder(), dec = new TextDecoder();
 const encode = x => enc.encode(canonicalizeJcs(x));
@@ -601,6 +601,8 @@ test('a registered historical verifier can retain exact old bytes without reinte
   }]]);
   f.engine = engine(f.adapter, {lineageVerifiers}); const p = await prepared(f); await f.engine.transact(p); assert.ok(checked > 0);
   assert.deepEqual(await f.adapter.tree().readObject(f.adapter.current().locatorRoot, query('commit-record', hash(raw))), raw);
+  const baseline=await f.engine.verifyBaseline();
+  assert.equal(isOwnedFullBaseline(baseline,f.engine,f.adapter.current()),false,'Custom historical lineage cannot seed a native incremental baseline');
 });
 
 test('original adapter destination changes are refused before any provider write', async () => {

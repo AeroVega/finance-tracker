@@ -1,3 +1,4 @@
+import {FullSnapshotApplication,inspectFullSnapshotFolder} from './full-snapshot-application.mjs';
 import { createDiagnostic, diagnosticMessage } from './app-diagnostics.mjs';
 import { reportError, getReport } from './error-reporting.mjs';
 import { SURFACES } from './diagnostic-context.mjs';
@@ -22,6 +23,7 @@ const PRODUCTION_FOLDER_NAME = "finance-tracker-database";
 export function classifyPickerAction(action, pickerActions) {
   if (action === pickerActions.PICKED) return "picked";
   if (action === pickerActions.CANCEL) return "cancelled";
+  if (pickerActions.ERROR !== undefined && action === pickerActions.ERROR) return "error";
   // Google Picker emits LOADED before the user chooses a folder. It is not a
   // terminal result; keep the picker open and wait for PICKED or CANCEL.
   return "pending";
@@ -205,7 +207,8 @@ export async function findOrCreateManifest(adapter, guard) {
 }
 
 export class DashboardSyntheticStorage {
-  constructor({ diagnosticSurface = 'workspace', onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {}, afterMutation = null, maintainOriginals = true } = {}) {
+  constructor({ fullSnapshot = false, diagnosticSurface = 'workspace', onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {}, afterMutation = null, maintainOriginals = true } = {}) {
+    this.fullSnapshot=fullSnapshot;
     this.diagnosticSurface = SURFACES.has(diagnosticSurface) ? diagnosticSurface : 'workspace';
     this.onStatus = onStatus;
     this.onSnapshot = onSnapshot;
@@ -223,6 +226,8 @@ export class DashboardSyntheticStorage {
     this.originals = null;
     this.retentionTimer = null;
   }
+
+  createLedgerStore(){return this.fullSnapshot?this.lifecycle.createLedgerStore():null;}
 
   async prepare() {
     if (!this.readyPromise) {
@@ -284,6 +289,7 @@ export class DashboardSyntheticStorage {
           .setCallback(async (data) => {
             const pickerResult = classifyPickerAction(data?.action, window.google.picker.Action);
             if (pickerResult === "pending") return;
+            if (pickerResult === "error") return reject(googleStartupError("google-picker-unavailable", "Google Picker reported an error."));
             if (pickerResult === "cancelled") return reject(new Error("Folder selection cancelled."));
             const item = data.docs?.[0];
             if (!item?.id) return reject(new Error("Google Picker returned no folder."));
@@ -318,7 +324,7 @@ export class DashboardSyntheticStorage {
         accessToken: () => this.token()
       });
       if (requireEmpty) await requireEmptySyntheticFolder(preflightAdapter);
-      const paged = await inspectPagedCanonicalCopy(preflightAdapter);
+      const paged = this.fullSnapshot?await inspectFullSnapshotFolder(preflightAdapter,{requireEmpty,requireExisting}):await inspectPagedCanonicalCopy(preflightAdapter);
       if (!paged && (await preflightAdapter.listChildren()).length) {
         throw storageError("unsupported-canonical-profile", "Only canonical v5 folders are supported. Existing files were left untouched; choose a new empty synthetic folder.");
       }
@@ -335,7 +341,7 @@ export class DashboardSyntheticStorage {
         this.lifecycle = null;
       }
       if (!this.lifecycle) {
-        this.lifecycle = new ApplicationStorageLifecycle({
+        this.lifecycle = this.fullSnapshot?new FullSnapshotApplication({folderId:this.folderId,accessToken:()=>this.token(),onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)}):new ApplicationStorageLifecycle({
           diagnosticSurface: this.diagnosticSurface,
           syntheticOnly: true,
           catalogProtocol: true,
@@ -361,10 +367,10 @@ export class DashboardSyntheticStorage {
           throw Object.assign(new Error("The existing storage session could not be revalidated. Writes remain disabled."), { code: "ownership-unknown" });
         }
       } else {
-        await this.lifecycle.start();
+        await this.lifecycle.start(this.fullSnapshot?{initialize:requireEmpty}:undefined);
       }
       const snapshot = await this.readSnapshot();
-      await this.startOriginalRetention();
+      if(!this.fullSnapshot)await this.startOriginalRetention();
       this.onSnapshot(snapshot);
       this.publish("ready", "Synthetic storage connected. CSV imports remain local to this page.", "success");
       return { folderName: this.folderName, snapshot };

@@ -51,3 +51,10 @@ test('MIME evidence exports fixed classes only at the immutable receipt stage',a
   assert.equal(Object.hasOwn(result,'stage'),false);
   assert.equal(Object.hasOwn(result,'actualMimeClass'),false);
 });
+
+test('manifest convergence diagnostics expose only known reasons and field names',()=>{
+ for(const reason of ['content-changed','revalidation-limit','metadata-unstable']){
+  assert.deepEqual(storageWriteDiagnostic({code:'manifest-version-mismatch',details:{reason,fields:['version','private-name','size'],fileId:'private-id'}}),
+   {code:'manifest-version-mismatch',reason,fields:['version','size']});
+ }
+});

@@ -1,9 +1,10 @@
-import {wrapNativeOwnershipGuard} from './session-coordination.mjs';
+import {isOwnedCanonicalPreparation,isOwnedCanonicalVerifier} from './canonical-paged-storage.mjs';
+import {wrapNativeOwnershipGuard,getNativeOwnershipCapability} from './session-coordination.mjs';
 import {bindPreparationRead,typedPreparationRead} from './owned-preparation-reader.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {partitionDigest} from './canonical-partitions.mjs';
 import {EMPTY_CANONICAL_BYTES, PAGED_CANONICAL_VERIFIER, canonicalProfileForVerifier} from './paged-canonical-format.mjs';
-import {PhysicalRootBinding, validatePhysicalRootManifest, createPhysicalRootManifest, createPortableLogicalCommit, PORTABLE_COMMIT_FORMAT, PHYSICAL_MANIFEST_FORMAT} from './physical-root-binding.mjs';
+import {readPublicationObservation,PhysicalRootBinding,isOwnedFullBaseline, validatePhysicalRootManifest, createPhysicalRootManifest, createPortableLogicalCommit, PORTABLE_COMMIT_FORMAT, PHYSICAL_MANIFEST_FORMAT} from './physical-root-binding.mjs';
 import {createPagedPhysicalLocators} from './paged-physical-locators.mjs';
 const enc = new TextEncoder(), dec = new TextDecoder();
 const encode = x => enc.encode(canonicalizeJcs(x));
@@ -12,7 +13,10 @@ import {createPhysicalDriveAdapter,PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND} from
 export {createPhysicalDriveAdapter,PAGED_MANIFEST_NAME,PAGED_MANIFEST_KIND} from './physical-drive-adapter.mjs';
 export const PAGED_INITIALIZATION_FORMAT = 'finance-tracker-paged-initialization';
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
-const failureOwners=new WeakMap(),ownedOperationFactories=new WeakSet();
+let successfulPublicationSequence=0;
+export const currentSuccessfulPublicationSequence=()=>successfulPublicationSequence;
+const failureOwners=new WeakMap(),ownedOperationFactories=new WeakSet(),ownedSaveBaselines=new WeakMap();
+export const getOwnedSaveBaseline=factory=>ownedSaveBaselines.get(factory)??null;
 export const isOwnedPagedOperationFactory=fn=>ownedOperationFactories.has(fn);
 export const isObsoletePagedVerificationFailure=error=>error!==null&&typeof error==='object'&&failureOwners.get(error)?.()===true;
 export function currentPagedVerificationFailure(error) {return error!==null&&typeof error==='object'&&failureOwners.has(error)?Object.assign(new Error('Current application verification failed.',{cause:error}),{code:error.code}):error;}
@@ -92,6 +96,9 @@ export async function initializePagedCanonicalCopy({adapter, guard, cryptoImpl =
 }
 
 export class PagedApplicationStorage {
+  #publicationSummary=null;
+  get lastSuccessfulPublication(){return this.#publicationSummary?{...this.#publicationSummary}:null;}
+  #savedBaseline=null;
   #physical; #selectedManifest; #plans; #planEntries; #beginSemantic; #endSemantic;
   #generation=Object.freeze({});
   #current=null; #closures=new WeakMap(); #results=new WeakMap(); #snapshots=new WeakMap();
@@ -145,6 +152,7 @@ export class PagedApplicationStorage {
   }
   invalidateHistory(context) {
     if(context!==undefined&&this.#current!==context)return false;
+    this.#savedBaseline=null;
     const prior=this.#current;this.#current=null;this.#generation=Object.freeze({});
     this.physical?.invalidateReadCache();
     if(prior)this.#end(prior);
@@ -155,6 +163,16 @@ export class PagedApplicationStorage {
     if(!this.#physical)this.#physical=createPhysicalDriveAdapter(this.adapter,{manifestFileId,assertWritable:this.assertWritable});
     const captureOperationGuard=()=>{const context=this.#current;return ()=>this.#assertOpen(context);};
     ownedOperationFactories.add(captureOperationGuard);
+    ownedSaveBaselines.set(captureOperationGuard,(manifest)=>{
+      const context=this.#current,record=this.#savedBaseline;
+      if(!context?.trustedSave||!record||record.engine!==this.engine||!same(record.manifest,manifest))return null;
+      const check=()=>{this.#assertOpen(context);this.#checkPlans();
+        if(this.#savedBaseline!==record||record.engine!==this.engine)fail('verification-scope-closed','Incremental baseline changed.');
+        record.ownership();
+        this.#assertOpen(context);this.#checkPlans();
+        if(this.#savedBaseline!==record||record.engine!==this.engine)fail('verification-scope-closed','Incremental baseline changed.');};
+      check();context.baselineRecord=record;return check;
+    });
     if(!this.engine)this.engine=new PhysicalRootBinding({adapter:this.physical,assertWritable:this.assertWritable,assertStaging:this.assertStaging,
       verificationPlans:this.#plans,verifySourceEvidence:this.#plans.verifySourceEvidence,
       captureOperationGuard});
@@ -206,7 +224,7 @@ export class PagedApplicationStorage {
     try {
       this.#live(context);
       const manifest=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
-      await engine.verifyBaseline();this.#live(context);
+      context.fullAuditHandle=await engine.verifyBaseline();context.fullAuditManifest=structuredClone(manifest);this.#live(context);
       const current=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
       if(!same(manifest,current))fail('base-conflict','Root changed during full verification.');
       if(manifest.pending!==null)fail('recovery-required','Finish paged recovery before reading.');
@@ -233,13 +251,34 @@ export class PagedApplicationStorage {
     if(!context)fail('verification-scope-closed','Snapshot result is not owned by this application.');
     this.#live(context);
   }
+  #retainBaseline(manifest) {
+    const context=this.#current,engine=this.engine,generation=this.#generation,record=this.#savedBaseline;
+    const live=()=>{this.#live(context);this.assertVerificationGeneration(generation);this.#checkPlans();
+      if(this.engine!==engine||this.#savedBaseline!==record)fail('verification-scope-closed','Baseline completion was invalidated.');};
+    live();
+    // A proof of the old base does not certify history appended by a custom
+    // preparation/semantic operation. Only the closed native result can promote.
+    const exactFull=isOwnedFullBaseline(context?.fullAuditHandle,engine,manifest);
+    if(!exactFull&&(!context?.trustedSave||!context.nativeCompletedManifest||!same(context.nativeCompletedManifest,manifest))) {
+      this.#savedBaseline=null;return;
+    }
+    const previous=context?.baselineRecord;
+    if(previous){
+      if(record!==previous||engine!==previous.engine)fail('verification-scope-closed','Incremental baseline changed before completion.');
+      previous.ownership();live();
+    }else if(!isOwnedFullBaseline(context?.fullAuditHandle,engine,context?.fullAuditManifest)) {this.#savedBaseline=null;return;}
+    const native=getNativeOwnershipCapability(this.assertWritable);
+    if(!native?.isCurrent()||manifest.sourceEvidence||!isOwnedCanonicalVerifier(this.#plans.get(PAGED_CANONICAL_VERIFIER))) {live();this.#savedBaseline=null;return;}
+    live();const ownership=native.capture();live();ownership();live();
+    this.#savedBaseline={manifest:structuredClone(manifest),engine,ownership};
+  }
   async finishSnapshot() {
     const context=this.#current;
     if(!context?.manifest)return;
     if(context.closing)return context.closing;
     if(context.closed)return context.handle;
     context.closing=(async()=>{
-      try {await this.#close(context);this.#live(context);return context.handle;}
+      try {await this.#close(context);this.#live(context);this.#retainBaseline(context.manifest);return context.handle;}
       catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
     })();
     return context.closing;
@@ -329,7 +368,9 @@ export class PagedApplicationStorage {
     const current=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
     if (!same(expectedBase,current)) fail('base-conflict','Reopen the current root before saving.');
     this.recoveryRequired=true;
+    context.trustedSave=isOwnedCanonicalPreparation(prepare)&&operation==='synthetic-canonical-import'&&semanticVersion===PAGED_CANONICAL_VERIFIER;
     const verifiedBase=await engine.verifyBaseline({expectedManifest:current});this.#live(context);
+    context.fullAuditHandle=verifiedBase;context.fullAuditManifest=structuredClone(current);
     const tree=createPagedPhysicalLocators(this.physical,{databaseId:current.databaseId,copyId:current.copyId,folderId:current.storageBinding.folderId,assertWritable:this.assertWritable});
     if(prepare!==undefined) {
       const head=JSON.parse(dec.decode(await tree.readObject(current.locatorRoot,{kind:'commit-record',sha256:current.headCommit.sha256})));this.#assertOpen(context);
@@ -351,8 +392,12 @@ export class PagedApplicationStorage {
     const after=JSON.parse(dec.decode(await this.physical.readManifest()));this.#live(context);
     if(!same(result.manifest,after))fail('base-conflict','Root changed after transaction closure.');
     await this.assertWritable();this.#live(context);
+    if(context.trustedSave)context.nativeCompletedManifest=structuredClone(result.manifest);
+    this.#retainBaseline(result.manifest);
     context.manifest=structuredClone(result.manifest);this.#results.set(result,context);
-    this.recoveryRequired=false;return result;
+    this.recoveryRequired=false;
+    try{const observation=readPublicationObservation(result);if(observation)this.#publicationSummary=Object.freeze({...observation,sequence:++successfulPublicationSequence});}catch{}
+    return result;
     }catch(error){if(!this.invalidateHistory(context))throw obsolete(error);throw this.verificationFailure(error);}
   }
 }

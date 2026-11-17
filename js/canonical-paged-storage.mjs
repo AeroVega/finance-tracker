@@ -9,6 +9,11 @@ import {PAGED_CANONICAL_LAYOUT,PAGED_CANONICAL_VERIFIER,canonicalProfileForVerif
 
 const fail = code => { throw Object.assign(new Error(code),{code}); };
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
+const ownedCanonicalVerifiers=new WeakSet(),ownedCanonicalPreparations=new WeakSet();
+export const isOwnedCanonicalPreparation=fn=>ownedCanonicalPreparations.has(fn);
+const ownPreparation=fn=>{ownedCanonicalPreparations.add(fn);return fn;};
+// Identity lookup only; callers cannot register verifier callbacks.
+export const isOwnedCanonicalVerifier=verify=>ownedCanonicalVerifiers.has(verify);
 
 /** The current workspace requires a complete ledger. This is a materializing
  * semantic audit, not a bounded-memory audit. Explicit expansion budgets protect
@@ -101,6 +106,7 @@ export function canonicalPartitionVerificationPlans() {
       throw error;
     }
   };
+  ownedCanonicalVerifiers.add(verify);
   const plans=new Map([[PAGED_CANONICAL_VERIFIER,verify]]);
   Object.defineProperties(plans,{
     beginVerification:{value:()=>{if(active)fail('semantic-scope-open');audited.clear();verifiedEdges.clear();active=Object.freeze({});return active;}},
@@ -148,7 +154,7 @@ export class PagedCanonicalLedgerStore {
       this.base=null;
       let preparedAudit,preparedRoot;
       const committed=await this.lifecycle.savePartitionedRoot({expectedBase,semanticVersion,operation:'synthetic-canonical-import',transactionId:this.crypto.randomUUID(),
-        prepare:async({rootHash:baseRootHash,semanticVersion:verifiedVersion,store})=>{
+        prepare:ownPreparation(async({rootHash:baseRootHash,semanticVersion:verifiedVersion,store})=>{
           const profile=canonicalProfileForVerifier(verifiedVersion);
           if(profile.verifier!==semanticVersion)fail('canonical-profile-mismatch');
           const prepared=new Map();
@@ -174,7 +180,7 @@ export class PagedCanonicalLedgerStore {
           // arbitrary callback can run during its later staging reads.
           const read=createOwnedPreparationReader(objects.map(d=>[d.sha256,prepared.get(d.sha256)]));
           return {rootHash,objects,preparationStore:Object.freeze({read})};
-        }});
+        })});
       // The lifecycle has independently verified these exact prepared bytes,
       // their financial graph/history, durable publication and closing metadata.
       // Reopening here repeated that whole audit without new user work. Adopt

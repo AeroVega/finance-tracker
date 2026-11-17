@@ -1,5 +1,7 @@
 // Public source paths only. CI checks this manifest against shipped modules.
 export const DIAGNOSTIC_FILES = Object.freeze([
+  "js/full-snapshot-storage.mjs",
+  "js/full-snapshot-application.mjs",
   "js/app-error.mjs",
   "js/app-diagnostic-codes.mjs",
   "js/app-diagnostic-messages.mjs",
@@ -65,6 +67,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/stack-frames.mjs",
   "js/storage-diagnostics.mjs",
   "js/storage-write-diagnostic.mjs",
+  "js/success-metrics.mjs",
   "js/synthetic-application-structure.mjs",
   "js/synthetic-financial-position.mjs",
   "js/synthetic-financial-year.mjs",
