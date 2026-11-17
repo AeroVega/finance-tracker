@@ -34,6 +34,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/google-startup-diagnostics.mjs",
   "js/immutable-content-type.mjs",
   "js/import-reconciliation.mjs",
+  "js/provider-csv-preview.mjs",
   "js/provider-csv.mjs",
   "js/session-claim-diagnostic.mjs",
   "js/session-coordination.mjs",
