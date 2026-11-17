@@ -88,7 +88,7 @@ test('canonical validation is reused in memory when mapping and declared coverag
 test('missing account mapping and declared coverage are surfaced rather than inferred', async () => {
   const base = createLedger({ idFactory: () => ledgerId, now: '2026-01-01T00:00:00.000Z' });
   const ledger = registerAccount(base, { institutionId: 'wells-fargo', displayName: 'Invented Checking', currency: 'USD', accountType: 'checking' }, accountOptions);
-  const csv = `${wf}\\n01/02/2026,INVENTED SHOP,-1,,Posted`;
+  const csv = `${wf}\n01/02/2026,INVENTED SHOP,-1,,Posted`;
   const unmapped = await previewProviderCsv({ bytes: bytes(csv), ledger });
   assert.deepEqual(unmapped.requirements.accountMappings, ['default']);
   assert.deepEqual(unmapped.requirements.declaredCoverage, []);
@@ -101,7 +101,7 @@ test('missing account mapping and declared coverage are surfaced rather than inf
 });
 
 test('recognized headers with malformed CSV syntax return the existing parser error', async () => {
-  const result = await previewProviderCsv({ bytes: bytes(`${wf}\\n01/02/2026,"INVENTED BROKEN,-1,,Posted`) });
+  const result = await previewProviderCsv({ bytes: bytes(`${wf}\n01/02/2026,"INVENTED BROKEN,-1,,Posted`) });
   assert.equal(result.status, 'parse-error');
   assert.equal(result.reason, 'invalid-csv-quoting');
 });
