@@ -66,7 +66,7 @@ export async function previewProviderCsv({ bytes, ledger, accountMappings, cover
       candidates: detection.candidates,
       rows: null,
       accounts: [],
-      requirements: { accountMappings: [], declaredCoverage: [], note: 'No parser was selected; input was not guessed.' },
+      requirements: { accountMappings: [], sourceAccountIdentityRows: [], declaredCoverage: [], note: 'No parser was selected; input was not guessed.' },
       canonicalValidation: { status: 'not-run', reason: 'format-not-recognized' },
     };
   }
@@ -82,13 +82,14 @@ export async function previewProviderCsv({ bytes, ledger, accountMappings, cover
       candidates: [detection.sourceFormat],
       rows: null,
       accounts: [],
-      requirements: { accountMappings: [], declaredCoverage: [], note: 'The recognized format failed the existing provider parser.' },
+      requirements: { accountMappings: [], sourceAccountIdentityRows: [], declaredCoverage: [], note: 'The recognized format failed the existing provider parser.' },
       canonicalValidation: { status: 'not-run', reason: 'parse-failed' },
     };
   }
 
   const sourceKeys = [...new Set([...parsed.sourceAccountKeys, ...parsed.records.map(record => record.sourceAccountKey).filter(key => key !== null)])];
   const accounts = summarize(parsed.records, sourceKeys);
+  const sourceAccountIdentityRows = parsed.records.filter(record => record.sourceAccountKey === null).map(record => record.rowOrdinal);
   const missingAccountMappings = sourceKeys.filter(key => !accountMappings?.[key]);
   const missingCoverage = sourceKeys
     .map(key => accountMappings?.[key])
@@ -97,7 +98,7 @@ export async function previewProviderCsv({ bytes, ledger, accountMappings, cover
     .filter((accountId, index, all) => all.indexOf(accountId) === index);
 
   let canonicalValidation = { status: 'not-run', reason: 'provide-ledger-account-mappings-and-declared-coverage' };
-  if (ledger && missingAccountMappings.length === 0 && missingCoverage.length === 0 && sourceKeys.length > 0) {
+  if (ledger && sourceAccountIdentityRows.length === 0 && missingAccountMappings.length === 0 && missingCoverage.length === 0 && sourceKeys.length > 0) {
     try {
       // This creates and validates an in-memory proposal only. The returned ledger is
       // deliberately discarded: preview never persists, mutates, or accepts anything.
@@ -122,6 +123,7 @@ export async function previewProviderCsv({ bytes, ledger, accountMappings, cover
     accounts,
     requirements: {
       accountMappings: missingAccountMappings,
+      sourceAccountIdentityRows,
       declaredCoverage: missingCoverage,
       note: 'Observed valid dates describe rows present in this file only; they do not establish complete or declared coverage.',
     },
