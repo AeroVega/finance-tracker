@@ -29,8 +29,8 @@ function detectFormat(bytes) {
   return { status: matches.length > 1 ? 'ambiguous' : 'unrecognized', reason: matches.length > 1 ? 'multiple-supported-header-matches' : 'unsupported-header', candidates: matches };
 }
 
-function summarize(records) {
-  const groups = new Map();
+function summarize(records, sourceAccountKeys) {
+  const groups = new Map(sourceAccountKeys.map(key => [key, { sourceAccountKey: key, rows: 0, validRows: 0, rowsRequiringReview: 0, validDateRows: 0, observedValidDateStart: null, observedValidDateEnd: null }]));
   for (const record of records) {
     const key = record.sourceAccountKey;
     if (!groups.has(key)) groups.set(key, { sourceAccountKey: key, rows: 0, validRows: 0, rowsRequiringReview: 0, validDateRows: 0, observedValidDateStart: null, observedValidDateEnd: null });
@@ -87,8 +87,8 @@ export async function previewProviderCsv({ bytes, ledger, accountMappings, cover
     };
   }
 
-  const accounts = summarize(parsed.records);
-  const sourceKeys = [...new Set(parsed.records.map(record => record.sourceAccountKey).filter(key => key !== null))];
+  const accounts = summarize(parsed.records, sourceKeys);
+  const sourceKeys = [...new Set([...parsed.sourceAccountKeys, ...parsed.records.map(record => record.sourceAccountKey).filter(key => key !== null)])];
   const missingAccountMappings = sourceKeys.filter(key => !accountMappings?.[key]);
   const missingCoverage = sourceKeys
     .map(key => accountMappings?.[key])
