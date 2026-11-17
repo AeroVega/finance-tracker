@@ -8,7 +8,7 @@ const workspace = {
   'unsupported-derived-projection': 'This ledger contains a linked refund without a defined category. Keep the original copy. Add an explicit category correction to the original activity, save it, then retry the new copy.',
   'canonical-ledger-required': 'This copy has no saved canonical ledger. Release it, seed a synthetic year in a new empty folder, then open that saved copy here.',
   'deprecated-canonical-layout': 'This standalone grouped version-2 copy is no longer supported. It was not initialized or modified. Preserve it and create a new synthetic copy using canonical version 5.',
-  'existing-copy-required': 'Choose the folder where you already saved the synthetic year. This workspace does not initialize empty folders.',
+  'existing-copy-required': 'No saved synthetic copy was found. To use an empty folder, choose Create new synthetic year, or Save preview to a new folder if a preview is open. Open saved synthetic year only opens an existing copy.',
   'correction-rationale-required': 'Explain the evidence or reason for this correction.',
   'classification-amount-conflict': 'That classification conflicts with the amount. Income must not be negative and spending must not be positive.',
   'category-required': 'Enter a category for this transaction.',

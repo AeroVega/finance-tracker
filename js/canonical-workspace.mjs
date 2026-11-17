@@ -29,6 +29,7 @@ function money(value, currency) {
   return `${negative ? '-' : ''}${currency === 'USD' ? '$' : currency + ' '}${BigInt(whole).toLocaleString('en-US')}.${fraction.padEnd(2, '0')}`;
 }
 const monthLabel = month => new Date(month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+let freshYearLedger = null;
 let busy = false, configured = false, page = 0, selectedActivity = null, view = null, operationStarted = null;
 let viewLedger = null, viewReader = null, homeView = null, searchTimer = null, composingSearch = false;
 const reviewButtons = new Map();
@@ -119,6 +120,8 @@ function refresh() {
   $('start-preview').disabled = busy || Boolean(lifecycle);
   $('welcome-panel').hidden = Boolean(session.ledger);
   $('overview-loaded').hidden = !session.ledger;
+  $('create-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(lifecycle) || session.unverified || (session.mode !== 'preview' && !freshYearLedger);
+  $('create-ledger').textContent = session.mode === 'preview' ? 'Save preview to a new folder' : 'Create new synthetic year';
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false;
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
   $('preview-position').disabled = busy || Boolean(lifecycle);
@@ -698,6 +701,17 @@ $('month-filter').addEventListener('change', () => {
   if (!changeReconciliationScope('month-filter', view?.scope.month || '')) return;
   updateStatementEditor();
 });
+action('create-ledger', 'Preparing and saving an invented year to a new empty synthetic folder. Keep this tab open.', async () => {
+  const navigationRevision = pages.revision;
+  // Reuse an existing preview, including edits, rather than replacing its data.
+  if (session.mode !== 'preview') {
+    if ((session.dirty || hasUnfinishedDetail()) && !window.confirm('Replace your local draft with a new invented year? This discards unsaved corrections in this tab before folder selection. Existing saved folders are unchanged.')) return;
+    session.preview(freshYearLedger);
+  } else if (!confirmDiscardDetail()) return;
+  render({ reset: true });
+  await session.savePreviewToNewCopy(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview');
+  announce('Synthetic year created in the new folder and independently verified. Use Open saved synthetic year next time.', 'success'); return true;
+});
 action('open-ledger', 'Opening and verifying your saved synthetic copy. This can take time while retained history is checked.', async () => {
   if (!confirmReplace()) return;
   const navigationRevision = pages.revision;
@@ -706,7 +720,7 @@ action('open-ledger', 'Opening and verifying your saved synthetic copy. This can
 action('preview-year', 'Preparing the invented year locally. No Google connection or Drive write.', async () => {
   if (!confirmReplace()) return;
   const navigationRevision = pages.revision;
-  session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Local synthetic preview ready. Open your saved copy to save corrections to Drive.', 'success');
+  session.preview((await createSyntheticFinancialYear()).ledger); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview'); announce('Local synthetic preview ready. Choose Save preview to a new folder to save this preview and any corrections to Drive.', 'success');
 });
 action('save-preview', 'Saving this exact local preview into a newly selected, empty synthetic Drive folder and independently verifying it. Keep this tab open.', async () => {
   await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success'); return true;
@@ -778,6 +792,11 @@ window.addEventListener('beforeunload', event => { if (busy || session.dirty || 
 window.addEventListener('offline', () => { session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
 refresh();
+// Prepare only invented data ahead of the click so OAuth starts within the
+// user's create-button gesture, without awaiting fixture generation first.
+createSyntheticFinancialYear().then(recipe => { freshYearLedger = recipe.ledger; refresh(); }).catch(error => {
+  $('connection-status').textContent = showDiagnostic(error, {surface: 'workspace', target: $('connection-status'), page: pages.current});
+});
 storage.prepare().then(() => { configured = true; refresh(); }).catch(error => {
   configured = false;
   $('connection-status').textContent = showDiagnostic(error, {surface: 'workspace', target: $('connection-status'), page: pages.current});
