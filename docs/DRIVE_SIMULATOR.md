@@ -75,3 +75,32 @@ Still outside this model: real OAuth grants and popup policies, Picker iframe be
 Google propagation behavior not encoded in a scenario, HTTP caches/proxies, actual
 quotas, physical-device suspension and actual service latency. A small live synthetic
 smoke test can remain a final compatibility check; it should not be the primary bug loop.
+
+## Bounded witness-read overlap (2026-11-17)
+
+`#close` now overlaps at most two independent immutable metadata GETs. Each pair
+fully drains, including on rejection, before any result is processed. Content
+revalidation and its shared budgets remain sequential. Ownership and manifest
+checks and all mutation ordering remain unchanged; no verification request is removed.
+
+Run a timing-injected benchmark with:
+
+```sh
+FINANCE_SCENARIO_WALL_CLOCK=1 node tests/benchmark-drive-scenarios.mjs
+```
+
+One local before/after run of the slow-server-settling profile (250 ms/read,
+1,300 ms/write, 1 MB/s upload, 5 MB/s download) measured:
+
+| Phase | Serial metadata | Paired metadata | Requests (unchanged) |
+| --- | ---: | ---: | ---: |
+| Seed | 36.02 s | 34.94 s | 107 |
+| Save one correction | 27.80 s | 25.97 s | 84 |
+
+That is a 6.6% save reduction and 3.0% seed reduction in this single synthetic
+comparison, not a live Drive/Safari prediction or a statistical benchmark. Local
+CPU scheduling adds noise. Read concurrency peaked at two; mutation concurrency
+remained one. Summed modeled service time is unchanged: the benefit is overlapping
+independent waiting, not fewer requests or bytes. New gated tests cover first-read
+failure, scope invalidation, changed second-witness binding, release draining, and
+version-only settling of both witnesses without concurrent content revalidation.

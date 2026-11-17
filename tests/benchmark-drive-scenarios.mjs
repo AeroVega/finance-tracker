@@ -6,7 +6,7 @@ import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
 import {ScenarioFullSnapshotDrive} from './helpers/scenario-full-snapshot-drive.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 function setup(profile = 'server-settling') {
-  const http = new ScenarioFullSnapshotDrive({profile});
+  const http = new ScenarioFullSnapshotDrive({profile, wallClock: process.env.FINANCE_SCENARIO_WALL_CLOCK === "1"});
   const create = () => new FullSnapshotApplication({folderId: http.folderId, accessToken: () => 'invented-test-token',
     fetchImpl: http.fetch, cryptoImpl: webcrypto, visibilityDelayMs: 0, setIntervalImpl: () => 1,
     clearIntervalImpl: () => {}, lifecycleTarget: null, isOnline: () => true});

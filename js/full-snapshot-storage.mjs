@@ -136,7 +136,18 @@ class FullSnapshotStorage {
  }
  async #exact(expected){await this.#owned();if(!same(await this.#selected(),expected))fail('base-conflict');this.#capture()();}
  async #close(expected){
-  const check=this.#capture();for(const [fileId,witness]of this.#context.used){const fresh=await this.adapter.readMetadata(fileId);check();const settled=await this.#settleImmutable(witness.metadata,fresh,witness.ref,witness.kind,witness.transactionId);check();witness.metadata=clone(settled);}
+  const check=this.#capture(),witnesses=[...this.#context.used];
+  // Only independent metadata GETs overlap. Drain each pair even on failure so
+  // no read survives this operation; content settling and its budgets stay serial.
+  for(let offset=0;offset<witnesses.length;offset+=2){
+   check();const pair=witnesses.slice(offset,offset+2);
+   const results=await Promise.allSettled(pair.map(([fileId])=>this.adapter.readMetadata(fileId)));check();
+   const failed=results.find(result=>result.status==='rejected');if(failed)throw failed.reason;
+   for(let index=0;index<pair.length;index++){
+    check();const witness=pair[index][1],fresh=results[index].value;
+    const settled=await this.#settleImmutable(witness.metadata,fresh,witness.ref,witness.kind,witness.transactionId);check();witness.metadata=clone(settled);
+   }
+  }
   await this.#exact(expected);check();
  }
  async #current(m){
