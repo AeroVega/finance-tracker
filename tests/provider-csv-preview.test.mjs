@@ -108,7 +108,7 @@ test('recognized headers with malformed CSV syntax return the existing parser er
 
 test('missing Fidelity source account identity is reported as an unresolved row requirement', async () => {
   const row = ['01/03/2026', 'INVENTED ACCOUNT', '', 'Contribution', '', 'INVENTED DESCRIPTION', '', '', '', 'USD', '', '', '', '', '', '', '10', ''].join(',');
-  const result = await previewProviderCsv({ bytes: bytes(`${fidelity}\\n${row}`) });
+  const result = await previewProviderCsv({ bytes: bytes(`${fidelity}\n${row}`) });
   assert.deepEqual(result.requirements.sourceAccountIdentityRows, [2]);
   assert.equal(result.accounts[0].sourceAccountKey, null);
   assert.equal(result.accounts[0].rowsRequiringReview, 1);
