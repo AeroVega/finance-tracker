@@ -1,5 +1,5 @@
 // Fresh-copy full-snapshot protocol, used by the explicit experimental application route.
-import {fail} from './app-error.mjs';
+import {fail,AppError} from './app-error.mjs';
 import {GoogleDriveTransactionAdapter,getNativeDriveReadCheck} from './drive-transaction-engine.mjs';
 import {createDriveSessionAdapter} from './drive-session-adapter.mjs';
 import {SessionCoordinator,createNativeOwnershipGuard,getNativeOwnershipCapability} from './session-coordination.mjs';
@@ -13,6 +13,10 @@ export const FULL_SNAPSHOT_MANIFEST_NAME='finance-tracker-full-snapshot-manifest
 const MANIFEST='finance-tracker-full-snapshot-manifest',ENVELOPE='finance-tracker-full-snapshot-commit',PROFILE='canonical-ledger-full-v1';
 const enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:true});
 const clone=x=>structuredClone(x),same=(a,b)=>canonicalizeJcs(a)===canonicalizeJcs(b);
+const metadataFields=['id','name','mimeType','parents','appProperties','size','version','trashed'];
+const sameExceptVersion=(a,b)=>{const {version:av,...aa}=a,{version:bv,...bb}=b;return same(aa,bb);};
+const changedFields=(a,b)=>metadataFields.filter(k=>!same(a[k]??null,b[k]??null));
+const metadataChanged=(a,b,reason='metadata-changed')=>{const error=new AppError('verification-metadata-changed');error.details={reason,fields:changedFields(a,b)};throw error;};
 const fields=(x,names)=>{if(!x||Object.getPrototypeOf(x)!==Object.prototype||Object.keys(x).length!==names.length||names.some(k=>!Object.hasOwn(x,k)))fail('invalid-shape');};
 const id=x=>{if(typeof x!=='string'||!x.length||x.length>256)fail('invalid-identity');return x;};
 const hash=x=>{if(typeof x!=='string'||!(/^[a-f0-9]{64}$/).test(x))fail('invalid-hash');return x;};
@@ -66,7 +70,7 @@ class FullSnapshotStorage {
   this.adapter.assertMutationsSettled();if(this.#busy)fail('operation-in-progress');this.#busy=true;
   try{return await this.coordinator.withWrite(async()=>{
    const guard=createNativeOwnershipGuard(this.coordinator);if(!guard)fail('verification-scope-closed');
-   const owner=getNativeOwnershipCapability(guard).capture(),transport=getNativeDriveReadCheck(this.adapter);if(!transport)fail('verification-scope-closed');const context={owner,transport,adapter:this.adapter,coordinator:this.coordinator,epoch:this.#epoch,used:new Map()};this.#context=context;
+   const owner=getNativeOwnershipCapability(guard).capture(),transport=getNativeDriveReadCheck(this.adapter);if(!transport)fail('verification-scope-closed');const context={owner,transport,adapter:this.adapter,coordinator:this.coordinator,epoch:this.#epoch,used:new Map(),revalidationBytes:0,revalidationReads:0};this.#context=context;
    try{const result=await operation();this.#capture()();return result;}
    finally{if(this.#context===context)this.#context=null;}
   });}catch(error){this.#recoveryRequired=true;this.invalidate();throw error;}finally{this.#busy=false;}
@@ -77,13 +81,36 @@ class FullSnapshotStorage {
   if(sha&&(m.appProperties?.financeTrackerHash!==sha||m.name!=='ft-full-'+sha+'.bin'||m.mimeType!=='application/octet-stream'))fail('metadata-mismatch');
   if(transactionId&&m.appProperties?.financeTrackerTransaction!==transactionId)fail('metadata-mismatch');return m;
  }
+ // Drive version includes invisible server-side changes. Never ignore drift:
+ // re-read the exact immutable object under stable metadata, within a per-run
+ // byte/attempt budget. All non-version bindings remain exact; authority does
+ // not use this exception.
+ async #settleImmutable(expected,current,ref,kind,transactionId){
+  const check=this.#capture(),max=kind==='snapshot-object'?FULL_SNAPSHOT_LIMITS.snapshotBytes:FULL_SNAPSHOT_LIMITS.envelopeBytes;
+  for(let attempt=0;attempt<3;attempt++){
+   check();this.#metadata(current,ref.fileId,kind,ref.sha256,transactionId);
+   if(same(expected,current))return current;
+   if(!sameExceptVersion(expected,current)||BigInt(current.version)<=BigInt(expected.version))metadataChanged(expected,current);
+   if(this.#context.revalidationReads>=8||this.#context.revalidationBytes+ref.byteLength>3*FULL_SNAPSHOT_LIMITS.snapshotBytes)metadataChanged(expected,current,'revalidation-limit');
+   this.#context.revalidationBytes+=ref.byteLength;this.#context.revalidationReads++;
+   const raw=await this.adapter.readBytes(ref.fileId,{kind,maxBytes:max});check();
+   if(raw.length!==ref.byteLength||String(raw.length)!==current.size||await this.#digest(raw)!==ref.sha256)fail('hash-mismatch');check();
+   const after=this.#metadata(await this.adapter.readMetadata(ref.fileId),ref.fileId,kind,ref.sha256,transactionId);check();
+   if(same(current,after))return after;
+   if(!sameExceptVersion(current,after)||BigInt(after.version)<=BigInt(current.version))metadataChanged(current,after);
+   expected=current;current=after;
+  }
+  metadataChanged(expected,current,'metadata-unstable');
+ }
+ #remember(ref,kind,transactionId,metadata){this.#context.used.set(ref.fileId,{ref:clone(ref),kind,transactionId,metadata:clone(metadata)});}
  async #read(ref,kind,transactionId){
   const max=kind==='snapshot-object'?FULL_SNAPSHOT_LIMITS.snapshotBytes:FULL_SNAPSHOT_LIMITS.envelopeBytes;reference(ref,max);
   const check=this.#capture();check();const before=this.#metadata(await this.adapter.readMetadata(ref.fileId),ref.fileId,kind,ref.sha256,transactionId);check();
   const raw=await this.adapter.readBytes(ref.fileId,{kind,maxBytes:max});check();
   if(raw.length!==ref.byteLength||String(raw.length)!==before.size||await this.#digest(raw)!==ref.sha256)fail('hash-mismatch');check();
-  const after=this.#metadata(await this.adapter.readMetadata(ref.fileId),ref.fileId,kind,ref.sha256,transactionId);check();if(!same(before,after))fail('verification-metadata-changed');
-  this.#context.used.set(ref.fileId,clone(after));return {value:JSON.parse(dec.decode(raw)),metadata:after};
+  const observed=this.#metadata(await this.adapter.readMetadata(ref.fileId),ref.fileId,kind,ref.sha256,transactionId);check();
+  const after=await this.#settleImmutable(before,observed,ref,kind,transactionId);check();
+  this.#remember(ref,kind,transactionId,after);return {value:JSON.parse(dec.decode(raw)),metadata:after};
  }
  async #selected(){
   const check=this.#capture();check();const before=this.#metadata(await this.adapter.readMetadata(this.#manifestId),this.#manifestId,MANIFEST);check();
@@ -94,7 +121,7 @@ class FullSnapshotStorage {
  }
  async #exact(expected){await this.#owned();if(!same(await this.#selected(),expected))fail('base-conflict');this.#capture()();}
  async #close(expected){
-  const check=this.#capture();for(const [fileId,witness]of this.#context.used){const fresh=await this.adapter.readMetadata(fileId);check();if(!same(fresh,witness))fail('verification-metadata-changed');}
+  const check=this.#capture();for(const [fileId,witness]of this.#context.used){const fresh=await this.adapter.readMetadata(fileId);check();const settled=await this.#settleImmutable(witness.metadata,fresh,witness.ref,witness.kind,witness.transactionId);check();witness.metadata=clone(settled);}
   await this.#exact(expected);check();
  }
  async #current(m){
@@ -128,7 +155,7 @@ class FullSnapshotStorage {
   const before=this.#metadata(receipt.readback.metadata,fileId,kind,sha256,transactionId);
   if(before.size!==String(actual.length)||await this.#digest(actual)!==sha256)fail('hash-mismatch');check();
   const after=this.#metadata(await this.adapter.readMetadata(fileId),fileId,kind,sha256,transactionId);check();
-  if(!same(before,after))fail('verification-metadata-changed');this.#context.used.set(fileId,clone(after));return ref;
+  const settled=await this.#settleImmutable(before,after,ref,kind,transactionId);check();this.#remember(ref,kind,transactionId,settled);return ref;
  }
  async #publish(next,expected){
   await this.#close(expected);this.#capture()();

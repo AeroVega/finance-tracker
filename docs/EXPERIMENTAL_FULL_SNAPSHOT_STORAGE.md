@@ -52,3 +52,21 @@ No live Google Drive, Apple-device, deployment, import, backup/restore, or real-
 The welcome panel now distinguishes Create new synthetic year from Open saved synthetic year. Create prepares invented data before the click, then uses the empty-folder-only save path. An existing local preview, including staged corrections, is reused unchanged. Open never initializes an empty folder. Cancelling folder selection leaves the preview available; retrying creation never overwrites a nonempty folder. These routes are covered through the shipped controller, Dashboard picker bridge, workspace session and actual protocol with invented HTTP responses. Google sign-in/Picker rendering and physical Safari remain live acceptance steps.
 
 The creation-entry fix passed 54 focused protocol/application/controller tests and 87 adjacent workspace/navigation/seeder tests locally. It preserves unsaved drafts unless replacement is explicitly confirmed, keeps OAuth initiation in the click gesture, rejects nonempty destinations before writes, and respects navigation made during creation. Exact-head CI must separately validate the full extended suite before owner testing.
+
+### Immutable Drive version convergence
+
+Drive's file version includes server-side changes that do not necessarily change
+content. Immutable verification now tolerates only a monotonically increasing
+version with every other metadata field unchanged, and only after a fresh actual
+media read matches the reference hash and length inside a stable metadata bracket.
+Each convergence check allows at most three attempts. An operation allows at most
+eight revalidation media reads and 24 MiB of cumulative revalidation bytes.
+Identity, location, tags, size, content, backwards versions, persistent churn and
+expired ownership/scope still fail closed. Manifest authority checks remain strict.
+No create or publication is retried by this read-only convergence path.
+
+This addresses a reproduced version-only failure consistent with the reported
+fresh-seed diagnostic; the live diagnostic did not identify the changed field,
+so that exact live cause is not proven. Changed-field diagnostics now contain
+allowlisted field names, not file IDs or metadata values. Preserve any affected
+folder and do not infer that a failed seed can be retried from HTTP success alone.
