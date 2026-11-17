@@ -1,5 +1,7 @@
 import {createDriveRequestMetrics} from '../js/drive-request-metrics.mjs';
-import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
+import {webcrypto} from 'node:crypto';
+import {FullSnapshotApplication} from '../js/full-snapshot-application.mjs';
+import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
 import {createWorkspacePages} from '../js/workspace-pages.mjs';
 import {buildFinancialPosition, buildAccountMonthCoverage} from '../js/financial-position.mjs';
 import {createSyntheticFinancialPosition} from '../js/synthetic-financial-position.mjs';
@@ -10,7 +12,6 @@ import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
 import {createWorkspaceViewReader, getWorkspaceActivity} from '../js/canonical-workspace-model.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 import {googleStartupMessage} from '../js/google-startup-diagnostics.mjs';
-import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
 import {registerAccount, prepareCanonicalImport, applyReviewDecision, getEffectiveActivities} from '../js/canonical-import.mjs';
 import {exactSignedDecimal, isCalendarDate} from '../js/import-reconciliation.mjs';
 import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
@@ -22,47 +23,38 @@ const text = element => [element.textContent, ...element.children.map(text)].joi
 async function workspacePage({ledger = recipe.ledger} = {}) {
   const state = {connects:[],writes:0,snapshotReads:0,releases:0,recovers:0,connectionError:null,saveGate:null,readbackGate:null,
     loseResponse:false,failSave:false,releaseVerified:true,snapshotError:false,recoveryGate:null};
-  const physical = await createPagedFixture();
-  const initialStore = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
-  await initialStore.load(); await initialStore.save(ledger);
-  const {manifest,objects} = physical;
-  const readSnapshot = physical.lifecycle.readPartitionedSnapshot, saveRoot = physical.lifecycle.savePartitionedRoot;
-  let storage, session, browserNavigator;
+  let storage, session, browserNavigator, lifecycle, http;
   const timeouts = new Map();
   const timers = { setTimeout(callback, delay) { timeouts.set(callback, delay); return callback; }, clearTimeout(callback) { timeouts.delete(callback); } };
   const flushSearch = async () => { const callbacks = [...timeouts.keys()]; timeouts.clear(); for (const callback of callbacks) await callback(); };
-  const lifecycle = {
-    ...physical.lifecycle,
-    state:'ready',acceptingWrites:true,coordinator:{canWrite:true},folderId:'invented-ui-folder',
-    async readManifest() { return structuredClone(manifest); },
-    async readObject(path) { return objects[path]; },
-    async readPartitionedSnapshot() {
+  const createCopy=async(seed)=>{
+    http=new HttpFullSnapshotDrive();
+    lifecycle=new FullSnapshotApplication({folderId:http.folderId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,cryptoImpl:webcrypto,
+      lifecycleTarget:null,isOnline:()=>browserNavigator?.onLine!==false,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},visibilityDelayMs:0,
+      onStatus:status=>storage?.options.onStatus(status)});
+    await lifecycle.start({initialize:true});
+    if(seed){const initial=lifecycle.createLedgerStore();await initial.load();await initial.save(seed);}
+    // Action gates/failures wrap real persisted full-snapshot operations; these
+    // test controller behavior, not provider interruption timing.
+    const read=lifecycle.load.bind(lifecycle),save=lifecycle.save.bind(lifecycle),recover=lifecycle.recover.bind(lifecycle);
+    lifecycle.load=async()=>{
       state.snapshotReads++;
-      if (state.openGate) await state.openGate.promise;
-      if (state.snapshotError) throw Object.assign(new Error('Private provider body'), {code:'snapshot-unavailable'});
-      if (manifest.revision > 1 && state.readbackGate) await state.readbackGate.promise;
-      return readSnapshot();
-    },
-    async savePartitionedRoot(transaction) {
-      assert.deepEqual(transaction.expectedBase, manifest);
-      if (state.saveGate) await state.saveGate.promise;
-      if (state.measureSave) await state.measureSave();
-      if (state.failSave) throw Object.assign(new Error('Private provider detail'), {code:'base-conflict'});
-      state.writes++;
-      const result = await saveRoot(transaction);
-      if (state.readbackGate) await state.readbackGate.promise;
-      if (state.loseResponse) {
-        lifecycle.state = 'recovery-required'; lifecycle.acceptingWrites = false;
-        storage.options.onStatus({state:lifecycle.state});
-        throw Object.assign(new Error('Private lost commit response'), {code:'transaction-unresolved'});
-      }
+      if(state.openGate)await state.openGate.promise;
+      if(state.snapshotError)throw Object.assign(new Error('Private provider body'),{code:'snapshot-unavailable'});
+      return read();
+    };
+    lifecycle.save=async next=>{
+      if(state.saveGate)await state.saveGate.promise;
+      if(state.measureSave)await state.measureSave();
+      if(state.failSave)throw Object.assign(new Error('Private provider detail'),{code:'base-conflict'});
+      const result=await save(next);state.writes++;
+      if(state.readbackGate)await state.readbackGate.promise;
+      if(state.loseResponse){lifecycle.state='recovery-required';lifecycle.acceptingWrites=false;storage.options.onStatus({state:lifecycle.state});throw Object.assign(new Error('Private lost commit response'),{code:'write-unresolved'});}
       return result;
-    },
-    async recover() {
-      state.recovers++; if (state.recoveryGate) await state.recoveryGate.promise; lifecycle.state = 'ready'; lifecycle.acceptingWrites = true;
-      storage.options.onStatus({state:'ready'});
-    },
+    };
+    lifecycle.recover=async()=>{state.recovers++;if(state.recoveryGate)await state.recoveryGate.promise;return recover();};
   };
+  await createCopy(ledger);
   class Storage {
     constructor(options) { this.options = options; this.lifecycle = null; this.accessToken = 'invented-token'; storage = this; }
     async prepare() {}
@@ -71,7 +63,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       if (state.connectionError) throw Object.assign(new Error('Private provider detail'), {code:state.connectionError});
       if (options.requireEmpty === true) {
         assert.equal(options.requireExisting, undefined);
-        await physical.reset();
+        await createCopy(null);
       } else {
         assert.equal(options.requireExisting, true);
         assert.equal(options.requireEmpty, undefined);
@@ -79,9 +71,10 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       this.lifecycle = lifecycle; lifecycle.state = 'ready'; lifecycle.acceptingWrites = true;
       this.options.onStatus({state:'ready'});
     }
+    createLedgerStore(){return this.lifecycle.createLedgerStore();}
     async release() {
       state.releases++;
-      if (state.releaseVerified) { this.lifecycle = null; this.options.onStatus({state:'disconnected'}); }
+      if (state.releaseVerified) { await lifecycle.release(); this.lifecycle = null; this.options.onStatus({state:'disconnected'}); }
       return {released:state.releaseVerified};
     }
     async recoverStaleSession() { await lifecycle.recover(); }
@@ -99,7 +92,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     },getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,isCalendarDate,buildFinancialPosition,buildAccountMonthCoverage,createSyntheticFinancialPosition,createSyntheticFinancialYear,googleStartupMessage,TypeError},
   {htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs',timers});
   browserNavigator = page.navigator;
-  return {...page,state,manifest,objects,storage,lifecycle,modelSession:session,timeouts,flushSearch,
+  return {...page,state,get manifest(){return lifecycle.engine.verifiedManifest;},storage,get lifecycle(){return lifecycle;},modelSession:session,timeouts,flushSearch,
     summary:() => text(page.get('summary-cards')),
     async search(value) { page.get('transaction-search').value = value; await page.get('transaction-search').emit('input'); await flushSearch(); },
     async detail(description = 'INVENTED UTILITY') {
@@ -116,12 +109,8 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       await page.get('correction-rationale').emit('input');
       await page.click('stage-correction');
     },
-    async replaceSavedLedger(next) {
-      await physical.reset();
-      const store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
-      await store.load(); await store.save(next);
-    },
-    async storedLedger() { return new CanonicalLedgerStore({lifecycle}).load(); },
+    async replaceSavedLedger(next) { await createCopy(next); storage.lifecycle=lifecycle; },
+    async storedLedger() { return lifecycle.createLedgerStore().load(); },
   };
 }
 
@@ -197,7 +186,8 @@ test('switching to an account without selected-month coverage keeps the selected
 test('detail lazily exposes original evidence and staging requires an explicit later save', async () => {
   const h = await workspacePage(); await h.click('open-ledger');
   assert.deepEqual(h.state.connects, [{requireExisting:true}]);
-  assert.equal(h.storage.options.maintainOriginals, false);
+  assert.equal(h.lifecycle.fullSnapshot, true);
+  assert.equal(h.modelSession.store.valueCodec, 'full-snapshot-v1');
   assert.equal(h.state.writes, 0);
   await h.detail();
   assert.equal(h.get('activity-detail').hidden, false);
@@ -577,7 +567,7 @@ test('main workspace can explicitly save the exact local preview into a fresh sy
   assert.equal(h.modelSession.mode, 'preview');
   assert.equal(h.get('save-preview').disabled, false);
   await h.click('save-preview');
-  assert.deepEqual(h.state.connects, [{requireEmpty:true,canonicalLayout:'partitions-v5'}]);
+  assert.deepEqual(h.state.connects, [{requireEmpty:true,canonicalLayout:'full-snapshot-v1'}]);
   assert.equal(h.state.writes, 1);
   assert.equal(h.modelSession.mode, 'saved');
   assert.equal(h.modelSession.dirty, false);
@@ -1121,19 +1111,19 @@ test('pending or unknown corrections clear effective posting date and never subm
   assert.equal(h.state.writes,0);
 });
 
-test('Storage distinguishes the active saved format from preview and experimental formats', async () => {
+test('Storage distinguishes the active full-snapshot saved format from local preview', async () => {
   const h = await workspacePage();
   assert.match(h.get('storage-format').textContent, /No saved format currently verified/);
   await h.click('preview-year');
   assert.match(h.get('storage-format').textContent, /Local preview, no saved format yet/);
   assert.match(h.get('storage-format').textContent, /new folder will use full-snapshot v1/);
   await h.click('open-ledger');
-  assert.match(h.get('storage-format').textContent, /Last verified saved format: compact-json-v1/);
+  assert.match(h.get('storage-format').textContent, /Last verified saved format: full-snapshot-v1/);
   await h.click('release-ledger');
   assert.match(h.get('storage-format').textContent, /No saved format currently verified/);
   await h.click('preview-year');
   await h.click('save-preview');
-  assert.match(h.get('storage-format').textContent, /Last verified saved format: compact-json-v1/);
+  assert.match(h.get('storage-format').textContent, /Last verified saved format: full-snapshot-v1/);
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /one complete canonical ledger snapshot and a small commit envelope/);
   assert.match(html, /Opening and recovery verify retained history/);

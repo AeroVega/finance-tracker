@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createDriveRequestMetrics,markManifestRequest,transferManifestRequest} from '../js/drive-request-metrics.mjs';
 import {successfulActionSummary} from '../js/success-metrics.mjs';
-import {setupHttpCanonicalWorkbench} from './helpers/pr28-http-workbench.mjs';
+import {FullSnapshotApplication} from '../js/full-snapshot-application.mjs';
+import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
+async function setupHttpCanonicalWorkbench(){const http=new HttpFullSnapshotDrive();const lifecycle=new FullSnapshotApplication({folderId:http.folderId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,lifecycleTarget:null,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},visibilityDelayMs:0});await lifecycle.start({initialize:true});const driver=lifecycle.createLedgerStore();await driver.load();return {http,lifecycle,driver};}
 import {replayFixture} from './helpers/ledger-replay-fixtures.mjs';
 test('manifest attempt observations exclude session PATCH and count retries without inspecting URLs',async()=>{
  const metrics=createDriveRequestMetrics(),other=createDriveRequestMetrics(),a=metrics.openWindow(),b=other.openWindow();let calls=0;
@@ -15,34 +17,6 @@ test('manifest attempt observations exclude session PATCH and count retries with
  assert.equal(successfulActionSummary({actionId:'SECRET',elapsedMs:0}),null);
  assert.equal(successfulActionSummary({get actionId(){throw Error('SECRET');}}),null);
 });
-for(const generic of [false,true])test(`successful closed publication exports only detached observed path generic=${generic}`,async()=>{
- const h=await setupHttpCanonicalWorkbench();try{
-  if(generic){const create=h.lifecycle.transactionAdapter.createImmutable.bind(h.lifecycle.transactionAdapter);h.lifecycle.transactionAdapter.createImmutable=(...args)=>create(...args);}
-  assert.equal(h.lifecycle.engine.lastSuccessfulPublication,null);
-  const window=h.lifecycle.requestMetrics.openWindow();await h.driver.save(replayFixture(1).ledger);
-  assert.equal(window.manifestPatches(),generic?4:2);
-  const value=h.lifecycle.engine.lastSuccessfulPublication;
-  assert.ok(Number.isSafeInteger(value.sequence)&&value.sequence>0);assert.deepEqual({...value,sequence:0},{path:generic?'legacy':'native',reason:generic?'custom-transport':'none',sequence:0});
-  value.path='SECRET';assert.notEqual(h.lifecycle.engine.lastSuccessfulPublication.path,'SECRET');
-  window.close();
- }finally{await h.lifecycle.release();}
-});
-test('failed publication does not expose a successful path summary',async()=>{
- const h=await setupHttpCanonicalWorkbench();try{
-  h.http.beforeResponse=({category,fileId})=>{if(category==='update'&&fileId===h.manifestFileId)h.http.stopAfterMutation=h.http.mutations+1;};
-  await assert.rejects(h.driver.save(replayFixture(1).ledger));assert.equal(h.lifecycle.engine.lastSuccessfulPublication,null);
- }finally{h.http.beforeResponse=null;h.http.reboot();await h.lifecycle.release().catch(()=>{});}
-});
-test('publication observation sequence distinguishes new engines without attributing old summaries',async()=>{
- const {currentSuccessfulPublicationSequence}=await import('../js/paged-application-storage.mjs');
- const a=await setupHttpCanonicalWorkbench(),b=await setupHttpCanonicalWorkbench();try{
-  await a.driver.save(replayFixture(1).ledger);const before=currentSuccessfulPublicationSequence();
-  assert.ok(a.lifecycle.engine.lastSuccessfulPublication.sequence<=before);
-  await b.driver.save(replayFixture(1).ledger);assert.ok(b.lifecycle.engine.lastSuccessfulPublication.sequence>before);
-  assert.ok(a.lifecycle.engine.lastSuccessfulPublication.sequence<=before);
- }finally{await a.lifecycle.release();await b.lifecycle.release();}
-});
-
 test('purpose attempts retain exact status bins, overlapping header times and detached private output',async()=>{
  const {markRequestPurpose,safePurposeMetrics}=await import('../js/drive-request-metrics.mjs');
  let time=0;const metrics=createDriveRequestMetrics({now:()=>time}),window=metrics.openWindow();
@@ -59,14 +33,13 @@ test('purpose attempts retain exact status bins, overlapping header times and de
  assert.equal(safePurposeMetrics([{purpose:'SECRET'}]),null);
  assert.equal(safePurposeMetrics(window.purposes().map(row=>({...row,headerMs:-1}))),null);
 });
-test('actual native save classifies every fetch without changing native publication eligibility',async()=>{
+test('full-snapshot save classifies every fetch and preserves two publications',async()=>{
  const h=await setupHttpCanonicalWorkbench();try{
  const window=h.lifecycle.requestMetrics.openWindow();await h.driver.save(replayFixture(1).ledger);
  const rows=window.purposes(),by=Object.fromEntries(rows.map(row=>[row.purpose,row]));
  assert.equal(rows.reduce((n,row)=>n+row.count,0),window.snapshot().requests);
  assert.equal(by.unknown.count,0);assert.equal(by['manifest-patch'].count,2);
- for(const purpose of ['owner-list','inventory-list','metadata','media','id-generation','immutable-create'])assert.ok(by[purpose].count>0,purpose);
- assert.equal(h.lifecycle.engine.lastSuccessfulPublication.path,'native');
+ for(const purpose of ['owner-list','metadata','media','immutable-create'])assert.ok(by[purpose].count>0,purpose);
  }finally{await h.lifecycle.release();}
 });
 

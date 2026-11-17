@@ -1,5 +1,8 @@
 # Database Identity and Lifecycle — Architecture Decision Record
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 **Status:** Accepted architecture baseline (PR #19); synthetic transaction-engine implementation is underway in PR #23. Production financial-data persistence remains unauthorized.  
 **Decision scope:** Database identity, manifest/schema versioning, physical copies, immutable storage, commit lineage, transaction journaling, initialization, migrations, backups, lifecycle, and recovery  
 **Storage direction:** Google Drive, subject to the existing production-readiness gates  

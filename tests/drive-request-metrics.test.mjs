@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDriveRequestMetrics, safeRequestMetrics, combineRequestMetrics, REQUEST_METRIC_FIELDS } from '../js/drive-request-metrics.mjs';
-import { ApplicationStorageLifecycle } from '../js/application-storage-lifecycle.mjs';
+import { FullSnapshotApplication } from '../js/full-snapshot-application.mjs';
 
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
@@ -80,19 +80,18 @@ test('sanitization rejects non-scalars, impossible counts and extra private fiel
 
 test('lifecycle sends session and transaction adapter fetch attempts through one shared counter', async () => {
   const fetches = [], received = [];
-  const lifecycle = new ApplicationStorageLifecycle({ syntheticOnly: true, folderName: 'invented synthetic folder', folderId: 'invented-folder', manifestFileId: 'invented-manifest',
+  const lifecycle = new FullSnapshotApplication({ lifecycleTarget:null, syntheticOnly: true, folderName: 'invented synthetic folder', folderId: 'invented-folder', manifestFileId: 'invented-manifest',
     accessToken: () => 'invented-token', makeManifest: () => ({}),
     fetchImpl: async (...args) => { fetches.push(args); return new Response(JSON.stringify(args[0].includes('/invented-file?') ? { id: 'invented-file', parents: ['invented-folder'], trashed: false } : { files: [], incompleteSearch: false }), { status: 200 }); },
     factories: { createEngine: () => ({}), createCoordinator: () => ({}) }
   });
-  lifecycle.createComponents();
-  await lifecycle.sessionAdapter.read();
+  await lifecycle.coordinator.adapter.read();
   await lifecycle.transactionAdapter.readMetadata('invented-file');
   assert.equal(fetches.length, 2); assert.equal(lifecycle.requestMetrics.snapshot().requests, 2);
   assert.equal(lifecycle.requestMetrics.snapshot().get, 2);
   const window = lifecycle.requestMetrics.openWindow();
   const unsubscribe = lifecycle.requestMetrics.subscribe(() => received.push(lifecycle.requestMetrics.snapshot()));
-  await lifecycle.sessionAdapter.read(); unsubscribe();
+  await lifecycle.coordinator.adapter.read(); unsubscribe();
   assert.equal(window.close().requests, 1); assert.equal(lifecycle.requestMetrics.snapshot().requests, 3);
   assert.equal(received.length, 2); assert.doesNotMatch(JSON.stringify(received), /invented-(token|folder|file|manifest)/);
 });

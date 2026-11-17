@@ -1,26 +1,27 @@
 # Next steps
 
-**Updated:** 2026-11-14  
-**Current baseline:** [current main and scoped evidence](CURRENT_STATE.md)  
+**Updated:** 2026-11-17
+**Current baseline:** [current main and scoped evidence](CURRENT_STATE.md)
 **Release target:** 2027-01-01 for v1.0.0, conditional on all release gates.
 
 This file is the active dependency/acceptance queue. It does not grant permission to merge, deploy, change production configuration, or use real financial data. The [current state](CURRENT_STATE.md) is authoritative for implementation and authorization. The [product definition](PRODUCT_DEFINITION.md) owns the detailed v1.0.0 scope.
 
 ## Immediate priorities
 
-- **Make open/save practical without weakening verification.** Target under 30 seconds per operation for Alpha and under 10 seconds later. See [performance evidence](OPEN_SAVE_PERFORMANCE.md). Keep synthetic measurements, predictions and live acceptance separate; preserve full financial, retained-history and physical verification.
+- **Finish the full-snapshot cleanup and PR46 merge.** The owner accepted the reported 11-second open and 25-second persisted save on `86d1f2b`. Remove obsolete storage-format paths and their exclusive tests without removing shared financial, integrity, ownership or recovery coverage. Review and validate the exact cleanup head before merging; see [current state](CURRENT_STATE.md) for authorization.
 
-1. **Validate the latest integrated app.** Recheck synthetic-year initialization and one-change save/reopen on the current main build, using the bounded diagnostics to preserve exact evidence. Confirm physical iPhone/iPad Safari behavior for the changed workspace and diagnostics. Do not infer a provider-side cause from a diagnostic category alone.
-2. **Finish the Alpha financial-history path.** Implement and verify the distinct monthly-summary migration from January 2023 using invented workbook fixtures first. Preserve source granularity, provenance, month coverage, and reconciliation results; never convert monthly totals into fabricated transaction rows.
-3. **Complete supported owner-file ingestion.** Bring supported Wells Fargo, SoFi, and Fidelity exports through the actual application workflow: strict format recognition, account mapping, user-adjustable declared coverage, observed-date validation, discrepancy resolution, duplicate/re-import safety, and verified persistence. Real files remain gated.
-4. **Complete production controls.** Implement and review account/database binding, OAuth lifecycle, privacy boundaries, backup/recovery, portable export/restore, cost/quotas, and safe session cleanup with synthetic data. Production remains NO-GO until every applicable gate and explicit owner activation approval pass.
+1. **Next PR, after cleanup/merge: recovery and backup/restore.** Strengthen user-facing recovery and implement portable backup/restore for the selected full-snapshot format. The protocol recovery engine already exists and must retain full ancestry audit, pending-publication resolution, explicit uncertainty and verified-reopen requirements. Use the upgraded simulator extensively for interruption, corruption, authorization, uncertain-write and fresh-restore/reopen scenarios before asking the owner to deploy and test. Do not fold this implementation into the cleanup PR.
+2. **Keep acceptance scoped to evidence.** The reported 11-second open and 25-second persisted save are accepted. The last reported seed was 42 seconds; seed performance is separate and does not reopen that gate. Test changed behavior and regressions without inferring universal sub-30-second operations or Alpha completeness.
+3. **Finish the Alpha financial-history path.** Implement and verify the distinct monthly-summary migration from January 2023 using invented workbook fixtures first. Preserve source granularity, provenance, month coverage and reconciliation results; never convert monthly totals into fabricated transaction rows.
+4. **Complete supported owner-file ingestion.** Bring supported Wells Fargo, SoFi and Fidelity exports through the actual application workflow: strict format recognition, account mapping, user-adjustable declared coverage, observed-date validation, discrepancy resolution, duplicate/re-import safety and verified persistence. Real files remain gated.
+5. **Complete remaining production controls.** Implement and review account/database binding, OAuth lifecycle, privacy boundaries, cost/quotas and safe session cleanup with synthetic data. Production remains NO-GO until every applicable gate and explicit owner activation approval pass.
 
-These are project priorities, not a commitment to a specific PR sequence or delivery date. Sequence by dependency, risk, and reviewability—not PR number.
+The next-PR sequence above is owner-directed, not a delivery-date commitment. Later work remains ordered by dependency, risk and reviewability.
 
 ## Acceptance boundaries
 
-- **Canonical v5:** active application write format. Older canonical v1/v2/v3/v4 copies are refused; do not silently migrate, overwrite, or revive them. Existing v5 migration-origin copies retain read-only provenance verification. See [format contract](PARTITIONED_CANONICAL_STORAGE.md).
-- **Storage performance:** coalesced writes and segmented indexes do not mean bounded full-database memory, selective financial loading, or incremental semantic validation. Preserve full integrity and financial checks.
+- **Full-snapshot v1:** the selected application storage format. Older layouts are unsupported; do not migrate, overwrite, revive or delete their folders. See [format contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md).
+- **Storage performance:** the reported open/save goal is owner-accepted; the last reported 42-second seed is separate. Full ledger/history loading and validation remain; no bounded-memory or selective-loading claim follows. Preserve integrity and financial checks.
 - **Financial position:** PR36 implementation is merged. Its existing owner synthetic/device acceptance is historical evidence for the paths tested; do not reopen unchanged checks without a reason.
 - **Diagnostics:** PR40 is merged. Reports are bounded and privacy-safe, with Copy/Select only. They improve evidence; they do not prove a live provider cause or substitute for acceptance.
 - **Deployment:** successful CI or Pages workflow is not independent verification of the served SHA. Record each state separately.

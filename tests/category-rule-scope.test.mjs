@@ -4,15 +4,9 @@ import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import {createLedger, registerAccount, prepareCanonicalImport, applyFinancialEvent,
   applyReviewDecision, reverseReviewDecision, getEffectiveActivities, summarizeLedger, validateLedger} from '../js/canonical-import.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
-import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
-import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
-import {ApplicationStorageLifecycle} from '../js/application-storage-lifecycle.mjs';
-import {initializePagedCanonicalCopy} from '../js/paged-application-storage.mjs';
-import {canonicalPartitionVerificationPlans} from '../js/canonical-paged-storage.mjs';
-import {exportPagedCanonicalArchive,restorePagedCanonicalArchive,withSourceEvidenceVerification} from '../js/paged-canonical-backup.mjs';
-import {verifyPagedArchiveInMemory} from '../js/paged-archive-rehearsal.mjs';
-import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
-import {GoogleDriveTransactionAdapter} from '../js/drive-transaction-engine.mjs';
+import {webcrypto} from 'node:crypto';
+import {createFullSnapshotStorage} from '../js/full-snapshot-storage.mjs';
+import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
 
 const now='2026-11-08T00:00:00.000Z';
 const options=()=>{let n=0;return {now:()=>now,idFactory:()=>`f00d0001-0000-4000-8000-${String(++n).padStart(12,'0')}`};};
@@ -37,20 +31,20 @@ const matchingIds=(ledger,a)=>ledger.activities.filter(peer=>canonicalizeJcs(sco
 const annual=ledger=>summarizeLedger(ledger,{start:'2025-01-01',end:'2025-12-31',currency:'USD'});
 const year=await createSyntheticFinancialYear();
 
-const plans=()=>withSourceEvidenceVerification(canonicalPartitionVerificationPlans());
-function application(drive,manifestFileId) {
-  return new ApplicationStorageLifecycle({syntheticOnly:true,pagedCanonical:true,verificationPlans:plans(),
-    folderName:'Invented synthetic category rules',folderId:drive.folderId,manifestFileId,
-    accessToken:()=> 'invented-test-token',fetchImpl:drive.fetch,makeManifest:()=>{},
-    initializeManifest:({adapter,guard})=>initializePagedCanonicalCopy({adapter,guard}),
-    adapterOptions:{visibilityDelayMs:0,visibilityMaxDelayMs:0},setIntervalImpl:()=>1,clearIntervalImpl:()=>{},lifecycleTarget:null});
+function storage() {
+  const http=new HttpFullSnapshotDrive();
+  const store=createFullSnapshotStorage({folderId:http.folderId,accessToken:()=> 'invented-test-token',
+    fetchImpl:http.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}});
+  return {http,store};
 }
 async function persisted(ledger) {
-  const fixture=await createPagedFixture(),store=new CanonicalLedgerStore({lifecycle:fixture.lifecycle});
-  await store.load();await store.save(ledger);
-  assert.deepEqual(await new CanonicalLedgerStore({lifecycle:fixture.lifecycle}).load(),ledger);
-  assert.ok([...fixture.objects.values()].every(bytes=>bytes.length<=65536));
-  return fixture;
+  const {store}=storage();
+  try {
+    await store.start({initialize:true});await store.save(ledger);await store.release();
+    await store.start();const reopened=await store.open();
+    assert.deepEqual(reopened,ledger);
+    return reopened;
+  } finally {await store.release().catch(()=>{});}
 }
 
 test('new category rules retain only exact-key peers and preserve every scope boundary',()=>{
@@ -92,7 +86,7 @@ test('inactive retained peers stay excluded from prospective recategorization',(
   assert.equal(getEffectiveActivities(ledger).find(a=>a.activityId===inactiveId).categoryId,null);
 });
 
-test('1,000 distinct activities support four corrections in bounded v5 pages',async()=>{
+test('1,000 distinct activities retain compact corrections through full-snapshot reopen',async()=>{
   const {opt,ledger:initial}=setup();let ledger=initial;
   for(let i=1;i<=4;i++)ledger=correct(ledger,opt,ledger.activities[0].activityId,`invented-${i}`);
   assert.ok(ledger.events.every(event=>event.prospectiveRule.existingActivityIds.length===1));
@@ -101,7 +95,7 @@ test('1,000 distinct activities support four corrections in bounded v5 pages',as
   const legacy=structuredClone(ledger);for(const event of legacy.events)event.prospectiveRule.existingActivityIds=initial.activities.map(a=>a.activityId);
   assert.equal(validateLedger(legacy),true);
   const expanded=await persisted(legacy);
-  assert.ok(expanded.objects.size>=current.objects.size);
+  assert.ok(Buffer.byteLength(canonicalizeJcs(expanded))>Buffer.byteLength(canonicalizeJcs(current)));
   assert.deepEqual(getEffectiveActivities(ledger),getEffectiveActivities(legacy));
 });
 
@@ -130,37 +124,24 @@ test('year fixture corrections preserve old peers, late backdated imports and re
   assert.deepEqual(ledger.events.slice(0,before.events.length),before.events);
 });
 
-test('year fixture with legacy rules can append scoped rules, save, reopen, export and restore',async()=>{
+test('year fixture retains existing broad rule membership when appending scoped rules and reopening',async()=>{
   const opt=options(),target=year.ledger.activities.find(a=>a.sourceDescription==='INVENTED UTILITY');
-  let ledger=correct(year.ledger,opt,target.activityId,'legacy-utility');
-  // Reproduce a previously persisted v1 event without changing its command or financial effect.
+  let ledger=correct(year.ledger,opt,target.activityId,'broad-utility');
+  // Broad membership is still a valid logical event, independent of physical format.
   ledger.events.at(-1).prospectiveRule.existingActivityIds=year.ledger.activities.map(a=>a.activityId);
-  const legacyEvent=canonicalizeJcs(ledger.events.at(-1)),baseline=annual(ledger);
-  const source=new HttpCatalogDrive({folderId:'invented-category-source',idPrefix:'category-source-'}),app=application(source);
-  let restoredApp;
+  const originalEvent=canonicalizeJcs(ledger.events.at(-1)),baseline=annual(ledger);
+  const {store}=storage();
   try {
-  await app.start();const store=new CanonicalLedgerStore({lifecycle:app});
-  await store.load();await store.save(ledger);
-  for(let i=1;i<=4;i++)ledger=correct(ledger,opt,target.activityId,`scoped-utility-${i}`);
-  assert.equal(canonicalizeJcs(ledger.events[year.ledger.events.length]),legacyEvent);
-  assert.ok(ledger.events.slice(-4).every(e=>e.prospectiveRule.existingActivityIds.length===12));
-  await store.save(ledger);
-  assert.deepEqual(await new CanonicalLedgerStore({lifecycle:app}).load(),ledger);
-  const chunks=[];
-  await exportPagedCanonicalArchive({sourceAdapter:app.transactionAdapter,sourceManifestFileId:app.manifestFileId,
-    withSourceLock:op=>app.coordinator.withWrite(op),assertSourceWritable:async()=>{await app.coordinator.assertCanWrite({online:true});},
-    verificationPlans:plans(),sink:{write:async chunk=>chunks.push(chunk)}});
-  await verifyPagedArchiveInMemory(chunks,{verificationPlans:plans()});
-  await app.release();source.stopped=true;
-  const destination=new HttpCatalogDrive({folderId:'invented-category-restore',idPrefix:'category-restore-'});
-  const adapter=new GoogleDriveTransactionAdapter({folderId:destination.folderId,accessToken:()=> 'invented-test-token',fetchImpl:destination.fetch,visibilityDelayMs:0,visibilityMaxDelayMs:0});
-  const restored=await restorePagedCanonicalArchive({source:chunks,targetAdapter:adapter,withTargetLock:op=>op(),assertTargetWritable:async()=>{},verificationPlans:plans()});
-  restoredApp=application(destination,restored.manifestFileId);await restoredApp.start();
-  const restoredStore=new CanonicalLedgerStore({lifecycle:restoredApp}),reopened=await restoredStore.load();
-  assert.deepEqual(reopened,ledger);assert.deepEqual(annual(reopened),baseline);
-  const changed=structuredClone(reopened);changed.events[year.ledger.events.length].prospectiveRule.existingActivityIds=[target.activityId];
-  await assert.rejects(restoredStore.save(changed),{code:'history-rewrite-refused'});
-  } finally {if(restoredApp?.started)await restoredApp.release();if(app.started&&!source.stopped)await app.release();}
+    await store.start({initialize:true});await store.save(ledger);
+    for(let i=1;i<=4;i++)ledger=correct(ledger,opt,target.activityId,`scoped-utility-${i}`);
+    assert.equal(canonicalizeJcs(ledger.events[year.ledger.events.length]),originalEvent);
+    assert.ok(ledger.events.slice(-4).every(e=>e.prospectiveRule.existingActivityIds.length===12));
+    await store.save(ledger);await store.release();await store.start();
+    const reopened=await store.open();
+    assert.deepEqual(reopened,ledger);assert.deepEqual(annual(reopened),baseline);
+    const changed=structuredClone(reopened);changed.events[year.ledger.events.length].prospectiveRule.existingActivityIds=[target.activityId];
+    await assert.rejects(store.save(changed),{code:'history-rewrite-refused'});
+  } finally {await store.release().catch(()=>{});}
 });
 
 test('unrelated legacy membership arrays are not searched during effective projection',()=>{
@@ -201,19 +182,12 @@ test('structured source-action JSON retains accepted legacy JCS equality',()=>{
   assert.equal(validateLedger(JSON.parse(canonicalizeJcs(later))),true);
 });
 
-test('dense same-key history is persisted through bounded v5 pages',async()=>{
+test('dense same-key history preserves complete membership through full-snapshot reopen',async()=>{
   const {opt,ledger:initial}=setup(Array.from({length:1000},(_,i)=>row(i,{normalizedDescription:'invented recurring merchant'})));
   let ledger=initial;
   for(let i=1;i<=4;i++)ledger=correct(ledger,opt,ledger.activities[0].activityId,`dense-${i}`);
   assert.ok(ledger.events.every(event=>event.prospectiveRule.existingActivityIds.length===1000));
-  const physical=await persisted(ledger);
-  const root=JSON.parse(new TextDecoder().decode(physical.objects.get(physical.manifest.root)));
-  assert.equal(root.version,5);
-  const {createCanonicalPartitionReader}=await import('../js/canonical-partition-reader.mjs');
-  const reader=await createCanonicalPartitionReader({read:async hash=>physical.objects.get(hash).slice()},physical.manifest.root);
-  const event=(await reader.getRecord('events',ledger.events[0].eventId)).value;
-  const rule=(await reader.field(event,'prospectiveRule')).value;
-  const ids=(await reader.field(rule,'existingActivityIds')).value;
-  assert.equal(ids.ref.kind,'array');assert.equal(ids.ref.count,'1000');
-  assert.ok((await reader.pageValue(ids,{limit:128})).cursor,'oversized membership remains pageable');
+  const reopened=await persisted(ledger);
+  assert.deepEqual(reopened.events.map(event=>event.prospectiveRule.existingActivityIds),
+    ledger.events.map(event=>event.prospectiveRule.existingActivityIds));
 });

@@ -1,12 +1,12 @@
 # Synthetic financial year
 
-## Scope and authorization
+## Current creation route
 
-**User-confirmed request, November 8, 2026:** after PR #29 merged, the owner requested a button to upload a year's worth of invented financial data into an empty Google Drive folder of their choosing, for visualization, insight and projection testing.
+Use **Storage → Create new synthetic year** in the [main workspace](../index.html#storage). The workspace prepares invented data, requests Google authorization from the click gesture, and uses Picker to select a fresh empty synthetic folder. An already-open local preview uses **Save preview to a new folder** and preserves its staged edits. Open saved synthetic year never initializes an empty folder.
 
-**Implemented:** [Seed a synthetic year](../prototype/synthetic-year.html), linked from the main workspace and prototype hub. The default recipe is calendar year **2025**, the last complete calendar year at implementation time. The UI intentionally offers one reproducible version rather than importing user files. It is not a production dashboard, an investment engine or a projection implementation.
+The selected storage format is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). Older layouts are unsupported and are not migrated, overwritten or deleted. The standalone synthetic-year seeder and old copy guides were retired during PR46 cleanup. Supported file import and portable backup/restore remain outstanding requirements, not available actions.
 
-Production financial-data persistence remains **NO-GO** under [PR #27](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md). No real-data test, live Drive action, merge, deployment, or production activation is authorized or claimed by this implementation. No paid service, framework or new authentication scope was introduced. The current synthetic-year page writes [canonical v5](PARTITIONED_CANONICAL_STORAGE.md), with compact values and paged fallback. Existing per-record v1, fragmented v3 and canonical v4 copies remain compatible and are not silently migrated. Standalone grouped v2 is rejected. New copies use the reviewed v4 physical publication and recovery path with existing session ownership checks. The initial feature preserved existing prototype pages. The later owner-authorized [cleanup](PROTOTYPE_CLEANUP.md) retires superseded UI while preserving earlier acceptance records.
+The default recipe is calendar year **2025**, the last complete year when implemented. It offers one reproducible invented dataset, not a production dashboard, investment engine or projection implementation. Production remains **NO-GO**. This document grants no deployment, merge, live Drive or real-data authorization; consult [current state](CURRENT_STATE.md).
 
 ## Recipe and financial meaning
 
@@ -23,32 +23,21 @@ The versioned pure generator `createSyntheticFinancialYear` constructs invented 
 
 Balances, historical valuations, net worth, investment performance and complete-history claims remain unavailable. The current engine's cash subtotal excludes transfers and card activity; it is not total bank movement or a balance. The synthetic declared coverage is source-confirmed by the authored recipe, but `coverageReconciled` remains false. Original CSV bytes are available only in memory, not uploaded as retained files. Canonical retention fields honestly remain `not-retained`; preserved row-level source evidence is not a full-file retention claim.
 
-## Upload and overwrite boundaries
+## Save and overwrite boundaries
 
-1. Nothing connects or uploads on page load. Only public deployment configuration and Google libraries load. Local preview generates invented records without requesting a token or calling Drive.
-2. The owner creates and checks a new empty Drive folder whose name contains `synthetic`, separate from all real financial data. A checkbox and the selected-folder confirmation explain what will be uploaded.
-3. The existing Picker verifies folder identity, MIME type and nontrashed status. The production folder name is blocked. The same `drive.file` scope is retained.
-4. Strict empty-folder enumeration runs **before** session creation or manifest initialization. Every visible child, even an existing synthetic manifest or session marker, blocks a fresh upload. The existing initializer checks again before bootstrap.
-5. **Scope limit:** `drive.file` cannot prove absence of files outside app access. The owner must confirm actual emptiness in Drive. These checks do not turn a limited listing into a complete Drive inventory, and a concurrent external change can still race enumeration. Session coordination remains best-effort, not a server-enforced lock.
-6. The page pins the freshly admitted folder/database/copy identity in this tab only. The seeder requires a verified revision-zero primary synthetic manifest with an empty logical snapshot before the first financial commit.
-7. The existing `CanonicalLedgerStore`, application lifecycle and catalog engine save the canonical graph with all current ownership, offline, exact-base, provenance, immutable-history, journal and recovery safeguards. A new store independently reopens and compares the complete graph before success is shown.
-8. An exact previously saved recipe verifies without another financial commit. A different ledger, an unrelated logical object, a backup destination or changed empty-copy identity cannot be replaced or appended to by this page. Existing record history and unsupported folders are preserved.
-
-After verified release, open the [main workspace](../index.html#storage) and choose **Open saved synthetic year** to inspect this canonical year and stage corrections. The [paged copy guide](../prototype/pr25-acceptance.html?guide=v4) provides backup/export/restore. The old four-row dashboard diagnostic is a separate payload. Reports must retain the recipe's qualifications rather than infer complete balances.
+1. Use a new empty synthetic folder for creation. Do not clear an old or uncertain folder to make it appear empty.
+2. Cancelled sign-in or Picker leaves the local preview available. Creation refuses a nonempty destination.
+3. Wait for verified success before staging another operation. A successful HTTP response alone is not a verified save.
+4. Stage a correction, choose Save changes once, then independently reopen the saved copy to verify persistence.
+5. Release the session before moving to a different tab or device. Release does not erase the saved copy.
 
 ## Interruption and retry
 
-Repeated clicks are gated. Upload, preview, reconnect, recovery and release share a UI busy state; the seeder also rejects overlapping financial operations. Controls and status stay beside the action. Progress reports verified durable writes and elapsed time, not a percentage or proof of success.
+After a failed or uncertain save, preserve the folder and local draft. Do not blindly retry or delete files. Recover if offered, then perform a verified full reopen to establish what reached Drive. Recovery alone does not seed a save baseline or prove the intended draft was persisted. An uncertain release does not announce successful handoff. See the [current protocol](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) and [owner guide](OWNER_ACCEPTANCE.md).
 
-A failed save may have reached Drive. The page never deletes partial files or blindly starts another transaction. Reconnect uses an existing-copy-only preflight and cannot initialize a new folder. Existing lifecycle revalidation and recovery run before the recipe is examined. An exact committed graph verifies without reseeding. A verified return to the original empty primary copy permits one explicit user-triggered safe retry, only while that folder's admission identity remains in the same tab. Retry can be requested again after another verified recovery; no background retry runs.
+## Historical performance and acceptance
 
-After reload, admission permission is gone. An exact complete year can still be verified using its deterministic recipe, but an empty/aborted or unrecognized existing copy cannot be seeded. Preserve it and choose a new empty folder. An interruption during initial bootstrap without a valid manifest also fails closed and requires a new folder; automatic cleanup and bootstrap reconstruction are not part of this feature.
-
-Reconnection and verification still perform the existing session/recovery operations, including session-marker updates and journal recovery. “No financial records added” does not mean zero Drive requests or zero maintenance writes. A stopped session requires explicit confirmation that other tabs/devices have stopped. Release must verify before the owner switches tools or devices. Token expiry or offline transitions stop writes through the existing lifecycle; reconnect and verify rather than assuming the upload failed harmlessly.
-
-Beforeunload asks the browser to warn while an operation or session is active. Mobile termination and browser warning limitations remain; keep the tab open, online and awake. Nothing stores tokens, folder IDs or record data in localStorage/sessionStorage. No new telemetry or public reports are introduced. The year page opts out of original-source retention maintenance, so selecting an unrelated synthetic copy cannot trigger original-file retention or deletion before the recipe is checked. Other tools retain their existing maintenance behavior.
-
-## Performance and acceptance
+The sections below preserve earlier seeder/storage experiments. Commands, UI steps, format compatibility and limits apply only to those historical revisions, not the current workspace.
 
 ### Historical grouped canonical experiment (deprecated)
 
@@ -114,6 +103,6 @@ The procedure below belongs to the deprecated grouped-v2 experiment and preserve
 6. If any operation fails, preserve the folder and use the documented reconnect/recovery path. An interrupted initial setup or post-reload empty copy requires a new folder, not deletion or repeated blind upload.
 
 
-## Current canonical storage
+## Historical canonical-v5 storage
 
-**Implemented, synthetic-only:** new copies use [canonical v5](PARTITIONED_CANONICAL_STORAGE.md). Existing per-record v1, fragmented v3 and canonical v4 copies retain their interpretation; the [copy guide](../prototype/pr25-acceptance.html?guide=v4) offers explicit v1/v3 migration into a fresh v5 folder while preserving source history. V4-to-v5 migration is not implemented. Full ledger/history verification still materializes data. The earlier v1/v3 benchmarks above do not measure the current app path or establish device capacity.
+**Implemented, synthetic-only:** new copies use [canonical v5](PARTITIONED_CANONICAL_STORAGE.md). Existing per-record v1, fragmented v3 and canonical v4 copies retain their interpretation; the [retired copy-guide source](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/prototype/pr25-acceptance.html) offers explicit v1/v3 migration into a fresh v5 folder while preserving source history. V4-to-v5 migration is not implemented. Full ledger/history verification still materializes data. The earlier v1/v3 benchmarks above do not measure the current app path or establish device capacity.

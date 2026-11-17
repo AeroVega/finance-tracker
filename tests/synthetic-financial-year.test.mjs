@@ -5,8 +5,9 @@ import {canonicalizeJcs} from '../js/transaction-protocol.mjs';
 import {createSyntheticFinancialYear, DEFAULT_SYNTHETIC_YEAR} from '../js/synthetic-financial-year.mjs';
 import {parseProviderCsv} from '../js/provider-csv.mjs';
 import {getEffectiveActivities, prepareCanonicalImport, validateLedger} from '../js/canonical-import.mjs';
-import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
-import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
+import {webcrypto} from 'node:crypto';
+import {createFullSnapshotStorage} from '../js/full-snapshot-storage.mjs';
+import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
 
 // One shared immutable fixture keeps this suite bounded. No Drive or private inputs.
 const fixture = await createSyntheticFinancialYear();
@@ -113,12 +114,16 @@ test('source bytes reproduce provider fingerprints and reimport does not repeat 
 
 test('same recipe produces exact retry identity and a valid canonical storage roundtrip', async () => {
   assert.deepEqual(await createSyntheticFinancialYear(), fixture);
-  const physical = await createPagedFixture(), store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
-  await store.load(); await store.save(fixture.ledger);
-  assert.ok([...physical.objects.values()].every(bytes => bytes.length <= 65536));
-  assert.equal(JSON.parse(new TextDecoder().decode(physical.objects.get(physical.manifest.root))).version, 5);
-  const restored = await new CanonicalLedgerStore({lifecycle:physical.lifecycle}).load();
-  assert.deepEqual(restored, fixture.ledger);
+  const http = new HttpFullSnapshotDrive();
+  const store = createFullSnapshotStorage({folderId:http.folderId,accessToken:()=> 'invented-test-token',
+    fetchImpl:http.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}});
+  try {
+    await store.start({initialize:true});
+    await store.save(fixture.ledger);
+    await store.release();
+    await store.start();
+    assert.deepEqual(await store.open(), fixture.ledger);
+  } finally { await store.release().catch(()=>{}); }
 });
 
 test('bounded year option supports leap years without accepting extra data', async () => {

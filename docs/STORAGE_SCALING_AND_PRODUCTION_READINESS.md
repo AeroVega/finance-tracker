@@ -92,9 +92,9 @@ against the audited main revision. The audit follow-up repaired it and prevents 
 between different storage layouts. The historical request counts in older
 performance documents remain historical, not current-v3 budgets.
 
-Source: [catalog copying](../js/drive-locator-catalog.mjs),
-[staged and finalized catalog writes](../js/catalog-transaction-engine.mjs),
-[benchmark](../tests/benchmark-history-reads.mjs).
+Source: [catalog copying](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/js/drive-locator-catalog.mjs),
+[staged and finalized catalog writes](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/js/catalog-transaction-engine.mjs),
+[benchmark](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/tests/benchmark-history-reads.mjs).
 
 ### Fragment limits do not bound total memory
 
@@ -134,10 +134,10 @@ archive inventories lack an end-to-end admission budget. A malformed or oversize
 remote file can exhaust memory before later rejection. No destructive OOM test
 was attempted.
 
-[History verification](../js/catalog-storage.mjs) still inspects and hashes all
+[History verification](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/js/catalog-storage.mjs) still inspects and hashes all
 retained objects, journals and ancestry. Its 16 MiB cache caps only cached byte
 evidence, not the verification result or browser memory.
-[Backup](../js/catalog-backup.mjs) validates every historical snapshot, retains
+[Backup](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/js/catalog-backup.mjs) validates every historical snapshot, retains
 objects in memory and constructs a base64 archive. Restore builds another decoded
 object map. A readable current ledger is insufficient if backup or restore cannot
 complete at the same supported capacity.

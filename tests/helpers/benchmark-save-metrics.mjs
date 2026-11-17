@@ -1,6 +1,6 @@
 // Synthetic benchmark telemetry only. Never emits URLs, IDs, bodies or errors.
 export const CATEGORIES=Object.freeze(['list','generate-id','metadata','media','create','update','other']);
-export const KINDS=Object.freeze(['paged-canonical-manifest','protocol-object','commit-record','snapshot-object','locator-catalog-page','locator-catalog','session-marker','unknown']);
+export const KINDS=Object.freeze(['finance-tracker-full-snapshot-manifest','commit-record','snapshot-object','session-marker','unknown']);
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:0;
 export function summarizeRequests(rows) {
   const categories=Object.fromEntries(CATEGORIES.map(k=>[k,{requests:0,requestBytes:0,responseBytes:0}]));

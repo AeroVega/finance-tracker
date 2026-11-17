@@ -32,14 +32,3 @@ test('complexity observation explicitly does not enforce target and accepts only
  assert.equal(result.targetStatus,'not-enforced');assert.equal(result.acceptance,'measurement-only');assert.equal(result.responseBytes,12);
  assert.throws(()=>complexityObservation({fixture:'private-id',revision:0,metrics}),TypeError);
 });
-test('actual benchmark applies latency to initial and retained saves and emits matching fixed aggregates',async()=>{
- const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');
- const {stdout}=await promisify(execFile)(process.execPath,['--max-old-space-size=768',new URL('./benchmark-v5-workspace.mjs',import.meta.url).pathname],{env:{...process.env,V5_BENCH_SINGLE_EDIT:'1',V5_BENCH_REVISIONS:'1',V5_BENCH_DENSE:'0',V5_BENCH_COLD_REOPEN:'0',V5_BENCH_SAVE_LATENCY_MS:'1'},timeout:120000,maxBuffer:2*1024*1024});
- const rows=stdout.trim().split('\n').map(line=>JSON.parse(line));
- for(const name of ['save-one-staged-edit','retained-save-1']){
-  const row=rows.find(x=>x.phase===name);assert.equal(row.status,'verified');assert.equal(row.effectiveDelayMs,1);assert.equal(row.requestMetrics.requests,row.requests);
-  for(const [key,total] of [['requestBytes',row.requestBytes],['responseBytes',row.responseBytes]])assert.equal(Object.values(row.requestMetrics.categories).reduce((n,x)=>n+x[key],0),total);
- }
- assert.equal(rows.find(x=>x.phase==='no-op-save').effectiveDelayMs,0);assert.equal(rows.at(-1).sourceFilesUnchangedDuringRun,true);
- assert.equal(rows.filter(x=>x.complexity).length,2);
-});

@@ -21,9 +21,9 @@ These are hypotheses, not assumptions. The test must report the actual result an
 
 ## Implemented prototype
 
-- Page: [`prototype/drive-folder-discovery.html`](../prototype/drive-folder-discovery.html)
-- Query helper: [`js/drive-folder-discovery.mjs`](../js/drive-folder-discovery.mjs)
-- Automated tests: [`tests/drive-folder-discovery.test.mjs`](../tests/drive-folder-discovery.test.mjs)
+- Page: [`prototype/drive-folder-discovery.html`](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/prototype/drive-folder-discovery.html)
+- Query helper: [`js/drive-folder-discovery.mjs`](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/js/drive-folder-discovery.mjs)
+- Automated tests: [`tests/drive-folder-discovery.test.mjs`](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/tests/drive-folder-discovery.test.mjs)
 - The page uses the same browser OAuth pattern and `drive.file` scope, and uses Picker only to establish the reference folder for comparison.
 - The selected folder ID and name are retained in this tab's `sessionStorage` solely to compare the identity after a reload. OAuth access tokens remain in page memory only. Closing the tab clears the session reference.
 - The page also provides **Forget saved comparison**. This removes the saved folder ID and allows a separate discovery run using only the entered folder name and the fresh access token; a unique result is reported without comparing against a Picker reference.

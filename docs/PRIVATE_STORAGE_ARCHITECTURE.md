@@ -1,5 +1,8 @@
 # Private Storage Architecture — Google Drive
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 **Status:** Selected direction; production validation required
 **Decision date:** 2026-10-17; architecture baseline and original-import retention reaffirmed 2026-10-31
 **Scope:** Architecture and verification plan only. This document does not authorize production implementation or storage of real financial data.

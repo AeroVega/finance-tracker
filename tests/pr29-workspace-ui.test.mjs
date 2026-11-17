@@ -113,7 +113,7 @@ test('shared static theme covers every retained tool and guarded navigation targ
   assert.match(root, /class="brand" href="#overview"/);
   assert.match(root, /Browser warnings may not appear/);
   assert.match(root, /not reconciled income, spending or account balances/);
-  assert.match(root, /pr28-import.html/);
+  assert.doesNotMatch(root, /pr28-import.html/);
   for (const name of readdirSync(new URL('../prototype/', import.meta.url)).filter(name => name.endsWith('.html'))) {
     const html = readFileSync(new URL('../prototype/' + name, import.meta.url), 'utf8');
     assert.match(html, name === 'local-preview.html' ? /href="\.\.\/styles.css"/ : /href="\.\/tools.css"/, name);
@@ -122,14 +122,9 @@ test('shared static theme covers every retained tool and guarded navigation targ
     assert.match(html, name === 'local-preview.html' ? /primary-nav/ : /tool-navigation/, name);
   }
   const hub = readFileSync(new URL('../prototype/index.html', import.meta.url), 'utf8');
-  assert.match(hub, /pr25-acceptance.html\?guide=v5/);
-  assert.match(hub, /acceptance.html/);
-  assert.match(hub, /<details/);
-  const acceptance = readFileSync(new URL('../prototype/pr25-acceptance.html', import.meta.url), 'utf8');
-  assert.doesNotMatch(acceptance, /guide=pr28/);
-  const acceptanceNavigation = acceptance.match(/<nav class="tool-navigation"[\s\S]*?<\/nav>/)[0];
-  assert.match(acceptanceNavigation, /id="prototype-tools"/, 'keep the copy guide navigation guard hook');
-  assert.doesNotMatch(acceptanceNavigation, /href="\.\.\/index.html"/, 'do not add an unguarded exit beside the copy guide');
+  assert.match(hub, /local-preview.html/);
+  assert.match(hub, /session-coordination-test.html/);
+  assert.doesNotMatch(hub, /pr25-acceptance|pr28-import|synthetic-year.html/);
   assert.equal(existsSync(new URL('../docs/archive/MODERN_UI_EXPLORATION.md', import.meta.url)), true);
   assert.match(readFileSync(new URL('../design-system.css', import.meta.url), 'utf8'), /\[hidden\]\s*\{\s*display:\s*none\s*!important/);
   assert.doesNotMatch(root, /tailwind|fonts\.googleapis|analytics/);

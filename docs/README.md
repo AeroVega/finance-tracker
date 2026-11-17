@@ -4,7 +4,7 @@ Start with [Agent quick start](AGENT_QUICK_START.md), then read [current project
 
 ## Authority and reading order
 
-1. [Current state](CURRENT_STATE.md) — concise, current `main` snapshot and permission boundary.
+1. [Current state](CURRENT_STATE.md) — concise active branch/main status and permission boundary.
 2. [Contributor/agent instructions](../AGENTS.md) — mandatory privacy, Git, and engineering rules.
 3. [Next steps](NEXT_STEPS.md) — active project priorities and acceptance gates.
 4. One or more focused contracts below.
@@ -31,13 +31,15 @@ Start with [Agent quick start](AGENT_QUICK_START.md), then read [current project
 
 ## Storage, persistence, and recovery
 
-- [Partitioned canonical storage](PARTITIONED_CANONICAL_STORAGE.md) — active canonical v5 format and compatibility/refusal contract.
-- [Storage terminology](STORAGE_TERMINOLOGY.md) — distinct version namespaces and verification vocabulary.
-- [Database identity and lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md) and [application storage lifecycle](APPLICATION_STORAGE_LIFECYCLE.md) — database authority, session and application lifecycle.
-- [Session coordination](SESSION_COORDINATION.md), [ledger session](LEDGER_SESSION.md), and [transaction staging/recovery](TRANSACTION_STAGING_AND_RECOVERY.md) — single-active-session and safe-write behavior.
-- [Root transaction protocol](ROOT_TRANSACTION_PROTOCOL.md), [immutable page tree](IMMUTABLE_PAGE_TREE.md), [segmented locator catalog](SEGMENTED_LOCATOR_CATALOG.md), [canonical month index](CANONICAL_MONTH_INDEX.md), and [Drive response bounds](DRIVE_RESPONSE_BOUNDS.md) — physical publication and bounded subsystem contracts.
-- [Backup and restore](DRIVE_BACKUP_AND_RESTORE.md), [framed backup stream](FRAMED_BACKUP_STREAM.md), and [original-source retention](ORIGINAL_SOURCE_RETENTION.md) — portability, verification, and retention.
-- [Private storage architecture](PRIVATE_STORAGE_ARCHITECTURE.md), [Google Drive configuration](GOOGLE_DRIVE_CONFIGURATION.md), and [security](SECURITY.md) — privacy and provider boundaries.
+- [Full-snapshot storage](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) — selected application format, authority, verification, recovery and bounds.
+- [Drive simulator](DRIVE_SIMULATOR.md) — repeatable synthetic provider/authentication scenarios, performance measurements and explicit emulation limits.
+- [Storage terminology](STORAGE_TERMINOLOGY.md) — active format versus historical version namespaces.
+- [Session coordination](SESSION_COORDINATION.md), [Drive response bounds](DRIVE_RESPONSE_BOUNDS.md), [Google Drive configuration](GOOGLE_DRIVE_CONFIGURATION.md), and [security](SECURITY.md) — retained shared safety/provider boundaries.
+- Portable backup/restore and supported file ingestion remain requirements, not available features of the selected route.
+
+### Historical storage design references
+
+The following preserve rationale and earlier invariants; they do not describe a second supported application format: [partitioned canonical storage](PARTITIONED_CANONICAL_STORAGE.md), [database identity/lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md), [application storage lifecycle](APPLICATION_STORAGE_LIFECYCLE.md), [ledger session](LEDGER_SESSION.md), [transaction staging/recovery](TRANSACTION_STAGING_AND_RECOVERY.md), [root protocol](ROOT_TRANSACTION_PROTOCOL.md), [immutable page tree](IMMUTABLE_PAGE_TREE.md), [segmented locator catalog](SEGMENTED_LOCATOR_CATALOG.md), [canonical month index](CANONICAL_MONTH_INDEX.md), [backup/restore](DRIVE_BACKUP_AND_RESTORE.md), [framed archives](FRAMED_BACKUP_STREAM.md), [source retention](ORIGINAL_SOURCE_RETENTION.md), and [earlier private-storage architecture](PRIVATE_STORAGE_ARCHITECTURE.md).
 
 ## Interface, diagnostics, and quality
 

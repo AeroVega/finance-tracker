@@ -487,14 +487,14 @@ The workflow in source deploys main pushes or an explicitly selected manual run.
 | Historical continuity | Monthly migration requirements are settled. | Separate monthly-summary schema, converter, reconciliation and source-selection rules from January 2023. No conversion is claimed. |
 | Devices and deployment | Local automated/browser evidence and bounded owner observations exist. | Verify current served SHA, current live paths and physical-device coverage. Whole-graph loading has no demonstrated large-device capacity guarantee. |
 
-Code evidence: [workspace model](../js/canonical-workspace-model.mjs), [workspace session](../js/canonical-workspace-session.mjs), [provider parsers](../js/provider-csv.mjs), [canonical store](../js/canonical-ledger-storage.mjs) and [guided import](../prototype/pr28-import.mjs). See the linked contracts for exact financial and failure semantics.
+Code evidence: [workspace model](../js/canonical-workspace-model.mjs), [workspace session](../js/canonical-workspace-session.mjs), [provider parsers](../js/provider-csv.mjs), [canonical store](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/js/canonical-ledger-storage.mjs) and [guided import](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/prototype/pr28-import.mjs). See the linked contracts for exact financial and failure semantics.
 
 ## Acceptance evidence has a scope
 
 - **User-confirmed, recorded in the workspace guide:** the owner accepted PR32 local synthetic-year exploration, evidence/corrections and mobile workspace experience. Preserve that observation; do not repeat unaffected checks merely because the PR merged.
 - **Open:** the newer preview-to-Drive save, transfer-link persistence and interruption checks. The guide does not provide a new acceptance pass for these paths. Record the full tested SHA with the next result.
 - **User-confirmed, historical:** PR25, PR28 and PR30 records contain bounded live synthetic/device results. They do not validate every later screen or every interruption boundary.
-- **Implemented checklist correction:** the [acceptance plan](../prototype/acceptance-plan.mjs) now requests canonical v5 seeding and v5 backup/restore. This removes the obsolete grouped-v2 steps; it does not establish owner acceptance. Use [the current owner guide](OWNER_ACCEPTANCE.md).
+- **Implemented checklist correction:** the [acceptance plan](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/prototype/acceptance-plan.mjs) now requests canonical v5 seeding and v5 backup/restore. This removes the obsolete grouped-v2 steps; it does not establish owner acceptance. Use [the current owner guide](OWNER_ACCEPTANCE.md).
 
 ## Safety and release boundary
 
@@ -571,3 +571,12 @@ receipt convergence and retained refusal behavior. The complete extended suite a
 generated-reference and documentation checks passed. The candidate is not yet
 deployed or live-verified; preserve the affected folder rather than retrying it
 on the strength of synthetic tests.
+
+
+## 2026-11-17: full-snapshot format selected after live synthetic acceptance
+
+The owner reported that published PR46 head `86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d` opened the synthetic year in 11 seconds and saved a change in 25 seconds, with persistence confirmed. They declared the performance goal accomplished and selected full-snapshot v1 as the continuing storage format, requesting removal of obsolete format code/tests and cleanup/merge of PR46. This accepts the reported synthetic workflow, not all device scenarios, Alpha completeness or production financial-data use.
+
+The preceding PR46 head `9e35900` had owner-reported seed/open/save times of 42/11/33 seconds with persistence. The next change overlapped at most two independent metadata witness reads while preserving serial content settling and authority checks. Its local extended suite passed 2,339/2,339 tests; exact-head CI for `86d1f2b` passed both required jobs in [run 44013565187](https://github.com/AeroVega/finance-tracker/actions/runs/44013565187). These results validate that pre-cleanup tree, not subsequent cleanup.
+
+Before PR46, main `f183cdc` used canonical-v5 partitioned storage, paged locator catalogs and physical-root v4. PR37 introduced the incremental foundation, PR38 the mobile workspace, PR40 diagnostics, PR41/42 documentation, PR43 bounded verification reuse, PR44 measurements, and the later Tier1 work. Their detailed contracts and dated results remain historical evidence, not directions to retain a second active format. PR46 initially retained legacy modules for regression comparison; the owner's new cleanup direction supersedes that temporary arrangement. No merge or deployment of the cleanup is established by this entry.

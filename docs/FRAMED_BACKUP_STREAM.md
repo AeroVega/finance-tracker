@@ -1,5 +1,8 @@
 # Framed portable backup building block
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 ## Scope and status
 
 **Implemented, synthetic-only:** `js/framed-backup-stream.mjs` supplies a separate

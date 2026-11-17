@@ -1,5 +1,8 @@
 # Application storage lifecycle integration
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 ## PR25 synthetic catalog path — 2026-11-03
 
 The dashboard now opts into `catalogProtocol: true` and uses `CatalogTransactionEngine`. Fresh bootstrap writes a real genesis commit and immutable catalog before its manifest. Reads verify the selected logical commit and retained ancestry; pending finalization or a read/auth/integrity failure pauses access until reconnect/recovery. Initialization receives the session guard for each mutation. PR25 requires a fresh empty synthetic folder; PR24-format folders are rejected and are not converted or upgraded. See [the per-copy locator catalog design](DRIVE_LOCATOR_CATALOG_DESIGN.md) and [synthetic storage acceptance record](SYNTHETIC_STORAGE_ACCEPTANCE.md) for live-test requirements.

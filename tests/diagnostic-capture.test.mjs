@@ -1,29 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ApplicationStorageLifecycle} from '../js/application-storage-lifecycle.mjs';
 import {DashboardSyntheticStorage} from '../js/dashboard-synthetic-storage.mjs';
 import {GoogleDriveTransactionAdapter} from '../js/drive-transaction-engine.mjs';
 import {SessionCoordinator} from '../js/session-coordination.mjs';
 import {createDriveSessionAdapter, SESSION_MARKER_NAME, SESSION_MARKER_PROPERTY} from '../js/drive-session-adapter.mjs';
 import {readBoundedDriveJson} from '../js/drive-response-transport.mjs';
-import {getReport} from '../js/error-reporting.mjs';
+import {reportError,getReport} from '../js/error-reporting.mjs';
 import {createDriveRequestMetrics, markRequestEndpoint} from '../js/drive-request-metrics.mjs';
 
 const secret = 'PRIVATE-CANARY-https://private.invalid/account/4417';
-test('lifecycle and dashboard forward the same safe report instead of collapsing its cause', () => {
+test('dashboard forwards the same safe report instead of collapsing its cause', () => {
   const statuses=[];
   const dashboard=new DashboardSyntheticStorage({onStatus:status=>statuses.push(status)});
   const cause=Object.assign(new TypeError(secret),{code:'drive-network-error'});
   const failure=Object.assign(new Error(secret,{cause}),{code:'ownership-unknown',sessionCheck:'coordinator-read-failed'});
-  const lifecycle={onStatus:status=>dashboard.publish(status.state,status.message,'error',{code:status.code},status.reportId)};
-  ApplicationStorageLifecycle.prototype.publish.call(lifecycle,'ownership-unknown',secret,'ownership-unknown',failure);
+  const captured=reportError(failure,{surface:'workspace'});
+  dashboard.publish('ownership-unknown',secret,'error',{code:failure.code},captured.id);
   assert.equal(statuses.length,1);
   const report=getReport(statuses[0].reportId);
   assert.ok(report);
   assert.match(report.report,/drive-network-error/);
   assert.match(report.report,/coordinator-read-failed/);
   assert.doesNotMatch(JSON.stringify(statuses)+report.report,/PRIVATE-CANARY|private.invalid/);
-  assert.equal(lifecycle.state,'ownership-unknown');
 });
 test('transport keeps rejection identity as cause without changing its established code', async () => {
   for(const cause of [new TypeError(secret),new DOMException(secret,'AbortError')]) {
@@ -75,19 +73,11 @@ test('request endpoints are fixed caller metadata, never guessed from private UR
   assert.deepEqual(options,{method:'GET'});
 });
 
-test('seeder and import surfaces survive lifecycle status forwarding; invalid surfaces default safely', () => {
+test('diagnostic surfaces survive status forwarding; invalid surfaces default safely', () => {
   for (const requested of ['synthetic-year', 'import', secret]) {
     const expected = requested === secret ? 'workspace' : requested;
     const statuses = [];
     const dashboard = new DashboardSyntheticStorage({diagnosticSurface: requested, onStatus: status => statuses.push(status)});
-    const lifecycle = new ApplicationStorageLifecycle({
-      diagnosticSurface: dashboard.diagnosticSurface,
-      syntheticOnly: true, folderName: 'synthetic fixture', folderId: 'fixture', manifestFileId: 'fixture-manifest',
-      accessToken: () => 'fixture', makeManifest: () => ({}), fetchImpl: async () => { throw new Error('unused'); },
-      onStatus: status => dashboard.publish(status.state, status.message, 'error', {code:status.code}, status.reportId)
-    });
-    lifecycle.publish('ownership-unknown', 'Verification failed', 'ownership-unknown');
-    assert.equal(JSON.parse(getReport(statuses.at(-1).reportId).report).where.surface, expected);
     dashboard.publish('error', 'Verification failed', 'error', {code:'ownership-unknown'});
     assert.equal(JSON.parse(getReport(statuses.at(-1).reportId).report).where.surface, expected);
     assert.doesNotMatch(JSON.stringify(statuses), /PRIVATE-CANARY/);

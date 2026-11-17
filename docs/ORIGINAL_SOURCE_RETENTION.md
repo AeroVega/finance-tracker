@@ -1,5 +1,8 @@
 # Original Source File Retention
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 **Current implementation status:** Synthetic acceptance path implemented; owner-reported live retention/deletion rehearsal passed on 2026-11-04.
 **Production status:** Production CSV upload/retention is not enabled or authorized.
 

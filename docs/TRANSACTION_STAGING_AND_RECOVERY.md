@@ -1,5 +1,8 @@
 # Transaction Staging and Crash Recovery
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 **Status:** Protocol core merged in PR #22; durable Drive transaction engine under implementation in PR #23. Synthetic-only until all storage-readiness gates pass.  
 **Branch:** `feat/durable-drive-transaction-engine`  
 **Scope:** Durable Drive adapter, staged commits, append-only journal events, idempotent immutable object creation, manifest publication, and conservative deterministic recovery. Application lifecycle integration is PR #24.

@@ -1,4 +1,3 @@
-import {currentSuccessfulPublicationSequence} from './paged-application-storage.mjs';
 import {successfulActionSummary} from './success-metrics.mjs';
 import { createWorkspacePages } from './workspace-pages.mjs';
 import { createSyntheticFinancialPosition } from './synthetic-financial-position.mjs';
@@ -56,8 +55,6 @@ function scheduleSearch() {
   searchTimer = setTimeout(() => { searchTimer = null; if (!busy) { page = 0; render(); } }, 120);
 }
 const storage = new DashboardSyntheticStorage({
-  fullSnapshot:true,
-  maintainOriginals: false,
   onStatus(status) {
     if (!status.code) clearDiagnostic($('connection-status'));
     if (status.state !== 'ready') session.invalidate();
@@ -194,15 +191,13 @@ async function run(message, operation, formStatus = null, actionId = 'workspace-
   // Observation only: never let metrics block an action or replace its failure.
   try { actionRequestWindow = storage.lifecycle?.requestMetrics?.openWindow() ?? null; } catch { actionRequestWindow = null; }
   const measuredLifecycle=storage.lifecycle;
-  let priorPublication;try{priorPublication=currentSuccessfulPublicationSequence();}catch{}
   leaveBreadcrumb({e:'action.start', actionId});
   clearDiagnostic($('action-status'));
   busy = true; operationStarted = Date.now(); refresh(); announce(message);
   const timer = setInterval(refresh, 1000);
   try { const completed=await operation(); leaveBreadcrumb({e:'action.ok', actionId});
     try {
-      const observed=storage.lifecycle?.engine?.lastSuccessfulPublication;
-      const publication=observed&&observed.sequence>priorPublication?observed:null;
+      const publication=null; // Full-snapshot exposes request metrics, not legacy paged publication telemetry.
       const summary=successfulActionSummary({actionId,elapsedMs:Math.max(0,Date.now()-operationStarted),requests:storage.lifecycle===measuredLifecycle?actionRequestWindow?.close():null,manifestPatches:storage.lifecycle===measuredLifecycle?actionRequestWindow?.manifestPatches():null,publication,purposes:storage.lifecycle===measuredLifecycle?actionRequestWindow?.purposes():null});
       if(completed===true&&summary)$('success-metrics').textContent=JSON.stringify(summary,null,2);
     }catch{/* Success observations cannot change the action outcome. */}

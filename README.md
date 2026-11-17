@@ -10,13 +10,11 @@ A second-generation personal finance tracker built around trustworthy financial 
 
 ## Current state
 
-**PR46 test branch:** The main Dashboard now uses a fresh-copy full-snapshot v1 format. Use a new empty synthetic folder. Old copies, import, and backup/restore are not supported in this experiment. See [current branch state](docs/CURRENT_STATE.md#pr46-fresh-copy-test-build-update-2026-11-16) and [the format contract](docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). The main-baseline description below is historical context for this branch, not its active storage route.
+**Selected storage format:** full-snapshot v1. Dashboard and workspace use complete immutable ledger snapshots with verified publication and recovery. The owner accepted a synthetic 11-second open and 25-second persisted save on `86d1f2b`, then requested cleanup and merge of PR46. Cleanup is not yet merged; see [current state](docs/CURRENT_STATE.md) for exact evidence and authorization.
 
-The authoritative implementation and authorization snapshot is [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md), checked against `main` at `be43951a7b4a09c8e54c1984b1fb41dc39401636` on November 14, 2026.
+Use a fresh empty synthetic folder for creation. Older storage formats are unsupported and are not converted or deleted. Import and portable backup/restore for this format remain outstanding Alpha requirements. Financial position and reconciled coverage were implemented in PR36. Full ledger/history materialization and validation remain; no bounded whole-database memory claim is made.
 
-PR #37 (incremental storage), PR #38 (mobile/tablet workspace), and PR #40 (privacy-safe diagnostics) are merged. Financial position and reconciled coverage were implemented in PR36. The application writes canonical v5 and refuses older canonical copies without migration or overwrite. Full ledger/history materialization and semantic validation remain; v5 does not establish bounded whole-database memory or selective loading.
-
-Node CI passed on the current main SHA. The initial Pages push workflow failed, then a manual deployment and Pages build/deployment completed successfully. The served SHA has not been independently checked. Physical Apple-device and current live Google Drive acceptance remain open.
+CI, deployment identity, owner acceptance and production approval are separate. Historical implementation and measurement evidence remains in [project status](docs/PROJECT_STATUS.md).
 
 **Production financial-data persistence is NO-GO.** Use invented fixtures only. Do not access real financial records, the private workbook, or owner Drive data. Merge, deployment, production configuration, and real-data use require their separate authorization.
 
@@ -34,9 +32,9 @@ Node CI passed on the current main SHA. The initial Pages push workflow failed, 
 - [Canonical workspace](docs/CANONICAL_MAIN_WORKSPACE.md) and [canonical ledger contract](docs/CANONICAL_LEDGER_CONTRACT.md).
 - [Financial position](docs/FINANCIAL_POSITION.md) and [data model](docs/DATA_MODEL.md).
 - [Provider import specifications](docs/PROVIDER-IMPORT-SPECS.md) and [import contract](docs/PR28_CANONICAL_IMPORT.md).
-- [Canonical v5 storage contract](docs/PARTITIONED_CANONICAL_STORAGE.md) and [storage terminology](docs/STORAGE_TERMINOLOGY.md).
-- [Database identity/lifecycle](docs/DATABASE_IDENTITY_AND_LIFECYCLE.md), [session coordination](docs/SESSION_COORDINATION.md), and [transaction recovery](docs/TRANSACTION_STAGING_AND_RECOVERY.md).
-- [Security](docs/SECURITY.md), [backup/restore](docs/DRIVE_BACKUP_AND_RESTORE.md), and [application diagnostics](docs/APP_DIAGNOSTICS.md).
+- [Full-snapshot storage contract](docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) and [storage terminology](docs/STORAGE_TERMINOLOGY.md).
+- [Session coordination](docs/SESSION_COORDINATION.md), [Drive response bounds](docs/DRIVE_RESPONSE_BOUNDS.md), and [simulator coverage](docs/DRIVE_SIMULATOR.md).
+- [Security](docs/SECURITY.md) and [application diagnostics](docs/APP_DIAGNOSTICS.md).
 
 ## Engineering workflow
 

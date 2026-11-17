@@ -1,10 +1,13 @@
 # Prototype cleanup and retained coverage
 
+> Historical cleanup record. The later PR46 cleanup retired the acceptance/import/seeder/copy pages described here. Use the [current main workspace](../index.html#storage) and [written owner acceptance guide](OWNER_ACCEPTANCE.md). Earlier source links below are pinned historical references.
+
+
 **User-confirmed scope, November 8, 2026:** the owner asked for safe prototype cleanup, consolidation, and a fresh suite for tests that still need a person. This supersedes PR29's earlier preserve-all instruction. Production persistence remains **NO-GO**. This work does not authorize live Drive actions by agents, merge or deployment.
 
 ## Start here now
 
-The workspace opens the [owner acceptance suite](../prototype/acceptance.html). It groups the remaining physical-device and live synthetic observations in order and keeps a separate, sanitized report for each source commit and browser. The [owner guide](OWNER_ACCEPTANCE.md) is the written companion. The [tools index](../prototype/index.html) lists current tools, with specialist diagnostics collapsed by default.
+The workspace opens the [owner acceptance suite](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/prototype/acceptance.html). It groups the remaining physical-device and live synthetic observations in order and keeps a separate, sanitized report for each source commit and browser. The [owner guide](OWNER_ACCEPTANCE.md) is the written companion. The [tools index](../prototype/index.html) lists current tools, with specialist diagnostics collapsed by default.
 
 The suite does not connect to Google, run storage actions, infer passes from old reports or import another tool's results. It sends the tester to existing tools, which retain their own gates and exact graph checks. Save and verify release before switching tools or devices. Passing this suite is not production authorization.
 
