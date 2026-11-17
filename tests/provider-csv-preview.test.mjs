@@ -15,6 +15,8 @@ test('recognizes each supported header and parses each format into a read-only s
   const cases = [
     [`${wf}\n01/02/2026,INVENTED SHOP,-1,,Posted`, 'wells-fargo-csv-v1', 'default'],
     [`${sofi}\n2026-02-03,INVENTED SHOP,Card Purchase,-2,98,Posted`, 'sofi-csv-v1', 'default'],
+    [`DATE,DESCRIPTION,AMOUNT,STATUS\n01/02/2026,INVENTED SHOP,-1,Posted`, 'wells-fargo-csv-v1', 'default'],
+    [`Date,Description,Type,Amount,Status\n2026-02-03,INVENTED SHOP,Card Purchase,-2,Posted`, 'sofi-csv-v1', 'default'],
     [`${fidelity}\n${['02/04/2026', 'INVENTED ACCOUNT', 'ACCT-FAKE-01', 'Contribution', '', 'INVENTED DESCRIPTION', '', '', '', 'USD', '', '', '', '', '', '', '10', '02/05/2026'].join(',')}`, 'fidelity-accounts-history-csv-v1', 'ACCT-FAKE-01'],
   ];
   for (const [csv, format, key] of cases) {
