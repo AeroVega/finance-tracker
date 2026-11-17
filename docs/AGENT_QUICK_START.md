@@ -27,11 +27,10 @@ If sources disagree, do not silently combine them. Report the conflict and corre
 
 ## Essential terminology
 
-- **Canonical layout version** describes the financial-record representation.
-- **Locator catalog version** describes a storage index/root representation; it is not the canonical layout version.
-- **Physical root protocol** describes publication/recovery behavior.
-- **Framed transport/archive profile** describes backup/restore representation.
-- On the PR46 fresh-copy test branch, the application uses [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). The earlier main path writes canonical v5, documented in [PARTITIONED_CANONICAL_STORAGE.md](PARTITIONED_CANONICAL_STORAGE.md) and [STORAGE_TERMINOLOGY.md](STORAGE_TERMINOLOGY.md). Check CURRENT_STATE before choosing a format or testing route; never infer compatibility from a version number alone.
+- **Full-snapshot v1** is the selected physical application format. A commit envelope binds one entire validated canonical logical ledger; the manifest has published/clean acknowledgement states. Read [the active contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md).
+- **Canonical ledger** is the financial domain model, not an instruction to retain older canonical persistence layouts.
+- Legacy canonical v1–v5, locator catalogs, physical-root and framed-archive versions belong to the earlier storage design. Their retained documentation is historical rationale, not a second supported application route. See [terminology](STORAGE_TERMINOLOGY.md).
+- Import and portable backup/restore remain product requirements but are not currently available on the full-snapshot route. Never imply otherwise from legacy implementation history.
 
 ## Evidence vocabulary
 

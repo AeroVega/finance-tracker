@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {GoogleDriveTransactionAdapter} from '../js/drive-transaction-engine.mjs';
-import {partitionDigest} from '../js/canonical-partitions.mjs';
-import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
+const partitionDigest = async bytes => Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+import {HttpFullSnapshotDrive as HttpCatalogDrive} from './helpers/http-full-snapshot-drive.mjs';
 const enc=new TextEncoder();
 async function fixture(){
  const drive=new HttpCatalogDrive(),bytes=enc.encode('{"invented":true}'),sha256=await partitionDigest(bytes);let generation=0,expired=0;
@@ -10,7 +10,7 @@ async function fixture(){
   visibilityDelayMs:0,visibilityMaxDelayMs:0,captureMutationGuard:()=>{const captured=generation;return ()=>{
    if(captured!==generation)throw Object.assign(new Error('Invented expired lifetime'),{code:'verification-scope-closed'});
   };},onExpiredMutation:()=>{expired++;}});
- drive.files.set('invented-manifest',{bytes:enc.encode('{}'),metadata:{id:'invented-manifest',name:'invented-manifest',parents:[drive.folderId],trashed:false,version:'1',size:'2',appProperties:{financeTrackerKind:'paged-canonical-manifest'}}});
+ drive.files.set('invented-manifest',{bytes:enc.encode('{}'),metadata:{id:'invented-manifest',name:'invented-manifest',parents:[drive.folderId],trashed:false,version:'1',size:'2',appProperties:{financeTrackerKind:'finance-tracker-full-snapshot-manifest'}}});
  const create=()=>adapter.createImmutable({fileId:'invented-http-file-body',name:'invented-body',kind:'snapshot-object',transactionId:'invented-tx',content:bytes,expectedSha256:sha256,beforeMutation:async()=>{}});
  const publish=()=>adapter.publishManifest('invented-manifest',{revision:'1'},{beforeMutation:async()=>{}});
  return {drive,adapter,create,publish,invalidate:()=>{generation++;},get expired(){return expired;}};

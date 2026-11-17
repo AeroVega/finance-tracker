@@ -1,5 +1,8 @@
 # Canonical monthly index and summaries
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 **Implemented and verified with invented data only.** This adds account/month
 lookup and exact monthly summaries to the existing canonical store and workspace.
 Production persistence remains **NO-GO**. No live Drive, real financial records,

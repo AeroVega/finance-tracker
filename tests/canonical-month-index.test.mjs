@@ -1,14 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCanonicalMonthIndex,serializeCanonicalMonthIndex,readCanonicalMonthIndex,MONTH_INDEX_ROOT,MONTH_INDEX_PREFIX,canonicalMonthSourceHash} from '../js/canonical-month-index.mjs';
-import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
-import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
+import {createCanonicalMonthIndex} from '../js/canonical-month-index.mjs';
 import {createWorkspaceView,createWorkspaceViewReader} from '../js/canonical-workspace-model.mjs';
 import {applyFinancialEvent,applyFinancialEvents,prepareCanonicalImport,applyReviewDecision,reverseReviewDecision,summarizeLedger} from '../js/canonical-import.mjs';
-import {canonicalizeJcs,sha256Hex} from '../js/transaction-protocol.mjs';
-import {validateSyntheticApplicationSnapshot} from '../js/synthetic-application-structure.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
-import {createLargeWorkspaceFixture} from './helpers/workspace-large-fixture.mjs';
 import {replayFixture,replayRow,replayInput} from './helpers/ledger-replay-fixtures.mjs';
 const fixture = await createSyntheticFinancialYear();
 const annual = {start:'2025-01-01',end:'2025-12-31',currency:'USD'};
@@ -83,57 +78,6 @@ test('owned index and workspace reject source mismatch and isolate caller/result
   assert.deepEqual(reader.monthlySummaries(),createCanonicalMonthIndex(ledger).monthlySummaries());
 });
 
-async function sourceObjects(ledger) {
-  const physical = await createPagedFixture(), store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
-  await store.load(); await store.save(ledger);
-  return new Map([...physical.objects].map(([hash,bytes])=>[hash,new TextDecoder().decode(bytes)]));
-}
-
-test('v5 monthly reports reopen exactly, no-op saves do not publish, and corrupted objects fail closed', async () => {
-  const physical = await createPagedFixture(), store = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
-  await store.load(); await store.save(fixture.ledger);
-  assert.equal(store.monthIndexStatus,'verified');
-  const before = physical.commits.length;
-  await store.save(fixture.ledger); assert.equal(physical.commits.length,before);
-  const reopened = new CanonicalLedgerStore({lifecycle:physical.lifecycle});
-  assert.deepEqual(await reopened.load(),fixture.ledger);
-  assert.deepEqual(reopened.monthIndex.report(annual).report,summarizeLedger(fixture.ledger,annual));
-  const original = physical.objects.get(physical.manifest.root);
-  physical.objects.set(physical.manifest.root,new TextEncoder().encode('corrupted invented root'));
-  await assert.rejects(new CanonicalLedgerStore({lifecycle:physical.lifecycle}).load());
-  assert.equal(physical.commits.length,before);
-  physical.objects.set(physical.manifest.root,original);
-  assert.deepEqual(await reopened.load(),fixture.ledger);
-});
-
-test('missing, stale, wrong-version, reordered, wrong-partition and self-rehashed corrupt indexes rebuild', async () => {
-  const ledger = fixture.ledger, index = createCanonicalMonthIndex(ledger), source = await sourceObjects(ledger);
-  const good = await serializeCanonicalMonthIndex(index,source);
-  const read = objects => readCanonicalMonthIndex({ledger,sourceObjects:source,readText:async path => objects.get(path) ?? null});
-  assert.equal((await read(good)).status,'verified');
-  assert.equal((await read(new Map())).status,'rebuilt-missing');
-  for (const mutate of [
-    root => { root.sourceSha256 = '0'.repeat(64); },root => { root.version = 999; },
-    root => { root.groups.reverse(); root.groups.push(root.groups[0]); },root => { root.groups[0].path = MONTH_INDEX_PREFIX + 'groups/999999.json'; }
-  ]) {
-    const objects = new Map(good), root = JSON.parse(objects.get(MONTH_INDEX_ROOT)); mutate(root);
-    objects.set(MONTH_INDEX_ROOT,canonicalizeJcs(root));
-    assert.match((await read(objects)).status,/^rebuilt-/);
-  }
-  for (const extra of ['\"\\ud800\"','1e400']) {
-    const objects = new Map(good);
-    objects.set(MONTH_INDEX_ROOT,objects.get(MONTH_INDEX_ROOT).replace('{',`{\"extra\":${extra},`));
-    assert.equal((await read(objects)).status,'rebuilt-invalid');
-  }
-  const forged = new Map(good), root = JSON.parse(forged.get(MONTH_INDEX_ROOT)), path = root.groups[0].path;
-  const group = JSON.parse(forged.get(path)); group.summaries[0].month = '2099-01'; group.summaries[0].complete = true;
-  const text = canonicalizeJcs(group); forged.set(path,text); root.groups[0].sha256 = await sha256Hex(text);
-  forged.set(MONTH_INDEX_ROOT,canonicalizeJcs(root)); assert.equal((await read(forged)).status,'rebuilt-invalid');
-  const changed = new Map(source); changed.set([...source.keys()][0],source.values().next().value + ' ');
-  assert.notEqual(await canonicalMonthSourceHash(source),await canonicalMonthSourceHash(changed),'exact byte changes invalidate the source binding');
-  await assert.rejects(readCanonicalMonthIndex({ledger,sourceObjects:source,readText:async () => { throw new TypeError('network failed'); }}),/network failed/);
-});
-
 test('a dense valid month summarizes without replay or visiting activity detail after indexing', () => {
   let {ledger,options} = replayFixture(1000);
   ledger = applyFinancialEvents(ledger,ledger.activities.map((activity,i) => ({type:'classification',activityId:activity.activityId,activityKind:'spending',commandId:`invented-${i}`})),options);
@@ -142,22 +86,4 @@ test('a dense valid month summarizes without replay or visiting activity detail 
   assert.equal(result.report.spending,'12340.00');
   assert.equal(result.work.visitedDetails,0); assert.equal(result.work.visitedMonths,12);
   assert.equal(index.activities({month:'2026-02'}).length,0);
-});
-
-
-test('one corrected month replaces only its summary group and the source binding', async () => {
-  let {ledger,options} = createLargeWorkspaceFixture({perAccount:28,corrections:0,unresolvedPerAccount:0});
-  const source = await sourceObjects(ledger);
-  const before = await serializeCanonicalMonthIndex(createCanonicalMonthIndex(ledger),source);
-  ledger = applyFinancialEvent(ledger,{type:'bank-correction',activityId:ledger.activities[0].activityId,
-    amountText:'12.00',commandId:'invented-summary-correction',evidence:{reason:'Invented corrected amount'}},options);
-  const correctedSource = await sourceObjects(ledger);
-  const after = await serializeCanonicalMonthIndex(createCanonicalMonthIndex(ledger),correctedSource);
-  const changed = [...after].filter(([path,text]) => before.get(path) !== text).map(([path]) => path).sort();
-  assert.deepEqual(changed,[MONTH_INDEX_PREFIX + 'groups/000000.json',MONTH_INDEX_ROOT]);
-  for (const [path,text] of after) if (path !== MONTH_INDEX_ROOT) assert.ok(JSON.parse(text).summaries.length <= 64);
-  const reopened = await readCanonicalMonthIndex({ledger,sourceObjects:correctedSource,readText:async path => before.get(path) ?? null});
-  assert.equal(reopened.status,'rebuilt-stale');
-  const scope = {start:'2023-01-01',end:'2023-01-31',currency:'USD',accountIds:[ledger.accounts[0].accountId]};
-  assert.equal(reopened.index.report(scope).report.income,'142.00');
 });

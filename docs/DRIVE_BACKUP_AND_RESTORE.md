@@ -1,5 +1,8 @@
 # Google Drive Backup, Portable Archive, and Restore
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 **Current implementation status:** Synthetic version-2 implementation is present and owner-reported live acceptance passed on 2026-11-04.
 **Production status:** This document does not authorize production financial-data backup or persistence.
 

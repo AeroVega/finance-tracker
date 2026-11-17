@@ -3,28 +3,38 @@ import assert from 'node:assert/strict';
 import { applyFinancialEvent, getEffectiveActivities, summarizeLedgerPeriods } from '../js/canonical-import.mjs';
 import { CanonicalWorkspaceSession } from '../js/canonical-workspace-session.mjs';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
-import {CanonicalLedgerStore} from '../js/canonical-ledger-storage.mjs';
-import {createPagedFixture} from './helpers/paged-canonical-fixture.mjs';
+import {webcrypto} from 'node:crypto';
+import {FullSnapshotApplication} from '../js/full-snapshot-application.mjs';
+import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
 
 const recipe = await createSyntheticFinancialYear();
-async function setup(layout = 'partitions-v5', fresh = false) {
-  const fixture=await createPagedFixture(),lifecycle=fixture.lifecycle;
-  lifecycle.coordinator={canWrite:true};
-  if(!fresh){const store=new CanonicalLedgerStore({lifecycle});await store.load();await store.save(recipe.ledger);}
+async function setup(layout = 'full-snapshot-v1', fresh = false) {
+  const http=new HttpFullSnapshotDrive();
+  let lifecycle;
+  const create=async(seed)=>{
+    lifecycle=new FullSnapshotApplication({folderId:http.folderId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,cryptoImpl:webcrypto,
+      lifecycleTarget:null,isOnline:()=>true,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},visibilityDelayMs:0});
+    await lifecycle.start({initialize:true});
+    if(seed){const store=lifecycle.createLedgerStore();await store.load();await store.save(seed);}
+  };
+  await create(fresh?null:recipe.ledger);
   const calls = { connects: [], writes: 0, reads: 0, fail: false, loseResponse: false };
-  const save=lifecycle.savePartitionedRoot.bind(lifecycle),read=lifecycle.readPartitionedSnapshot.bind(lifecycle);
-  lifecycle.readPartitionedSnapshot=async()=>{calls.reads++;return read();};
-  lifecycle.savePartitionedRoot=async args=>{
+  // Inject UI/session outcome failures around the real full-snapshot bridge.
+  // Provider-level interruption semantics are exercised in the storage suites.
+  const save=lifecycle.save.bind(lifecycle),read=lifecycle.load.bind(lifecycle);
+  lifecycle.load=async()=>{calls.reads++;return read();};
+  lifecycle.save=async ledger=>{
     if(calls.fail)throw Object.assign(new Error('private failure'),{code:'base-conflict'});
-    const result=await save(args);calls.writes++;
-    if(calls.loseResponse)throw Object.assign(new Error('lost response'),{code:'transaction-unresolved'});
+    const result=await save(ledger);calls.writes++;
+    if(calls.loseResponse)throw Object.assign(new Error('lost response'),{code:'write-unresolved'});
     return result;
   };
   const storage = {lifecycle:null,accessToken:'invented-token',
     async connect(options){calls.connects.push(options);this.lifecycle=lifecycle;},
-    async release(){this.lifecycle=null;return {released:true};}};
-  const session=new CanonicalWorkspaceSession({storage});
-  return {session,storage,lifecycle,calls,get manifest(){return fixture.manifest;},reset:fixture.reset};
+    createLedgerStore(){return this.lifecycle.createLedgerStore();},
+    async release(){const result=await this.lifecycle.release();this.lifecycle=null;return result;}};
+  const session=new CanonicalWorkspaceSession({storage,online:()=>true});
+  return {session,storage,lifecycle,calls,get manifest(){return lifecycle.engine.verifiedManifest;}};
 }
 
 test('open selects an existing synthetic copy and independently loads canonical records', async () => {
@@ -50,7 +60,7 @@ test('corrections preserve source and base activities; explicit save then reopen
   const proposed = structuredClone(h.session.ledger);
   await h.session.save(); assert.equal(h.calls.writes, 1); assert.equal(h.session.dirty, false);
   await h.session.reopen(); assert.deepEqual(h.session.ledger, proposed); assert.equal(h.calls.writes, 1);
-  assert.equal(h.session.store.layout, 'partitions-v5');
+  assert.equal(h.session.store.valueCodec, 'full-snapshot-v1');
 });
 
 test('preview remains local and cannot save or run alongside a selected Drive session', async () => {
@@ -102,11 +112,10 @@ test('failed open never adopts another copy as writable base for the retained dr
   assert.deepEqual(h.session.ledger, proposal); assert.equal(h.session.canEdit(), false); assert.equal(h.session.canSave(), false);
 });
 
-test('missing canonical index and non-synthetic copies fail closed without initializing a ledger', async () => {
+test('missing saved ledger and non-synthetic copies fail closed without initializing a ledger', async () => {
   for (const invalid of ['empty', 'production']) {
-    const h = await setup();
-    if(invalid==='empty')await h.reset();
-    else h.lifecycle.readPartitionedSnapshot=async()=>{throw Object.assign(new Error('synthetic data required'),{code:'synthetic-data-required'});};
+    const h = await setup('full-snapshot-v1',invalid==='empty');
+    if(invalid==='production')h.lifecycle.load=async()=>{throw Object.assign(new Error('synthetic data required'),{code:'synthetic-data-required'});};
     await assert.rejects(h.session.open(), { code: invalid === 'empty' ? 'canonical-ledger-required' : 'synthetic-data-required' });
     assert.equal(h.session.ledger, null); assert.equal(h.calls.writes, 0); assert.equal(h.session.canEdit(), false);
   }
@@ -125,27 +134,27 @@ test('concurrent starts are refused while verified loading remains pending', asy
   assert.equal(h.session.canEdit(), false); finish(); await first; assert.equal(h.session.canEdit(), true);
 });
 
-for (const layout of ['partitions-v5']) test(`${layout} workspace correction saves and reopens without conversion`, async () => {
+for (const layout of ['full-snapshot-v1']) test(`${layout} workspace correction saves and reopens without conversion`, async () => {
   const h = await setup(layout); await h.session.open();
-  assert.equal(h.session.store.layout, layout);
+  assert.equal(h.session.store.valueCodec, layout);
   h.session.correct(correction(h.session.ledger)); const proposal = structuredClone(h.session.ledger);
   await h.session.save(); await h.session.reopen();
-  assert.equal(h.session.store.layout, layout); assert.deepEqual(h.session.ledger, proposal); assert.equal(h.calls.writes, 1);
+  assert.equal(h.session.store.valueCodec, layout); assert.deepEqual(h.session.ledger, proposal); assert.equal(h.calls.writes, 1);
 });
 
 
 for (const corrected of [false, true]) test(`local preview saves ${corrected ? 'the staged draft' : 'the untouched original year'} to a new empty folder and verifies an independent reopen`, async () => {
-  const h = await setup('partitions-v5', true);
+  const h = await setup('full-snapshot-v1', true);
   h.session.preview(recipe.ledger);
   if (corrected) h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger);
   await h.session.savePreviewToNewCopy();
-  assert.deepEqual(h.calls.connects, [{ requireEmpty: true, canonicalLayout: 'partitions-v5' }]);
+  assert.deepEqual(h.calls.connects, [{ requireEmpty: true, canonicalLayout: 'full-snapshot-v1' }]);
   assert.equal(h.calls.writes, 1);
   assert.equal(h.session.mode, 'saved');
   assert.equal(h.session.dirty, false);
   assert.equal(h.session.unverified, false);
-  assert.equal(h.session.store.layout, 'partitions-v5');
+  assert.equal(h.session.store.valueCodec, 'full-snapshot-v1');
   assert.deepEqual(h.session.ledger, proposal);
   await h.session.reopen();
   assert.deepEqual(h.session.ledger, proposal);
@@ -219,7 +228,7 @@ test('transfer linking rejects amount mismatches, same-account pairs and non-tra
 
 
 test('an uncertain fresh-copy write blocks retry and a verified reopen resolves the outcome', async () => {
-  const h = await setup('partitions-v5', true);
+  const h = await setup('full-snapshot-v1', true);
   h.session.preview(recipe.ledger);
   const proposal = structuredClone(h.session.ledger);
   h.calls.loseResponse = true;
@@ -238,7 +247,7 @@ test('an uncertain fresh-copy write blocks retry and a verified reopen resolves 
 });
 
 test('transfer-link events save and reopen through the existing canonical store', async () => {
-  const h = await setup('partitions-v5');
+  const h = await setup('full-snapshot-v1');
   await h.session.open();
   const outgoing = recipe.ledger.activities.find(activity =>
     activity.accountId === recipe.accounts.checking && activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' &&
@@ -259,10 +268,10 @@ test('transfer-link events save and reopen through the existing canonical store'
 
 
 test('preview persistence refuses an existing canonical copy without writing to it', async () => {
-  const h = await setup('partitions-v5', false);
+  const h = await setup('full-snapshot-v1', false);
   h.session.preview(recipe.ledger);
   await assert.rejects(h.session.savePreviewToNewCopy(), { message: 'new-empty-folder-required' });
-  assert.deepEqual(h.calls.connects, [{ requireEmpty: true, canonicalLayout: 'partitions-v5' }]);
+  assert.deepEqual(h.calls.connects, [{ requireEmpty: true, canonicalLayout: 'full-snapshot-v1' }]);
   assert.equal(h.calls.writes, 0);
   assert.equal(h.session.mode, 'preview');
   assert.equal(h.session.unverified, false);
@@ -377,7 +386,7 @@ test('lost position save response retains proposal and blocks edits and retry un
 });
 
 test('a position-only local preview saves to a fresh synthetic copy and release blocks later edits', async () => {
-  const h = await setup('partitions-v5', true); h.session.preview(recipe.ledger);
+  const h = await setup('full-snapshot-v1', true); h.session.preview(recipe.ledger);
   h.session.recordPosition(positionCommand(h.session.ledger));
   const proposed = structuredClone(h.session.ledger);
   await h.session.savePreviewToNewCopy();
@@ -417,7 +426,7 @@ test('invalid or read-only account creation cannot change the canonical draft', 
   assert.deepEqual(h.session.ledger,original);
 });
 
-for (const layout of ['partitions-v5']) test(`${layout} explicit posting corrections save, reopen, undo and preserve original evidence`, async () => {
+for (const layout of ['full-snapshot-v1']) test(`${layout} explicit posting corrections save, reopen, undo and preserve original evidence`, async () => {
   const h = await setup(layout); await h.session.open();
   const activity = getEffectiveActivities(h.session.ledger).find(a => a.lifecycleStatus === 'unknown');
   const before = structuredClone(h.session.ledger);

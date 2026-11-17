@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createDriveSessionAdapter, SESSION_MARKER_NAME} from '../js/drive-session-adapter.mjs';
 import {SessionCoordinator} from '../js/session-coordination.mjs';
-import {ApplicationStorageLifecycle} from '../js/application-storage-lifecycle.mjs';
+import {FullSnapshotApplication} from '../js/full-snapshot-application.mjs';
 import {HttpCatalogDrive} from './helpers/http-catalog-drive.mjs';
 
 function fixture({wait = async () => {}, delays = [0, 0, 0]} = {}) {
@@ -95,22 +95,20 @@ for (const phase of ['before-create', 'after-dispatch', 'retry-wait']) test(`can
 });
 
 test('offline during app claim preserves the marker without initializing a database', async () => {
-  const http = new HttpCatalogDrive(); let app, online = true;
+  const http = new HttpCatalogDrive(); let app, online = true; const target = new EventTarget();
   const create = http.respond.bind(http);
   http.respond = async (...args) => {
     const response = await create(...args);
-    if (args[2] === 'create') { online = false; await app.handleOffline(); }
+    if (args[2] === 'create') { online = false; target.dispatchEvent(new Event('offline')); }
     return response;
   };
-  let initialized = 0;
-  app = new ApplicationStorageLifecycle({syntheticOnly: true, folderName: 'invented synthetic claim', folderId: http.folderId,
-    accessToken: () => 'invented-test-token', fetchImpl: http.fetch, makeManifest: () => {},
-    initializeManifest: async () => { initialized++; return 'unused'; }, isOnline: () => online, lifecycleTarget: null});
-  await assert.rejects(app.start());
-  assert.equal(app.state, 'offline');
+  app = new FullSnapshotApplication({folderId: http.folderId,
+    accessToken: () => 'invented-test-token', fetchImpl: http.fetch, isOnline: () => online, lifecycleTarget: target});
+  await assert.rejects(app.start({initialize:true}));
+  assert.notEqual(app.state, 'ready');
   assert.equal(app.acceptingWrites, false);
   assert.equal(app.coordinator.canWrite, false);
-  assert.equal(initialized, 0);
+  assert.equal(http.mutations, 1);
   assert.equal(http.files.size, 1);
   assert.equal([...http.files.values()][0].metadata.name, SESSION_MARKER_NAME);
 });

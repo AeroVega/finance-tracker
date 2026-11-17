@@ -1,6 +1,6 @@
 # Synthetic Google Drive round-trip prototype
 
-**Historical record:** the first probe UI was retired on November 8, 2026. Use the [current owner acceptance suite](../prototype/acceptance.html) for new tests and the [configuration guide](GOOGLE_CLOUD_SETUP.md) for setup. The recipe and user-confirmed results below describe the original experiment only. Its mocked regression implementation remains in `tests/helpers/legacy-drive-probe-core.mjs`; no active browser page imports it. See [the cleanup inventory](PROTOTYPE_CLEANUP.md).
+**Historical record:** the first probe UI was retired on November 8, 2026. Use the [current owner acceptance guide](OWNER_ACCEPTANCE.md) for new tests and the [configuration guide](GOOGLE_CLOUD_SETUP.md) for setup. The recipe and user-confirmed results below describe the original experiment only. Its earlier mocked implementation is a historical artifact, not an active application route. See [the cleanup inventory](PROTOTYPE_CLEANUP.md).
 
 ## Confirmed decisions
 

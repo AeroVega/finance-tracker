@@ -8,7 +8,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const read = path => readFileSync(resolve(root, path), 'utf8');
 const prototypes = readdirSync(resolve(root, 'prototype')).filter(name => name.endsWith('.html')).map(name => 'prototype/' + name);
 const pagePaths = ['index.html', ...prototypes];
-const retained = ['pr28-import.html', 'pr28-testing.html', 'pr25-acceptance.html', 'synthetic-year.html', 'application-storage-lifecycle-test.html', 'session-coordination-test.html', 'drive-feasibility-spike.html', 'drive-folder-discovery.html'];
+const retained = ['local-preview.html', 'session-coordination-test.html'];
 
 function localTarget(owner, link) {
   if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(link)) return null;
@@ -43,9 +43,7 @@ test('active browser modules and CSS imports reference existing local files', ()
 
 test('specialist diagnostics remain reachable without crowding the main checklist', () => {
   const hub = read('prototype/index.html');
-  assert.match(hub, /href="\.\/acceptance.html"/);
-  assert.match(hub, /<details id="engineering-tools">/);
-  assert.doesNotMatch(hub, /<details id="engineering-tools"[^>]*\bopen/);
+  assert.doesNotMatch(hub, /pr28-import|pr25-acceptance|synthetic-year.html/);
   for (const page of retained) {
     assert.ok(hub.includes(page), page + ' remains discoverable');
     assert.ok(existsSync(resolve(root, 'prototype', page)));
@@ -55,11 +53,11 @@ test('specialist diagnostics remain reachable without crowding the main checklis
   assert.match(workspace, /aria-disabled="true" title="Legacy acceptance tooling is unavailable for full-snapshot copies"/);
 });
 
-test('superseded runtime is removed while historical design and probe regression remain', () => {
+test('superseded runtime is removed while historical design remains', () => {
   for (const path of ['prototype/drive-probe.html', 'prototype/drive-probe.mjs', 'prototype/modern-stack-exploration', 'js/drive-probe-core.mjs']) {
     assert.equal(existsSync(resolve(root, path)), false, path);
   }
-  assert.ok(existsSync(resolve(root, 'tests/helpers/legacy-drive-probe-core.mjs')));
+  assert.equal(existsSync(resolve(root, 'tests/helpers/legacy-drive-probe-core.mjs')),false);
   assert.ok(existsSync(resolve(root, 'docs/archive/MODERN_UI_EXPLORATION.md')));
   for (const page of pagePaths) {
     assert.doesNotMatch(read(page), /drive-probe\.html|modern-stack-exploration|tailwindcss\/browser/);

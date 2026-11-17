@@ -1,15 +1,10 @@
 import {getEffectiveActivities, reportActivityContribution} from './canonical-import.mjs';
 import {isCalendarDate} from './import-reconciliation.mjs';
 import {addExact, monthBounds} from './financial-position-contract.mjs';
-import {canonicalizeJcs, sha256Hex} from './transaction-protocol.mjs';
+import {canonicalizeJcs} from './transaction-protocol.mjs';
 
-export const MONTH_INDEX_PREFIX = 'synthetic/canonical-month-index-v1/';
-export const MONTH_INDEX_ROOT = MONTH_INDEX_PREFIX + 'root.json';
-export const MONTH_INDEX_GROUP_SIZE = 64;
-const FORMAT = 'finance-tracker-canonical-month-index';
 const ownedIndexes = new WeakSet();
 export const isCanonicalMonthIndexFor = (index,ledger) => ownedIndexes.has(index) && index.matches(ledger);
-const groupPath = ordinal => MONTH_INDEX_PREFIX + 'groups/' + String(ordinal).padStart(6, '0') + '.json';
 const fail = message => { throw new TypeError(message); };
 const reportDate = a => a.activityKind === 'refund' ? a.postedDate : a.effectiveDate;
 const zero = () => ({income:'0',spending:'0',cash:'0',eligibleActivityCount:0,cashActivityCount:0});
@@ -167,56 +162,4 @@ export function createCanonicalMonthIndex(ledger) {
   });
   ownedIndexes.add(index);
   return index;
-}
-
-export function isMonthIndexPath(path) {
-  return path === MONTH_INDEX_ROOT || /^synthetic\/canonical-month-index-v1\/groups\/\d{6,}\.json$/.test(path);
-}
-
-// Include paths as well as exact canonical object text. A revision number alone
-// cannot bind derived values to their source, and no timestamps enter this hash.
-export async function canonicalMonthSourceHash(sourceObjects, cryptoImpl = globalThis.crypto) {
-  const hashes = [];
-  for (const [path,text] of [...sourceObjects].sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0)) hashes.push([path,await sha256Hex(text,cryptoImpl)]);
-  return sha256Hex(canonicalizeJcs(hashes),cryptoImpl);
-}
-
-export async function serializeCanonicalMonthIndex(index, sourceObjects, cryptoImpl = globalThis.crypto) {
-  const summaries = index.monthlySummaries(), objects = new Map(), groups = [];
-  for (let offset = 0; offset < summaries.length; offset += MONTH_INDEX_GROUP_SIZE) {
-    const path = groupPath(offset / MONTH_INDEX_GROUP_SIZE);
-    const text = canonicalizeJcs({format:FORMAT + '-group',version:1,syntheticOnly:true,summaries:summaries.slice(offset,offset + MONTH_INDEX_GROUP_SIZE)});
-    objects.set(path,text); groups.push({path,sha256:await sha256Hex(text,cryptoImpl)});
-  }
-  objects.set(MONTH_INDEX_ROOT,canonicalizeJcs({format:FORMAT,version:1,syntheticOnly:true,
-    sourceSha256:await canonicalMonthSourceHash(sourceObjects,cryptoImpl),groups}));
-  return objects;
-}
-
-/** Rebuildable bytes cannot establish correctness merely by agreeing on hashes.
- * Compare the complete partitioned payload to freshly derived canonical results.
- * Transport/ownership verification belongs to the existing storage lifecycle.
- */
-export async function readCanonicalMonthIndex({ledger,sourceObjects,readText,cryptoImpl = globalThis.crypto}) {
-  const index = createCanonicalMonthIndex(ledger), expected = await serializeCanonicalMonthIndex(index,sourceObjects,cryptoImpl);
-  const actual = new Map();
-  const rootText = await readText(MONTH_INDEX_ROOT);
-  if (rootText === null) return {index,objects:actual,status:'rebuilt-missing'};
-  actual.set(MONTH_INDEX_ROOT,rootText);
-  let root;
-  try { root = JSON.parse(rootText); }
-  catch { return {index,objects:actual,status:'rebuilt-invalid'}; }
-  const expectedRoot = JSON.parse(expected.get(MONTH_INDEX_ROOT));
-  if (root?.sourceSha256 !== expectedRoot.sourceSha256) return {index,objects:actual,status:'rebuilt-stale'};
-  let canonicalRoot;
-  try { canonicalRoot = canonicalizeJcs(root); }
-  catch { return {index,objects:actual,status:'rebuilt-invalid'}; }
-  if (canonicalRoot !== canonicalizeJcs(expectedRoot)) return {index,objects:actual,status:'rebuilt-invalid'};
-  for (const {path} of expectedRoot.groups) {
-    const text = await readText(path);
-    if (text === null) return {index,objects:actual,status:'rebuilt-invalid'};
-    actual.set(path,text);
-    if (text !== expected.get(path)) return {index,objects:actual,status:'rebuilt-invalid'};
-  }
-  return {index,objects:actual,status:'verified'};
 }

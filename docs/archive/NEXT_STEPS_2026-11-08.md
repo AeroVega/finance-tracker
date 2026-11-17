@@ -139,7 +139,7 @@ Closing or disconnecting an account must not create gaps: preserve its historica
 
 ## Temporary prototype navigation and MVP1 cleanup
 
-The workspace links to the [owner acceptance suite](../../prototype/acceptance.html) and a [test tools index](../../prototype/). The suite orders the remaining physical-device and live synthetic checks. Specialist recovery and protocol diagnostics remain accessible in the tools index; the [cleanup inventory](../PROTOTYPE_CLEANUP.md) records retired UI and preserved coverage. These tools are development-only and must not become product features.
+The workspace links to the [owner acceptance suite](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/prototype/acceptance.html) and a [test tools index](../../prototype/). The suite orders the remaining physical-device and live synthetic checks. Specialist recovery and protocol diagnostics remain accessible in the tools index; the [cleanup inventory](../PROTOTYPE_CLEANUP.md) records retired UI and preserved coverage. These tools are development-only and must not become product features.
 
 **MVP1 completion gate:** remove the app-footer entry point and exclude all browser prototype pages under `prototype/` from the user-facing GitHub Pages deployment. Keep automated tests and useful engineering documentation; do not ship prototype pages, test controls, or prototype navigation as part of the MVP1 app. Verify the deployed artifact contains no prototype hub or prototype HTML pages before calling MVP1 complete.
 

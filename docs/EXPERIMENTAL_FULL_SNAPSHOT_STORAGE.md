@@ -1,6 +1,6 @@
-# Experimental fresh-copy full-snapshot storage
+# Full-snapshot storage contract
 
-Fresh-copy synthetic test build. The actual Dashboard and workspace route now use the new full-snapshot store. Existing copies are not migrated or converted. Legacy storage modules remain for regression coverage, not as supported copies in this new application route. This is not Alpha acceptance or a deployment claim.
+Selected application storage format as of 2026-11-17. Dashboard and workspace use this full-snapshot store. Older-format copies are unsupported, not migrated or converted. The owner accepted the reported synthetic open/save workflow on `86d1f2b` and requested removal of obsolete format code/tests. This is not Alpha completeness or production approval. See [current state](CURRENT_STATE.md) for merge and deployment status. Historical measurement sections below apply only to their named revisions.
 
 The new manifest/version selects a direct commit envelope, which binds one complete canonical logical-ledger snapshot by physical ID, SHA256 and byte length. Envelope binds copy/database/revision, exact parent and previous clean manifest hash. No catalog, three-index map, descriptor plan, deduplication or persisted derived projection is used. Financial reports are recomputed from a fully validated ledger. The application supports fresh synthetic seeding, opening, editing, saving, releasing and recovery. Legacy import and backup/restore are explicitly unavailable in this test build; their completion remains an Alpha gate.
 

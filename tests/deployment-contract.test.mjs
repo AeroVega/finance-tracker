@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [workflow, dashboard, acceptanceCenter, buildInfo] = await Promise.all([
+const [workflow, dashboard, localPreview, buildInfo] = await Promise.all([
   readFile(new URL("../.github/workflows/deploy-pages.yml", import.meta.url), "utf8"),
   readFile(new URL("../index.html", import.meta.url), "utf8"),
-  readFile(new URL("../prototype/acceptance.html", import.meta.url), "utf8"),
+  readFile(new URL("../prototype/local-preview.html", import.meta.url), "utf8"),
   readFile(new URL("../js/build-info.js", import.meta.url), "utf8")
 ]);
 
@@ -25,9 +25,9 @@ test("deployment stamps the checked-out source commit into the artifact", () => 
   assert.match(buildInfo, /development \(not deployed\)/);
 });
 
-test("workspace and acceptance center display the generated source commit", () => {
+test("workspace and local preview display the generated source commit", () => {
   assert.match(dashboard, /id="build-sha"/);
   assert.match(dashboard, /src="js\/build-info\.js"/);
-  assert.match(acceptanceCenter, /id="build-sha"/);
-  assert.match(acceptanceCenter, /src="\.\.\/js\/build-info\.js"/);
+  assert.match(localPreview, /id="build-sha"/);
+  assert.match(localPreview, /src="\.\.\/js\/build-info\.js"/);
 });

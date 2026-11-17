@@ -1,5 +1,8 @@
 # Root transactions and recovery
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 The application uses physical root protocol 4. The unused protocol-3 runtime
 and its dedicated test suite have been removed after transferring relevant
 boundary cases to the active physical suite. The prototype had no application

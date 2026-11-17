@@ -1,5 +1,8 @@
 # Owned in-memory ledger sessions
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 **Implemented:** `createLedgerSessionOwner()` adds an optional cache for financial-event commands and read views. Existing pure canonical functions remain supported. It does not save, claim a storage session, rewrite history, or authorize production data.
 
 ## Ownership and boundaries

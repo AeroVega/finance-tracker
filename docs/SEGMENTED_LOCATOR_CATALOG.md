@@ -1,5 +1,8 @@
 # Segmented locator catalogs
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 The segmented version-2 path below remains distinct from the
 [catalog-3 application companion](#catalog-3-application-companion). Neither
 version number changes the canonical ledger schema version.

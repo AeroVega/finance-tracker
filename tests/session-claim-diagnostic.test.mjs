@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createDriveSessionAdapter } from '../js/drive-session-adapter.mjs';
 import { SessionCoordinator } from '../js/session-coordination.mjs';
 import { sessionClaimDiagnostic } from '../js/session-claim-diagnostic.mjs';
-import { ApplicationStorageLifecycle } from '../js/application-storage-lifecycle.mjs';
+import {FullSnapshotApplication} from '../js/full-snapshot-application.mjs';
 import { HttpCatalogDrive } from './helpers/http-catalog-drive.mjs';
 
 const closingCases = [
@@ -28,11 +28,11 @@ for (const [check, change] of closingCases) test(`claim reports ${check} without
     return new Response(JSON.stringify(value));
   };
   let initialized = 0;
-  const app = new ApplicationStorageLifecycle({syntheticOnly: true,
+  const app = new FullSnapshotApplication({syntheticOnly: true,
     folderName: 'invented synthetic diagnostic', folderId: http.folderId,
     accessToken: () => 'invented-test-token', fetchImpl, makeManifest: () => {},
     initializeManifest: async () => { initialized++; return 'unused'; }, lifecycleTarget: null});
-  await assert.rejects(app.start(), failure => {
+  await assert.rejects(app.start({initialize:true}), failure => {
     assert.deepEqual(sessionClaimDiagnostic(failure), {code: 'ownership-unknown', check});
     assert.match(failure.message, /session claim could not be confirmed/);
     return true;

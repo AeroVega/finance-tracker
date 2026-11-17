@@ -3,10 +3,7 @@ import assert from 'node:assert/strict';
 import { createDriveResponseLimits, readBoundedDriveBytes, readBoundedDriveJson } from '../js/drive-response-transport.mjs';
 import { GoogleDriveTransactionAdapter } from '../js/drive-transaction-engine.mjs';
 import { createDriveSessionAdapter, SESSION_MARKER_NAME, SESSION_MARKER_PROPERTY } from '../js/drive-session-adapter.mjs';
-import { listFolderChildren, createSyntheticObject } from '../js/drive-feasibility-spike.mjs';
-import { discoverFoldersByExactName } from '../js/drive-folder-discovery.mjs';
-import { initializeCatalogCopy, verifyCatalogHistory } from '../js/catalog-storage.mjs';
-import { CatalogTransactionEngine } from '../js/catalog-transaction-engine.mjs';
+import { listFolderChildren } from '../js/drive-feasibility-spike.mjs';
 import { HttpCatalogDrive } from './helpers/http-catalog-drive.mjs';
 
 const token = 'invented-test-token';
@@ -76,8 +73,7 @@ test('all transaction response routes use distinct finite per-kind budgets', asy
     ['list-page', a => a.listChildren()],
     ['generated-ids', a => a.allocateFileId()],
     ['manifest', a => a.readJson('invented-manifest', { kind: 'manifest' })],
-    ['journal-event', a => a.readJson('invented-journal', { kind: 'journal-event' })],
-    ['locator-catalog-segment', a => a.readBytes('invented-segment', { kind: 'locator-catalog-segment' })]
+    ['snapshot-object', a => a.readBytes('invented-snapshot', { kind: 'snapshot-object' })]
   ]) {
     const { response, stats } = endless();
     await assert.rejects(operation(adapter(async () => response, { [kind]: 8 })), { code: 'drive-response-too-large' });
@@ -89,7 +85,6 @@ test('folder lists and session discovery reject oversized pages without claiming
   for (const operation of [
     settings => listFolderChildren(settings),
     settings => createDriveSessionAdapter(settings).read(),
-    settings => discoverFoldersByExactName({ ...settings, folderName: 'invented-folder' })
   ]) {
     const { response, stats } = endless();
     await assert.rejects(operation({ accessToken: token, folderId: 'invented-folder', fetchImpl: async () => response, responseLimits: { 'list-page': 8 } }), { code: 'drive-response-too-large' });
@@ -122,34 +117,6 @@ test('listing bounds apply to each page, never the aggregate database', async ()
   await assert.rejects(repeated.listChildren(), { code: 'pagination-loop' });
 });
 
-test('oversized legacy data remains intact and recovers with an explicit larger finite profile and full integrity checks', async () => {
-  const http = new HttpCatalogDrive();
-  const makeAdapter = responseLimits => new GoogleDriveTransactionAdapter({ accessToken: () => token, folderId: http.folderId, fetchImpl: http.fetch, responseLimits });
-  const normal = makeAdapter({});
-  const initial = await initializeCatalogCopy({ adapter: normal, guard: async () => {} });
-  const engine = new CatalogTransactionEngine({ adapter: normal, assertWritable: async () => {}, isOnline: () => true });
-  const content = JSON.stringify({ inventedLegacyPayload: 'x'.repeat(140 * 1024) });
-  const saved = await engine.transact({ manifestFileId: initial.manifestFileId, expectedBase: initial.manifest,
-    objects: [{ logicalPath: 'synthetic/legacy.json', content }], commitRecord: { operationType: 'synthetic-test' } });
-  const before = structuredClone([...http.files]);
-  const mutations = http.mutations;
-  const tight = new CatalogTransactionEngine({ adapter: makeAdapter({ 'data-object': 1024 }), assertWritable: async () => {}, isOnline: () => true });
-  await assert.rejects(tight.recover({ manifestFileId: initial.manifestFileId }), { code: 'drive-response-too-large' });
-  assert.equal(tight.recoveryRequired, true);
-  assert.equal(http.mutations, mutations);
-  assert.deepEqual([...http.files], before);
-  const reopened = makeAdapter({ 'data-object': 256 * 1024 });
-  const recovery = new CatalogTransactionEngine({ adapter: reopened, assertWritable: async () => {}, isOnline: () => true });
-  const result = await recovery.recover({ manifestFileId: initial.manifestFileId });
-  assert.equal(result.manifest.commitId, saved.manifest.commitId);
-  const verified = await verifyCatalogHistory(reopened, result.manifest);
-  const target = Object.values(verified.catalog.entries).find(entry => entry.kind === 'data-object');
-  assert.equal(new TextDecoder().decode(verified.objects.get(`data-object:${target.identity}`)), content);
-  http.files.get(target.fileId).bytes[0] ^= 1;
-  await assert.rejects(recovery.recover({ manifestFileId: initial.manifestFileId }), { code: 'immutable-hash-mismatch' });
-  assert.equal(http.mutations, mutations, 'neither oversize nor corruption authorizes repair writes or data deletion');
-});
-
 test('a huge first chunk is cancelled before retaining it, even if cancellation rejects', async () => {
   let cancels = 0;
   const response = new Response(new ReadableStream({
@@ -175,20 +142,6 @@ test('tiny chunks and reused producer buffers retain exact admitted bytes', asyn
   for (let i = 0; i < size; i++) assert.equal(actual[i], i % 251);
 });
 
-test('oversized manifests stop recovery before any mutations or empty-copy fallback', async () => {
-  const http = new HttpCatalogDrive();
-  const normal = new GoogleDriveTransactionAdapter({ accessToken: () => token, folderId: http.folderId, fetchImpl: http.fetch });
-  const initial = await initializeCatalogCopy({ adapter: normal, guard: async () => {} });
-  const before = structuredClone([...http.files]);
-  const mutations = http.mutations;
-  const bounded = new GoogleDriveTransactionAdapter({ accessToken: () => token, folderId: http.folderId, fetchImpl: http.fetch, responseLimits: { manifest: 8 } });
-  const recovery = new CatalogTransactionEngine({ adapter: bounded, assertWritable: async () => {}, isOnline: () => true });
-  await assert.rejects(recovery.recover({ manifestFileId: initial.manifestFileId }), { code: 'drive-response-too-large' });
-  assert.equal(recovery.recoveryRequired, true);
-  assert.equal(http.mutations, mutations);
-  assert.deepEqual([...http.files], before);
-});
-
 test('an oversized successful create body is discarded and resolved by the same exact ID and verified bytes', async () => {
   const http = new HttpCatalogDrive();
   let oversized = null;
@@ -200,7 +153,7 @@ test('an oversized successful create body is discarded and resolved by the same 
   const content = new TextEncoder().encode('{"invented":true}');
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', content)), b => b.toString(16).padStart(2, '0')).join('');
   const id = await a.allocateFileId();
-  const result = await a.createImmutable({ fileId: id, content, kind: 'data-object', transactionId: 'invented', name: 'invented', expectedSha256: hash });
+  const result = await a.createImmutable({ fileId: id, content, kind: 'snapshot-object', transactionId: 'invented', name: 'invented', expectedSha256: hash });
   assert.equal(result.fileId, id);
   assert.deepEqual(result.readback.bytes, content);
   assert.deepEqual(oversized.stats, { pulls: 0, cancels: 1 });
@@ -209,45 +162,26 @@ test('an oversized successful create body is discarded and resolved by the same 
 
 test('new oversized objects fail before posting a durable file', async () => {
   let requests = 0;
-  const a = adapter(async () => { requests++; throw new Error('Must not request'); }, { 'data-object': 8, manifest: 8 });
-  await assert.rejects(a.createImmutable({ fileId: 'invented', content: 'too-long-invented-content', kind: 'data-object', expectedSha256: '0'.repeat(64) }), { code: 'drive-response-too-large' });
+  const a = adapter(async () => { requests++; throw new Error('Must not request'); }, { 'snapshot-object': 8, manifest: 8 });
+  await assert.rejects(a.createImmutable({ fileId: 'invented', content: 'too-long-invented-content', kind: 'snapshot-object', expectedSha256: '0'.repeat(64) }), { code: 'drive-response-too-large' });
   await assert.rejects(a.publishManifest('invented', { invented: true }), { code: 'drive-response-too-large' });
   assert.equal(requests, 0);
 });
 
-test('the catalog segment transport default matches the 64 KiB stored-format bound', async () => {
-  const a = adapter(async () => new Response(new Uint8Array(64 * 1024 + 1)));
-  await assert.rejects(a.readBytes('invented-segment', { kind: 'locator-catalog-segment' }), error =>
-    error.code === 'drive-response-too-large' && error.details.maxBytes === 64 * 1024);
-});
-
-test('physical and logical data aliases share one finite upload and recovery budget', async () => {
-  for (const responseLimits of [{ 'data-object': 8 }, { 'snapshot-object': 8 }, { 'data-object': 64, 'snapshot-object': 8 }]) {
-    const http = new HttpCatalogDrive();
-    const a = new GoogleDriveTransactionAdapter({ accessToken: () => token, folderId: http.folderId,
-      fetchImpl: http.fetch, responseLimits });
-    assert.equal(a.responseLimits['data-object'], 8);
-    assert.equal(a.responseLimits['snapshot-object'], 8);
-    const initial = await initializeCatalogCopy({ adapter: a, guard: async () => {} });
-    const mutations = http.mutations;
-    const engine = new CatalogTransactionEngine({ adapter: a, assertWritable: async () => {}, isOnline: () => true });
-    await assert.rejects(engine.transact({ manifestFileId: initial.manifestFileId, expectedBase: initial.manifest,
-      objects: [{ logicalPath: 'synthetic/rejected.json', content: 'x'.repeat(32) }] }), { code: 'drive-response-too-large' });
-    assert.equal(http.mutations, mutations, 'reject before any transaction journal or payload becomes durable');
-    const recovered = await engine.recover({ manifestFileId: initial.manifestFileId });
-    assert.deepEqual(recovered.manifest, initial.manifest);
-    assert.equal(http.mutations, mutations);
-  }
-  const larger = createDriveResponseLimits({ 'data-object': 64 * 1024 * 1024 });
-  assert.equal(larger['snapshot-object'], larger['data-object']);
-});
-
-
-test('feasibility uploads apply their read-back budget before allocating or posting', async () => {
-  let requests = 0;
-  await assert.rejects(createSyntheticObject({ accessToken: token, folderId: 'invented-folder',
-    content: 'x'.repeat(32), responseLimits: { 'stored-object': 8 },
-    fetchImpl: async () => { requests++; throw new Error('must not request'); }
-  }), { code: 'drive-response-too-large' });
-  assert.equal(requests, 0);
+test('snapshot uploads and reads enforce the same finite budget without mutations', async () => {
+  const http = new HttpCatalogDrive();
+  const a = new GoogleDriveTransactionAdapter({ accessToken: () => token, folderId: http.folderId,
+    fetchImpl: http.fetch, responseLimits: { 'snapshot-object': 8 } });
+  await assert.rejects(a.createImmutable({ fileId: 'invented', content: 'x'.repeat(32),
+    kind: 'snapshot-object', expectedSha256: '0'.repeat(64) }), { code: 'drive-response-too-large' });
+  assert.equal(http.mutations, 0);
+  assert.equal(http.requests.length, 0);
+  http.files.set('invented', { bytes: new Uint8Array(32), metadata: { id: 'invented' } });
+  const before = structuredClone([...http.files]);
+  await assert.rejects(a.readBytes('invented', { kind: 'snapshot-object' }), { code: 'drive-response-too-large' });
+  assert.equal(http.mutations, 0);
+  assert.deepEqual([...http.files], before);
+  const larger = new GoogleDriveTransactionAdapter({ accessToken: () => token, folderId: http.folderId,
+    fetchImpl: http.fetch, responseLimits: { 'snapshot-object': 64 } });
+  assert.deepEqual(await larger.readBytes('invented', { kind: 'snapshot-object' }), new Uint8Array(32));
 });

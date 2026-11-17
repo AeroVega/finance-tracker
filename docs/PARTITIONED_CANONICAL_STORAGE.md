@@ -1,5 +1,8 @@
 # Partitioned canonical storage
 
+> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+
+
 ## Scope and status
 
 The synthetic application supports canonical v5 only through the existing paged
