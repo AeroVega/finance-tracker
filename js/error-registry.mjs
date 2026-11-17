@@ -3,6 +3,13 @@
 // Unknown/ambiguous validation remains loud: the same slug can be raised while
 // reading stored data, not only while entering a form. No code grants retry rights.
 const workspace = {
+  'backup-password-mismatch': 'The passwords do not match. Enter the same password twice before creating the encrypted backup.',
+  'backup-password-required': 'Enter a password to use an encrypted backup. A lost password cannot be recovered.',
+  'backup-decryption-failed': 'The backup could not be decrypted. Check the password and file; no Drive copy was changed.',
+  'backup-staged-changes': 'This backup excludes unsaved changes. Save first or explicitly back up the last saved copy.',
+  'verified-retry-required': 'Retry is blocked until the previous change is conclusively verified as not saved and you confirm retry.',
+  'verified-backup-required': 'Validate a backup locally before restoring it into a new empty folder.',
+  'restore-verification-mismatch': 'The restored copy did not pass independent verification. Keep the backup and destination unchanged.',
   'unsupported-canonical-profile': 'Only canonical version 5 is supported. Keep this folder unchanged and choose a new empty synthetic folder. Older copies are not migrated.',
   'unsupported-canonical-layout': 'Only canonical version 5 is supported. Create a new synthetic copy; existing files will not be changed.',
   'unsupported-derived-projection': 'This ledger contains a linked refund without a defined category. Keep the original copy. Add an explicit category correction to the original activity, save it, then retry the new copy.',
@@ -145,6 +152,7 @@ const startup = Object.freeze({
 const codeGroups = {
   startup: `google-config-http google-config-invalid google-config-json google-config-network google-libraries-unavailable google-library-timeout google-picker-unavailable`,
   backup: `
+    backup-password-mismatch backup-password-required backup-decryption-failed backup-staged-changes verified-retry-required verified-backup-required restore-verification-mismatch
     archive-canonical-profile-mismatch archive-hash-mismatch archive-identity-mismatch
     archive-object-hash-mismatch backup-commit-readback-failed backup-manifest-readback-failed
     backup-metadata-mismatch backup-metadata-unavailable backup-object-not-visible

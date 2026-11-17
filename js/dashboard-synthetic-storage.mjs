@@ -254,6 +254,32 @@ export class DashboardSyntheticStorage {
     }
   }
 
+  async refreshRecoveryAuthorization(){
+    const lifecycle=this.lifecycle,folderId=this.folderId;
+    if(!lifecycle||lifecycle.folderId!==folderId||this.busy)throw new AppError('reconnect-required');
+    try{this.token();return;}catch(error){if(error.code!=='authorization-required')throw error;}
+    if(!this.config)throw new AppError('authorization-required');
+    // Explicit user recheck only, never from automatic recovery. Keep GIS in
+    // the click gesture and do not reopen Picker or switch the selected folder.
+    const response=await requestToken(this.config.clientId);
+    if(this.lifecycle!==lifecycle||this.folderId!==folderId)throw new AppError('reconnect-required');
+    this.accessToken=response.access_token;
+    const seconds=Number(response.expires_in);
+    this.tokenExpiresAt=Number.isFinite(seconds)&&seconds>0?Date.now()+seconds*1000:Number.POSITIVE_INFINITY;
+  }
+
+  async reopenIndependent() {
+    const previous=this.lifecycle,folderId=this.folderId;
+    if(!previous||previous.folderId!==folderId||this.busy)throw new AppError('reconnect-required');
+    const result=await previous.release();
+    if(result?.released!==true||this.lifecycle!==previous||this.folderId!==folderId)throw new AppError('release-unconfirmed');
+    const fresh=new FullSnapshotApplication({folderId,accessToken:()=>this.token(),onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
+    this.lifecycle=fresh;
+    await fresh.start();
+    if(this.lifecycle!==fresh||this.folderId!==folderId)throw new AppError('reconnect-required');
+    return fresh;
+  }
+
   async readSnapshot() {
     if (!this.lifecycle || this.lifecycle.state !== "ready") throw new Error("Synthetic storage is not ready.");
     // Canonical records are opened through the full-snapshot store after connect.

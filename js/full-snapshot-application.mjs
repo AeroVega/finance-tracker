@@ -44,8 +44,8 @@ export class FullSnapshotApplication {
    return structuredClone(ledger);
   },{starting:true});
  }
- async load(){
-  const transfer=this.#transfer;this.#transfer=null;
+ async load({cold=false}={}){
+  const transfer=cold?null:this.#transfer;this.#transfer=null;
   if(transfer){try{this.#assert(transfer.generation);this.engine.assertVerifiedBaseline(transfer.manifest);const ledger=structuredClone(transfer.ledger);this.#assert(transfer.generation);this.engine.assertVerifiedBaseline(transfer.manifest);return ledger;}catch(error){this.invalidate();throw error;}}
   return this.#operation(async()=>{const ledger=await this.engine.open(),m=this.engine.verifiedManifest;this.#status('ready');this.engine.assertVerifiedBaseline(m);return ledger;});
  }
@@ -63,7 +63,7 @@ export class FullSnapshotApplication {
 }
 class FullSnapshotLedgerStore {
  constructor(lifecycle){this.lifecycle=lifecycle;this.base=null;this.ledger=null;this.valueCodec='full-snapshot-v1';this.monthIndex=undefined;}
- async load(){this.base=null;const ledger=await this.lifecycle.load(),manifest=await this.lifecycle.readManifest();this.lifecycle.engine.assertVerifiedBaseline(manifest);this.base=manifest;this.ledger=structuredClone(ledger);return structuredClone(ledger);}
+ async load(options){this.base=null;const ledger=await this.lifecycle.load(options),manifest=await this.lifecycle.readManifest();this.lifecycle.engine.assertVerifiedBaseline(manifest);this.base=manifest;this.ledger=structuredClone(ledger);return structuredClone(ledger);}
  async save(ledger){const base=this.base;if(!base)fail('verified-base-required');this.lifecycle.engine.assertVerifiedBaseline(base);
   this.base=null;const saved=await this.lifecycle.save(ledger),manifest=await this.lifecycle.readManifest();this.lifecycle.engine.assertVerifiedBaseline(manifest);this.base=manifest;this.ledger=structuredClone(saved);return structuredClone(saved);}
 }

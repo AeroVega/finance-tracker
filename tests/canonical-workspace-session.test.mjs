@@ -84,6 +84,7 @@ test('offline/session uncertainty blocks edits until a verified reopen, retainin
 for (const [flag, writes] of [['fail', 0], ['loseResponse', 1]]) test(`${flag} retains proposal and forbids blind save retry`, async () => {
   const h = await setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger); h.calls[flag] = true;
+  if(flag==='loseResponse'){await h.session.save();assert.equal(h.session.recoveryOutcome,'saved');assert.equal(h.session.dirty,false);assert.deepEqual(h.session.ledger,proposal);assert.equal(h.calls.writes,1);return;}
   await assert.rejects(h.session.save());
   assert.equal(h.session.unverified, true); assert.equal(h.session.dirty, true);
   assert.equal(h.session.canSave(), false); assert.deepEqual(h.session.ledger, proposal);
@@ -227,23 +228,13 @@ test('transfer linking rejects amount mismatches, same-account pairs and non-tra
 });
 
 
-test('an uncertain fresh-copy write blocks retry and a verified reopen resolves the outcome', async () => {
-  const h = await setup('full-snapshot-v1', true);
-  h.session.preview(recipe.ledger);
-  const proposal = structuredClone(h.session.ledger);
-  h.calls.loseResponse = true;
-  await assert.rejects(h.session.savePreviewToNewCopy());
-  assert.equal(h.session.mode, 'preview');
-  assert.equal(h.session.unverified, true);
-  assert.equal(h.session.canEdit(), false);
-  await assert.rejects(h.session.savePreviewToNewCopy(), { message: 'verified-preview-required' });
-  assert.equal(h.calls.writes, 1);
-  h.calls.loseResponse = false;
-  await h.session.reopen();
-  assert.equal(h.session.mode, 'saved');
-  assert.equal(h.session.unverified, false);
-  assert.deepEqual(h.session.ledger, proposal);
-  assert.equal(h.calls.writes, 1);
+test('a lost fresh-copy response is automatically reconciled without a second save', async () => {
+  const h = await setup('full-snapshot-v1', true);h.session.preview(recipe.ledger);
+  const proposal=structuredClone(h.session.ledger);h.calls.loseResponse=true;
+  await h.session.savePreviewToNewCopy();assert.equal(h.session.recoveryOutcome,'saved');
+  assert.equal(h.session.mode,'saved');assert.equal(h.session.unverified,false);assert.equal(h.calls.writes,1);
+  assert.deepEqual(h.session.ledger,proposal);
+  await assert.rejects(h.session.savePreviewToNewCopy(),{code:'verified-preview-required'});
 });
 
 test('transfer-link events save and reopen through the existing canonical store', async () => {
@@ -369,20 +360,13 @@ test('invalid position evidence leaves the draft and undo history unchanged', as
   assert.equal(h.session.dirty, false);
 });
 
-test('lost position save response retains proposal and blocks edits and retry until independent reopen', async () => {
-  const h = await setup(); await h.session.open();
-  h.session.recordPosition(positionCommand(h.session.ledger));
-  const proposed = structuredClone(h.session.ledger);
-  h.calls.loseResponse = true;
-  await assert.rejects(h.session.save());
-  assert.equal(h.session.unverified, true);
-  assert.throws(() => h.session.recordPosition(positionCommand(h.session.ledger)), { code: 'reopen-before-editing' });
-  await assert.rejects(h.session.save(), { code: 'verified-draft-required' });
-  assert.equal(h.calls.writes, 1);
-  assert.deepEqual(h.session.ledger, proposed);
-  h.calls.loseResponse = false; await h.session.reopen();
-  assert.deepEqual(h.session.ledger, proposed);
-  assert.equal(h.session.ledger.positionEvents.length, 1);
+test('lost position save response is verified automatically without duplicate position history', async () => {
+  const h=await setup();await h.session.open();h.session.recordPosition(positionCommand(h.session.ledger));
+  const proposed=structuredClone(h.session.ledger);h.calls.loseResponse=true;
+  await h.session.save();assert.equal(h.session.recoveryOutcome,'saved');assert.equal(h.session.unverified,false);
+  assert.deepEqual(h.session.ledger,proposed);assert.equal(h.calls.writes,1);
+  await assert.rejects(h.session.save(),{code:'verified-draft-required'});
+  h.calls.loseResponse=false;await h.session.reopen();assert.deepEqual(h.session.ledger,proposed);assert.equal(h.session.ledger.positionEvents.length,1);
 });
 
 test('a position-only local preview saves to a fresh synthetic copy and release blocks later edits', async () => {

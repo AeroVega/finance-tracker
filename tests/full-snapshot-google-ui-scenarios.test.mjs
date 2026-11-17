@@ -21,7 +21,7 @@ async function setup({oauthFailure=null,pickerAction=null}={}){
  imports.DashboardSyntheticStorage=class extends DashboardSyntheticStorage{constructor(options){super(options);storage=this;}async prepare(){this.config={clientId:'invented',apiKey:'invented',projectNumber:'1'};return this.config;}};
  imports.CanonicalWorkspaceSession=class extends CanonicalWorkspaceSession{constructor(options){super(options);session=this;}};
  const page=await pageController('canonical-workspace',imports,{htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs'});
- return {page,http,get tokenRequests(){return tokenRequests;},get storage(){return storage;},get session(){return session;},cancel(value){cancel=value;},async close(){http.beforeResponse=null;http.reboot();await storage.lifecycle?.release().catch(()=>{});globalThis.window=previous.window;globalThis.fetch=previous.fetch;}};
+ return {page,http,get tokenRequests(){return tokenRequests;},get storage(){return storage;},get session(){return session;},cancel(value){cancel=value;},async close(){http.beforeResponse=null;http.reboot();await storage.lifecycle?.release().catch(()=>{});storage.lifecycle?.coordinator.heartbeatStop?.();globalThis.window=previous.window;globalThis.fetch=previous.fetch;}};
 }
 
 for (const oauthFailure of ['access_denied','popup_failed_to_open','popup_closed']) test('create handles OAuth '+oauthFailure+' without writes or stuck busy state', async()=>{
@@ -62,5 +62,33 @@ test('token expiry during a suspension-shaped read delay fails closed before pub
   await assert.rejects(h.session.save(),{code:'authorization-required'});
   assert.equal(fired,true);assert.equal(h.http.mutations,mutations);assert.deepEqual(h.session.ledger,draft);
   assert.equal(h.session.busy,false);assert.equal(h.storage.lifecycle.acceptingWrites,false);
+ }finally{await h.close();}
+});
+
+test('backup restore uses shipped Google Picker bridge and independent fresh lifecycle',async()=>{
+ const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const {replayFixture}=await import('./helpers/ledger-replay-fixtures.mjs');
+ const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);const source=replayFixture(2).ledger;
+  await h.session.importBackup(await encodeFullSnapshotBackup(source));
+  let old;const reopen=h.storage.reopenIndependent.bind(h.storage);h.storage.reopenIndependent=async()=>{old=h.storage.lifecycle;return reopen();};
+  await h.session.restoreBackupToNewCopy();assert.notEqual(h.storage.lifecycle,old);assert.equal(old.state,'released');assert.deepEqual(h.session.ledger,source);assert.equal(h.session.unverified,false);assert.equal(h.session.backupPreview,false);
+ }finally{await h.close();}
+});
+for(const pickerAction of ['cancel','error'])test('restore Picker '+pickerAction+' preserves validated source without mutations',async()=>{
+ const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const {replayFixture}=await import('./helpers/ledger-replay-fixtures.mjs');
+ const h=await setup({pickerAction});try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);const source=replayFixture(1).ledger;await h.session.importBackup(await encodeFullSnapshotBackup(source));
+  await assert.rejects(h.session.restoreBackupToNewCopy());assert.equal(h.http.mutations,0);assert.equal(h.session.backupPreview,true);assert.deepEqual(h.session.backupSource,source);assert.equal(h.session.busy,false);
+ }finally{await h.close();}
+});
+
+test('explicit outcome recheck refreshes expired authorization without changing folder or retrying save',async()=>{
+ const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented',rationale:'Invented'});const expected=structuredClone(h.session.ledger),lifecycle=h.storage.lifecycle,requests=h.tokenRequests;
+  h.http.fault({category:'update',kind:'finance-tracker-full-snapshot-manifest',after:true,effect:'lost-response'});
+  const original=h.http.applyRules.bind(h.http);h.http.applyRules=async(...args)=>{try{return await original(...args);}catch(error){h.storage.tokenExpiresAt=1;throw error;}};
+  await assert.rejects(h.session.save());assert.equal(h.session.recoveryOutcome,'unverifiable');assert.equal(h.tokenRequests,requests);
+  h.http.applyRules=original;const result=await h.session.resolveUncertainSave();assert.equal(result.outcome,'saved');assert.equal(h.tokenRequests,requests+1);assert.equal(h.storage.lifecycle,lifecycle);assert.deepEqual(h.session.ledger,expected);assert.equal(h.session.dirty,false);
  }finally{await h.close();}
 });

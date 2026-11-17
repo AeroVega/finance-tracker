@@ -1,3 +1,5 @@
+import { FULL_SNAPSHOT_BACKUP_LIMITS } from './full-snapshot-backup.mjs';
+import { fail } from './app-error.mjs';
 import {successfulActionSummary} from './success-metrics.mjs';
 import { createWorkspacePages } from './workspace-pages.mjs';
 import { createSyntheticFinancialPosition } from './synthetic-financial-position.mjs';
@@ -117,7 +119,7 @@ function refresh() {
   $('start-preview').disabled = busy || Boolean(lifecycle);
   $('welcome-panel').hidden = Boolean(session.ledger);
   $('overview-loaded').hidden = !session.ledger;
-  $('create-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(lifecycle) || session.unverified || (session.mode !== 'preview' && !freshYearLedger);
+  $('create-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(lifecycle) || session.backupPreview || session.unverified || (session.mode !== 'preview' && !freshYearLedger);
   $('create-ledger').textContent = session.mode === 'preview' ? 'Save preview to a new folder' : 'Create new synthetic year';
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false;
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
@@ -134,7 +136,7 @@ function refresh() {
   $('stage-balance').disabled = !editable || !$('balance-account').value || !$('balance-date').value || !$('balance-amount').value.trim() || !$('balance-source').value.trim();
   $('stage-reconciliation').disabled = !editable || !$('month-filter').value || !$('reconcile-opening').value || !$('reconcile-closing').value || !$('reconcile-source').value.trim();
   $('preview-year').disabled = busy || Boolean(lifecycle);
-  $('save-preview').disabled = busy || !configured || navigator.onLine === false || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.unverified;
+  $('save-preview').disabled = busy || !configured || navigator.onLine === false || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.backupPreview || session.unverified;
   $('save-preview').textContent = session.mode === 'preview' ? 'Save this preview to a new folder' : 'Save this preview to a new folder';
   $('save-ledger').disabled = busy || !session.canSave();
   $('undo-last-change').disabled = busy || !session.canUndo();
@@ -142,6 +144,25 @@ function refresh() {
   $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
   $('reopen-ledger').disabled = busy || !ready;
   $('release-ledger').disabled = busy || !lifecycle;
+  const exportReady = ready && session.mode === 'saved' && Boolean(session.ledger) && !session.unverified && !session.needsReopen && !session.pendingSave;
+  $('backup-draft-warning').hidden = !session.dirty;
+  $('export-backup').disabled = busy || !exportReady || session.dirty;
+  $('backup-save-first').hidden = !session.dirty;
+  $('backup-save-first').disabled = busy || !session.canSave();
+  $('backup-saved-only').hidden = !session.dirty;
+  $('backup-saved-only').disabled = busy || !exportReady || !session.dirty;
+  $('backup-encrypt').disabled = busy;
+  $('backup-password').disabled = busy || !$('backup-encrypt').checked;
+  $('backup-password-confirm').disabled = $('backup-password').disabled;
+  $('backup-file').disabled = busy || Boolean(lifecycle);
+  $('restore-password').disabled = busy || Boolean(lifecycle);
+  $('stage-backup').disabled = busy || Boolean(lifecycle) || !$('backup-file').files?.length;
+  $('restore-backup').hidden = !session.backupPreview;
+  $('restore-backup').disabled = busy || Boolean(lifecycle) || !session.backupPreview || session.dirty || session.mode !== 'preview' || session.unverified || !configured || navigator.onLine === false;
+  $('verify-save-outcome').hidden = !session.unverified && !session.recoveryOutcome;
+  $('verify-save-outcome').disabled = busy || navigator.onLine === false || !lifecycle || (!session.unverified && !['not-saved','different','unverifiable'].includes(session.recoveryOutcome)) || session.recoveryOutcome === 'checking';
+  $('retry-save').hidden = session.recoveryOutcome !== 'not-saved';
+  $('retry-save').disabled = busy || navigator.onLine === false || !lifecycle || session.recoveryOutcome !== 'not-saved';
   $('recover-ledger').hidden = lifecycle?.state !== 'recovery-required';
   $('recover-ledger').disabled = busy || navigator.onLine === false || lifecycle?.state !== 'recovery-required' || !lifecycle?.coordinator?.canWrite;
   $('recover-stale').hidden = lifecycle?.state !== 'stale-session';
@@ -163,7 +184,8 @@ function refresh() {
   if (timing) timing.textContent = operationStarted ? `${Math.floor((Date.now() - operationStarted) / 1000)}s elapsed` : '';
   let text;
   if (busy) text = 'Working and verifying. Keep this tab open.';
-  else if (session.unverified) text = 'Save unverified. Keep your draft here. Recover if offered, then reopen to check what reached Drive before retrying.';
+  else if (session.unverified || ['not-saved','different','unverifiable','checking'].includes(session.recoveryOutcome)) text = recoveryMessage();
+  else if (session.backupPreview) text = session.dirty ? 'Validated backup preview has staged edits. Undo or revert them before restoring the exact backup.' : 'Validated backup preview only. Choose Restore backup to new empty folder; existing folders will not change.';
   else if (session.mode === 'preview') text = session.dirty ? 'Staged local preview changes. Save this preview to a new empty synthetic folder when ready.' : 'Local preview only. Save this preview to a new empty synthetic folder when ready.';
   else if (session.dirty) text = `${session.stagedHistory.length} staged change(s). ${session.canSave() ? 'Save when you are ready.' : 'Saving is blocked. Reconnect and reopen before continuing.'}`;
   else if (session.needsReopen) text = 'Read-only last loaded records. Reconnect or reopen before editing.';
@@ -205,7 +227,8 @@ async function run(message, operation, formStatus = null, actionId = 'workspace-
   catch (error) {
     leaveBreadcrumb({e:'action.fail', actionId});
     const message = showDiagnostic(error, {surface: 'workspace', target: $('action-status'), actionId, page: pages.current});
-    announce(message + (session.dirty ? ' Your staged changes remain in this tab.' : ''), 'error');
+    const recoveryAction = ['save-ledger','retry-save','verify-save-outcome'].includes(actionId) || (actionId === 'backup-save-first' && session.recoveryOutcome !== 'saved');
+    announce(recoveryAction && session.recoveryOutcome ? recoveryMessage() : message + (session.dirty ? ' Your staged changes remain in this tab.' : ''), recoveryAction && session.recoveryOutcome === 'saved' ? 'success' : 'error');
   } finally {
     try { actionRequestWindow?.close(); } catch { /* observational only */ }
     actionRequestWindow = null;
@@ -215,8 +238,8 @@ const formStatuses = { 'stage-account':'account-form-status', 'stage-balance':'p
 const action = (id, message, callback) => $(id).addEventListener('click', () => {
   if (!$(id).disabled) return run(message, callback, formStatuses[id], id);
 });
-function confirmReplace() {
-  if ((!session.dirty && !hasUnfinishedDetail()) || window.confirm('Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.')) return true;
+function confirmReplace(message = 'Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.') {
+  if ((!session.dirty && !hasUnfinishedDetail()) || window.confirm(message)) return true;
   announce('Action cancelled. Your local draft is unchanged.');
   return false;
 }
@@ -722,6 +745,51 @@ action('save-preview', 'Saving this exact local preview into a newly selected, e
 });
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
   await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
+});
+function recoveryMessage() {
+  return ({checking:'Checking what reached Drive. Your draft remains in this tab; keep it open.',saved:'Your draft was found saved and verified. No retry is needed.', 'not-saved':'The save was conclusively not published. Your draft is preserved. Retry only with the explicit confirmation below.',different:'Drive contains different saved records. Your draft is preserved. Do not retry blindly; review the saved copy first.',unverifiable:'The save outcome could not be verified. Your draft is preserved. Recheck when connected; do not retry blindly.'})[session.recoveryOutcome] || 'Save unverified. Your draft remains in this tab. Verify the save outcome before retrying.';
+}
+async function downloadBackup({excludeStaged=false,saveFirst=false}={}) {
+  try {
+    const encrypted=$('backup-encrypt').checked, password=encrypted?$('backup-password').value:undefined;
+    if (encrypted && !password) fail('backup-password-required');
+    if (encrypted && password !== $('backup-password-confirm').value) fail('backup-password-mismatch');
+    if (!encrypted && !window.confirm('Download an unencrypted backup? This file contains readable synthetic financial data. Keep it private.')) { announce('Backup cancelled. No file was downloaded.'); return; }
+    if (saveFirst) await session.save();
+    const bytes=await session.exportBackup({password,excludeStaged});
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/json'}));
+    const link=node('a');link.href=url;link.download='finance-tracker-synthetic-backup.json';
+    document.body.append(link);
+    try {link.click();} finally {link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+    announce('Backup download requested. Check your downloads and keep the file safe.'+(excludeStaged?' Staged changes were excluded; your draft is unchanged.':''),'success');return true;
+  } finally {$('backup-password').value='';$('backup-password-confirm').value='';}
+}
+$('backup-encrypt').addEventListener('change',()=>{if (!$('backup-encrypt').checked) {$('backup-password').value='';$('backup-password-confirm').value='';}refresh();});
+$('backup-file').addEventListener('change',()=>{refresh();});
+action('export-backup','Verifying the saved copy and preparing a local backup.',()=>downloadBackup());
+action('backup-saved-only','Verifying the saved copy. Staged changes will be excluded.',()=>downloadBackup({excludeStaged:true}));
+action('backup-save-first','Saving changes before preparing a verified backup. Keep this tab open.',()=>downloadBackup({saveFirst:true}));
+action('stage-backup','Checking the local backup. No folder is selected or written.',async()=>{
+  try {
+    if (!confirmReplace('Replace this tab’s local draft with the validated backup preview? Unsaved edits will be discarded only after validation succeeds. Saved folders will not change.')) return;
+    const file=$('backup-file').files?.[0];if (!file) return;
+    if (!Number.isSafeInteger(file.size)||file.size<1||file.size>FULL_SNAPSHOT_BACKUP_LIMITS.archiveBytes) fail('byte-limit');
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    await session.importBackup(bytes,{password:$('restore-password').value || undefined});
+    $('backup-file').value='';render({reset:true});
+    announce('Backup validated and staged locally. Review the preview, then choose Restore backup to new empty folder. No Drive write has occurred.','success');return true;
+  } finally {$('restore-password').value='';}
+});
+action('restore-backup','Restoring the validated preview to a new empty synthetic folder and verifying it. Keep this tab open.',async()=>{
+  if (!confirmDiscardDetail()) return;
+  await session.restoreBackupToNewCopy();render({reset:true});announce('Backup restored to a new synthetic copy and independently verified. The original folder was not changed.','success');return true;
+});
+action('verify-save-outcome','Checking what reached Drive. Your draft stays in this tab.',async()=>{
+  await session.resolveUncertainSave();render();announce(recoveryMessage(),session.recoveryOutcome==='saved'?'success':'info');
+});
+action('retry-save','Preparing an explicitly confirmed retry of the verified unsaved draft.',async()=>{
+  if (!window.confirm('Drive verification found that this draft was not saved. Retry saving this exact draft now?')) {announce('Retry cancelled. Your draft is unchanged.');return;}
+  await session.retryUncertainSave({confirm:true});render();announce(recoveryMessage(),session.recoveryOutcome==='saved'?'success':'info');
 });
 action('reopen-ledger', 'Reopening and verifying saved records. No new financial commit is made.', async () => {
   if (!confirmReplace()) return;
