@@ -124,3 +124,50 @@ test('header recognition is conservative and never drops repeated-looking transa
   assert.equal(result.accounts[0].rows, 2);
   assert.equal(result.accounts[0].validRows, 2);
 });
+
+test('recognition shares decoded quoted headers and blank CSV records across providers', async () => {
+  for (const header of [wf, sofi, fidelity, 'DATE,DESCRIPTION,AMOUNT,STATUS', 'Date,Description,Type,Amount,Status']) {
+    for (const newline of ['\n', '\r\n', '\r']) {
+      const quoted = header.split(',').map(value => `"${value}"`).join(',');
+      const mixed = header.split(',').map((value, i) => i % 2 ? `"${value}"` : value).join(',');
+      for (const representation of [quoted, mixed]) {
+        const result = await previewProviderCsv({ bytes: bytes(`\uFEFF,,${newline}"",""${newline}${representation}${newline}`) });
+        assert.equal(result.status, 'preview');
+        assert.equal(result.rows.parsedRows, 0);
+      }
+    }
+  }
+});
+
+test('decoded header recognition does not accept reordered, duplicate, extra, or whitespace-altered names', async () => {
+  for (const header of ['"DESCRIPTION","DATE","AMOUNT","CHECK #","STATUS"', '"DATE","DATE","AMOUNT","CHECK #","STATUS"', '"DATE","DESCRIPTION","AMOUNT","CHECK #","STATUS","EXTRA"', '" DATE","DESCRIPTION","AMOUNT","CHECK #","STATUS"']) {
+    assert.equal((await previewProviderCsv({ bytes: bytes(header) })).status, 'unrecognized');
+  }
+  assert.equal((await previewProviderCsv({ bytes: bytes(` \n${wf}`) })).status, 'unrecognized');
+  assert.equal((await previewProviderCsv({ bytes: bytes('"DATE","DESCRIPTION') })).status, 'parse-error');
+});
+
+test('header-only Fidelity requires explicit selection and validates supplied mapping and coverage', async () => {
+  const ledger = registerAccount(createLedger(), { accountId, institutionId: 'fidelity', displayName: 'Invented Brokerage', currency: 'USD', accountType: 'brokerage' });
+  const before = structuredClone(ledger);
+  const input = { bytes: bytes(fidelity), ledger };
+  const noSelection = await previewProviderCsv(input);
+  assert.equal(noSelection.requirements.explicitAccountSelectionRequired, true);
+  assert.equal(noSelection.canonicalValidation.status, 'not-run');
+  const mapped = { ...input, accountMappings: { 'INVENTED-1': accountId } };
+  const noCoverage = await previewProviderCsv(mapped);
+  assert.deepEqual(noCoverage.requirements.declaredCoverage, [accountId]);
+  assert.equal(noCoverage.canonicalValidation.status, 'not-run');
+  for (const coverage of [{}, { start: '2026-01-01', end: '2026-01-31', provenance: 'observed' }]) {
+    assert.equal((await previewProviderCsv({ ...mapped, coverageByAccount: { [accountId]: coverage } })).canonicalValidation.reason, 'confirmed-coverage-required');
+  }
+  const coverage = { start: '2026-01-01', end: '2026-01-31', provenance: 'user-confirmed' };
+  const valid = await previewProviderCsv({ ...mapped, coverageByAccount: { [accountId]: coverage } });
+  assert.equal(valid.canonicalValidation.status, 'passed');
+  assert.equal(valid.canonicalValidation.runCount, 1);
+  assert.equal(valid.accounts[0].observedValidDateStart, null);
+  assert.equal(valid.requirements.explicitAccountSelectionRequired, false);
+  const conflict = await previewProviderCsv({ ...mapped, accountMappings: { 'INVENTED-1': accountId, 'INVENTED-2': accountId }, coverageByAccount: { [accountId]: coverage } });
+  assert.equal(conflict.canonicalValidation.reason, 'account-mapping-conflict');
+  assert.deepEqual(ledger, before);
+});

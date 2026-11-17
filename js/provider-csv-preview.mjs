@@ -1,33 +1,5 @@
-import { parseProviderCsv } from './provider-csv.mjs';
+import { parseRecognizedProviderCsv } from './provider-csv.mjs';
 import { prepareCanonicalImport } from './canonical-import.mjs';
-
-const FORMATS = [
-  { id: 'wells-fargo-csv-v1', headers: ['DATE', 'DESCRIPTION', 'AMOUNT', 'CHECK #', 'STATUS'], optional: ['CHECK #'] },
-  { id: 'sofi-csv-v1', headers: ['Date', 'Description', 'Type', 'Amount', 'Current balance', 'Status'], optional: ['Current balance'] },
-  { id: 'fidelity-accounts-history-csv-v1', headers: ['Run Date', 'Account', 'Account Number', 'Action', 'Symbol', 'Description', 'Type', 'Exchange Quantity', 'Exchange Currency', 'Currency', 'Price', 'Quantity', 'Exchange Rate', 'Commission', 'Fees', 'Accrued Interest', 'Amount', 'Settlement Date'] },
-];
-
-function detectFormat(bytes) {
-  if (!(bytes instanceof Uint8Array) && !(bytes instanceof ArrayBuffer)) {
-    return { status: 'unrecognized', reason: 'invalid-source-bytes', candidates: [] };
-  }
-  let text;
-  try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes instanceof ArrayBuffer ? bytes : bytes.slice());
-  } catch {
-    return { status: 'unrecognized', reason: 'invalid-source-encoding', candidates: [] };
-  }
-  if (text.includes('\0')) return { status: 'unrecognized', reason: 'invalid-source-encoding', candidates: [] };
-  const first = text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/).find(line => line.trim() !== '');
-  if (first === undefined) return { status: 'unrecognized', reason: 'empty-input', candidates: [] };
-  const matches = FORMATS.filter(format => {
-    const headers = first.split(',');
-    const exact = values => values.length === headers.length && values.every((value, index) => value === headers[index]);
-    return exact(format.headers) || (format.optional?.length === 1 && exact(format.headers.filter(value => value !== format.optional[0])));
-  }).map(format => format.id);
-  if (matches.length === 1) return { status: 'recognized', sourceFormat: matches[0], candidates: matches };
-  return { status: matches.length > 1 ? 'ambiguous' : 'unrecognized', reason: matches.length > 1 ? 'multiple-supported-header-matches' : 'unsupported-header', candidates: matches };
-}
 
 function summarize(records, sourceAccountKeys) {
   const groups = new Map(sourceAccountKeys.map(key => [key, { sourceAccountKey: key, rows: 0, validRows: 0, rowsRequiringReview: 0, validDateRows: 0, observedValidDateStart: null, observedValidDateEnd: null }]));
@@ -58,36 +30,29 @@ function summarize(records, sourceAccountKeys) {
  * @returns {Promise<object>} Preview summary and optional canonical validation result.
  */
 export async function previewProviderCsv({ bytes, ledger, accountMappings, coverageByAccount } = {}) {
-  const detection = detectFormat(bytes);
+  let detection;
+  try {
+    detection = await parseRecognizedProviderCsv({ bytes });
+  } catch (error) {
+    const reason = error?.code ?? 'provider-csv-parse-failed';
+    const unrecognized = ['invalid-source-bytes', 'invalid-source-encoding', 'missing-csv-header'].includes(reason);
+    return {
+      status: unrecognized ? 'unrecognized' : 'parse-error',
+      reason: reason === 'missing-csv-header' ? 'empty-input' : reason,
+      candidates: [], rows: null, accounts: [],
+      requirements: { accountMappings: [], sourceAccountIdentityRows: [], declaredCoverage: [], note: 'Input did not produce a supported parsed file.' },
+      canonicalValidation: { status: 'not-run', reason: unrecognized ? 'format-not-recognized' : 'parse-failed' },
+    };
+  }
   if (detection.status !== 'recognized') {
     return {
-      status: detection.status,
-      reason: detection.reason,
-      candidates: detection.candidates,
-      rows: null,
-      accounts: [],
+      ...detection, rows: null, accounts: [],
       requirements: { accountMappings: [], sourceAccountIdentityRows: [], declaredCoverage: [], note: 'No parser was selected; input was not guessed.' },
       canonicalValidation: { status: 'not-run', reason: 'format-not-recognized' },
     };
   }
-
-  let parsed;
-  try {
-    parsed = await parseProviderCsv({ bytes, sourceFormat: detection.sourceFormat });
-  } catch (error) {
-    return {
-      status: 'parse-error',
-      sourceFormat: detection.sourceFormat,
-      reason: error?.code ?? 'provider-csv-parse-failed',
-      candidates: [detection.sourceFormat],
-      rows: null,
-      accounts: [],
-      requirements: { accountMappings: [], sourceAccountIdentityRows: [], declaredCoverage: [], note: 'The recognized format failed the existing provider parser.' },
-      canonicalValidation: { status: 'not-run', reason: 'parse-failed' },
-    };
-  }
-
-  const sourceKeys = [...new Set([...parsed.sourceAccountKeys, ...parsed.records.map(record => record.sourceAccountKey).filter(key => key !== null)])];
+  const parsed = detection.parsed;
+  const sourceKeys = [...new Set([...parsed.sourceAccountKeys, ...parsed.records.map(record => record.sourceAccountKey).filter(key => key !== null), ...(parsed.records.length === 0 ? Object.keys(accountMappings ?? {}) : [])])];
   const accounts = summarize(parsed.records, sourceKeys);
   const sourceAccountIdentityRows = parsed.records.filter(record => record.sourceAccountKey === null).map(record => record.rowOrdinal);
   const missingAccountMappings = sourceKeys.filter(key => !accountMappings?.[key]);
@@ -123,6 +88,7 @@ export async function previewProviderCsv({ bytes, ledger, accountMappings, cover
     accounts,
     requirements: {
       accountMappings: missingAccountMappings,
+      explicitAccountSelectionRequired: parsed.records.length === 0 && sourceKeys.length === 0,
       sourceAccountIdentityRows,
       declaredCoverage: missingCoverage,
       note: 'Observed valid dates describe rows present in this file only; they do not establish complete or declared coverage.',

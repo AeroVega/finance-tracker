@@ -33,6 +33,7 @@ The function returns a preview object. It does not mutate the supplied ledger, p
 - `rows`: source row count, parsed row count, parser-ignored rows, valid rows, and rows requiring review.
 - `accounts[]`: source account key, row counts, review count, valid-date row count, and min/max valid effective date observed for that source account.
 - `requirements.accountMappings[]`: source account keys that still need explicit mapping.
+- `requirements.explicitAccountSelectionRequired`: true when a recognized empty file provides no source account identity and the caller has not explicitly selected one. Header-only Fidelity files honor caller-supplied mapping keys, then require confirmed coverage for those accounts. No account is inferred.
 - `requirements.sourceAccountIdentityRows[]`: row ordinals whose source account identity is missing; these rows cannot be mapped until their source evidence is resolved.
 - `requirements.declaredCoverage[]`: mapped canonical account IDs that still need declared coverage.
 - `canonicalValidation`: `not-run`, `passed`, or `failed`. It is run only when a ledger, all required mappings, and coverage declarations are supplied. It calls the existing `prepareCanonicalImport` validation/reconciliation path and discards the proposed ledger.
@@ -41,7 +42,7 @@ For bank formats the source account key is `default`; it still requires explicit
 
 ## Recognition and parsing
 
-The module checks the first nonblank header line against the exact ordered headers and documented optional-column variants already accepted by `provider-csv.mjs`. It selects one format and invokes `parseProviderCsv` once. It does not try each provider parser in turn.
+The module uses `parseRecognizedProviderCsv` in `provider-csv.mjs`. Recognition and explicit-format parsing share one CSV decode and tokenization path, exact ordered header matching, and row conversion. CSV quoting and blank records are interpreted identically, including comma-only and quoted-empty preambles. It does not try each provider parser in turn.
 
 Supported identifiers:
 
@@ -62,7 +63,7 @@ Repeated-looking rows are counted individually. The preview does not deduplicate
 ## Limitations
 
 - Header recognition is intentionally narrow: exact ordered names only, with only the optional columns supported by the current parser. It is not a general CSV dialect or provider discovery engine.
-- The header detector uses the first nonblank physical line. The existing parser remains responsible for full CSV syntax and Fidelity's blank preamble handling.
+- Recognition uses the first nonblank decoded CSV record. Whitespace-only cells are not blank, matching the existing parser. Malformed CSV syntax returns `parse-error`, even when no supported header can yet be established.
 - No real financial files or live provider exports were used. The supported variants are the synthetic-tested variants documented by the existing parser and tests.
 - Account mapping and user/source-confirmed declared coverage are not guessed.
 - This module is not connected to UI, Drive, storage, recovery, or production import workflows.

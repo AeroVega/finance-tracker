@@ -66,8 +66,25 @@ function date(text, mode) {
 const blank = row => row.cells.every(value => value === '');
 const optional = value => value === undefined || value === '' ? null : value;
 
-export async function parseProviderCsv({ bytes, sourceFormat } = {}) {
-  if (!Object.hasOwn(HEADERS, sourceFormat)) fail('unsupported-source-format');
+export function parseProviderCsv(options = {}) {
+  return parseCsv(options, false);
+}
+
+// Recognition and explicit-format parsing share the same decoded CSV records.
+// This preserves CSV quoting/blank-record semantics without parsing per provider.
+export function parseRecognizedProviderCsv({ bytes } = {}) {
+  return parseCsv({ bytes }, true);
+}
+
+function matchesHeader(headers, sourceFormat) {
+  const expected = HEADERS[sourceFormat];
+  const optionalHeader = sourceFormat === 'wells-fargo-csv-v1' ? 'CHECK #' : sourceFormat === 'sofi-csv-v1' ? 'Current balance' : null;
+  const matches = candidate => candidate.length === headers.length && candidate.every((v, i) => v === headers[i]);
+  return matches(expected) || Boolean(optionalHeader && matches(expected.filter(v => v !== optionalHeader)));
+}
+
+async function parseCsv({ bytes, sourceFormat }, recognize) {
+  if (!recognize && !Object.hasOwn(HEADERS, sourceFormat)) fail('unsupported-source-format');
   if (!(bytes instanceof Uint8Array) && !(bytes instanceof ArrayBuffer)) fail('invalid-source-bytes');
   const data = new Uint8Array(bytes instanceof ArrayBuffer ? bytes.slice(0) : bytes.slice());
   let text;
@@ -79,10 +96,11 @@ export async function parseProviderCsv({ bytes, sourceFormat } = {}) {
   // accepting an empty download or a wrong export as successful history.
   if (headerIndex < 0) fail('missing-csv-header');
   const headers = parsed[headerIndex].cells;
-  const expected = HEADERS[sourceFormat];
-  const optionalHeader = sourceFormat === 'wells-fargo-csv-v1' ? 'CHECK #' : sourceFormat === 'sofi-csv-v1' ? 'Current balance' : null;
-  const matches = candidate => candidate.length === headers.length && candidate.every((v, i) => v === headers[i]);
-  if (!matches(expected) && !(optionalHeader && matches(expected.filter(v => v !== optionalHeader)))) fail('unsupported-csv-header');
+  if (recognize) {
+    const candidates = Object.keys(HEADERS).filter(format => matchesHeader(headers, format));
+    if (candidates.length !== 1) return { status: candidates.length ? 'ambiguous' : 'unrecognized', reason: candidates.length ? 'multiple-supported-header-matches' : 'unsupported-header', candidates };
+    sourceFormat = candidates[0];
+  } else if (!matchesHeader(headers, sourceFormat)) fail('unsupported-csv-header');
   const fidelity = sourceFormat === 'fidelity-accounts-history-csv-v1';
   const wf = sourceFormat === 'wells-fargo-csv-v1';
   let ignoredCount = headerIndex + 1;
@@ -152,6 +170,7 @@ export async function parseProviderCsv({ bytes, sourceFormat } = {}) {
   await flush();
   const digest = await globalThis.crypto.subtle.digest('SHA-256', data);
   const fileFingerprint = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-  return { sourceFormat, institutionId: INSTITUTIONS[sourceFormat], fileFingerprint, rowsSeen: parsed.length, ignoredCount,
+  const result = { sourceFormat, institutionId: INSTITUTIONS[sourceFormat], fileFingerprint, rowsSeen: parsed.length, ignoredCount,
     records, sourceAccountKeys: fidelity ? [...new Set(records.map(r => r.sourceAccountKey).filter(v => v !== null))] : ['default'], sourceCoverage: null };
+  return recognize ? { status: 'recognized', parsed: result } : result;
 }
