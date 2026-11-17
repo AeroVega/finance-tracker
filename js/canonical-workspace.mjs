@@ -121,7 +121,7 @@ function refresh() {
   $('overview-loaded').hidden = !session.ledger;
   $('create-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(lifecycle) || session.backupPreview || session.unverified || (session.mode !== 'preview' && !freshYearLedger);
   $('create-ledger').textContent = session.mode === 'preview' ? 'Save preview to a new folder' : 'Create new synthetic year';
-  $('open-ledger').disabled = busy || !configured || navigator.onLine === false;
+  $('open-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(session.restoreExpected && session.restoreFolderId);
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
   $('preview-position').disabled = busy || Boolean(lifecycle);
   $('position-date').disabled = busy || !session.ledger;
@@ -143,7 +143,7 @@ function refresh() {
   $('revert-all-changes').disabled = busy || !session.canRevertAll();
   $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
   $('reopen-ledger').disabled = busy || !ready;
-  $('release-ledger').disabled = busy || !lifecycle;
+  $('release-ledger').disabled = busy || !lifecycle || Boolean(session.restoreExpected && session.restoreFolderId);
   const exportReady = ready && session.mode === 'saved' && Boolean(session.ledger) && !session.unverified && !session.needsReopen && !session.pendingSave;
   $('backup-draft-warning').hidden = !session.dirty;
   $('export-backup').disabled = busy || !exportReady || session.dirty;

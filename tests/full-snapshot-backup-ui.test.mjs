@@ -80,3 +80,9 @@ test('different saved contents never offer retry and encryption cannot silently 
 test('mismatched backup password cannot save or export and clears both fields',async()=>{
  const h=await setup();await h.saved();h.page.get('backup-encrypt').checked=true;await h.page.get('backup-encrypt').emit('change');h.page.get('backup-password').value='invented one';h.page.get('backup-password-confirm').value='invented two';await h.page.click('export-backup');assert.equal(h.calls.exports.length,0);assert.equal(h.page.get('backup-password').value,'');assert.equal(h.page.get('backup-password-confirm').value,'');
 });
+
+test('outstanding restore verification blocks folder switching and release but allows verification',async()=>{
+ const h=await setup();await h.saved({unverified:true});h.session.restoreExpected=structuredClone(h.session.ledger);h.session.restoreFolderId='invented-target';h.session.recoveryOutcome='unverifiable';await h.refresh();
+ assert.equal(h.page.get('open-ledger').disabled,true);assert.equal(h.page.get('release-ledger').disabled,true);assert.equal(h.page.get('reopen-ledger').disabled,false);assert.equal(h.page.get('verify-save-outcome').disabled,false);
+ h.session.restoreExpected=null;h.session.unverified=false;h.session.recoveryOutcome=null;await h.refresh();assert.equal(h.page.get('open-ledger').disabled,false);assert.equal(h.page.get('release-ledger').disabled,false);
+});

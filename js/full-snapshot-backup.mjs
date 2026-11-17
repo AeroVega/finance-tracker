@@ -20,14 +20,14 @@ function shape(value,keys){
 }
 function canonical(value){try{return canonicalizeJcs(value);}catch(cause){fail('invalid-json',{cause});}}
 function admitText(text,max){if(utf8ByteLength(text)>max)fail('byte-limit');}
-function parse(text,max){
+function parse(text,max,maxDepth=FULL_SNAPSHOT_BACKUP_LIMITS.depth){
  admitText(text,max);
  // Bound nesting before JSON.parse and recursive canonical/domain validation.
  let depth=0,string=false,escape=false;
  for(const char of text){
   if(string){if(escape)escape=false;else if(char==='\\')escape=true;else if(char==='"')string=false;}
   else if(char==='"')string=true;
-  else if(char==='{'||char==='['){if(++depth>FULL_SNAPSHOT_BACKUP_LIMITS.depth)fail('byte-limit');}
+  else if(char==='{'||char==='['){if(++depth>maxDepth)fail('byte-limit');}
   else if(char==='}'||char===']')depth--;
  }
  let value;try{value=JSON.parse(text);}catch(cause){fail('invalid-json',{cause});}
@@ -118,7 +118,9 @@ export async function encodeFullSnapshotBackup(source,{cryptoImpl=globalThis.cry
  * or password can prove a supplied file's external origin or missing revisions.
  */
 export async function decodeFullSnapshotBackup(input,{cryptoImpl=globalThis.crypto,password}={}){
- const bytes=own(input),value=parse(textOf(bytes),FULL_SNAPSHOT_BACKUP_LIMITS.archiveBytes);checkHeader(value);
+ // The plaintext envelope adds one container outside the bounded ledger.
+ // Encrypted envelope shape is independently restricted to header/KDF scalars.
+ const bytes=own(input),value=parse(textOf(bytes),FULL_SNAPSHOT_BACKUP_LIMITS.archiveBytes,FULL_SNAPSHOT_BACKUP_LIMITS.depth+1);checkHeader(value);
  if(value.protection===PLAIN){if(password!==undefined)fail('unsupported-archive');if(bytes.length>FULL_SNAPSHOT_BACKUP_LIMITS.plaintextBytes)fail('byte-limit');return decodePlain(value,cryptoImpl);}
  shape(value,['format','version','syntheticOnly','protection','kdf','iv','ciphertext']);
  shape(value.kdf,['name','hash','iterations','salt']);
@@ -130,6 +132,6 @@ export async function decodeFullSnapshotBackup(input,{cryptoImpl=globalThis.cryp
  const key=await keyFor(password,salt,cryptoImpl);let clear;
  try{clear=new Uint8Array(await cryptoImpl.subtle.decrypt({name:'AES-GCM',iv,additionalData:enc.encode(canonical(metadata)),tagLength:128},key,ciphertext));}
  catch(cause){fail('backup-decryption-failed',{cause});}
- try{return await decodePlain(parse(textOf(clear),FULL_SNAPSHOT_BACKUP_LIMITS.plaintextBytes),cryptoImpl);}
+ try{return await decodePlain(parse(textOf(clear),FULL_SNAPSHOT_BACKUP_LIMITS.plaintextBytes,FULL_SNAPSHOT_BACKUP_LIMITS.depth+1),cryptoImpl);}
  finally{clear.fill(0);}
 }

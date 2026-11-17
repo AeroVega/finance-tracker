@@ -106,3 +106,14 @@ test('encrypted export interoperates with independent Node crypto derivation and
  assert.equal(clear.toString('utf8'),canonicalizeJcs(decoded));
  key.fill(0);clear.fill(0);
 });
+
+for(const password of [undefined,'Invented depth-boundary password'])test(`${password===undefined?'plaintext':'encrypted'} backup roundtrips maximum ledger depth without spending it on the archive wrapper`,async()=>{
+ const source=empty();let extension={};
+ // Root ledger + extension objects consume exactly the public ledger depth.
+ for(let i=0;i<LIMITS.depth-2;i++)extension={nested:extension};
+ source.inventedExtension=extension;
+ const bytes=await encodeFullSnapshotBackup(source,{...options,password});
+ assert.deepEqual(await decodeFullSnapshotBackup(bytes,{...options,password}),source);
+ source.inventedExtension={nested:extension};
+ await assert.rejects(encodeFullSnapshotBackup(source,{...options,password}),{code:'byte-limit'});
+});

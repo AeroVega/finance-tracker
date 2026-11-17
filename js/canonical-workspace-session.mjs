@@ -58,6 +58,8 @@ export class CanonicalWorkspaceSession {
 
   async loadVerified() {
     this.#assertNoUnknownPublication();
+    // An ordinary reopen must not waive the stronger restore acceptance gate.
+    if(this.restoreExpected&&this.restoreFolderId)return this.#verifyRestoredCopy();
     this.invalidate();
     if (!this.ready()) fail('reconnect-required');
     const lifecycle = this.storage.lifecycle;
@@ -79,6 +81,7 @@ export class CanonicalWorkspaceSession {
   }
 
   async open() {
+    if(this.restoreExpected&&this.restoreFolderId)fail('recovery-required');
     this.#assertNoUnknownPublication();
     return this.operation(async () => {
       this.invalidate();
@@ -360,6 +363,7 @@ export class CanonicalWorkspaceSession {
   }
 
   async release() {
+    if(this.restoreExpected&&this.restoreFolderId)fail('recovery-required');
     this.#assertNoUnknownPublication();
     return this.operation(async () => {
       this.invalidate();

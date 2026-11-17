@@ -44,3 +44,35 @@ One representative synthetic special-operation run (slow profile assumptions, no
 ## Candidate verification (2026-11-17)
 
 The retained extended Node suite passed 915/915, with zero failures, cancellations or skips. Independent codec, recovery-outcome and restore review found no remaining blockers after correcting and regressing expired authorization during final restore verification and changed-destination refusal. Crypto compatibility was checked independently through Node's classic PBKDF2/AES-GCM APIs in addition to Web Crypto round trips. Exact-head remote CI and the bounded live synthetic check remain separate gates. No Apple Safari, OS download completion, mobile KDF/memory, or live provider acceptance is claimed.
+
+## Deeper resilience review (2026-11-17)
+
+The engineering-workflows adversarial-review, verification-and-testing,
+safe-execution-and-migrations and measurement-and-benchmarks workflows were
+applied to the integrated PR candidate. Formal-verification guidance informed
+the state-transition review; no formal model checker or proof was run.
+
+Boundary regressions exposed two gaps beyond the previously passing suite:
+a maximum-depth valid ledger exported but its extra archive wrapper prevented
+decoding, and an ordinary reopen could waive incomplete independent restore
+verification. The corrections preserve the ledger depth/size bounds and keep
+restore acceptance tied to a fresh-instance comparison. Neither adds requests
+to ordinary successful open/save.
+
+A scratch negative control removed the unknown-publication guard; the delayed
+PATCH regression then failed because it incorrectly classified the operation
+as not saved. This establishes sensitivity of that regression to this specific
+defect, not a proof covering every remote-write ordering. The unchanged
+recovery suite passed 15/15 before these boundary corrections. A repeated
+provider simulation retained the normal request counts above; modeled service
+time is still not elapsed Google/Safari performance. Live synthetic acceptance,
+Apple-device resource limits and OS download completion remain outstanding.
+
+After these corrections, the integrated extended suite passed **934/934** on
+Node 24.22.1 in 159.100 seconds, with zero failures, skips or cancellations.
+Independent cross-review cleared both corrections, including direct rejection
+of a checksum-correct over-depth archive and preservation of prewrite
+cancellation/release behavior. Syntax, generated error references, documentation
+links/contracts and whitespace checks passed. The local Chromium launch was
+attempted again and exited before opening a page; browser acceptance remains
+unverified. Exact-head remote CI is recorded in the PR conversation separately.
