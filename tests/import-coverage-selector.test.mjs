@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {createImportCoverageModel,evaluateImportCoverage,isRealIsoDate} from "../components/import-coverage-selector.mjs";
+import {createImportCoverageModel,evaluateImportCoverage,isRealIsoDate,mountImportCoverageSelector} from "../components/import-coverage-selector.mjs";
+import {AppError} from "../js/app-error.mjs";
 test("real Gregorian dates and leap centuries",()=>{assert.equal(isRealIsoDate("2024-02-29"),true);assert.equal(isRealIsoDate("2000-02-29"),true);assert.equal(isRealIsoDate("1900-02-29"),false);assert.equal(isRealIsoDate("2023-02-29"),false);assert.equal(isRealIsoDate("2024-04-31"),false);assert.equal(isRealIsoDate("0000-01-01"),false);});
 test("invalid and reversed declarations require review",()=>{for(const [start,end,code] of [["","2024-01-31","invalid-start-date"],["2024-02-30","2024-03-01","invalid-start-date"],["2024-01-01","2024-02-30","invalid-end-date"],["2024-02-02","2024-02-01","reversed-date-range"]])assert.ok(evaluateImportCoverage({start,end,observedDates:["2024-01-15"]}).errors.some(x=>x.code===code));});
 test("inclusive boundaries are valid",()=>{const r=evaluateImportCoverage({start:"2024-01-01",end:"2024-01-31",observedDates:["2024-01-01","2024-01-31"]});assert.equal(r.valid,true);assert.deepEqual(r.outside,[]);});
@@ -36,3 +37,67 @@ test("calendar keyboard navigation moves focus and keeps calendar controls acces
 test("narrow layout and touch target rules are present",()=>{const css=readFileSync(new URL("../components/import-coverage-selector.css",import.meta.url),"utf8");assert.match(css,/min-height:44px/);assert.match(css,/@media\(max-width:620px\)/);assert.match(css,/grid-template-columns:1fr/);});
 
 test("editing metadata suggestions records a user declaration",()=>{const m=createImportCoverageModel({observedDates:["2024-01-01"],sourceCoverage:{start:"2024-01-01",end:"2024-01-31"}});m.setDates({end:"2024-01-30"});assert.equal(m.confirm().coverage.provenance.coverageSource,"user-declaration");});
+
+
+function clickButton(container,dataset) {
+  const button={dataset,closest(){return this;}};
+  container.dispatch("click",{target:button});
+}
+function calendarSection(html,which) {
+  const match=html.match(new RegExp("<section class='ics-calendar' aria-label='"+which+" date calendar'>([\\\\s\\\\S]*?)</section>"));
+  assert.ok(match,"missing "+which+" calendar");
+  return match[1];
+}
+test("rendered reset restores both independently navigated calendar views",()=>{
+  const container=new TestContainer();
+  const selector=mountImportCoverageSelector({container,observedDates:["2024-02-01"],sourceCoverage:{start:"2024-02-01",end:"2024-02-29"}});
+  clickButton(container,{month:"start",step:"1"});
+  clickButton(container,{month:"end",step:"-1"});
+  assert.match(calendarSection(container.innerHTML,"start"),/March 2024/);
+  assert.match(calendarSection(container.innerHTML,"end"),/January 2024/);
+  clickButton(container,{action:"reset"});
+  assert.match(calendarSection(container.innerHTML,"start"),/February 2024/);
+  assert.match(calendarSection(container.innerHTML,"end"),/February 2024/);
+  assert.match(calendarSection(container.innerHTML,"start"),/data-date='2024-02-01'/);
+  assert.match(calendarSection(container.innerHTML,"end"),/data-date='2024-02-29'/);
+  clickButton(container,{month:"start",step:"1"});
+  clickButton(container,{month:"end",step:"-1"});
+  selector.reset();
+  assert.match(calendarSection(container.innerHTML,"start"),/February 2024/);
+  assert.match(calendarSection(container.innerHTML,"end"),/February 2024/);
+  selector.destroy();
+});
+test("mounted selector notifies caller when confirmation is invalidated by edit, reset, or context replacement",()=>{
+  const container=new TestContainer(),events=[];
+  let accepted=null;
+  const selector=mountImportCoverageSelector({
+    container,observedDates:["2024-01-01"],sourceCoverage:{start:"2024-01-01",end:"2024-01-31"},
+    onConfirm:result=>{accepted=result;},
+    onInvalidate:event=>{events.push(event);accepted=null;}
+  });
+  clickButton(container,{action:"confirm"});
+  assert.equal(accepted.status,"confirmed");
+  container.dispatch("change",{target:{dataset:{field:"end"},value:"2024-01-30"}});
+  assert.equal(accepted,null);
+  assert.equal(events.at(-1).reason,"date-edit");
+  assert.equal(events.at(-1).previous.coverage.end,"2024-01-31");
+  clickButton(container,{action:"confirm"});
+  assert.equal(accepted.status,"confirmed");
+  clickButton(container,{action:"reset"});
+  assert.equal(accepted,null);
+  assert.equal(events.at(-1).reason,"reset");
+  clickButton(container,{action:"confirm"});
+  assert.equal(accepted.status,"confirmed");
+  selector.updateContext({observedDates:["2024-02-01"],sourceCoverage:{start:"2024-02-01",end:"2024-02-29"},contextKey:"new-synthetic-file"});
+  assert.equal(accepted,null);
+  assert.equal(events.at(-1).reason,"context-replaced");
+  assert.equal(events.length,3);
+  selector.destroy();
+});
+test("component validation and lifecycle errors use registered AppError codes",()=>{
+  assert.throws(()=>evaluateImportCoverage({observedDates:null}),error=>error instanceof AppError&&error.code==="invalid-options");
+  const model=createImportCoverageModel({observedDates:["2024-01-01"]});
+  model.destroy();
+  assert.throws(()=>model.getState(),error=>error instanceof AppError&&error.code==="unknown");
+  assert.throws(()=>mountImportCoverageSelector({container:null}),error=>error instanceof AppError&&error.code==="invalid-options");
+});
