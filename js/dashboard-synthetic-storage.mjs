@@ -83,16 +83,28 @@ async function loadConfig() {
 
 function requestToken(clientId) {
   return new Promise((resolve, reject) => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: DRIVE_SCOPE,
-      callback: (response) => {
-        if (response?.error || !response?.access_token) return reject(new Error("Google did not authorize Drive access."));
-        resolve(response);
-      },
-      error_callback: () => reject(new Error("Google authorization was closed or blocked."))
-    });
-    client.requestAccessToken();
+    // Provider payloads may contain arbitrary text. Classify only documented
+    // discriminators; never retain the payload or copy it into diagnostics.
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: DRIVE_SCOPE,
+        callback: (response) => {
+          if (response?.error === 'access_denied') return reject(new AppError('authorization-cancelled'));
+          if (response?.error || typeof response?.access_token !== 'string' || !response.access_token.trim())
+            return reject(new AppError('authorization-failed'));
+          resolve(response);
+        },
+        error_callback: (error) => {
+          if (error?.type === 'popup_closed') return reject(new AppError('authorization-cancelled'));
+          if (error?.type === 'popup_failed_to_open') return reject(new AppError('authorization-popup-blocked'));
+          reject(new AppError('authorization-failed'));
+        }
+      });
+      client.requestAccessToken();
+    } catch {
+      reject(new AppError('authorization-failed'));
+    }
   });
 }
 

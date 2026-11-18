@@ -15,14 +15,14 @@ async function setup({oauthFailure=null,pickerAction=null}={}){
  class View{setIncludeFolders(){return this;}setSelectFolderEnabled(){return this;}setMimeTypes(){return this;}}
  class Picker{addView(){return this;}setOAuthToken(){return this;}setDeveloperKey(){return this;}setAppId(){return this;}setOrigin(){return this;}setTitle(){return this;}setCallback(cb){this.cb=cb;return this;}build(){return this;}setVisible(){queueMicrotask(()=>this.cb(pickerAction?{action:pickerAction}:cancel?{action:'cancel'}:{action:'picked',docs:[{id:http.folderId}]}));}}
  const accountPins=new Map();
- globalThis.window={localStorage:{getItem:key=>accountPins.get(key)??null,setItem:(key,value)=>accountPins.set(key,value)},location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback,error_callback})=>({requestAccessToken:()=>{tokenRequests++;if(oauthFailure==='access_denied')callback({error:oauthFailure});else if(oauthFailure)error_callback({type:oauthFailure});else callback({access_token:'invented-test-token',expires_in:3600});}})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel',ERROR:'error',LOADED:'loaded'}}}};
+ globalThis.window={localStorage:{getItem:key=>accountPins.get(key)??null,setItem:(key,value)=>accountPins.set(key,value)},location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback,error_callback})=>({requestAccessToken:()=>{tokenRequests++;if(oauthFailure==='throw')throw new Error('invented-private-provider-secret');else if(oauthFailure==='missing_token')callback({});else if(oauthFailure==='callback_unknown')callback({error:'invented-private-provider-secret'});else if(oauthFailure==='access_denied')callback({error:oauthFailure});else if(oauthFailure)error_callback({type:oauthFailure});else callback({access_token:'invented-test-token',expires_in:3600});}})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel',ERROR:'error',LOADED:'loaded'}}}};
  globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):http.fetch(url,options);
  const imports={};const source=await readFile(new URL('../js/canonical-workspace.mjs',import.meta.url),'utf8');
  for(const match of source.matchAll(/^import \{([^}]+)\} from '([^']+)';$/gm)){const module=await import(new URL('../js/'+match[2],import.meta.url));for(const name of match[1].split(',').map(x=>x.trim()))imports[name]=module[name];}
  imports.DashboardSyntheticStorage=class extends DashboardSyntheticStorage{constructor(options){super(options);storage=this;}async prepare(){this.config={clientId:'invented',apiKey:'invented',projectNumber:'1'};return this.config;}};
  imports.CanonicalWorkspaceSession=class extends CanonicalWorkspaceSession{constructor(options){super(options);session=this;}};
  const page=await pageController('canonical-workspace',imports,{htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs'});
- return {page,http,get tokenRequests(){return tokenRequests;},get storage(){return storage;},get session(){return session;},cancel(value){cancel=value;},async close(){http.beforeResponse=null;http.reboot();await storage.lifecycle?.release().catch(()=>{});storage.lifecycle?.coordinator.heartbeatStop?.();globalThis.window=previous.window;globalThis.fetch=previous.fetch;}};
+ return {page,http,get tokenRequests(){return tokenRequests;},get storage(){return storage;},get session(){return session;},cancel(value){cancel=value;},failOAuth(value){oauthFailure=value;},async close(){http.beforeResponse=null;http.reboot();await storage.lifecycle?.release().catch(()=>{});storage.lifecycle?.coordinator.heartbeatStop?.();globalThis.window=previous.window;globalThis.fetch=previous.fetch;}};
 }
 
 for (const oauthFailure of ['access_denied','popup_failed_to_open','popup_closed']) test('create handles OAuth '+oauthFailure+' without writes or stuck busy state', async()=>{
@@ -91,5 +91,30 @@ test('explicit outcome recheck refreshes expired authorization without changing 
   const original=h.http.applyRules.bind(h.http);h.http.applyRules=async(...args)=>{try{return await original(...args);}catch(error){h.storage.tokenExpiresAt=1;throw error;}};
   await assert.rejects(h.session.save());assert.equal(h.session.recoveryOutcome,'unverifiable');assert.equal(h.tokenRequests,requests);
   h.http.applyRules=original;const result=await h.session.resolveUncertainSave();assert.equal(result.outcome,'saved');assert.equal(h.tokenRequests,requests+1);assert.equal(h.storage.lifecycle,lifecycle);assert.deepEqual(h.session.ledger,expected);assert.equal(h.session.dirty,false);
+ }finally{await h.close();}
+});
+
+
+for (const [failure,code,message] of [
+ ['popup_closed','authorization-cancelled',/cancelled/],
+ ['access_denied','authorization-cancelled',/cancelled/],
+ ['popup_failed_to_open','authorization-popup-blocked',/popup.*open/i],
+ ['invented-private-provider-secret','authorization-failed',/could not complete/i],
+ ['callback_unknown','authorization-failed',/could not complete/i],
+ ['missing_token','authorization-failed',/could not complete/i],
+ ['throw','authorization-failed',/could not complete/i]
+]) test(`OAuth ${failure} is a safe typed state and preserves an existing writable draft`,async()=>{
+ const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented',rationale:'Invented retained edit'});
+  const draft=h.session.ledger,lifecycle=h.storage.lifecycle,folder=h.storage.folderId,token=h.storage.accessToken,expires=h.storage.tokenExpiresAt,mutations=h.http.mutations;
+  h.failOAuth(failure);
+  await assert.rejects(h.session.open(),error=>error.name==='AppError'&&error.code===code);
+  await h.page.click('open-ledger');
+  assert.match(h.page.get('action-status').textContent,message);
+  assert.doesNotMatch(h.page.get('action-status').textContent,/invented-private-provider-secret|unexpected/i);
+  assert.equal(h.session.ledger,draft);assert.equal(h.storage.lifecycle,lifecycle);assert.equal(h.storage.folderId,folder);
+  assert.equal(h.storage.accessToken,token);assert.equal(h.storage.tokenExpiresAt,expires);
+  assert.equal(h.http.mutations,mutations);assert.equal(h.session.canSave(),true);assert.equal(h.session.busy,false);assert.equal(h.storage.busy,false);
  }finally{await h.close();}
 });
