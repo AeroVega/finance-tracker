@@ -35,7 +35,7 @@ const safeError = error => ({
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, onStaged = () => {} }) {
   if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function') fail('invalid-options');
   const document = root.ownerDocument;
-  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null };
+  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true };
   root.replaceChildren();
   const heading = element(document, 'h3', {}, 'Import a supported CSV');
   const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then choose Save changes.');
@@ -56,6 +56,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
 
   function invalidate(message = 'Import confirmation cleared. Review the file and coverage again.') {
     state.context++;
+    state.contextInvalidated = true;
     for (const mapping of state.mappings.values()) mapping.confirmed.checked = false;
     stage.disabled = true;
     discrepancy.textContent = message;
@@ -190,6 +191,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
       if (!preview.parsed) fail('invalid-parsed-import');
       state.parsed = preview.parsed;
       state.baseLedger = baseLedger;
+      state.contextInvalidated = false;
       const parsed = state.parsed;
       summary.textContent = parsed.sourceFormat + ' · ' + parsed.records.length + ' transaction rows · ' +
         parsed.records.filter(row => row.valid).length + ' parser-valid · ' +
@@ -206,6 +208,13 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
       summary.textContent = safeError(error);
       invalidate('The file was not accepted. No changes were staged.');
     }
+  }
+  function checkContext() {
+    if (state.parsed && getLedger() !== state.baseLedger && !state.contextInvalidated) {
+      invalidate(safeError({ code: 'reconnect-required' }));
+      return false;
+    }
+    return !state.contextInvalidated;
   }
   function prepare() {
     const ledger = getLedger();
@@ -279,6 +288,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
   clear();
   return {
     reset: clear,
+    checkContext,
     destroy() {
       clear();
       stage.removeEventListener('click', onStage);
