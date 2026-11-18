@@ -43,7 +43,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false, validated: false, finishedMessage: '' };
   root.replaceChildren();
   const heading = element(document, 'h3', {}, 'Import a supported CSV');
-  const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then choose Save changes.');
+  const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then use the workspace's explicit save action.');
   const fileLabel = element(document, 'label', { for: 'provider-import-file' }, 'CSV export');
   const file = element(document, 'input', { id: 'provider-import-file', type: 'file', accept: '.csv,text/csv' });
   const summary = element(document, 'p', { className: 'field-help', role: 'status', 'aria-live': 'polite' }, 'No file selected.');
@@ -323,7 +323,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       state.validated = false;
       state.finishedMessage = 'This file is already staged. Select another export to prepare another import.';
       summary.textContent = 'Import staged locally: ' + result.summary.created + ' created, ' + result.summary.matched + ' matched, ' +
-        result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Choose Save changes to persist this draft.';
+        result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Use the workspace's explicit save action to persist this draft.';
       discrepancy.textContent = 'No file upload or Drive write occurred. Existing review decisions remain in the Review page.';
       stage.disabled = true;
       onStaged();
