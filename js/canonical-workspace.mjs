@@ -115,7 +115,6 @@ function announce(text, kind = 'info') {
   }
 }
 function refresh() {
-  providerImportWorkflow?.checkContext();
   providerImportWorkflow?.refresh();
   refreshDiagnosticHistory();
   const lifecycle = storage.lifecycle;
