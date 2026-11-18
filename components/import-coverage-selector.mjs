@@ -66,7 +66,7 @@ export function createImportCoverageModel(initial={}) {
     confirm(){active();if(cancelled)return {status:"cancelled",accepted:false};const validation=evaluateImportCoverage({start,end,observedDates:context.observedDates||[]});
       if(!validation.valid)return {status:"review-required",validation};
       const sorted=[...validation.observedDates].sort();
-      confirmed={coverage:{start,end,provenance:{kind:"user-confirmed",coverageSource:context.sourceCoverage?"source-metadata":"user-declaration",
+      confirmed={coverage:{start,end,provenance:{kind:"user-confirmed",coverageSource:(isRealIsoDate(context.sourceCoverage?.start)||isRealIsoDate(context.sourceCoverage?.end))?"source-metadata":"user-declaration",
         confirmationMethod:"explicit-component-confirmation",sourceMetadata:context.sourceCoverage?structuredClone(context.sourceCoverage):null,
         priorConfirmedCoverageEnd:isRealIsoDate(context.priorConfirmedCoverageEnd)?context.priorConfirmedCoverageEnd:null,
         contextKey:context.contextKey??null}},
