@@ -51,12 +51,14 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     stage.disabled = true;
     discrepancy.textContent = message;
   }
-  function clear() {
+  function resetState({ clearFile = false } = {}) {
     state.bytes = null; state.parsed = null; state.fingerprint = null; state.mappings.clear();
-    file.value = ''; mappings.replaceChildren(); emptyConfirmation.hidden = true; emptyCheck.checked = false;
+    if (clearFile) file.value = '';
+    mappings.replaceChildren(); emptyConfirmation.hidden = true; emptyCheck.checked = false;
     invalidate('No import is staged. Choose a CSV file to begin.');
-    summary.textContent = 'No file selected.'; reset.disabled = true;
+    summary.textContent = 'No file selected.'; reset.disabled = !clearFile && !file.files?.length;
   }
+  function clear() { state.context++; resetState({ clearFile: true }); }
   function dateRange(records) {
     const dates = records.map(row => row.effectiveDate).filter(isCalendarDate).sort();
     return dates.length ? { start: dates[0], end: dates.at(-1) } : null;
@@ -88,9 +90,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     wrap.append(legend, accountLabel, rangeNote, startLabel, endLabel, coverageSource);
     const context = { sourceKey, institutionId, select, start, end, observed, records, manual };
     state.mappings.set(sourceKey, context);
-    for (const control of [select, start, end]) control.addEventListener('change', () => {
-      invalidate('A mapping or coverage value changed. Review and stage again.');
-    });
+    for (const control of [select, start, end]) control.addEventListener('change', refreshEligibility);
     return wrap;
   }
   function renderMappings() {
@@ -108,7 +108,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
         if (!value || state.mappings.has(value)) { discrepancy.textContent = 'Enter a non-empty source account key.'; return; }
         mappings.removeChild(manual); mappings.removeChild(add);
         mappings.append(buildMapping(value, parsed.institutionId, [], true));
-        invalidate('Header-only export account mapping added. Confirm coverage and the empty-file declaration.');
+        refreshEligibility();
       });
       mappings.append(add);
       return;
@@ -122,7 +122,8 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     }
   }
   async function readFile(selected) {
-    clear();
+    state.context++;
+    resetState();
     if (!selected) return;
     const token = state.context;
     try {
@@ -144,8 +145,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
       emptyConfirmation.hidden = parsed.records.length !== 0;
       renderMappings();
       reset.disabled = false;
-      invalidate(parsed.records.length ? 'Map every source account and declare its coverage to enable staging.' :
-        'This is a recognized header-only export. Explicitly confirm that it intentionally contains no transaction rows.');
+      refreshEligibility();
     } catch (error) {
       summary.textContent = safeError(error);
       invalidate('The file was not accepted. No changes were staged.');
@@ -173,6 +173,17 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     if (result.ledger === getLedger() || !result.runIds.length) throw new TypeError('import-proposal-has-no-new-run');
     return result;
   }
+  function refreshEligibility() {
+    if (!state.parsed) { stage.disabled = true; return; }
+    try {
+      prepare();
+      stage.disabled = false;
+      discrepancy.textContent = 'Mapping and inclusive coverage are valid. Stage this import to add it to the unsaved ledger draft.';
+    } catch (error) {
+      stage.disabled = true;
+      discrepancy.textContent = safeError(error);
+    }
+  }
   stage.addEventListener('click', () => {
     if (stage.disabled) return;
     try {
@@ -192,10 +203,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
   });
   reset.addEventListener('click', clear);
   file.addEventListener('change', () => readFile(file.files?.[0]));
-  emptyCheck.addEventListener('change', () => invalidate('Empty-file confirmation changed. Review and stage again.'));
-  root.addEventListener('input', event => {
-    if (event.target.matches('input,select')) invalidate('A file, mapping or coverage value changed. Review and stage again.');
-  });
+  emptyCheck.addEventListener('change', refreshEligibility);
   clear();
   return { reset: clear, destroy: clear };
 }
