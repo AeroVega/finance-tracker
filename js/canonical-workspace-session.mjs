@@ -141,8 +141,30 @@ export class CanonicalWorkspaceSession {
   }
 
   stageCheckpoint() {
-    this.stagedHistory.push({ accounts: this.ledger.accounts.length, events: this.ledger.events.length,
-      positionEvents: Object.hasOwn(this.ledger, 'positionEvents') ? this.ledger.positionEvents.length : null });
+    // Keep a complete immutable checkpoint. Import preparation can append to
+    // collections other than accounts/events, so length-only undo would leave
+    // orphaned observations, import runs or activities behind.
+    this.stagedHistory.push(structuredClone(this.ledger));
+  }
+
+  stageCanonicalImport(proposal) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    validateLedger(proposal);
+    const current = this.ledger;
+    if (proposal.ledgerId !== current.ledgerId || proposal.createdAt !== current.createdAt ||
+      proposal.syntheticOnly !== true || !same(proposal.accounts, current.accounts) ||
+      !same(proposal.positionEvents ?? [], current.positionEvents ?? [])) fail('invalid-import-proposal');
+    for (const key of ['activities', 'events', 'imports', 'observations', 'reviewDecisions']) {
+      const before = current[key], after = proposal[key];
+      if (!Array.isArray(after) || after.length < before.length ||
+        !before.every((record, index) => same(record, after[index]))) fail('invalid-import-proposal');
+    }
+    const addedRuns = proposal.imports.length - current.imports.length;
+    if (addedRuns < 1) fail('import-proposal-has-no-new-run');
+    this.stageCheckpoint();
+    this.ledger = structuredClone(proposal);
+    this.updateDirty();
+    return this.ledger;
   }
 
   addAccount({ institutionId, accountType, displayName, currency }) {
@@ -167,11 +189,7 @@ export class CanonicalWorkspaceSession {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (!this.stagedHistory.length) fail('no-staged-changes');
     const previous = this.stagedHistory.at(-1);
-    const next = structuredClone(this.ledger);
-    next.accounts = next.accounts.slice(0, previous.accounts);
-    next.events = next.events.slice(0, previous.events);
-    if (previous.positionEvents === null) delete next.positionEvents;
-    else next.positionEvents = next.positionEvents.slice(0, previous.positionEvents);
+    const next = structuredClone(previous);
     validateLedger(next);
     this.stagedHistory.pop();
     this.ledger = next;
