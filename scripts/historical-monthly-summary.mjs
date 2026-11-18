@@ -43,12 +43,50 @@ function sameExact(left, right) {
   return !sum.mismatch && sum.coefficient === 0n;
 }
 
-function stable(value) {
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
+function stable(value, ancestors = new WeakSet()) {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'string') return `string:${JSON.stringify(value)}`;
+  if (typeof value === 'boolean') return `boolean:${value}`;
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return 'number:NaN';
+    if (value === Infinity) return 'number:Infinity';
+    if (value === -Infinity) return 'number:-Infinity';
+    if (Object.is(value, -0)) return 'number:-0';
+    return `number:${value}`;
   }
-  return JSON.stringify(value);
+  if (typeof value === 'bigint') return `bigint:${value}`;
+  if (typeof value !== 'object') return `${typeof value}:${String(value)}`;
+
+  if (ancestors.has(value)) return 'circular-reference';
+  ancestors.add(value);
+  let result;
+  if (Array.isArray(value)) {
+    const entries = Array.from({ length: value.length }, (_, index) =>
+      Object.hasOwn(value, index) ? stable(value[index], ancestors) : 'array-hole');
+    result = `array:[${entries.join(',')}]`;
+  } else if (value instanceof Date) {
+    result = `date:${Number.isNaN(value.getTime()) ? 'invalid' : value.toISOString()}`;
+  } else if (value instanceof RegExp) {
+    result = `regexp:${value.toString()}`;
+  } else if (value instanceof Map) {
+    const entries = [...value].map(([key, entry]) =>
+      `${stable(key, ancestors)}=>${stable(entry, ancestors)}`).sort();
+    result = `map:{${entries.join(',')}}`;
+  } else if (value instanceof Set) {
+    result = `set:{${[...value].map(entry => stable(entry, ancestors)).sort().join(',')}}`;
+  } else if (ArrayBuffer.isView(value)) {
+    result = `view:${value.constructor.name}:[${Array.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)).join(',')}]`;
+  } else if (value instanceof ArrayBuffer) {
+    result = `array-buffer:[${Array.from(new Uint8Array(value)).join(',')}]`;
+  } else {
+    const tag = Object.prototype.toString.call(value);
+    const entries = Object.keys(value).sort().map(key =>
+      `${JSON.stringify(key)}:${stable(value[key], ancestors)}`);
+    result = `object:${tag}:{${entries.join(',')}}`;
+  }
+  ancestors.delete(value);
+  return result;
 }
 
 function finding(code, details = {}) {
@@ -142,9 +180,6 @@ export function validateHistoricalMonthlySummaries({ records, expectedMonthRange
     if (summaryValues.netCashFlow !== undefined && summaryValues.netCashFlow !== null &&
         !parseMoney(summaryValues.netCashFlow)) {
       findings.push(finding('invalid-summary-value', { recordIndex: index, month: month ?? null, field: 'netCashFlow' }));
-    }
-    if (summaryValues.netCashFlow === null) {
-      findings.push(finding('missing-summary-value', { recordIndex: index, month: month ?? null, field: 'netCashFlow' }));
     }
 
     const hasBreakdowns = record !== null && record !== undefined &&
