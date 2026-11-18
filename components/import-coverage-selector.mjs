@@ -1,3 +1,5 @@
+import {fail} from "../js/app-error.mjs";
+
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 export function isRealIsoDate(value) {
   if (typeof value !== "string") return false;
@@ -16,7 +18,7 @@ function shiftDate(value, days) {
   return [d.getUTCFullYear(),d.getUTCMonth()+1,d.getUTCDate()].map((v,i)=>String(v).padStart(i?2:4,"0")).join("-");
 }
 function observed(input) {
-  if (!Array.isArray(input)) throw new TypeError("observedDates-must-be-an-array");
+  if (!Array.isArray(input)) fail("invalid-options");
   const usable=[], unusable=[];
   input.forEach((item,index)=>{
     const date=typeof item==="string"?item:item?.date;
@@ -52,7 +54,7 @@ export function evaluateImportCoverage({start,end,observedDates=[]}={}) {
 export function createImportCoverageModel(initial={}) {
   let context={...initial,observedDates:structuredClone(initial.observedDates||[]),sourceCoverage:initial.sourceCoverage?structuredClone(initial.sourceCoverage):null}, dates=observed(context.observedDates), hint=suggestions(context);
   let start=hint.start||"",end=hint.end||"",confirmed=null,cancelled=false,destroyed=false;
-  const active=()=>{if(destroyed) throw new Error("coverage-model-destroyed");};
+  const active=()=>{if(destroyed) fail("unknown");};
   const invalidate=()=>{confirmed=null;};
   const state=()=>{
     const validation=evaluateImportCoverage({start,end,observedDates:context.observedDates||[]});
@@ -89,11 +91,13 @@ function calendar(which,value,view) {
   }
   return "<section class='ics-calendar' aria-label='"+which+" date calendar'><header><button type='button' data-month='"+which+"' data-step='-1' aria-label='Previous "+which+" month'>‹</button><h3>"+monthTitle(view.year,view.month)+"</h3><button type='button' data-month='"+which+"' data-step='1' aria-label='Next "+which+" month'>›</button></header><div class='ics-weekdays' aria-hidden='true'><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class='ics-grid'>"+cells.join("")+"</div></section>";
 }
-export function mountImportCoverageSelector({container,observedDates=[],sourceCoverage=null,priorConfirmedCoverageEnd=null,contextKey=null,onConfirm=()=>{},onCancel=()=>{}}={}) {
-  if(!container||typeof container.addEventListener!=="function")throw new TypeError("container-element-required");
+export function mountImportCoverageSelector({container,observedDates=[],sourceCoverage=null,priorConfirmedCoverageEnd=null,contextKey=null,onConfirm=()=>{},onCancel=()=>{},onInvalidate=()=>{}}={}) {
+  if(!container||typeof container.addEventListener!=="function")fail("invalid-options");
   const model=createImportCoverageModel({observedDates,sourceCoverage,priorConfirmedCoverageEnd,contextKey});
   const now=new Date(), monthFor=value=>isRealIsoDate(value)?{year:+value.slice(0,4),month:+value.slice(5,7)-1}:{year:now.getFullYear(),month:now.getMonth()};
   const initial=model.getState(),views={start:monthFor(initial.start),end:monthFor(initial.end)};let disposed=false;
+  const notifyInvalidation=(reason,previous)=>{if(previous)onInvalidate({status:"invalidated",reason,previous});};
+  const resetSelection=focus=>{const previous=model.getState().confirmed;model.reset();const s=model.getState();views.start=monthFor(s.start);views.end=monthFor(s.end);notifyInvalidation("reset",previous);render(focus);};
   const render=focus=>{
     if(disposed)return;const s=model.getState(),v=s.validation;
     const messages=v.errors.map(x=>({ "invalid-start-date":"Enter a real calendar start date.","invalid-end-date":"Enter a real calendar end date.","reversed-date-range":"Start must be on or before end.","no-usable-transaction-dates":"No usable transaction dates were supplied; review is required.","unusable-observed-dates":"Some supplied transaction dates are unusable; review is required."}[x.code]));
@@ -105,12 +109,12 @@ export function mountImportCoverageSelector({container,observedDates=[],sourceCo
   const click=e=>{
     const b=e.target.closest("button");if(!b||!container.contains(b))return;
     if(b.dataset.month){const v=views[b.dataset.month],d=utcDate(v.year,v.month+Number(b.dataset.step),1);v.year=d.getUTCFullYear();v.month=d.getUTCMonth();render('[data-month="'+b.dataset.month+'"][data-step="'+b.dataset.step+'"]');}
-    else if(b.dataset.date){const k=b.dataset.for;model.setDates({[k]:b.dataset.date});views[k]=monthFor(b.dataset.date);render('[data-field="'+k+'"]');}
-    else if(b.dataset.action==="reset"){model.reset();render('[data-action=reset]');}
-    else if(b.dataset.action==="cancel"){const r=model.cancel();onCancel(r);render('[data-action=cancel]');}
+    else if(b.dataset.date){const k=b.dataset.for,previous=model.getState().confirmed;model.setDates({[k]:b.dataset.date});views[k]=monthFor(b.dataset.date);notifyInvalidation("date-edit",previous);render('[data-field="'+k+'"]');}
+    else if(b.dataset.action==="reset"){resetSelection('[data-action=reset]');}
+    else if(b.dataset.action==="cancel"){const previous=model.getState().confirmed,r=model.cancel();notifyInvalidation("cancelled",previous);onCancel(r);render('[data-action=cancel]');}
     else if(b.dataset.action==="confirm"){const r=model.confirm();if(r.status==="confirmed")onConfirm(r);render('[data-action=confirm]');}
   };
-  const change=e=>{const k=e.target.dataset?.field;if(k==="start"||k==="end"){model.setDates({[k]:e.target.value});if(isRealIsoDate(e.target.value))views[k]=monthFor(e.target.value);render('[data-field="'+k+'"]');}};
+  const change=e=>{const k=e.target.dataset?.field;if(k==="start"||k==="end"){const previous=model.getState().confirmed;model.setDates({[k]:e.target.value});if(isRealIsoDate(e.target.value))views[k]=monthFor(e.target.value);notifyInvalidation("date-edit",previous);render('[data-field="'+k+'"]');}};
   const keydown=e=>{
     const b=e.target.closest?.(".ics-day[data-date]");if(!b||!container.contains(b))return;
     const weekday=(new Date(b.dataset.date+"T00:00:00Z").getUTCDay()+6)%7;
@@ -119,5 +123,5 @@ export function mountImportCoverageSelector({container,observedDates=[],sourceCo
     else if(e.key==="PageUp"||e.key==="PageDown"){e.preventDefault();const k=b.dataset.for,v=views[k],d=utcDate(v.year,v.month+(e.key==="PageUp"?-1:1),1);views[k]={year:d.getUTCFullYear(),month:d.getUTCMonth()};render('[data-for="'+k+'"][data-date^="'+String(d.getUTCFullYear()).padStart(4,"0")+'-'+String(d.getUTCMonth()+1).padStart(2,"0")+'"]');}
   };
   container.addEventListener("click",click);container.addEventListener("change",change);container.addEventListener("keydown",keydown);render();
-  return {getState:()=>model.getState(),updateContext(next){if(disposed)throw new Error("coverage-selector-destroyed");model.updateContext(next);const s=model.getState();views.start=monthFor(s.start);views.end=monthFor(s.end);render();},reset(){if(!disposed){model.reset();render();}},destroy(){if(disposed)return;container.removeEventListener("click",click);container.removeEventListener("change",change);container.removeEventListener("keydown",keydown);container.replaceChildren();model.destroy();disposed=true;}};
+  return {getState:()=>model.getState(),updateContext(next){if(disposed)fail("unknown");const previous=model.getState().confirmed;model.updateContext(next);const s=model.getState();views.start=monthFor(s.start);views.end=monthFor(s.end);notifyInvalidation("context-replaced",previous);render();},reset(){if(!disposed)resetSelection();},destroy(){if(disposed)return;const previous=model.getState().confirmed;container.removeEventListener("click",click);container.removeEventListener("change",change);container.removeEventListener("keydown",keydown);container.replaceChildren();model.destroy();disposed=true;notifyInvalidation("destroyed",previous);}};
 }
