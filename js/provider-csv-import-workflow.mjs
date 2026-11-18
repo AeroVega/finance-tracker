@@ -36,7 +36,7 @@ const safeError = error => ({
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, onStaged = () => {} }) {
   if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function') fail('invalid-options');
   const document = root.ownerDocument;
-  const state = { bytes: null, parsed: null, context: 0, mappings: new Map(), baseLedger: null };
+  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null };
   root.replaceChildren();
   const heading = element(document, 'h3', {}, 'Import a supported CSV');
   const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then choose Save changes.');
@@ -57,11 +57,11 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
 
   function invalidate(message = 'Import confirmation cleared. Review the file and coverage again.') {
     state.context++;
+    for (const mapping of state.mappings.values()) mapping.confirmed.checked = false;
     stage.disabled = true;
     discrepancy.textContent = message;
   }
   function resetState({ clearFile = false } = {}) {
-    state.bytes = null;
     state.parsed = null;
     state.mappings.clear();
     state.baseLedger = null;
@@ -168,13 +168,17 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     const token = state.context;
     const baseLedger = getLedger();
     try {
+      const isCurrent = () => token === state.context && file.files?.[0] === selected;
+      const ledgerIsCurrent = () => getLedger() === baseLedger;
       const bytes = await selected.arrayBuffer();
-      if (token !== state.context || file.files?.[0] !== selected) return;
+      if (!isCurrent()) return;
+      if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
       // The existing preview is the read-only recognition boundary. Parse again
       // only after it has selected exactly one supported schema so the UI can
       // construct account-scoped mapping controls without exposing raw rows.
       const preview = await previewProviderCsv({ bytes });
-      if (token !== state.context || file.files?.[0] !== selected) return;
+      if (!isCurrent()) return;
+      if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
       if (preview.status !== 'preview') {
         summary.textContent = preview.status === 'ambiguous'
           ? 'The headers match more than one supported format. No parser was selected.'
@@ -184,12 +188,12 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
         return;
       }
       const detection = await parseRecognizedProviderCsv({ bytes });
-      if (token !== state.context || file.files?.[0] !== selected) return;
+      if (!isCurrent()) return;
+      if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
       if (detection.status !== 'recognized') {
         summary.textContent = 'The headers are not an exact supported export format. No parser was selected.';
         return;
       }
-      state.bytes = new Uint8Array(bytes);
       state.parsed = detection.parsed;
       state.baseLedger = baseLedger;
       const parsed = state.parsed;
@@ -247,8 +251,8 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
       stage.disabled = false;
       discrepancy.textContent = 'Mapping and inclusive coverage are valid. Stage this import to add it to the unsaved ledger draft.';
     } catch (error) {
-      stage.disabled = true;
-      discrepancy.textContent = safeError(error);
+      if (error?.code === 'reconnect-required') invalidate(safeError(error));
+      else { stage.disabled = true; discrepancy.textContent = safeError(error); }
     }
   }
   function onStage() {
@@ -267,8 +271,8 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
       stage.disabled = true;
       onStaged();
     } catch (error) {
-      discrepancy.textContent = safeError(error);
-      stage.disabled = true;
+      if (error?.code === 'reconnect-required') invalidate(safeError(error));
+      else { discrepancy.textContent = safeError(error); stage.disabled = true; }
     }
   }
   const onFileChange = () => readFile(file.files?.[0]);
