@@ -5,7 +5,7 @@
 .provider-import-panel .provider-import-account{display:grid;gap:.75rem;min-width:0;padding:1rem;border:1px solid var(--border,#52616b);border-radius:.75rem}
 .provider-import-panel .provider-import-account legend{padding-inline:.35rem;font-weight:700}
 .provider-import-panel .provider-import-mappings{display:grid;gap:.75rem}
-.provider-import-panel .checkbox-field{display:flex;align-items:center;gap:.65rem}
+.provider-import-panel .checkbox-field{display:flex;align-items:center;gap:.65rem;min-height:44px}
 .provider-import-panel .checkbox-field input{width:1.15rem;min-height:1.15rem}
 .provider-import-panel .storage-actions{display:flex;flex-wrap:wrap;gap:.75rem}
 .provider-import-panel .status-message{overflow-wrap:anywhere}
