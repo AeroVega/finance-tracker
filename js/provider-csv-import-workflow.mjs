@@ -219,6 +219,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   }
   function prepare() {
     if (state.staged) fail('invalid-parsed-import');
+    if (!checkContext()) fail('reconnect-required');
     const ledger = getLedger();
     if (!state.parsed || !ledger) fail('canonical-ledger-required');
     if (ledger !== state.baseLedger) fail('reconnect-required');
@@ -256,6 +257,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       stage.disabled = true;
       return;
     }
+    if (!checkContext()) { stage.disabled = true; return; }
     const unavailable = getUnavailableReason();
     if (unavailable || !canStage()) {
       stage.disabled = true;
