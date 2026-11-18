@@ -45,7 +45,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false, validated: false, finishedMessage: '', noOp: false };
   root.replaceChildren();
   const heading = element(document, 'h4', {}, 'Import a supported CSV');
-  const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then use the workspace's explicit save action.');
+  const intro = element(document, "p", { className: "panel-copy" }, "Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then use the workspace explicit save action.");
   const fileLabel = element(document, 'label', { for: 'provider-import-file' }, 'CSV export');
   const file = element(document, 'input', { id: 'provider-import-file', type: 'file', accept: '.csv,text/csv' });
   const summary = element(document, 'p', { className: 'field-help', role: 'status', 'aria-live': 'polite' }, 'No file selected.');
