@@ -35,7 +35,7 @@ const safeError = error => ({
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, onStaged = () => {} }) {
   if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function') fail('invalid-options');
   const document = root.ownerDocument;
-  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true };
+  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false };
   root.replaceChildren();
   const heading = element(document, 'h3', {}, 'Import a supported CSV');
   const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then choose Save changes.');
@@ -65,6 +65,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     state.parsed = null;
     state.mappings.clear();
     state.baseLedger = null;
+    state.staged = false;
     if (clearFile) file.value = '';
     mappings.replaceChildren();
     emptyConfirmation.hidden = true;
@@ -217,6 +218,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     return !state.contextInvalidated;
   }
   function prepare() {
+    if (state.staged) fail('invalid-parsed-import');
     const ledger = getLedger();
     if (!state.parsed || !ledger) fail('canonical-ledger-required');
     if (ledger !== state.baseLedger) fail('reconnect-required');
@@ -245,6 +247,11 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     return result;
   }
   function refreshEligibility() {
+    if (state.staged) {
+      stage.disabled = true;
+      discrepancy.textContent = 'This file is already staged. Select another export to prepare another import.';
+      return;
+    }
     if (!state.parsed) {
       stage.disabled = true;
       return;
@@ -268,6 +275,8 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
         return;
       }
       stageImport(result.ledger);
+      state.baseLedger = getLedger();
+      state.staged = true;
       summary.textContent = 'Import staged locally: ' + result.summary.created + ' created, ' + result.summary.matched + ' matched, ' +
         result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Choose Save changes to persist this draft.';
       discrepancy.textContent = 'No file upload or Drive write occurred. Existing review decisions remain in the Review page.';
