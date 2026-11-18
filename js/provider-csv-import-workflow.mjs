@@ -17,6 +17,9 @@ const safeError = error => ({
   'unsupported-header': 'This file does not match one of the supported export formats.',
   'unsupported-csv-header': 'This file does not match one of the supported export formats.',
   'invalid-source-encoding': 'The file is not valid UTF-8 CSV.',
+  'invalid-source-bytes': 'The selected file could not be decoded as UTF-8 CSV.',
+  'missing-csv-header': 'The file does not contain a recognized CSV header.',
+  'empty-input': 'The selected file is empty and has no supported header row.',
   'invalid-csv-quoting': 'The CSV quoting is malformed.',
   'account-mapping-conflict': 'Each source account must map to a distinct existing account at the same institution.',
   'distinct-account-required': 'Map every source account to a different existing account.',
@@ -29,6 +32,8 @@ const safeError = error => ({
   'explicit-account-mapping-required': 'Explicitly map every source account before staging.',
   'empty-export-confirmation-required': 'Confirm that this recognized header-only export intentionally contains zero transaction rows.',
   'reconnect-required': 'The active ledger changed. Discard this file and select it again to review against the current ledger.',
+  'reopen-before-editing': 'The workspace session is no longer writable. Reopen or recover the saved ledger before staging.',
+  'operation-in-progress': 'Wait for the current storage operation to finish before staging an import.',
   'invalid-parsed-import': 'The canonical import proposal could not be validated. No changes were staged.'
 }[error?.code] || 'The import could not be prepared. No changes were staged.');
 
