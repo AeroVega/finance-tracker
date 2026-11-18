@@ -56,7 +56,7 @@ function finding(code, details = {}) {
 }
 
 function validateBreakdown(record, month, field, totalField, findings) {
-  const breakdown = record.breakdowns?.[field];
+  const breakdown = record.breakdowns[field];
   if (breakdown === undefined) return;
   if (!breakdown || typeof breakdown !== 'object' || typeof breakdown.complete !== 'boolean' ||
       !Array.isArray(breakdown.items)) {
@@ -147,24 +147,45 @@ export function validateHistoricalMonthlySummaries({ records, expectedMonthRange
       findings.push(finding('missing-summary-value', { recordIndex: index, month: month ?? null, field: 'netCashFlow' }));
     }
 
+    const hasBreakdowns = record !== null && record !== undefined &&
+      Object.prototype.hasOwnProperty.call(Object(record), 'breakdowns');
+    const breakdowns = record?.breakdowns;
+    const validBreakdowns = breakdowns !== null && typeof breakdowns === 'object' &&
+      !Array.isArray(breakdowns);
+    if (hasBreakdowns && !validBreakdowns) {
+      findings.push(finding('invalid-breakdowns-container', { recordIndex: index, month: month ?? null }));
+    }
+
     const provenance = record?.provenance;
     for (const field of ['workbook', 'worksheet', 'mapping']) {
       if (typeof provenance?.[field] !== 'string' || !provenance[field].trim()) {
         findings.push(finding('missing-provenance', { recordIndex: index, month, field }));
       }
     }
-    for (const [breakdownField, totalField] of BREAKDOWN_FIELDS) {
-      validateBreakdown(record ?? {}, month ?? null, breakdownField, totalField, findings);
+    if (validBreakdowns) {
+      for (const [breakdownField, totalField] of BREAKDOWN_FIELDS) {
+        validateBreakdown({ ...record, breakdowns }, month ?? null, breakdownField, totalField, findings);
+      }
     }
   }
 
   for (const [month, entries] of byMonth) {
     if (entries.length < 2) continue;
-    const first = entries[0].record;
-    const signature = stable({ summary: first.summary, breakdowns: first.breakdowns });
-    for (const entry of entries.slice(1)) {
-      const duplicate = signature === stable({ summary: entry.record.summary, breakdowns: entry.record.breakdowns });
-      findings.push(finding(duplicate ? 'duplicate-month-summary' : 'overlapping-month-summaries', {
+    const equivalentGroups = new Map();
+    for (const entry of entries) {
+      const signature = stable({ summary: entry.record?.summary, breakdowns: entry.record?.breakdowns });
+      if (!equivalentGroups.has(signature)) equivalentGroups.set(signature, []);
+      equivalentGroups.get(signature).push(entry.index);
+    }
+
+    for (const recordIndices of equivalentGroups.values()) {
+      if (recordIndices.length > 1) {
+        findings.push(finding('duplicate-month-summary', { month, recordIndices: [...recordIndices] }));
+      }
+    }
+
+    if (equivalentGroups.size > 1) {
+      findings.push(finding('overlapping-month-summaries', {
         month, recordIndices: entries.map(item => item.index),
       }));
     }
