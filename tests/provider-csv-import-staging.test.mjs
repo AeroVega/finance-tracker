@@ -65,7 +65,7 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
     coverageByAccount: { [accountId]: { start: '2026-01-01', end: '2026-01-31', provenance: 'user-confirmed' } },
   };
   const first = prepareCanonicalImport(session.ledger, input);
-  assert.equal(first.ledger.imports[0].status, 'needs-review');
+  assert.equal(first.ledger.imports.at(-1).status, 'needs-review');
   session.stageCanonicalImport(first.ledger);
   const changedCoverage = {
     ...input,
@@ -75,10 +75,10 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
 
   const retry = prepareCanonicalImport(session.ledger, input);
   assert.equal(retry.ledger.imports.length, first.ledger.imports.length);
-  assert.equal(retry.ledger.imports[0].retryAttempts.length, 1);
-  assert.equal(retry.ledger.imports[0].status, 'needs-review');
+  assert.equal(retry.ledger.imports.at(-1).retryAttempts.length, 1);
+  assert.equal(retry.ledger.imports.at(-1).status, 'needs-review');
   const alteredRetry = structuredClone(retry.ledger);
-  alteredRetry.imports[0].declaredCoverage.start = '2025-01-01';
+  alteredRetry.imports.at(-1).declaredCoverage.start = '2025-01-01';
   assert.throws(() => session.stageCanonicalImport(alteredRetry), { code: 'invalid-parsed-import' });
   session.stageCanonicalImport(retry.ledger);
   assert.deepEqual(session.ledger, retry.ledger);
