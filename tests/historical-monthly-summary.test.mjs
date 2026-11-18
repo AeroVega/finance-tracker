@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateHistoricalMonthlySummaries } from '../js/historical-monthly-summary.mjs';
+import { validateHistoricalMonthlySummaries } from '../scripts/historical-monthly-summary.mjs';
 
 const range = { start: '2023-01', end: '2023-03' };
 const provenance = { workbook: 'invented-history.xlsx', worksheet: 'Monthly Summary', mapping: 'mapping-v1' };
