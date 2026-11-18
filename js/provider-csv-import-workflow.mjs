@@ -14,6 +14,7 @@ const element = (document, tag, attributes = {}, text = '') => {
   return node;
 };
 const safeError = error => ({
+  'canonical-ledger-required': 'Open a synthetic ledger or start a local preview before mapping accounts.',
   'unsupported-header': 'This file does not match one of the supported export formats.',
   'invalid-source-encoding': 'The file is not valid UTF-8 CSV.',
   'invalid-csv-quoting': 'The CSV quoting is malformed.',
@@ -39,7 +40,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
   emptyConfirmation.append(emptyCheck, element(document, 'span', {}, 'I confirm this recognized export intentionally contains zero transaction rows.'));
   emptyConfirmation.hidden = true;
   const discrepancy = element(document, 'p', { className: 'status-message', role: 'status', 'aria-live': 'polite' });
-  const stage = element(document, 'button', { type: 'button', className: 'primary-button', disabled: '' }, 'Stage reviewed import');
+  const stage = element(document, 'button', { type: 'button', className: 'primary-button', disabled: '' }, 'Stage import for review');
   const reset = element(document, 'button', { type: 'button', className: 'text-button', disabled: '' }, 'Discard selected file');
   const actions = element(document, 'div', { className: 'storage-actions' });
   actions.append(stage, reset);
