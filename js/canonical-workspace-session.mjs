@@ -191,11 +191,24 @@ export class CanonicalWorkspaceSession {
         retryRunIds.add(before.importRunId);
       }
     }
+    const changedObservationIds = new Set();
     for (let index = 0; index < current.observations.length; index++) {
       const before = current.observations[index], after = proposal.observations[index];
       if (before.observationId !== after.observationId) fail('invalid-parsed-import');
-      if (!same(before, after) &&
-        (!retryRunIds.has(before.importRunId) || !validObservationRetry(before, after))) fail('invalid-parsed-import');
+      if (!same(before, after)) {
+        if (!retryRunIds.has(before.importRunId) || !validObservationRetry(before, after)) fail('invalid-parsed-import');
+        changedObservationIds.add(before.observationId);
+      }
+    }
+    for (const observation of proposal.observations.slice(current.observations.length)) {
+      changedObservationIds.add(observation.observationId);
+    }
+    for (const activity of proposal.activities.slice(current.activities.length)) {
+      if (!proposal.observations.some(observation => observation.activityId === activity.activityId &&
+        changedObservationIds.has(observation.observationId))) fail('invalid-parsed-import');
+    }
+    for (const event of proposal.events.slice(current.events.length)) {
+      if (!changedObservationIds.has(event.sourceObservationId)) fail('invalid-parsed-import');
     }
     const addedRuns = proposal.imports.length - current.imports.length;
     if (addedRuns < 1 && retryRunIds.size < 1) fail('invalid-parsed-import');
