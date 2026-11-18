@@ -160,6 +160,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
           discrepancy.textContent = 'Enter a non-empty source account key.';
           return;
         }
+        emptyCheck.checked = false;
         mappings.removeChild(manual);
         mappings.removeChild(add);
         mappings.append(buildMapping(value, parsed.institutionId, [], true));
