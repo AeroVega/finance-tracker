@@ -116,6 +116,7 @@ function announce(text, kind = 'info') {
 }
 function refresh() {
   providerImportWorkflow?.checkContext();
+  providerImportWorkflow?.refresh();
   refreshDiagnosticHistory();
   const lifecycle = storage.lifecycle;
   const needsRecovery = ['recovery-required', 'stale-session'].includes(lifecycle?.state);
@@ -922,6 +923,16 @@ window.addEventListener('online', refresh);
 providerImportWorkflow = mountProviderImportWorkflow({
   root: $('provider-import-workflow'),
   getLedger: () => session.ledger,
+  canStage: () => !busy && session.canEdit(),
+  getUnavailableReason: () => {
+    if (busy || session.busy) return 'Wait for the current workspace or storage action to finish.';
+    if (!session.ledger) return 'Open or create a synthetic ledger before staging an import.';
+    if (navigator.onLine === false) return 'Reconnect before staging changes to a saved ledger.';
+    if (session.needsReopen) return 'Reopen the saved ledger before staging another import.';
+    if (session.unverified) return 'Verify or recover the saved ledger before staging an import.';
+    if (!session.canEdit()) return 'The current workspace session is read-only. Reopen or recover it before staging.';
+    return null;
+  },
   stageImport: proposal => {
     session.stageCanonicalImport(proposal);
     render();
