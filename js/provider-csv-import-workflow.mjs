@@ -58,6 +58,8 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     state.context++;
     state.contextInvalidated = true;
     state.validated = false;
+    state.staged = false;
+    state.finishedMessage = '';
     for (const mapping of state.mappings.values()) mapping.confirmed.checked = false;
     stage.disabled = true;
     discrepancy.textContent = message;
