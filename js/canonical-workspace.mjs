@@ -104,6 +104,17 @@ function refreshDiagnosticHistory() {
   }
 }
 installDiagnosticSelfTest({button:$('diagnostic-self-test'), target:$('diagnostic-test-status'), onReport:refreshDiagnosticHistory, document, navigator});
+mountProviderImportWorkflow({
+  root: $('provider-import-workflow'),
+  getLedger: () => session.ledger,
+  stageImport: proposal => {
+    session.stageCanonicalImport(proposal);
+    render();
+    announce('Supported CSV import staged locally. Review unresolved rows, then choose Save changes when ready.', 'success');
+  },
+  onStaged: refresh
+});
+
 
 function announce(text, kind = 'info') {
   $('action-status').textContent = text; $('action-status').dataset.kind = kind;
@@ -681,16 +692,6 @@ function showDetail(activityId, {navigate = true} = {}) {
   $('correction-rationale').value = '';
   detailEditorBaseline = detailEditorValues();
   correctionFields();
-mountProviderImportWorkflow({
-  root: $('provider-import-workflow'),
-  getLedger: () => session.ledger,
-  stageImport: proposal => {
-    session.stageCanonicalImport(proposal);
-    render();
-    announce('Supported CSV import staged locally. Review unresolved rows, then choose Save changes when ready.', 'success');
-  },
-  onStaged: refresh
-});
 refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
 }
 function correctionFields() {
