@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { webcrypto } from 'node:crypto';
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
 import { parseRecognizedProviderCsv } from '../js/provider-csv.mjs';
 import { prepareCanonicalImport } from '../js/canonical-import.mjs';
