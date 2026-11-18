@@ -75,7 +75,7 @@ export function createImportCoverageModel(initial={}) {
     destroy(){if(destroyed)return;confirmed=null;context={};dates={usable:[],unusable:[]};hint={start:null,end:null};start="";end="";cancelled=false;destroyed=true;}
   };
 }
-function monthTitle(y,m){return new Intl.DateTimeFormat(undefined,{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(Date.UTC(y,m,1)));}
+function monthTitle(y,m){return new Intl.DateTimeFormat(undefined,{month:"long",year:"numeric",timeZone:"UTC"}).format(utcDate(y,m,1));}
 function calendar(which,value,view) {
   const first=utcDate(view.year,view.month,1), offset=(first.getUTCDay()+6)%7;
   const count=utcDate(view.year,view.month+1,0).getUTCDate(), cells=[];
