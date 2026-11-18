@@ -65,11 +65,13 @@ export function createImportCoverageModel(initial={}) {
     updateContext(next={}){active();cancelled=false;context={...next,observedDates:structuredClone(next.observedDates||[]),sourceCoverage:next.sourceCoverage?structuredClone(next.sourceCoverage):null};dates=observed(context.observedDates);hint=suggestions(context);start=hint.start||"";end=hint.end||"";invalidate();return state();},
     confirm(){active();if(cancelled)return {status:"cancelled",accepted:false};const validation=evaluateImportCoverage({start,end,observedDates:context.observedDates||[]});
       if(!validation.valid)return {status:"review-required",validation};
-      confirmed={start,end,provenance:{kind:"user-confirmed",confirmationMethod:"explicit-component-confirmation",
-        sourceMetadata:context.sourceCoverage?structuredClone(context.sourceCoverage):null,
+      const sorted=[...validation.observedDates].sort();
+      confirmed={coverage:{start,end,provenance:{kind:"user-confirmed",coverageSource:context.sourceCoverage?"source-metadata":"user-declaration",
+        confirmationMethod:"explicit-component-confirmation",sourceMetadata:context.sourceCoverage?structuredClone(context.sourceCoverage):null,
         priorConfirmedCoverageEnd:isRealIsoDate(context.priorConfirmedCoverageEnd)?context.priorConfirmedCoverageEnd:null,
-        contextKey:context.contextKey??null}};
-      return {status:"confirmed",coverage:structuredClone(confirmed)};},
+        contextKey:context.contextKey??null}},
+        observedDateRange:{start:sorted[0]??null,end:sorted[sorted.length-1]??null}};
+      return {status:"confirmed",...structuredClone(confirmed)};},
     cancel(){active();confirmed=null;cancelled=true;return {status:"cancelled",accepted:false};},
     reset(){active();start=hint.start||"";end=hint.end||"";cancelled=false;invalidate();return state();},
     destroy(){if(destroyed)return;confirmed=null;context={};dates={usable:[],unusable:[]};hint={start:null,end:null};start="";end="";cancelled=false;destroyed=true;}
@@ -106,7 +108,7 @@ export function mountImportCoverageSelector({container,observedDates=[],sourceCo
     else if(b.dataset.date){const k=b.dataset.for;model.setDates({[k]:b.dataset.date});views[k]=monthFor(b.dataset.date);render('[data-field="'+k+'"]');}
     else if(b.dataset.action==="reset"){model.reset();render('[data-action=reset]');}
     else if(b.dataset.action==="cancel"){const r=model.cancel();onCancel(r);render('[data-action=cancel]');}
-    else if(b.dataset.action==="confirm"){const r=model.confirm();if(r.status==="confirmed")onConfirm(r.coverage);render('[data-action=confirm]');}
+    else if(b.dataset.action==="confirm"){const r=model.confirm();if(r.status==="confirmed")onConfirm(r);render('[data-action=confirm]');}
   };
   const change=e=>{const k=e.target.dataset?.field;if(k==="start"||k==="end"){model.setDates({[k]:e.target.value});if(isRealIsoDate(e.target.value))views[k]=monthFor(e.target.value);render('[data-field="'+k+'"]');}};
   const keydown=e=>{
