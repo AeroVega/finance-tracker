@@ -932,12 +932,12 @@ providerImportWorkflow = mountProviderImportWorkflow({
     if (!session.canEdit()) return 'The current workspace session is read-only. Reopen or recover it before staging.';
     return null;
   },
-  stageImport: proposal => {
-    session.stageCanonicalImport(proposal);
+  stageImport: proposal => session.stageCanonicalImport(proposal),
+  onStaged: () => {
     render();
-    announce('Supported CSV import staged locally. Review unresolved rows, then choose Save changes when ready.', 'success');
-  },
-  onStaged: refresh
+    refresh();
+    announce('Supported CSV import staged locally. Review unresolved rows, then use the workspace explicit save action when ready.', 'success');
+  }
 });
 refresh();
 // Prepare only invented data ahead of the click so OAuth starts within the
