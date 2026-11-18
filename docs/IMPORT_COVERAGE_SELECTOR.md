@@ -14,11 +14,11 @@ Import mountImportCoverageSelector from components/import-coverage-selector.mjs.
 
 The returned instance exposes getState(), updateContext(next), reset(), and destroy(). updateContext replaces file context, reapplies suggestions, and invalidates confirmation. reset restores current suggestions. destroy is idempotent, removes the instance's delegated click/change/keydown listeners, clears rendered content and clears model state.
 
-A confirmation callback is emitted only after explicit user activation and valid dates, start <= end, at least one usable observed date, no malformed observed date values, and no out-of-range dates. Its result contains start, end, and provenance with kind user-confirmed, confirmationMethod explicit-component-confirmation, sourceMetadata, priorConfirmedCoverageEnd, and contextKey. This provenance records the user's explicit declaration; it does not certify provider completeness, parsing correctness, or reconciliation. Cancellation returns accepted:false and never calls onConfirm.
+The onConfirm callback is emitted only after explicit user activation and valid dates, start <= end, at least one usable observed date, no malformed observed date values, and no out-of-range dates. It receives {status: confirmed, coverage, observedDateRange}. The coverage object contains start, end, and provenance: kind user-confirmed, coverageSource (source-metadata or user-declaration), confirmationMethod explicit-component-confirmation, sourceMetadata, priorConfirmedCoverageEnd, and contextKey. observedDateRange is the minimum/maximum usable transaction date and remains separate from declared coverage. This provenance records the user's explicit declaration; it does not certify provider completeness, parsing correctness, or reconciliation. Cancellation returns accepted:false and never calls onConfirm; it is terminal until reset or context replacement.
 
 ## Interaction and accessibility
 
-Two independently navigable, Monday-first calendars are rendered alongside two independently editable native date fields. Arrow keys move by day/week; Home/End move to week boundaries; PageUp/PageDown navigate months. Calendar controls and date inputs have accessible names and visible focus. Layouts collapse to one calendar column on narrow screens; interactive controls have 40–44px minimum targets.
+Two independently navigable, Monday-first calendars are rendered alongside two independently editable native date fields. Arrow keys move by day/week; Home/End move to week boundaries; PageUp/PageDown navigate months. Calendar controls and date inputs have accessible names and visible focus. Layouts collapse to one calendar column on narrow screens; calendar and action controls have 44px minimum heights.
 
 ## Synthetic demonstration
 
