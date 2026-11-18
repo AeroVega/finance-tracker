@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {createImportCoverageModel,evaluateImportCoverage,isRealIsoDate,mountImportCoverageSelector} from "../components/import-coverage-selector.mjs";
 import {AppError} from "../js/app-error.mjs";
+import {ERRORS} from "../js/error-registry.mjs";
+import {scanSource} from "../scripts/audit-error-codes.mjs";
 test("real Gregorian dates and leap centuries",()=>{assert.equal(isRealIsoDate("2024-02-29"),true);assert.equal(isRealIsoDate("2000-02-29"),true);assert.equal(isRealIsoDate("1900-02-29"),false);assert.equal(isRealIsoDate("2023-02-29"),false);assert.equal(isRealIsoDate("2024-04-31"),false);assert.equal(isRealIsoDate("0000-01-01"),false);});
 test("invalid and reversed declarations require review",()=>{for(const [start,end,code] of [["","2024-01-31","invalid-start-date"],["2024-02-30","2024-03-01","invalid-start-date"],["2024-01-01","2024-02-30","invalid-end-date"],["2024-02-02","2024-02-01","reversed-date-range"]])assert.ok(evaluateImportCoverage({start,end,observedDates:["2024-01-15"]}).errors.some(x=>x.code===code));});
 test("inclusive boundaries are valid",()=>{const r=evaluateImportCoverage({start:"2024-01-01",end:"2024-01-31",observedDates:["2024-01-01","2024-01-31"]});assert.equal(r.valid,true);assert.deepEqual(r.outside,[]);});
@@ -44,9 +46,12 @@ function clickButton(container,dataset) {
   container.dispatch("click",{target:button});
 }
 function calendarSection(html,which) {
-  const match=html.match(new RegExp("<section class='ics-calendar' aria-label='"+which+" date calendar'>([\\\\s\\\\S]*?)</section>"));
-  assert.ok(match,"missing "+which+" calendar");
-  return match[1];
+  const marker="<section class='ics-calendar' aria-label='"+which+" date calendar'>";
+  const start=html.indexOf(marker);
+  assert.notEqual(start,-1,"missing "+which+" calendar");
+  const contentStart=start+marker.length,end=html.indexOf("</section>",contentStart);
+  assert.notEqual(end,-1,"unterminated "+which+" calendar");
+  return html.slice(contentStart,end);
 }
 test("rendered reset restores both independently navigated calendar views",()=>{
   const container=new TestContainer();
@@ -101,3 +106,5 @@ test("component validation and lifecycle errors use registered AppError codes",(
   assert.throws(()=>model.getState(),error=>error instanceof AppError&&error.code==="unknown");
   assert.throws(()=>mountImportCoverageSelector({container:null}),error=>error instanceof AppError&&error.code==="invalid-options");
 });
+
+test("component fail sites are registered and follow the repository diagnostic scanner",()=>{const source=readFileSync(new URL("../components/import-coverage-selector.mjs",import.meta.url),"utf8");const {sites,dynamic}=scanSource(source,"components/import-coverage-selector.mjs");assert.deepEqual(dynamic,[]);assert.ok(sites.length>=4);for(const site of sites)assert.ok(Object.hasOwn(ERRORS,site.code),site.code);assert.doesNotMatch(source,/throw\s+(?:new\s+)?(?:Error|TypeError)/);});
