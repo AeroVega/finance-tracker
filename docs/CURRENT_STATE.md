@@ -34,9 +34,9 @@ Preserve the $0 recurring-cost constraint, permanent manual file imports, no sto
 
 ## Next work
 
-The performance objective for the reported synthetic save/open is accepted. Cleanup is merged. Implement and validate recovery and portable backup/restore according to the [approved state/fault contract](FULL_SNAPSHOT_BACKUP_RECOVERY.md). Preserve the existing protocol, complete logical history and normal successful-save request path. Full test evidence, independent review and exact-head CI precede a bounded live synthetic check; no gate is complete from code alone.
+The performance objective for the reported synthetic save/open is accepted. Recovery and portable backup/restore are implemented in the selected full-snapshot route; preserve their existing contracts and do not reopen unchanged acceptance gates without a demonstrated defect.
 
-Supported file ingestion, monthly-summary history and remaining production controls follow that next PR; see [NEXT_STEPS.md](NEXT_STEPS.md). Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
+Complete independent adversarial review, synthetic tests, exact-head CI and bounded owner acceptance for the supported CSV workflow before considering merge. Then implement monthly-summary persistence/review in a separate PR, followed by the purpose-built legacy workbook converter in another separate PR. Keep remaining production controls as a distinct NO-GO review. The dependency order and acceptance boundaries are maintained in [NEXT_STEPS.md](NEXT_STEPS.md). Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
 
 ## Reading map
 
