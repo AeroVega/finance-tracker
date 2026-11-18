@@ -53,7 +53,7 @@ export function createImportCoverageModel(initial={}) {
   let context={...initial,observedDates:structuredClone(initial.observedDates||[]),sourceCoverage:initial.sourceCoverage?structuredClone(initial.sourceCoverage):null}, dates=observed(context.observedDates), hint=suggestions(context);
   let start=hint.start||"",end=hint.end||"",confirmed=null,cancelled=false,destroyed=false;
   const active=()=>{if(destroyed) throw new Error("coverage-model-destroyed");};
-  const invalidate=()=>{confirmed=null;cancelled=false;};
+  const invalidate=()=>{confirmed=null;};
   const state=()=>{
     const validation=evaluateImportCoverage({start,end,observedDates:context.observedDates||[]});
     return {start,end,suggestions:{...hint},confirmed:confirmed?structuredClone(confirmed):null,cancelled,
@@ -62,8 +62,8 @@ export function createImportCoverageModel(initial={}) {
   return {
     getState(){active();return state();},
     setDates(next={}){active();if(Object.hasOwn(next,"start"))start=next.start;if(Object.hasOwn(next,"end"))end=next.end;invalidate();return state();},
-    updateContext(next={}){active();context={...next,observedDates:structuredClone(next.observedDates||[]),sourceCoverage:next.sourceCoverage?structuredClone(next.sourceCoverage):null};dates=observed(context.observedDates);hint=suggestions(context);start=hint.start||"";end=hint.end||"";invalidate();return state();},
-    confirm(){active();const validation=evaluateImportCoverage({start,end,observedDates:context.observedDates||[]});
+    updateContext(next={}){active();cancelled=false;context={...next,observedDates:structuredClone(next.observedDates||[]),sourceCoverage:next.sourceCoverage?structuredClone(next.sourceCoverage):null};dates=observed(context.observedDates);hint=suggestions(context);start=hint.start||"";end=hint.end||"";invalidate();return state();},
+    confirm(){active();if(cancelled)return {status:"cancelled",accepted:false};const validation=evaluateImportCoverage({start,end,observedDates:context.observedDates||[]});
       if(!validation.valid)return {status:"review-required",validation};
       confirmed={start,end,provenance:{kind:"user-confirmed",confirmationMethod:"explicit-component-confirmation",
         sourceMetadata:context.sourceCoverage?structuredClone(context.sourceCoverage):null,
@@ -71,7 +71,7 @@ export function createImportCoverageModel(initial={}) {
         contextKey:context.contextKey??null}};
       return {status:"confirmed",coverage:structuredClone(confirmed)};},
     cancel(){active();confirmed=null;cancelled=true;return {status:"cancelled",accepted:false};},
-    reset(){active();start=hint.start||"";end=hint.end||"";invalidate();return state();},
+    reset(){active();start=hint.start||"";end=hint.end||"";cancelled=false;invalidate();return state();},
     destroy(){if(destroyed)return;confirmed=null;context={};dates={usable:[],unusable:[]};hint={start:null,end:null};start="";end="";cancelled=false;destroyed=true;}
   };
 }
@@ -97,7 +97,7 @@ export function mountImportCoverageSelector({container,observedDates=[],sourceCo
     const messages=v.errors.map(x=>({ "invalid-start-date":"Enter a real calendar start date.","invalid-end-date":"Enter a real calendar end date.","reversed-date-range":"Start must be on or before end.","no-usable-transaction-dates":"No usable transaction dates were supplied; review is required.","unusable-observed-dates":"Some supplied transaction dates are unusable; review is required."}[x.code]));
     const outside=v.outside.map(x=>"<li>"+x.date+(x.rowReference===null?"":" (row "+escapeHtml(x.rowReference)+")")+"</li>").join("");
     const hints=[s.suggestions.start?"Suggested start: "+s.suggestions.start+" ("+s.suggestions.startSource+")":"",s.suggestions.end?"Suggested end: "+s.suggestions.end+" ("+s.suggestions.endSource+")":""].filter(Boolean).join(" · ");
-    container.innerHTML="<div class='ics'><header><h2>Declare import coverage</h2><p>Choose the inclusive dates this file is intended to cover. Suggestions are not confirmation.</p></header><p class='ics-hints' aria-live='polite'>"+(hints||"No suggestions available.")+"</p><div class='ics-fields'><label>Start date (inclusive)<input type='date' data-field='start' value='"+s.start+"'></label><label>End date (inclusive)<input type='date' data-field='end' value='"+s.end+"'></label></div><div class='ics-calendars'>"+calendar("start",s.start,views.start)+calendar("end",s.end,views.end)+"</div><section class='ics-review' aria-live='polite'><h3>Coverage review</h3><p>"+v.usableObservedCount+" usable transaction date(s) observed. Observed dates do not prove completeness.</p>"+(messages.length?"<ul class='ics-errors'>"+messages.map(x=>"<li>"+x+"</li>").join("")+"</ul>":"")+(outside?"<p>Out-of-range transaction dates; rows are retained for review:</p><ul>"+outside+"</ul>":"")+(v.unusableObserved.length?"<p>"+v.unusableObserved.length+" unusable date value(s) require review.</p>":"")+(s.confirmed?"<p role='status'>Coverage explicitly confirmed.</p>":"")+"</section><footer><button type='button' data-action='reset'>Reset suggestions</button><button type='button' data-action='cancel'>Cancel</button><button type='button' data-action='confirm' "+(v.valid?"":"disabled")+">Confirm coverage</button></footer></div>";
+    container.innerHTML="<div class='ics'><header><h2>Declare import coverage</h2><p>Choose the inclusive dates this file is intended to cover. Suggestions are not confirmation.</p></header><p class='ics-hints' aria-live='polite'>"+(hints||"No suggestions available.")+"</p><div class='ics-fields'><label>Start date (inclusive)<input type='date' data-field='start' value='"+s.start+"'></label><label>End date (inclusive)<input type='date' data-field='end' value='"+s.end+"'></label></div><div class='ics-calendars'>"+calendar("start",s.start,views.start)+calendar("end",s.end,views.end)+"</div><section class='ics-review' aria-live='polite'><h3>Coverage review</h3><p>"+v.usableObservedCount+" usable transaction date(s) observed. Observed dates do not prove completeness.</p>"+(messages.length?"<ul class='ics-errors'>"+messages.map(x=>"<li>"+x+"</li>").join("")+"</ul>":"")+(outside?"<p>Out-of-range transaction dates; rows are retained for review:</p><ul>"+outside+"</ul>":"")+(v.unusableObserved.length?"<p>"+v.unusableObserved.length+" unusable date value(s) require review.</p>":"")+(s.confirmed?"<p role='status'>Coverage explicitly confirmed.</p>":"")+"</section><footer><button type='button' data-action='reset'>Reset suggestions</button><button type='button' data-action='cancel'>Cancel</button><button type='button' data-action='confirm' "+(v.valid&&!s.cancelled?"":"disabled")+">Confirm coverage</button></footer></div>";
     if(focus)container.querySelector(focus)?.focus();
   };
   const click=e=>{
