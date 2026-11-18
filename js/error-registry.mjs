@@ -116,6 +116,9 @@ const copyGuideMessages = Object.freeze({
 });
 
 const extra = Object.freeze({
+  'account-mismatch': 'This is not the designated Google account. Keep this tab open and reconnect using the original account.',
+  'account-verification-failed': 'The Google account identity could not be verified. Keep your draft and retry with the same account.',
+  'account-designation-unavailable': 'The browser could not retain the designated account. Allow site storage before connecting.',
   'conflicting-match-requires-correction': 'The selected match has a different account, currency or amount, or is missing an amount. Choose a compatible activity or resolve the evidence with an explicit correction before matching.',
   'inactive-match-target': 'The selected activity is no longer active. Choose an active match target before submitting this review decision.',
 
@@ -314,7 +317,7 @@ const codeGroups = {
     write-readback-mismatch write-unresolved
   `,
   session: `
-    ambiguous-session-record authorization-required confirmation-required drive-create-failed
+    account-mismatch account-verification-failed account-designation-unavailable ambiguous-session-record authorization-required confirmation-required drive-create-failed
     drive-read-failed drive-update-failed fetch-unavailable invalid-adapter invalid-operation invalid-response
     invalid-timing missing-folder network-error no-session-context not-owner not-stale offline ownership-lost
     ownership-unknown read-before-write-required release-unconfirmed session-active session-marker-not-visible

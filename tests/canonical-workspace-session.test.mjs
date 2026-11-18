@@ -94,7 +94,7 @@ for (const [flag, writes] of [['fail', 0], ['loseResponse', 1]]) test(`${flag} r
   assert.deepEqual(h.session.ledger, flag === 'loseResponse' ? proposal : recipe.ledger);
 });
 
-test('release keeps draft read-only and clears credentials only after verified completion', async () => {
+test('release clears loaded financial state and credentials only after verified completion', async () => {
   const h = await setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger);
   const release = h.storage.release;
@@ -102,15 +102,16 @@ test('release keeps draft read-only and clears credentials only after verified c
   await assert.rejects(h.session.release(), { code: 'release-unconfirmed' });
   assert.equal(h.storage.accessToken, 'invented-token'); assert.deepEqual(h.session.ledger, proposal);
   h.storage.release = release; await h.session.release();
-  assert.equal(h.storage.accessToken, ''); assert.equal(h.session.dirty, true); assert.equal(h.session.canEdit(), false);
-  assert.deepEqual(h.session.ledger, proposal);
+  assert.equal(h.storage.accessToken, ''); assert.equal(h.session.dirty, false); assert.equal(h.session.canEdit(), false);
+  for (const key of ['ledger','baselineLedger','store','backupSource','restoreExpected','restoreFolderId','pendingSave','recoveryOutcome']) assert.equal(h.session[key], null, key);
+  assert.deepEqual(h.session.stagedHistory, []); assert.equal(h.session.mode, 'empty'); assert.equal(h.session.savedEventCount, 0);
 });
 
-test('failed open never adopts another copy as writable base for the retained draft', async () => {
+test('cancelled folder selection preserves the current writable draft and base', async () => {
   const h = await setup(); await h.session.open(); h.session.correct(correction(h.session.ledger));
   const proposal = structuredClone(h.session.ledger); h.storage.connect = async () => { throw new Error('invented cancellation'); };
   await assert.rejects(h.session.open());
-  assert.deepEqual(h.session.ledger, proposal); assert.equal(h.session.canEdit(), false); assert.equal(h.session.canSave(), false);
+  assert.deepEqual(h.session.ledger, proposal); assert.equal(h.session.canEdit(), true); assert.equal(h.session.canSave(), true);
 });
 
 test('missing saved ledger and non-synthetic copies fail closed without initializing a ledger', async () => {
@@ -376,8 +377,8 @@ test('a position-only local preview saves to a fresh synthetic copy and release 
   await h.session.savePreviewToNewCopy();
   await h.session.reopen(); assert.deepEqual(h.session.ledger, proposed);
   await h.session.release();
-  assert.throws(() => h.session.recordPosition(positionCommand(h.session.ledger)), { code: 'reopen-before-editing' });
-  assert.deepEqual(h.session.ledger, proposed);
+  assert.throws(() => h.session.recordPosition(positionCommand(proposed)), { code: 'reopen-before-editing' });
+  assert.equal(h.session.ledger, null);
 });
 
 test('manual synthetic liability creation and balances stage, undo and save through existing history rules', async () => {
@@ -407,7 +408,7 @@ test('invalid or read-only account creation cannot change the canonical draft', 
   assert.deepEqual(h.session.ledger,original);assert.equal(h.session.stagedHistory.length,0);
   await h.session.release();
   assert.throws(()=>h.session.addAccount({ institutionId:'sofi',accountType:'mortgage',displayName:'Invented',currency:'USD' }),{code:'reopen-before-editing'});
-  assert.deepEqual(h.session.ledger,original);
+  assert.equal(h.session.ledger,null);
 });
 
 for (const layout of ['full-snapshot-v1']) test(`${layout} explicit posting corrections save, reopen, undo and preserve original evidence`, async () => {

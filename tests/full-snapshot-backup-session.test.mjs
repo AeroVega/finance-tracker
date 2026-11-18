@@ -91,7 +91,7 @@ test('explicit restore recheck refreshes expired authorization after saved publi
 
 
 test('restore recheck rejects changed destination before authorization or cold reopen',async()=>{
- const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const h=setup();await h.session.importBackup(await encodeFullSnapshotBackup(replayFixture(1).ledger));
+ const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const h=setup();const backup=await encodeFullSnapshotBackup(replayFixture(1).ledger);await h.session.importBackup(backup);
  h.storage.reopenIndependent=async()=>{throw Object.assign(new Error('invented expiry'),{code:'authorization-required'});};await assert.rejects(h.session.restoreBackupToNewCopy());const original=h.storage.lifecycle;let auth=0,cold=0;
  h.storage.refreshRecoveryAuthorization=async()=>{auth++;};h.storage.reopenIndependent=async()=>{cold++;};h.storage.lifecycle={folderId:'invented-other-folder'};
  try{await assert.rejects(h.session.resolveUncertainSave(),{code:'verified-backup-required'});assert.equal(auth,0);assert.equal(cold,0);assert.equal(h.session.backupPreview,true);assert.equal(h.session.unverified,true);}
@@ -99,7 +99,7 @@ test('restore recheck rejects changed destination before authorization or cold r
 });
 
 test('ordinary reopen cannot waive an incomplete independent restore verification',async()=>{
- const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const h=setup();await h.session.importBackup(await encodeFullSnapshotBackup(replayFixture(1).ledger));
+ const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const h=setup();const backup=await encodeFullSnapshotBackup(replayFixture(1).ledger);await h.session.importBackup(backup);
  const reopen=h.storage.reopenIndependent;let checks=0;
  h.storage.reopenIndependent=async()=>{checks++;throw Object.assign(new Error('invented interruption'),{code:'authorization-required'});};
  await assert.rejects(h.session.restoreBackupToNewCopy());const expected=structuredClone(h.session.restoreExpected);
@@ -111,7 +111,7 @@ test('ordinary reopen cannot waive an incomplete independent restore verificatio
 });
 
 test('open and release cannot discard outstanding restore verification',async()=>{
- const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const h=setup();await h.session.importBackup(await encodeFullSnapshotBackup(replayFixture(1).ledger));
+ const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const h=setup();const backup=await encodeFullSnapshotBackup(replayFixture(1).ledger);await h.session.importBackup(backup);
  h.storage.reopenIndependent=async()=>{throw Object.assign(new Error('invented interruption'),{code:'authorization-required'});};await assert.rejects(h.session.restoreBackupToNewCopy());
  const original=h.storage.lifecycle,connects=h.calls.connect,expected=structuredClone(h.session.restoreExpected);
  await assert.rejects(h.session.open(),{code:'recovery-required'});await assert.rejects(h.session.release(),{code:'recovery-required'});
@@ -119,12 +119,12 @@ test('open and release cannot discard outstanding restore verification',async()=
  await original.release();
 });
 
-test('prewrite restore failure preserves preview without blocking safe release and retry',async()=>{
- const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const h=setup();await h.session.importBackup(await encodeFullSnapshotBackup(replayFixture(1).ledger));
+test('prewrite restore failure preserves preview until privacy release; retry imports the original backup again',async()=>{
+ const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const h=setup();const backup=await encodeFullSnapshotBackup(replayFixture(1).ledger);await h.session.importBackup(backup);
  const connect=h.storage.connect;h.storage.connect=async()=>{throw Object.assign(new Error('invented cancel'),{code:'picker-cancelled'});};
  await assert.rejects(h.session.restoreBackupToNewCopy());assert.equal(h.session.restoreFolderId,null);assert.equal(h.session.backupPreview,true);
  h.storage.connect=async function(){await connect.call(this);throw Object.assign(new Error('invented prewrite failure'),{code:'offline'});};
- await assert.rejects(h.session.restoreBackupToNewCopy());assert.equal(h.session.restoreFolderId,null);await h.session.release();assert.equal(h.storage.lifecycle,null);assert.equal(h.session.backupPreview,true);
+ await assert.rejects(h.session.restoreBackupToNewCopy());assert.equal(h.session.restoreFolderId,null);await h.session.release();assert.equal(h.storage.lifecycle,null);assert.equal(h.session.backupPreview,false);assert.equal(h.session.backupSource,null);assert.equal(h.session.ledger,null);
  // A new destination remains available; do not reuse the initialized partial folder.
- const target=setup();await target.session.importBackup(await encodeFullSnapshotBackup(h.session.backupSource));await target.session.restoreBackupToNewCopy();assert.equal(target.session.unverified,false);await target.session.release();
+ const target=setup();await target.session.importBackup(backup);await target.session.restoreBackupToNewCopy();assert.equal(target.session.unverified,false);await target.session.release();
 });

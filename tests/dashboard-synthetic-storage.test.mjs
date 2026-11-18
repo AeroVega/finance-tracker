@@ -27,7 +27,7 @@ test("dashboard CSV import path remains local and cannot invoke Drive persistenc
 
 test("dashboard supplies a synchronous token provider to the Drive session adapter", () => {
   const source = readFileSync(new URL("../js/dashboard-synthetic-storage.mjs", import.meta.url), "utf8");
-  assert.match(source, /accessToken: \(\) => this\.token\(\)/);
+  assert.match(source, /accessToken:\s*\(\)\s*=>\s*this\.token\(\)/);
   assert.doesNotMatch(source, /accessToken: async \(\) => this\.token\(\)/);
 });
 

@@ -15,7 +15,7 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 - Trusted app file/line/column plus a stamped commit locate source. Function names are omitted. Unminified static modules need no source maps; if bundling/minification is ever adopted, retain source maps before relying on those frames.
 - The literal-code audit reports computed/forwarded calls separately. Zero unknown literal codes is not proof that every dynamic path was exercised.
 
-## Registered codes (665)
+## Registered codes (668)
 
 ### backup / integrity
 
@@ -255,6 +255,7 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 
 ### session / integrity
 
+`account-designation-unavailable` · `account-mismatch` · `account-verification-failed`
 `ambiguous-session-record` · `confirmation-required` · `drive-create-failed` · `drive-read-failed`
 `drive-update-failed` · `fetch-unavailable` · `invalid-operation` · `invalid-response`
 `invalid-timing` · `missing-folder` · `network-error` · `no-session-context` · `not-owner`

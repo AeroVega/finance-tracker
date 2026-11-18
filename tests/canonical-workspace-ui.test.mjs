@@ -318,8 +318,10 @@ test('failed release remains selected and read-only until verified closure', asy
   assert.equal(h.get('preview-year').disabled, false);
   assert.equal(h.get('save-ledger').disabled, true);
   assert.equal(h.get('stage-correction').disabled, true);
-  assert.equal(h.get('data-mode').textContent, 'Synthetic · read-only');
-  assert.deepEqual(h.modelSession.ledger, proposed);
+  assert.equal(h.get('data-mode').textContent, 'Synthetic workspace');
+  assert.equal(h.modelSession.ledger, null);
+  for (const id of ['transaction-rows','summary-cards','recent-activities','detail-source','detail-history','position-accounts','position-totals','review-queue']) assert.equal(h.get(id).children.length, 0, id);
+  for (const id of ['detail-title','detail-description','detail-amount','amount','correction-rationale','backup-password','restore-password']) assert.equal(h.get(id).value || h.get(id).textContent, '', id);
   assert.equal(h.state.writes, 0);
 });
 
@@ -1326,4 +1328,41 @@ test('successful storage timing stays tab-local, labels unavailable counts and c
  assert.equal(summary.requests,null);assert.equal(summary.manifestPatches,null);assert.equal(summary.path,'unavailable');
  assert.equal(h.session.size,0);assert.doesNotMatch(JSON.stringify(summary),/invented|ledgerId|copyId|rootHash|https:/);
  await h.click('clear-success-metrics');assert.match(h.get('success-metrics').textContent,/No successful action/);
+});
+
+test('privacy close clears financial display and unfinished forms only after explicit confirmation', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.detail();
+  h.get('correction-rationale').value = 'Invented unfinished private note';
+  for (const id of ['balance-source','balance-amount','holdings-source','new-account-name','backup-password','backup-password-confirm','restore-password']) h.get(id).value = 'Invented private form value';
+  h.observed.confirm = false;
+  await h.click('release-ledger');
+  assert.equal(h.state.releases, 0);
+  assert.equal(h.get('correction-rationale').value, 'Invented unfinished private note');
+  assert.notEqual(h.modelSession.ledger, null);
+  h.observed.confirm = true;
+  await h.click('release-ledger');
+  assert.equal(h.modelSession.ledger, null);
+  for (const id of ['correction-rationale','balance-source','balance-amount','holdings-source','new-account-name','backup-password','backup-password-confirm','restore-password']) assert.equal(h.get(id).value, '', id);
+  for (const id of ['detail-title','detail-description','detail-amount']) assert.equal(h.get(id).textContent, '', id);
+  assert.match(h.observed.confirmations.at(-1), /cleared from this tab/);
+  assert.match(h.get('action-status').textContent, /does not erase browser or device traces/);
+  assert.equal(h.get('activity-detail').hidden, true);
+  assert.equal(h.get('overview-loaded').hidden, true);
+  assert.equal(h.get('welcome-panel').hidden, false);
+});
+
+for (const action of ['release-ledger','open-ledger']) test(`${action} protects unfinished position evidence even when the saved ledger is clean`, async () => {
+  const h = await workspacePage(); await h.click('open-ledger');
+  const ledger = h.modelSession.ledger;
+  h.get('balance-amount').value = '123.45';
+  h.get('balance-source').value = 'Invented unstaged statement';
+  h.observed.confirm = false;
+  const connections = h.state.connects.length;
+  await h.click(action);
+  assert.equal(h.observed.confirmations.length, 1);
+  assert.equal(h.state.releases, 0);
+  assert.equal(h.state.connects.length, connections);
+  assert.equal(h.modelSession.ledger, ledger);
+  assert.equal(h.get('balance-amount').value, '123.45');
+  assert.equal(h.get('balance-source').value, 'Invented unstaged statement');
 });

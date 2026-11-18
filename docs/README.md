@@ -34,6 +34,7 @@ Start with [Agent quick start](AGENT_QUICK_START.md), then read [current project
 - [Full-snapshot storage](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) — selected application format, authority, verification, recovery and bounds.
 - [Drive simulator](DRIVE_SIMULATOR.md) — repeatable synthetic provider/authentication scenarios, performance measurements and explicit emulation limits.
 - [Storage terminology](STORAGE_TERMINOLOGY.md) — active format versus historical version namespaces.
+- [Account/session privacy](PRIVACY_SESSION.md) — designated-account checks, transactional folder selection, privacy close, and browser retention limitations.
 - [Session coordination](SESSION_COORDINATION.md), [Drive response bounds](DRIVE_RESPONSE_BOUNDS.md), [Google Drive configuration](GOOGLE_DRIVE_CONFIGURATION.md), and [security](SECURITY.md) — retained shared safety/provider boundaries.
 - Portable backup/restore and supported file ingestion remain requirements, not available features of the selected route.
 
