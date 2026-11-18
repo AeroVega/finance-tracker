@@ -26,7 +26,7 @@ const safeError = error => ({
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, onStaged = () => {} }) {
   if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function') throw Object.assign(new TypeError('invalid-options'), { code: 'invalid-options' });
   const document = root.ownerDocument;
-  const state = { bytes: null, parsed: null, fingerprint: null, context: 0, mappings: new Map(), preview: null };
+  const state = { bytes: null, parsed: null, fingerprint: null, context: 0, mappings: new Map(), preview: null, baseLedger: null };
   root.replaceChildren();
   const heading = element(document, 'h3', {}, 'Import a supported CSV');
   const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then choose Save changes.');
@@ -52,7 +52,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     discrepancy.textContent = message;
   }
   function resetState({ clearFile = false } = {}) {
-    state.bytes = null; state.parsed = null; state.fingerprint = null; state.mappings.clear();
+    state.bytes = null; state.parsed = null; state.fingerprint = null; state.mappings.clear(); state.baseLedger = null;
     if (clearFile) file.value = '';
     mappings.replaceChildren(); emptyConfirmation.hidden = true; emptyCheck.checked = false;
     invalidate('No import is staged. Choose a CSV file to begin.');
@@ -126,18 +126,22 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     resetState();
     if (!selected) return;
     const token = state.context;
+    const baseLedger = getLedger();
     try {
       const bytes = await selected.arrayBuffer();
-      if (token !== state.context || file.files?.[0] !== selected) return;
+      if (token !== state.context || file.files?.[0] !== selected || getLedger() !== baseLedger) return;
       const detection = await parseRecognizedProviderCsv({ bytes });
-      if (token !== state.context || file.files?.[0] !== selected) return;
+      if (token !== state.context || file.files?.[0] !== selected || getLedger() !== baseLedger) {
+        invalidate('The active ledger changed while this file was being read. Select the file again to start a fresh import review.');
+        return;
+      }
       if (detection.status !== 'recognized') {
         summary.textContent = detection.status === 'ambiguous'
           ? 'The headers match more than one supported format. No parser was selected.'
           : 'The headers are not an exact supported export format. No parser was selected.';
         return;
       }
-      state.bytes = bytes; state.parsed = detection.parsed; state.fingerprint = detection.parsed.fileFingerprint;
+      state.bytes = bytes; state.parsed = detection.parsed; state.fingerprint = detection.parsed.fileFingerprint; state.baseLedger = baseLedger;
       const parsed = state.parsed;
       summary.textContent = parsed.sourceFormat + ' · ' + parsed.records.length + ' transaction rows · ' +
         parsed.records.filter(row => row.valid).length + ' parser-valid · ' +
@@ -153,6 +157,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
   }
   function prepare() {
     if (!state.parsed || !getLedger()) throw Object.assign(new TypeError('canonical-ledger-required'), { code: 'canonical-ledger-required' });
+    if (getLedger() !== state.baseLedger) throw Object.assign(new TypeError('reconnect-required'), { code: 'reconnect-required' });
     const parsed = state.parsed;
     if (!parsed.records.length && !emptyCheck.checked) throw Object.assign(new TypeError('explicit-account-mapping-required'), { code: 'explicit-account-mapping-required' });
     const accountMappings = {}, coverageByAccount = {};
