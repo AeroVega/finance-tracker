@@ -41,7 +41,7 @@ const safeError = error => ({
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, canStage = () => true, getUnavailableReason = () => null, onStaged = () => {} }) {
   if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function' || typeof canStage !== 'function' || typeof getUnavailableReason !== 'function') fail('invalid-options');
   const document = root.ownerDocument;
-  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false, validated: false, finishedMessage: '' };
+  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false, validated: false, finishedMessage: '', noOp: false };
   root.replaceChildren();
   const heading = element(document, 'h4', {}, 'Import a supported CSV');
   const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then use the workspace's explicit save action.');
@@ -67,6 +67,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     state.validated = false;
     state.staged = false;
     state.finishedMessage = '';
+    state.noOp = false;
     emptyCheck.checked = false;
     for (const mapping of state.mappings.values()) mapping.confirmed.checked = false;
     stage.disabled = true;
@@ -80,6 +81,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     state.staged = false;
     state.validated = false;
     state.finishedMessage = '';
+    state.noOp = false;
     if (clearFile) file.value = '';
     mappings.replaceChildren();
     emptyConfirmation.hidden = true;
@@ -140,6 +142,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     const changed = control => {
       if (control !== confirmed) confirmed.checked = false;
       state.validated = false;
+      state.noOp = false;
       previewSummary.textContent = '';
       emptyCheck.checked = false;
       refreshEligibility();
@@ -291,15 +294,18 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       const result = prepare();
       state.validated = true;
       const counts = result.summary;
-      previewSummary.textContent = result.summary.noOp === state.mappings.size
-        ? 'This exact file has already been imported for the selected account. No duplicate rows or new import run will be staged.'
+      state.noOp = result.summary.noOp === state.mappings.size;
+      state.finishedMessage = state.noOp ? 'This exact file has already been imported for the selected account. No duplicate rows or new import run will be staged.' : '';
+      previewSummary.textContent = state.noOp
+        ? state.finishedMessage
         : state.parsed.records.length === 0
           ? 'Ready to stage a confirmed header-only export. It will record an empty import run with no transaction rows.'
           : 'Read-only reconciliation preview: ' + counts.created + ' new, ' + counts.matched + ' matched, ' + counts.review + ' for review, ' + counts.rejected + ' rejected, ' + counts.ignored + ' ignored. Nothing has been staged yet.';
-      stage.disabled = false;
-      discrepancy.textContent = 'Mapping and inclusive coverage are valid. Stage this import to add it to the unsaved ledger draft.';
+      stage.disabled = state.noOp;
+      discrepancy.textContent = state.noOp ? 'Discard this file to select another export.' : 'Mapping and inclusive coverage are valid. Stage this import to add it to the unsaved ledger draft.';
     } catch (error) {
       state.validated = false;
+      state.noOp = false;
       previewSummary.textContent = '';
       if (error?.code === 'reconnect-required') invalidate(safeError(error));
       else { stage.disabled = true; discrepancy.textContent = safeError(error); }
@@ -314,8 +320,10 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       discrepancy.textContent = unavailable || 'The current workspace session cannot stage changes.';
       return;
     }
-    if (state.validated) stage.disabled = false;
-    else refreshEligibility();
+    if (state.validated) {
+      stage.disabled = state.noOp;
+      if (state.noOp) discrepancy.textContent = state.finishedMessage;
+    } else refreshEligibility();
   }
   function onStage() {
     if (stage.disabled) return;
@@ -330,6 +338,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       if (result.summary.noOp === state.mappings.size) {
         state.staged = true;
         state.validated = false;
+        state.noOp = true;
         state.finishedMessage = 'This exact file has already been imported for the selected account. No duplicate rows or new import run were staged.';
         stage.disabled = true;
         discrepancy.textContent = state.finishedMessage;
@@ -339,6 +348,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       state.baseLedger = getLedger();
       state.staged = true;
       state.validated = false;
+      state.noOp = false;
       state.finishedMessage = 'This file is already staged. Select another export to prepare another import.';
       summary.textContent = 'Import staged locally: ' + result.summary.created + ' created, ' + result.summary.matched + ' matched, ' +
         result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Use the workspace's explicit save action to persist this draft.';
