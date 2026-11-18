@@ -50,7 +50,7 @@ export function evaluateImportCoverage({start,end,observedDates=[]}={}) {
     usableObservedCount:dates.usable.length,observedDates:dates.usable.map(x=>x.date)};
 }
 export function createImportCoverageModel(initial={}) {
-  let context={...initial}, dates=observed(initial.observedDates||[]), hint=suggestions(initial);
+  let context={...initial,observedDates:structuredClone(initial.observedDates||[]),sourceCoverage:initial.sourceCoverage?structuredClone(initial.sourceCoverage):null}, dates=observed(context.observedDates), hint=suggestions(context);
   let start=hint.start||"",end=hint.end||"",confirmed=null,cancelled=false,destroyed=false;
   const active=()=>{if(destroyed) throw new Error("coverage-model-destroyed");};
   const invalidate=()=>{confirmed=null;cancelled=false;};
@@ -62,7 +62,7 @@ export function createImportCoverageModel(initial={}) {
   return {
     getState(){active();return state();},
     setDates(next={}){active();if(Object.hasOwn(next,"start"))start=next.start;if(Object.hasOwn(next,"end"))end=next.end;invalidate();return state();},
-    updateContext(next={}){active();context={...next};dates=observed(next.observedDates||[]);hint=suggestions(next);start=hint.start||"";end=hint.end||"";invalidate();return state();},
+    updateContext(next={}){active();context={...next,observedDates:structuredClone(next.observedDates||[]),sourceCoverage:next.sourceCoverage?structuredClone(next.sourceCoverage):null};dates=observed(context.observedDates);hint=suggestions(context);start=hint.start||"";end=hint.end||"";invalidate();return state();},
     confirm(){active();const validation=evaluateImportCoverage({start,end,observedDates:context.observedDates||[]});
       if(!validation.valid)return {status:"review-required",validation};
       confirmed={start,end,provenance:{kind:"user-confirmed",confirmationMethod:"explicit-component-confirmation",
