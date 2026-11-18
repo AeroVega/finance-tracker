@@ -50,23 +50,13 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
   const recipe = await createSyntheticFinancialYear();
   const session = new CanonicalWorkspaceSession({ storage: { lifecycle: null }, online: () => true });
   session.preview(recipe.ledger);
-  const bytes = await readFile(new URL('../fixtures/wells-fargo.csv', import.meta.url));
-  const { parsed: source } = await parseRecognizedProviderCsv({ bytes: new Uint8Array(bytes) });
-  const parsed = structuredClone(source);
-  parsed.records.push({
-    ...structuredClone(parsed.records[0]),
-    rowOrdinal: parsed.records.length + 1,
-    physicalLine: parsed.records.length + 3,
-    sourceDescription: 'Synthetic malformed date row',
-    normalizedDescription: 'synthetic malformed date row',
-    sourceFields: { ...parsed.records[0].sourceFields, DATE: 'not-a-date' },
-    sourceRecordId: null,
-    sourceRowFingerprint: 'b'.repeat(64),
-    effectiveDate: null,
-    valid: false,
-    errorCode: 'invalid-date',
-  });
-  parsed.rowsSeen++;
+  const sourceBytes = await readFile(new URL('../fixtures/wells-fargo.csv', import.meta.url));
+  const csvText = new TextDecoder().decode(sourceBytes).trimEnd() +
+    '\\nnot-a-date,EXAMPLE MALFORMED DATE,-1.00,,Posted\\n';
+  const bytes = new TextEncoder().encode(csvText);
+  const { parsed } = await parseRecognizedProviderCsv({ bytes });
+  assert.equal(parsed.records.at(-1).valid, false);
+  assert.equal(parsed.records.at(-1).effectiveDate, null);
   const accountId = recipe.accounts.checking;
   const input = {
     parsed,
