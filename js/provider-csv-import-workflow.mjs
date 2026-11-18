@@ -353,7 +353,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       state.noOp = false;
       state.finishedMessage = 'This file is already staged. Select another export to prepare another import.';
       summary.textContent = 'Import staged locally: ' + result.summary.created + ' created, ' + result.summary.matched + ' matched, ' +
-        result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Use the workspace's explicit save action to persist this draft.';
+        result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Use the workspace explicit save action to persist this draft.';
       previewSummary.textContent = 'Import staged locally: ' + result.summary.created + ' new, ' + result.summary.matched + ' matched, ' + result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored.';
       discrepancy.textContent = 'No file upload or Drive write occurred. Existing review decisions remain in the Review page.';
       stage.disabled = true;
