@@ -333,7 +333,9 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
         result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Use the workspace's explicit save action to persist this draft.';
       discrepancy.textContent = 'No file upload or Drive write occurred. Existing review decisions remain in the Review page.';
       stage.disabled = true;
-      onStaged();
+      try { onStaged(); } catch {
+        discrepancy.textContent = 'The import was staged locally, but the workspace view could not refresh. Reload before taking another action.';
+      }
     } catch (error) {
       if (error?.code === 'reconnect-required') invalidate(safeError(error));
       else { discrepancy.textContent = safeError(error); stage.disabled = true; }
