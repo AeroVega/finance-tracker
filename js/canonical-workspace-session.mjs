@@ -174,12 +174,13 @@ export class CanonicalWorkspaceSession {
     if (proposal.ledgerId !== current.ledgerId || proposal.createdAt !== current.createdAt ||
       proposal.syntheticOnly !== true || !same(proposal.accounts, current.accounts) ||
       !same(proposal.positionEvents ?? [], current.positionEvents ?? [])) fail('invalid-parsed-import');
-    for (const key of ['activities', 'events', 'reviewDecisions']) {
+    for (const key of ['activities', 'events']) {
       const before = current[key], after = proposal[key];
       if (!Array.isArray(after) || after.length < before.length ||
         !before.every((record, index) => same(record, after[index]))) fail('invalid-parsed-import');
     }
-    if (!Array.isArray(proposal.imports) || proposal.imports.length < current.imports.length ||
+    if (!same(proposal.reviewDecisions, current.reviewDecisions) ||
+      !Array.isArray(proposal.imports) || proposal.imports.length < current.imports.length ||
       !Array.isArray(proposal.observations) || proposal.observations.length < current.observations.length) fail('invalid-parsed-import');
     const retryRunIds = new Set();
     for (let index = 0; index < current.imports.length; index++) {
