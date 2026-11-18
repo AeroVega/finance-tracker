@@ -14,8 +14,9 @@ async function setup(){
  const previous={window:globalThis.window,fetch:globalThis.fetch};
  class View{setIncludeFolders(){return this;}setSelectFolderEnabled(){return this;}setMimeTypes(){return this;}}
  class Picker{addView(){return this;}setOAuthToken(){return this;}setDeveloperKey(){return this;}setAppId(){return this;}setOrigin(){return this;}setTitle(){return this;}setCallback(cb){this.cb=cb;return this;}build(){return this;}setVisible(){queueMicrotask(()=>this.cb(cancel?{action:'cancel'}:{action:'picked',docs:[{id:http.folderId}]}));}}
- globalThis.window={location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>{tokenRequests++;callback({access_token:'invented-test-token',expires_in:3600});}})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel'}}}};
- globalThis.fetch=(url,options)=>String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):http.fetch(url,options);
+ const accountPins=new Map();
+ globalThis.window={localStorage:{getItem:key=>accountPins.get(key)??null,setItem:(key,value)=>accountPins.set(key,value)},location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>{tokenRequests++;callback({access_token:'invented-test-token',expires_in:3600});}})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel'}}}};
+ globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):http.fetch(url,options);
  const imports={};const source=await readFile(new URL('../js/canonical-workspace.mjs',import.meta.url),'utf8');
  for(const match of source.matchAll(/^import \{([^}]+)\} from '([^']+)';$/gm)){const module=await import(new URL('../js/'+match[2],import.meta.url));for(const name of match[1].split(',').map(x=>x.trim()))imports[name]=module[name];}
  imports.DashboardSyntheticStorage=class extends DashboardSyntheticStorage{constructor(options){super(options);storage=this;}async prepare(){this.config={clientId:'invented',apiKey:'invented',projectNumber:'1'};return this.config;}};
@@ -33,10 +34,11 @@ test('visible create action seeds an empty folder through the shipped controller
   const expected=structuredClone(h.session.ledger);await h.page.click('release-ledger');await h.page.click('open-ledger');
   assert.deepEqual(h.session.ledger,expected);assert.equal(h.session.mode,'saved');
   h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented-retained',rationale:'Invented retained draft'});
-  const draft=structuredClone(h.session.ledger);await h.page.click('release-ledger');
-  h.page.observed.confirm=false;const tokens=h.tokenRequests;await h.page.click('create-ledger');
-  assert.deepEqual(h.session.ledger,draft);assert.equal(h.tokenRequests,tokens,'declining replacement does not authorize Drive');
-  h.page.observed.confirm=true;const files=structuredClone([...h.http.files]);const mutations=h.http.mutations;
+  const draft=structuredClone(h.session.ledger);h.page.observed.confirm=false;
+  const tokens=h.tokenRequests;await h.page.click('release-ledger');
+  assert.deepEqual(h.session.ledger,draft);assert.equal(h.tokenRequests,tokens,'declining closure preserves the draft without authorizing Drive');
+  h.page.observed.confirm=true;await h.page.click('release-ledger');assert.equal(h.session.ledger,null);
+ const files=structuredClone([...h.http.files]);const mutations=h.http.mutations;
   await h.page.click('create-ledger');assert.equal(h.http.mutations,mutations);assert.deepEqual([...h.http.files],files,'existing copy is never overwritten');
   assert.equal(h.session.mode,'preview');
  }finally{await h.close();}
@@ -73,4 +75,16 @@ test('pending create ignores repeat clicks and preserves newer page navigation',
   await h.page.navigate('#storage');unblock();await creating;
   assert.equal(h.session.mode,'saved');assert.equal(h.page.location.hash,'#storage');
  }finally{unblock?.();await h.close();}
+});
+
+test('cancelled reconnect through the shipped controller preserves the current writable draft',async()=>{
+ const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented-retained',rationale:'Invented current draft'});
+  const draft=h.session.ledger,base=h.session.store,lifecycle=h.storage.lifecycle;
+  h.cancel(true);await h.page.click('open-ledger');
+  assert.equal(h.session.ledger,draft);assert.equal(h.session.store,base);assert.equal(h.storage.lifecycle,lifecycle);
+  assert.equal(h.session.needsReopen,false);assert.equal(h.session.canSave(),true);
+  assert.equal(h.page.get('save-ledger').disabled,false);
+ }finally{await h.close();}
 });

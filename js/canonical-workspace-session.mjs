@@ -84,9 +84,11 @@ export class CanonicalWorkspaceSession {
     if(this.restoreExpected&&this.restoreFolderId)fail('recovery-required');
     this.#assertNoUnknownPublication();
     return this.operation(async () => {
+      // Folder admission is transactional: cancellation keeps this draft and
+      // its original verified base usable when storage did not change.
+      await this.storage.connect({ requireExisting: true });
       this.invalidate();
       this.store = null;
-      await this.storage.connect({ requireExisting: true });
       return this.loadVerified();
     });
   }
@@ -369,7 +371,12 @@ export class CanonicalWorkspaceSession {
       this.invalidate();
       const result = await this.storage.release();
       if (result?.released !== true || this.storage.lifecycle) fail('release-unconfirmed');
-      this.store = null;
+      this.store = null; this.ledger = null; this.baselineLedger = null;
+      this.stagedHistory = []; this.savedEventCount = 0;
+      this.pendingSave = null; this.recoveryOutcome = null;
+      this.backupSource = null; this.backupPreview = false;
+      this.restoreExpected = null; this.restoreFolderId = null;
+      this.mode = 'empty'; this.dirty = false; this.unverified = false; this.needsReopen = false;
       this.storage.accessToken = ''; this.storage.tokenExpiresAt = 0;
       return result;
     });

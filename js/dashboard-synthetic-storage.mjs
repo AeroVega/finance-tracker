@@ -83,17 +83,54 @@ async function loadConfig() {
 
 function requestToken(clientId) {
   return new Promise((resolve, reject) => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: DRIVE_SCOPE,
-      callback: (response) => {
-        if (response?.error || !response?.access_token) return reject(new Error("Google did not authorize Drive access."));
-        resolve(response);
-      },
-      error_callback: () => reject(new Error("Google authorization was closed or blocked."))
-    });
-    client.requestAccessToken();
+    // Provider payloads may contain arbitrary text. Classify only documented
+    // discriminators; never retain the payload or copy it into diagnostics.
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: DRIVE_SCOPE,
+        callback: (response) => {
+          if (response?.error === 'access_denied') return reject(new AppError('authorization-cancelled'));
+          if (response?.error || typeof response?.access_token !== 'string' || !response.access_token.trim())
+            return reject(new AppError('authorization-failed'));
+          resolve(response);
+        },
+        error_callback: (error) => {
+          if (error?.type === 'popup_closed') return reject(new AppError('authorization-cancelled'));
+          if (error?.type === 'popup_failed_to_open') return reject(new AppError('authorization-popup-blocked'));
+          reject(new AppError('authorization-failed'));
+        }
+      });
+      client.requestAccessToken();
+    } catch {
+      reject(new AppError('authorization-failed'));
+    }
   });
+}
+
+// Only an account fingerprint is retained locally. It is not a credential or
+// an access-control boundary; clearing browser site data requires designation again.
+const ACCOUNT_KEY = 'finance-tracker.designated-account.v1';
+async function accountFingerprint(id) {
+  const bytes = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode('finance-tracker-account-v1:' + id));
+  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+async function verifiedAccount(token) {
+  let response;
+  try { response = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(permissionId,emailAddress,me)', {
+    headers: { Authorization: 'Bearer ' + token }, cache: 'no-store'
+  }); } catch (cause) { throw new AppError('account-verification-failed', {cause}); }
+  if (!response.ok) throw new AppError('account-verification-failed');
+  let user;
+  try { user = (await response.json()).user; } catch (cause) { throw new AppError('account-verification-failed', {cause}); }
+  if (user?.me !== true || typeof user.permissionId !== 'string' || !user.permissionId ||
+      typeof user.emailAddress !== 'string' || !user.emailAddress || user.emailAddress.length > 320) throw new AppError('account-verification-failed');
+  return user;
+}
+function authorizationExpiry(response) {
+  const seconds = Number(response.expires_in);
+  if (!Number.isFinite(seconds) || seconds <= 5) throw new AppError('authorization-required');
+  return Date.now() + seconds * 1000;
 }
 
 /** Strict fresh-target admission, before even a session marker is written.
@@ -114,6 +151,7 @@ export class DashboardSyntheticStorage {
     this.onDiagnostic = onDiagnostic;
     this.accessToken = "";
     this.tokenExpiresAt = 0;
+    this.accountId = "";
     this.config = null;
     this.folderId = "";
     this.folderName = "";
@@ -154,6 +192,35 @@ export class DashboardSyntheticStorage {
     return this.accessToken;
   }
 
+  async authorizeAccount(response, { refresh = false } = {}) {
+    const expiresAt = authorizationExpiry(response);
+    const user = await verifiedAccount(response.access_token);
+    if (this.accountId && user.permissionId !== this.accountId) throw new AppError('account-mismatch');
+    if (refresh && !this.accountId) throw new AppError('account-verification-failed');
+    if (!refresh) {
+      let saved;
+      const fingerprint = await accountFingerprint(user.permissionId);
+      try { saved = window.localStorage.getItem(ACCOUNT_KEY); }
+      catch (cause) { throw new AppError('account-designation-unavailable', {cause}); }
+      if (saved && saved !== fingerprint) throw new AppError('account-mismatch');
+      const message = saved
+        ? `Continue as ${user.emailAddress}, your designated Google account? No account switch is allowed.`
+        : `Designate ${user.emailAddress} as your only Finance Tracker Google account in this browser? A non-secret account fingerprint will be remembered locally, not your email or token. Use the same account on every device. No folder will be created automatically.`;
+      if (!window.confirm(message)) throw new AppError('authorization-cancelled');
+      try {
+        // Recheck after confirmation: another tab may have designated an account.
+        const current = window.localStorage.getItem(ACCOUNT_KEY);
+        if (current && current !== fingerprint) throw new AppError('account-mismatch');
+        window.localStorage.setItem(ACCOUNT_KEY, fingerprint);
+        if (window.localStorage.getItem(ACCOUNT_KEY) !== fingerprint) throw new AppError('account-designation-unavailable');
+      } catch (cause) {
+        if (cause instanceof AppError) throw cause;
+        throw new AppError('account-designation-unavailable', {cause});
+      }
+    }
+    return { token: response.access_token, expiresAt, accountId: user.permissionId };
+  }
+
   async connect({ requireEmpty = false, requireExisting = false, canonicalLayout = "full-snapshot-v1" } = {}) {
     if (canonicalLayout !== "full-snapshot-v1") throw new AppError("unsupported-canonical-layout");
     if (this.busy) throw new Error("A storage operation is already in progress.");
@@ -164,19 +231,17 @@ export class DashboardSyntheticStorage {
       // Invoke GIS immediately from the button handler while its user activation is live.
       const authorization = requestToken(config.clientId);
       const response = await authorization;
-      this.accessToken = response.access_token;
-      const expiresInSeconds = Number(response.expires_in);
-      // GIS normally supplies expires_in, but do not turn an omitted/malformed
-      // lifetime into an already-expired token. Let Drive report a 401 if needed.
-      this.tokenExpiresAt = Number.isFinite(expiresInSeconds) && expiresInSeconds > 0
-        ? Date.now() + expiresInSeconds * 1000
-        : Number.POSITIVE_INFINITY;
-      await new Promise((resolve, reject) => {
+      const candidate = await this.authorizeAccount(response);
+      const candidateToken = () => {
+        if (Date.now() >= candidate.expiresAt - 5000) throw new AppError('authorization-required');
+        return candidate.token;
+      };
+      const folder = await new Promise((resolve, reject) => {
         const view = new window.google.picker.DocsView(window.google.picker.ViewId.FOLDERS)
           .setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(FOLDER_MIME);
         const picker = new window.google.picker.PickerBuilder()
           .addView(view)
-          .setOAuthToken(this.token())
+          .setOAuthToken(candidateToken())
           .setDeveloperKey(config.apiKey)
           .setAppId(config.projectNumber)
           .setOrigin(window.location.origin)
@@ -190,7 +255,7 @@ export class DashboardSyntheticStorage {
             if (!item?.id) return reject(new Error("Google Picker returned no folder."));
             try {
               const metadataResponse = await fetch(DRIVE_FILES + "/" + encodeURIComponent(item.id) + "?fields=id,name,mimeType,trashed", {
-                headers: { Authorization: "Bearer " + this.token() }
+                headers: { Authorization: "Bearer " + candidateToken() }
               });
               if (!metadataResponse.ok) throw new Error("Drive folder verification failed (HTTP " + metadataResponse.status + ").");
               const metadata = await metadataResponse.json();
@@ -204,9 +269,7 @@ export class DashboardSyntheticStorage {
               if (!window.confirm(confirmation)) {
                 throw new Error("Folder selection cancelled.");
               }
-              this.folderId = metadata.id;
-              this.folderName = metadata.name;
-              resolve();
+              resolve({id: metadata.id, name: metadata.name});
             } catch (error) { reject(error); }
           }).build();
         picker.setVisible(true);
@@ -215,19 +278,26 @@ export class DashboardSyntheticStorage {
       // Refuse unsupported or otherwise nonempty folders before the lifecycle
       // creates or updates a session marker. A rejected folder stays untouched.
       const preflightAdapter = new GoogleDriveTransactionAdapter({
-        folderId: this.folderId,
-        accessToken: () => this.token()
+        folderId: folder.id,
+        accessToken: candidateToken
       });
       if (requireEmpty) await requireEmptySyntheticFolder(preflightAdapter);
       await inspectFullSnapshotFolder(preflightAdapter,{requireEmpty,requireExisting});
-      if (this.lifecycle && this.lifecycle.folderId !== this.folderId) {
+      if (this.lifecycle && this.lifecycle.folderId !== folder.id) {
         if (this.lifecycle.coordinator?.canWrite) {
-          await this.lifecycle.release({ reason: "synthetic-folder-change" });
+          const released = await this.lifecycle.release({ reason: "synthetic-folder-change" });
+          if (released?.released !== true || this.lifecycle.state !== "released") throw new AppError("release-unconfirmed");
         } else if (this.lifecycle.started) {
           throw new Error("The previous storage session cannot be safely released. Keep this folder selected and resolve its lifecycle state first.");
         }
         this.lifecycle = null;
       }
+      // Commit the selection only after admission and verified old-session release.
+      this.accessToken = candidate.token;
+      this.tokenExpiresAt = candidate.expiresAt;
+      this.accountId = candidate.accountId;
+      this.folderId = folder.id;
+      this.folderName = folder.name;
       if (!this.lifecycle) {
         this.lifecycle = new FullSnapshotApplication({folderId:this.folderId,accessToken:()=>this.token(),onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
       }
@@ -261,11 +331,14 @@ export class DashboardSyntheticStorage {
     if(!this.config)throw new AppError('authorization-required');
     // Explicit user recheck only, never from automatic recovery. Keep GIS in
     // the click gesture and do not reopen Picker or switch the selected folder.
-    const response=await requestToken(this.config.clientId);
-    if(this.lifecycle!==lifecycle||this.folderId!==folderId)throw new AppError('reconnect-required');
-    this.accessToken=response.access_token;
-    const seconds=Number(response.expires_in);
-    this.tokenExpiresAt=Number.isFinite(seconds)&&seconds>0?Date.now()+seconds*1000:Number.POSITIVE_INFINITY;
+    this.busy=true;
+    try {
+      const response=await requestToken(this.config.clientId);
+      const candidate=await this.authorizeAccount(response,{refresh:true});
+      if(this.lifecycle!==lifecycle||this.folderId!==folderId)throw new AppError('reconnect-required');
+      this.accessToken=candidate.token;
+      this.tokenExpiresAt=candidate.expiresAt;
+    } finally { this.busy=false; }
   }
 
   async reopenIndependent() {
@@ -298,27 +371,32 @@ export class DashboardSyntheticStorage {
   }
 
   async release() {
-    const lifecycle = this.lifecycle;
-    const accessToken = this.accessToken;
-    const tokenExpiresAt = this.tokenExpiresAt;
-    if (!lifecycle) {
-      throw Object.assign(new Error("There is no active storage session to release."), { code: "release-unconfirmed" });
-    }
-    const result = await lifecycle.release({ reason: "dashboard-handoff" });
-    // An older completion must not erase a newer lifecycle or recovery failure.
-    if (result?.released !== true || this.lifecycle !== lifecycle ||
-        lifecycle.state !== "released" || lifecycle.engine?.recoveryRequired ||
-        // Reauthorization can replace credentials while release is awaiting
-        // Drive. An older completion must not clear that newer authorization.
-        // Natural expiry may already have cleared the old token; that is safe.
-        (this.accessToken && (this.accessToken !== accessToken || this.tokenExpiresAt !== tokenExpiresAt))) {
-      throw Object.assign(new Error("Storage release could not be verified. Keep this device selected and resolve the session before switching devices."), { code: "release-unconfirmed" });
-    }
-    this.accessToken = "";
-    this.tokenExpiresAt = 0;
-    this.lifecycle = null;
-    this.publish("disconnected", "Synthetic storage session released.", "success");
-    return result;
+    if (this.busy) throw new AppError("operation-in-progress");
+    this.busy = true;
+    try {
+      const lifecycle = this.lifecycle;
+      const accessToken = this.accessToken;
+      const tokenExpiresAt = this.tokenExpiresAt;
+      if (!lifecycle) {
+        throw Object.assign(new Error("There is no active storage session to release."), { code: "release-unconfirmed" });
+      }
+      const result = await lifecycle.release({ reason: "dashboard-handoff" });
+      // An older completion must not erase a newer lifecycle or recovery failure.
+      if (result?.released !== true || this.lifecycle !== lifecycle ||
+          lifecycle.state !== "released" || lifecycle.engine?.recoveryRequired ||
+          // Reauthorization can replace credentials while release is awaiting
+          // Drive. An older completion must not clear that newer authorization.
+          // Natural expiry may already have cleared the old token; that is safe.
+          (this.accessToken && (this.accessToken !== accessToken || this.tokenExpiresAt !== tokenExpiresAt))) {
+        throw Object.assign(new Error("Storage release could not be verified. Keep this device selected and resolve the session before switching devices."), { code: "release-unconfirmed" });
+      }
+      this.accessToken = "";
+      this.tokenExpiresAt = 0;
+      this.lifecycle = null;
+      this.publish("disconnected", "Synthetic storage session released.", "success");
+      this.onSnapshot([]);
+      return result;
+    } finally { this.busy = false; }
   }
 }
 

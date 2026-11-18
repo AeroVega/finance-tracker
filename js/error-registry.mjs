@@ -23,7 +23,9 @@ const workspace = {
   'posting-status-unchanged': 'The posting status and date are unchanged. Choose a different value or another correction.',
   'invalid-amount': 'Enter an exact decimal amount, for example -125.50.',
   'reopen-before-editing': 'Reopen verified saved records before editing. Your local changes have not been discarded.',
-  'authorization-cancelled': 'Google authorization was cancelled. No saved records were replaced.',
+  'authorization-cancelled': 'Google authorization was cancelled or declined. Your selected folder and local draft are unchanged. Try connecting again when ready.',
+  'authorization-popup-blocked': 'The Google authorization popup could not open. Allow popups for this site, then try the connection button again. Your selected folder and local draft are unchanged.',
+  'authorization-failed': 'Google authorization could not complete. Your selected folder and local draft are unchanged. Try connecting again; check Google access or browser restrictions if it keeps failing.',
   'picker-cancelled': 'Folder selection was cancelled. No saved records were replaced.',
   'synthetic-folder-required': 'Choose an existing invented-data folder with “synthetic” in its name. No saved records were replaced.',
   'base-conflict': 'The saved copy changed. Reopen verified records before deciding what to retry.',
@@ -92,7 +94,7 @@ const copyGuideMessages = Object.freeze({
   "retained-original-migration-not-supported": "This copy has separate original-retention metadata or files. V4 backup/migration cannot preserve their deletion schedule yet. Keep the source unchanged and use the legacy archive2 backup tools where applicable; no originals were deleted.",
   "unsupported-derived-projection": "This legacy copy has a linked refund whose original activity has no category. Keep the source, add and save an explicit category correction to that original activity, then retry migration to a fresh folder. No source evidence was changed.",
   "selection-cancelled": "Selection cancelled. Nothing passed. Choose again when ready.",
-  "authorization-cancelled": "Google authorization was closed or blocked. Try the source button again.",
+  "authorization-cancelled": "Google authorization was cancelled or declined. Try the source button again when ready.",
   "authorization-required": "Google authorization is unavailable or expired. Release sessions, then reconnect before retrying.",
   "synthetic-folder-required": "Choose a dedicated test folder with 'synthetic' in its name, such as 'synthetic-backup'. No copy was started for this selection. Backup and restore destinations must also be new and empty.",
   "canonical-source-required": "Choose the existing completed canonical synthetic source. An empty folder, backup or unrelated fixture is not a source for this check. No database was created.",
@@ -116,6 +118,9 @@ const copyGuideMessages = Object.freeze({
 });
 
 const extra = Object.freeze({
+  'account-mismatch': 'This is not the designated Google account. Keep this tab open and reconnect using the original account.',
+  'account-verification-failed': 'The Google account identity could not be verified. Keep your draft and retry with the same account.',
+  'account-designation-unavailable': 'The browser could not retain the designated account. Allow site storage before connecting.',
   'conflicting-match-requires-correction': 'The selected match has a different account, currency or amount, or is missing an amount. Choose a compatible activity or resolve the evidence with an explicit correction before matching.',
   'inactive-match-target': 'The selected activity is no longer active. Choose an active match target before submitting this review decision.',
 
@@ -203,7 +208,7 @@ const codeGroups = {
   `,
   diag: `
     clipboard-unavailable
-    account-mapping-required account-name-required authorization-cancelled broken-chain
+    account-mapping-required account-name-required authorization-cancelled authorization-popup-blocked authorization-failed broken-chain
     canonical-identity-mismatch canonical-index-missing canonical-record-missing canonical-source-required
     coverage-confirmation-required coverage-dates-required coverage-order-invalid csv-unfinished-quote
     csv-unsupported-header currency-required deletion-not-confirmed deprecated-canonical-layout
@@ -314,7 +319,7 @@ const codeGroups = {
     write-readback-mismatch write-unresolved
   `,
   session: `
-    ambiguous-session-record authorization-required confirmation-required drive-create-failed
+    account-mismatch account-verification-failed account-designation-unavailable ambiguous-session-record authorization-required confirmation-required drive-create-failed
     drive-read-failed drive-update-failed fetch-unavailable invalid-adapter invalid-operation invalid-response
     invalid-timing missing-folder network-error no-session-context not-owner not-stale offline ownership-lost
     ownership-unknown read-before-write-required release-unconfirmed session-active session-marker-not-visible
@@ -341,7 +346,7 @@ const inputCodes = new Set(`category-required correction-rationale-required tran
  account-mapping-required coverage-dates-required coverage-order-invalid coverage-confirmation-required
  currency-required account-name-required distinct-account-required evidence-required review-rationale-required
  match-target-required`.split(/\s+/).filter(Boolean));
-const stateCodes = new Set(`offline authorization-required authorization-cancelled picker-cancelled selection-cancelled
+const stateCodes = new Set(`offline authorization-required authorization-cancelled authorization-popup-blocked authorization-failed picker-cancelled selection-cancelled
  session-active stale-session reconnect-required reopen-before-editing storage-not-ready read-only read-only-inspection
  preview-required verified-preview-required existing-copy-required`.split(/\s+/).filter(Boolean));
 const defectCodes = new Set(`unknown unexpected-error diagnostic-self-test module-load-failed

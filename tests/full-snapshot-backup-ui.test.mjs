@@ -71,10 +71,10 @@ test('restore failure clears password, retains draft, blocks repeats and warns b
  h.calls.gate.resolve();await pending;assert.equal(h.page.get('restore-password').value,'');assert.deepEqual(h.session.ledger,expected);assert.equal(h.calls.restores,0);
 });
 
-test('different saved contents never offer retry and encryption cannot silently use an empty password',async()=>{
+test('different saved contents keep retry visible but disabled and encryption cannot silently use an empty password',async()=>{
  const h=await setup();await h.saved();h.page.get('backup-encrypt').checked=true;await h.page.get('backup-encrypt').emit('change');await h.page.click('export-backup');assert.equal(h.calls.exports.length,0);
  h.page.get('backup-password').value='do not persist';h.page.get('backup-encrypt').checked=false;await h.page.get('backup-encrypt').emit('change');assert.equal(h.page.get('backup-password').value,'');
- h.session.unverified=true;h.session.dirty=true;h.session.recoveryOutcome='different';await h.refresh();assert.equal(h.page.get('retry-save').disabled,true);assert.equal(h.page.get('retry-save').hidden,true);await h.page.click('retry-save');assert.equal(h.calls.retries,0);
+ h.session.unverified=true;h.session.dirty=true;h.session.recoveryOutcome='different';await h.refresh();assert.equal(h.page.get('retry-save').disabled,true);assert.equal(h.page.get('retry-save').hidden,false);assert.match(h.page.get('retry-save-help').textContent,/must first prove this exact draft was not saved/);await h.page.click('retry-save');assert.equal(h.calls.retries,0);
 });
 
 test('mismatched backup password cannot save or export and clears both fields',async()=>{

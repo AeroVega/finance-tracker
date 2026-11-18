@@ -318,8 +318,10 @@ test('failed release remains selected and read-only until verified closure', asy
   assert.equal(h.get('preview-year').disabled, false);
   assert.equal(h.get('save-ledger').disabled, true);
   assert.equal(h.get('stage-correction').disabled, true);
-  assert.equal(h.get('data-mode').textContent, 'Synthetic · read-only');
-  assert.deepEqual(h.modelSession.ledger, proposed);
+  assert.equal(h.get('data-mode').textContent, 'Synthetic workspace');
+  assert.equal(h.modelSession.ledger, null);
+  for (const id of ['transaction-rows','summary-cards','recent-activities','detail-source','detail-history','position-accounts','position-totals','review-queue']) assert.equal(h.get(id).children.length, 0, id);
+  for (const id of ['detail-title','detail-description','detail-amount','amount','correction-rationale','backup-password','restore-password']) assert.equal(h.get(id).value || h.get(id).textContent, '', id);
   assert.equal(h.state.writes, 0);
 });
 
@@ -970,7 +972,7 @@ test('staged changes persist across pages and explicit save remains available wi
   for (const page of ['#storage','#holdings','#reconciliation','#overview']) await h.navigate(page);
   assert.deepEqual(h.modelSession.ledger, proposed); assert.equal(h.state.writes, 0);
   await h.click('save-ledger');
-  assert.equal(h.state.writes, 1); assert.equal(h.get('draft-bar').hidden, true);
+  assert.equal(h.state.writes, 1); assert.equal(h.get('draft-bar').hidden, false);
   assert.equal(h.location.hash, '#overview');
   assert.deepEqual(await h.storedLedger(), proposed);
 });
@@ -979,7 +981,7 @@ test('page navigation after automatically recovered save preserves verified ledg
   const h=await workspacePage();await h.click('open-ledger');await h.stageAmount();const draft=structuredClone(h.modelSession.ledger);
   h.state.loseResponse=true;await h.click('save-ledger');assert.equal(h.modelSession.recoveryOutcome,'saved');assert.equal(h.modelSession.unverified,false);
   const writes=h.state.writes;await h.navigate('#position');await h.navigate('#storage');
-  assert.deepEqual(h.modelSession.ledger,draft);assert.equal(h.state.writes,writes);assert.equal(h.get('save-ledger').disabled,true);assert.equal(h.get('draft-bar').hidden,true);
+  assert.deepEqual(h.modelSession.ledger,draft);assert.equal(h.state.writes,writes);assert.equal(h.get('save-ledger').disabled,true);assert.equal(h.get('draft-bar').hidden,false);
 });
 
 test('review drilldown opens Activity and first-run preview opens Home without storage calls', async () => {
@@ -1326,4 +1328,104 @@ test('successful storage timing stays tab-local, labels unavailable counts and c
  assert.equal(summary.requests,null);assert.equal(summary.manifestPatches,null);assert.equal(summary.path,'unavailable');
  assert.equal(h.session.size,0);assert.doesNotMatch(JSON.stringify(summary),/invented|ledgerId|copyId|rootHash|https:/);
  await h.click('clear-success-metrics');assert.match(h.get('success-metrics').textContent,/No successful action/);
+});
+
+test('privacy close clears financial display and unfinished forms only after explicit confirmation', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.detail();
+  h.get('correction-rationale').value = 'Invented unfinished private note';
+  for (const id of ['balance-source','balance-amount','holdings-source','new-account-name','backup-password','backup-password-confirm','restore-password']) h.get(id).value = 'Invented private form value';
+  h.observed.confirm = false;
+  await h.click('release-ledger');
+  assert.equal(h.state.releases, 0);
+  assert.equal(h.get('correction-rationale').value, 'Invented unfinished private note');
+  assert.notEqual(h.modelSession.ledger, null);
+  h.observed.confirm = true;
+  await h.click('release-ledger');
+  assert.equal(h.modelSession.ledger, null);
+  for (const id of ['correction-rationale','balance-source','balance-amount','holdings-source','new-account-name','backup-password','backup-password-confirm','restore-password']) assert.equal(h.get(id).value, '', id);
+  for (const id of ['detail-title','detail-description','detail-amount']) assert.equal(h.get(id).textContent, '', id);
+  assert.match(h.observed.confirmations.at(-1), /cleared from this tab/);
+  assert.match(h.get('action-status').textContent, /does not erase browser or device traces/);
+  assert.equal(h.get('activity-detail').hidden, true);
+  assert.equal(h.get('overview-loaded').hidden, true);
+  assert.equal(h.get('welcome-panel').hidden, false);
+});
+
+for (const action of ['release-ledger','open-ledger']) test(`${action} protects unfinished position evidence even when the saved ledger is clean`, async () => {
+  const h = await workspacePage(); await h.click('open-ledger');
+  const ledger = h.modelSession.ledger;
+  h.get('balance-amount').value = '123.45';
+  h.get('balance-source').value = 'Invented unstaged statement';
+  h.observed.confirm = false;
+  const connections = h.state.connects.length;
+  await h.click(action);
+  assert.equal(h.observed.confirmations.length, 1);
+  assert.equal(h.state.releases, 0);
+  assert.equal(h.state.connects.length, connections);
+  assert.equal(h.modelSession.ledger, ledger);
+  assert.equal(h.get('balance-amount').value, '123.45');
+  assert.equal(h.get('balance-source').value, 'Invented unstaged statement');
+});
+
+test('unavailable storage actions stay visible, explain prerequisites and reject activation', async () => {
+  const h = await workspacePage();
+  const actions = ['export-backup','backup-save-first','backup-saved-only','restore-backup','verify-save-outcome','retry-save','recover-ledger','recover-stale','save-ledger','draft-storage-link'];
+  for (const id of actions) {
+    assert.equal(Boolean(h.get(id).hidden), false, id + ' stays visible within its contextual panel');
+    assert.equal(h.get(id).disabled, true, id + ' is disabled');
+    assert.equal(h.get(id).attributes['aria-describedby'], id + '-help');
+    assert.ok(h.get(id + '-help').textContent.length > 10, id + ' explains prerequisite');
+    await h.get(id).emit('click');
+  }
+  assert.equal(h.state.connects.length, 0); assert.equal(h.state.writes, 0); assert.equal(h.state.recovers, 0);
+  await h.click('preview-year');
+  assert.equal(h.get('save-ledger').hidden, false); assert.equal(h.get('save-ledger').disabled, true);
+  assert.match(h.get('save-ledger-help').textContent, /preview/i);
+  assert.equal(h.get('draft-storage-link').hidden, false); assert.equal(h.get('draft-storage-link').disabled, false);
+  await h.click('draft-storage-link'); assert.equal(h.location.hash, '#storage');
+});
+
+test('visible recovery actions keep state and offline gates, with readable explanations', async () => {
+  const h = await workspacePage(); await h.click('open-ledger');
+  for (const id of ['restore-backup','retry-save','recover-ledger','recover-stale','backup-save-first','backup-saved-only']) {
+    assert.equal(h.get(id).hidden, false, id); assert.equal(h.get(id).disabled, true, id);
+  }
+  h.modelSession.recoveryOutcome = 'not-saved';
+  h.modelSession.unverified = true;
+  await h.event('online');
+  assert.equal(h.get('retry-save').disabled, false);
+  assert.match(h.get('retry-save-help').textContent, /explicit confirmation/);
+  h.navigator.onLine = false; await h.event('offline');
+  for (const id of ['retry-save','verify-save-outcome','recover-ledger','recover-stale','release-ledger']) {
+    assert.equal(h.get(id).hidden, false, id); assert.equal(h.get(id).disabled, true, id);
+    assert.match(h.get(id + '-help').textContent, /internet/, id);
+    await h.get(id).emit('click');
+  }
+  assert.equal(h.state.releases, 0); assert.equal(h.state.recovers, 0); assert.equal(h.state.writes, 0);
+});
+
+test('release stays visible but disabled until ownership and save outcome permit verified closure', async () => {
+  const h = await workspacePage(); await h.click('open-ledger');
+  const coordinator = h.lifecycle.coordinator;
+  const original = Object.getOwnPropertyDescriptor(coordinator, 'canWrite');
+  Object.defineProperty(coordinator, 'canWrite', {configurable:true,value:false});
+  await h.event('online');
+  assert.equal(h.get('release-ledger').disabled, true);
+  assert.match(h.get('release-ledger-help').textContent, /ownership/);
+  await h.get('release-ledger').emit('click'); assert.equal(h.state.releases, 0);
+  if (original) Object.defineProperty(coordinator, 'canWrite', original); else delete coordinator.canWrite;
+  Object.defineProperty(h.lifecycle.engine, 'recoveryRequired', {configurable:true,value:true}); await h.event('online');
+  assert.equal(h.get('release-ledger').disabled, true);
+  assert.match(h.get('release-ledger-help').textContent, /ownership/);
+  delete h.lifecycle.engine.recoveryRequired;
+  h.modelSession.pendingSave = {lifecycle:h.lifecycle,priorSequence:0};
+  Object.defineProperty(h.lifecycle.engine, 'saveAttempt', {configurable:true,value:{sequence:1,authorityDispatched:true}});
+  await h.event('online');
+  assert.equal(h.get('release-ledger').disabled, true);
+  assert.match(h.get('release-ledger-help').textContent, /save outcome/);
+  await h.get('release-ledger').emit('click'); assert.equal(h.state.releases, 0);
+  delete h.lifecycle.engine.saveAttempt; h.modelSession.pendingSave = null;
+  h.modelSession.recoveryOutcome = 'not-saved';
+  await h.event('online');
+  assert.equal(h.get('release-ledger').disabled, false, 'verified not-saved draft can be explicitly discarded');
 });

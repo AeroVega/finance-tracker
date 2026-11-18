@@ -113,7 +113,9 @@ test('preview initialization failure recovery does not save proposal; release an
   assert.deepEqual(session.ledger,ledger);assert.equal(session.mode,'preview');
   const manifest=first.json(old.engine.manifestFileId);assert.equal(manifest.revision,'0');assert.equal(manifest.head,null,'recovery did not seed the retained proposal');
   await session.release();assert.equal(storage.lifecycle,null);
+  assert.equal(session.ledger,null,'privacy release clears the local preview');
   const oldMetrics=old.requestMetrics.snapshot();selected=second;
+  session.preview(ledger); // Explicitly reload the invented source after closing.
   assert.deepEqual(await session.savePreviewToNewCopy(),ledger);
   assert.notStrictEqual(storage.lifecycle,old);assert.deepEqual(session.ledger,ledger);assert.equal(session.mode,'saved');
   assert.equal(storage.lifecycle.requestMetrics.snapshot().requests,second.requests.length,'latest lifecycle excludes prior folder requests');

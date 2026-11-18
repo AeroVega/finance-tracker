@@ -28,8 +28,9 @@ test('actual Dashboard picker route initializes only new full-snapshot format',a
  const previous={window:globalThis.window,fetch:globalThis.fetch};
  class View{setIncludeFolders(){return this;}setSelectFolderEnabled(){return this;}setMimeTypes(){return this;}}
  class Picker{addView(){return this;}setOAuthToken(){return this;}setDeveloperKey(){return this;}setAppId(){return this;}setOrigin(){return this;}setTitle(){return this;}setCallback(cb){this.cb=cb;return this;}build(){return this;}setVisible(){queueMicrotask(()=>this.cb({action:'picked',docs:[{id:http.folderId}]}));}}
- globalThis.window={location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>callback({access_token:'invented-test-token',expires_in:3600})})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel'}}}};
- globalThis.fetch=(url,options)=>String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):http.fetch(url,options);
+ const accountPins=new Map();
+ globalThis.window={localStorage:{getItem:key=>accountPins.get(key)??null,setItem:(key,value)=>accountPins.set(key,value)},location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>callback({access_token:'invented-test-token',expires_in:3600})})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel'}}}};
+ globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):http.fetch(url,options);
  const storage=new DashboardSyntheticStorage({fullSnapshot:true,maintainOriginals:false});storage.config={clientId:'invented',apiKey:'invented',projectNumber:'1'};
  const session=new CanonicalWorkspaceSession({storage,online:()=>true});try{session.preview(replayFixture(1).ledger);await session.savePreviewToNewCopy();assert.equal(storage.lifecycle.fullSnapshot,true);assert.equal(session.store.base.format,'finance-tracker-full-snapshot-manifest');assert.equal(session.canEdit(),true);await session.reopen();assert.deepEqual(session.ledger,replayFixture(1).ledger);}finally{await storage.release().catch(()=>{});globalThis.window=previous.window;globalThis.fetch=previous.fetch;}
 });
@@ -75,4 +76,22 @@ test('release waits for an admitted save and retains ownership if that save fail
   h.http.beforeResponse=null;await h.lifecycle.recover();await h.lifecycle.load();
   assert.equal((await h.lifecycle.release()).released,true);
  }finally{unblock?.();await close(h);}
+});
+
+test('expired existing-session reconnect exposes explicit stale recovery without changing saved data',async()=>{
+ const realNow=Date.now;let now=realNow();Date.now=()=>now;
+ const h=setup();try{
+  await h.lifecycle.start({initialize:true});await h.lifecycle.load();const expected=replayFixture(1).ledger;await h.lifecycle.save(expected);
+  now+=120001;const mutations=h.http.mutations;
+  await assert.rejects(h.lifecycle.handleOnline(),{code:'stale-session'});
+  assert.equal(h.lifecycle.state,'stale-session');assert.equal(h.lifecycle.acceptingWrites,false);assert.equal(h.http.mutations,mutations);
+  await h.lifecycle.recoverStaleSession({confirm:true});assert.deepEqual(await h.lifecycle.load(),expected);
+ }finally{await close(h);Date.now=realNow;}
+});
+for(const code of ['authorization-required','ownership-lost','ownership-unknown'])test(`reconnect ${code} never exposes stale takeover or starts a new session`,async()=>{
+ const h=setup();try{
+  await h.lifecycle.start({initialize:true});const mutations=h.http.mutations;
+  h.lifecycle.coordinator.resume=async()=>{throw Object.assign(new Error('Invented reconnect failure'),{code});};
+  await assert.rejects(h.lifecycle.handleOnline(),{code});assert.equal(h.lifecycle.state,'reconnecting');assert.equal(h.lifecycle.acceptingWrites,false);assert.equal(h.http.mutations,mutations);
+ }finally{await close(h);}
 });
