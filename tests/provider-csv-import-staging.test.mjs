@@ -52,7 +52,7 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
   session.preview(recipe.ledger);
   const sourceBytes = await readFile(new URL('../fixtures/wells-fargo.csv', import.meta.url));
   const csvText = new TextDecoder().decode(sourceBytes).trimEnd() +
-    '\nnot-a-date,EXAMPLE MALFORMED DATE,-1.00,,Posted\n';
+    '\n03/02/2026,EXAMPLE INVALID AMOUNT,not-money,,Posted\n';
   const bytes = new TextEncoder().encode(csvText);
   const { parsed } = await parseRecognizedProviderCsv({ bytes });
   assert.equal(parsed.records.at(-1).valid, false);
