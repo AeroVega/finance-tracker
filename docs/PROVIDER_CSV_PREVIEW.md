@@ -38,7 +38,7 @@ The function returns a preview object. It does not mutate the supplied ledger, p
 - `requirements.declaredCoverage[]`: mapped canonical account IDs that still need declared coverage.
 - `canonicalValidation`: `not-run`, `passed`, or `failed`. It is run only when a ledger, all required mappings, and coverage declarations are supplied. It calls the existing `prepareCanonicalImport` validation/reconciliation path and discards the proposed ledger.
 
-For bank formats the source account key is `default`; it still requires explicit mapping to an existing canonical account. Fidelity rows use the source Account Number as a source key; it must be mapped to an existing Fidelity account. Raw source account identifiers are sensitive: do not log or display them in production UI without an explicit privacy design.
+For bank formats the source account key is `default`; it still requires explicit mapping to an existing canonical account. Fidelity rows use the source Account Number as an in-memory source key; it must be mapped to an existing Fidelity account. The parser redacts that column from returned `sourceFields` before canonical observations can persist it. The one-way row fingerprint is computed from the original source fields, preserving evidence integrity without retaining the raw account number. The full key remains only in the transient parsed model for explicit mapping and must never be logged or displayed; the application shows only its last four characters.
 
 ## Recognition and parsing
 
