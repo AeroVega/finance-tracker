@@ -104,16 +104,6 @@ function refreshDiagnosticHistory() {
   }
 }
 installDiagnosticSelfTest({button:$('diagnostic-self-test'), target:$('diagnostic-test-status'), onReport:refreshDiagnosticHistory, document, navigator});
-mountProviderImportWorkflow({
-  root: $('provider-import-workflow'),
-  getLedger: () => session.ledger,
-  stageImport: proposal => {
-    session.stageCanonicalImport(proposal);
-    render();
-    announce('Supported CSV import staged locally. Review unresolved rows, then choose Save changes when ready.', 'success');
-  },
-  onStaged: refresh
-});
 
 
 function announce(text, kind = 'info') {
@@ -927,6 +917,16 @@ $('next-page').addEventListener('click', () => { if (!busy && view && page + 1 <
 window.addEventListener('beforeunload', event => { if (busy || session.dirty || hasUnfinishedDetail() || hasUnfinishedEvidence()) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('offline', () => { session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
+mountProviderImportWorkflow({
+  root: $('provider-import-workflow'),
+  getLedger: () => session.ledger,
+  stageImport: proposal => {
+    session.stageCanonicalImport(proposal);
+    render();
+    announce('Supported CSV import staged locally. Review unresolved rows, then choose Save changes when ready.', 'success');
+  },
+  onStaged: refresh
+});
 refresh();
 // Prepare only invented data ahead of the click so OAuth starts within the
 // user's create-button gesture, without awaiting fixture generation first.
