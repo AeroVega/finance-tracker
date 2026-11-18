@@ -5,7 +5,7 @@ import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal, sameCo
 const collections = { accounts:'accountId', imports:'importRunId', observations:'observationId', activities:'activityId', events:'eventId', reviewDecisions:'reviewDecisionId' };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clone = value => structuredClone(value);
-const fail = message => { throw new TypeError(message); };
+const fail = message => { throw Object.assign(new TypeError(message), { code: message }); };
 const stamp = options => { const value = typeof options.now === 'function' ? options.now() : options.now ?? new Date().toISOString(); if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) fail('invalid-clock'); return value; };
 const id = options => { const value = (options.idFactory ?? (() => globalThis.crypto.randomUUID()))(); if (!uuid.test(value)) fail('uuid-v4-required'); return value; };
 const accountFor = (ledger, accountId) => ledger.accounts.find(a => a.accountId === accountId) ?? fail('unknown-account');
