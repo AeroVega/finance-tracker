@@ -85,6 +85,7 @@ test("mounted selector notifies caller when confirmation is invalidated by edit,
   container.dispatch("change",{target:{dataset:{field:"end"},value:"2024-01-30"}});
   assert.equal(accepted,null);
   assert.equal(events.at(-1).reason,"date-edit");
+  assert.equal(events.at(-1).previous.status,"confirmed");
   assert.equal(events.at(-1).previous.coverage.end,"2024-01-31");
   clickButton(container,{action:"confirm"});
   assert.equal(accepted.status,"confirmed");
