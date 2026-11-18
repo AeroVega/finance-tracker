@@ -12,6 +12,7 @@ import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
 import { showDiagnostic, clearDiagnostic } from './app-diagnostics.mjs';
 import { leaveBreadcrumb, registerContextProvider, recentReports } from './error-reporting.mjs';
 import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
+import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs';
 
 const $ = id => document.getElementById(id);
 const pages = createWorkspacePages({document, window, onNavigate: page => leaveBreadcrumb({e:'page.view', page})});
@@ -679,7 +680,18 @@ function showDetail(activityId, {navigate = true} = {}) {
   if (activity.lifecycleStatus === 'unknown') $('correction-type').value = 'posting-status-correction';
   $('correction-rationale').value = '';
   detailEditorBaseline = detailEditorValues();
-  correctionFields(); refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
+  correctionFields();
+mountProviderImportWorkflow({
+  root: $('provider-import-workflow'),
+  getLedger: () => session.ledger,
+  stageImport: proposal => {
+    session.stageCanonicalImport(proposal);
+    render();
+    announce('Supported CSV import staged locally. Review unresolved rows, then choose Save changes when ready.', 'success');
+  },
+  onStaged: refresh
+});
+refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
 }
 function correctionFields() {
   const type = $('correction-type').value;
