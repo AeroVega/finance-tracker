@@ -216,3 +216,76 @@ test('reports exact duplicate groups and conflicting overlaps independent of inp
     );
   }
 });
+
+
+test('distinguishes malformed array entries when classifying same-month duplicates', () => {
+  const cases = [
+    { left: [undefined], right: [] },
+    { left: [NaN], right: [null] },
+    { left: new Array(1), right: [undefined] },
+  ];
+
+  for (const { left, right } of cases) {
+    const first = record('2023-01', { breakdowns: {
+      incomeSources: { complete: false, items: left },
+    } });
+    const second = record('2023-01', { breakdowns: {
+      incomeSources: { complete: false, items: right },
+    } });
+    const result = validateHistoricalMonthlySummaries({
+      records: [first, second, record('2023-02'), record('2023-03')],
+      expectedMonthRange: range,
+    });
+
+    assert.ok(result.findings.some(f =>
+      f.code === 'overlapping-month-summaries' &&
+      f.month === '2023-01' &&
+      f.recordIndices.join(',') === '0,1'));
+    assert.ok(!result.findings.some(f =>
+      f.code === 'duplicate-month-summary' && f.month === '2023-01'));
+  }
+});
+
+test('groups identical malformed array entries as duplicates without collapsing distinct values', () => {
+  const first = record('2023-01', { breakdowns: {
+    incomeSources: { complete: false, items: [undefined] },
+  } });
+  const second = record('2023-01', { breakdowns: {
+    incomeSources: { complete: false, items: [undefined] },
+  } });
+  const result = validateHistoricalMonthlySummaries({
+    records: [first, second, record('2023-02'), record('2023-03')],
+    expectedMonthRange: range,
+  });
+
+  assert.ok(result.findings.some(f =>
+    f.code === 'duplicate-month-summary' &&
+    f.month === '2023-01' &&
+    f.recordIndices.join(',') === '0,1'));
+  assert.ok(!result.findings.some(f =>
+    f.code === 'overlapping-month-summaries' && f.month === '2023-01'));
+});
+
+test('treats null optional net cash flow the same as an omitted value', () => {
+  const explicitNull = record('2023-01', { summary: {
+    incomeTotal: money('100.00'),
+    expenseTotal: money('60.00'),
+    netCashFlow: null,
+    netWorthSnapshot: money('500.00'),
+  } });
+  const omitted = record('2023-02', { summary: {
+    incomeTotal: money('100.00'),
+    expenseTotal: money('60.00'),
+    netWorthSnapshot: money('500.00'),
+  } });
+  const result = validateHistoricalMonthlySummaries({
+    records: [explicitNull, omitted, record('2023-03')],
+    expectedMonthRange: range,
+  });
+
+  assert.equal(result.records[0].summary.netCashFlow, null);
+  assert.equal(result.records[1].summary.netCashFlow, undefined);
+  assert.ok(!result.findings.some(f =>
+    f.field === 'netCashFlow' &&
+    ['missing-summary-value', 'invalid-summary-value'].includes(f.code)));
+});
