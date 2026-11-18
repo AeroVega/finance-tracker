@@ -22,13 +22,14 @@ Example caller setup:
       sourceCoverage: { start: "2024-02-01", end: "2024-02-29" },
       onConfirm(result) {
         // Persist/accept only in the later caller workflow, not in this component.
-        const declaration = result.coverage;\n        const observedRange = result.observedDateRange;
+        acceptedCoverage = result.coverage;
+        const observedRange = result.observedDateRange;
       },
       onCancel() { /* accept nothing */ },
       onInvalidate(event) {
         // Clear any caller-owned accepted declaration immediately.
         acceptedCoverage = null;
-        showNeedsReview(event.reason);
+        document.querySelector("#result").textContent = "Needs review: " + event.reason;
       }
     });
 
