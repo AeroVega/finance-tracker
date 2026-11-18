@@ -1,4 +1,5 @@
 import { previewProviderCsv } from './provider-csv-preview.mjs';
+import { parseRecognizedProviderCsv } from './provider-csv.mjs';
 import { prepareCanonicalImport } from './canonical-import.mjs';
 import { isCalendarDate } from './import-reconciliation.mjs';
 import { fail } from './app-error.mjs';
@@ -188,9 +189,10 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       const bytes = await selected.arrayBuffer();
       if (!isCurrent()) return;
       if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
-      // The existing preview is the read-only recognition boundary. It
-      // returns the parsed source model for local mapping controls; no proposed
-      // ledger is persisted or accepted by this call.
+      // The read-only preview is the recognition boundary. It deliberately
+      // returns only summaries, so the strict parser is then used to obtain the
+      // row model needed for explicit account mapping. Both operations remain
+      // local and neither accepts nor persists a proposed ledger.
       const preview = await previewProviderCsv({ bytes });
       if (!isCurrent()) return;
       if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
@@ -202,8 +204,12 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
             : 'The headers are not an exact supported export format. No parser was selected.';
         return;
       }
-      if (!preview.parsed) fail('invalid-parsed-import');
-      state.parsed = preview.parsed;
+      const detection = await parseRecognizedProviderCsv({ bytes });
+      if (!isCurrent()) return;
+      if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
+      if (detection.status !== 'recognized' || detection.parsed.sourceFormat !== preview.sourceFormat ||
+        detection.parsed.fileFingerprint !== preview.fileFingerprint) fail('invalid-parsed-import');
+      state.parsed = detection.parsed;
       state.baseLedger = baseLedger;
       state.contextInvalidated = false;
       const parsed = state.parsed;
