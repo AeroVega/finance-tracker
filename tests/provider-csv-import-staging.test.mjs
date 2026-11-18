@@ -81,6 +81,9 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
   assert.equal(retry.ledger.imports.length, first.ledger.imports.length);
   assert.equal(retry.ledger.imports[0].retryAttempts.length, 1);
   assert.equal(retry.ledger.imports[0].status, 'needs-review');
+  const alteredRetry = structuredClone(retry.ledger);
+  alteredRetry.imports[0].declaredCoverage.start = '2025-01-01';
+  assert.throws(() => session.stageCanonicalImport(alteredRetry), { code: 'invalid-parsed-import' });
   session.stageCanonicalImport(retry.ledger);
   assert.deepEqual(session.ledger, retry.ledger);
 
