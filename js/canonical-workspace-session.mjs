@@ -8,6 +8,26 @@ const same=(a,b)=>canonicalizeJcs(a)===canonicalizeJcs(b);
 const reportContents=ledger=>({activities:getEffectiveActivities(ledger),periods:summarizeLedgerPeriods(ledger,[...new Set(ledger.accounts.map(a=>a.currency))].sort().map(currency=>({start:'0100-01-01',end:'9999-12-31',currency}))),position:buildFinancialPosition(ledger,{asOf:'9999-12-31'})});
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
+const changedOnly = (before, after, allowed) => {
+  const left = { ...before }, right = { ...after };
+  for (const key of allowed) { delete left[key]; delete right[key]; }
+  return same(left, right);
+};
+function validImportRetry(before, after) {
+  if (before.status !== 'needs-review' || !Array.isArray(before.retryAttempts) ||
+    !Array.isArray(after.retryAttempts) || after.retryAttempts.length !== before.retryAttempts.length + 1 ||
+    !before.retryAttempts.every((attempt, index) => same(attempt, after.retryAttempts[index])) ||
+    !changedOnly(before, after, ['status', 'errorCode', 'counts', 'latestActivityDate', 'retryAttempts'])) return false;
+  const attempt = after.retryAttempts.at(-1);
+  return attempt.priorStatus === before.status && same(attempt.priorCounts, before.counts) &&
+    attempt.status === after.status && same(attempt.counts, after.counts);
+}
+function validObservationRetry(before, after) {
+  if (before.resolved || !['review', 'rejected'].includes(before.disposition) ||
+    after.resolved !== false || !changedOnly(before, after, ['disposition', 'activityId', 'reasonCode'])) return false;
+  return true;
+}
+
 /** A local draft is never storage authority. Every durable change uses the
  * existing verified store and lifecycle; failed operations retain the draft. */
 export class CanonicalWorkspaceSession {
@@ -154,13 +174,30 @@ export class CanonicalWorkspaceSession {
     if (proposal.ledgerId !== current.ledgerId || proposal.createdAt !== current.createdAt ||
       proposal.syntheticOnly !== true || !same(proposal.accounts, current.accounts) ||
       !same(proposal.positionEvents ?? [], current.positionEvents ?? [])) fail('invalid-parsed-import');
-    for (const key of ['activities', 'events', 'imports', 'observations', 'reviewDecisions']) {
+    for (const key of ['activities', 'events', 'reviewDecisions']) {
       const before = current[key], after = proposal[key];
       if (!Array.isArray(after) || after.length < before.length ||
         !before.every((record, index) => same(record, after[index]))) fail('invalid-parsed-import');
     }
+    if (!Array.isArray(proposal.imports) || proposal.imports.length < current.imports.length ||
+      !Array.isArray(proposal.observations) || proposal.observations.length < current.observations.length) fail('invalid-parsed-import');
+    const retryRunIds = new Set();
+    for (let index = 0; index < current.imports.length; index++) {
+      const before = current.imports[index], after = proposal.imports[index];
+      if (before.importRunId !== after.importRunId) fail('invalid-parsed-import');
+      if (!same(before, after)) {
+        if (!validImportRetry(before, after)) fail('invalid-parsed-import');
+        retryRunIds.add(before.importRunId);
+      }
+    }
+    for (let index = 0; index < current.observations.length; index++) {
+      const before = current.observations[index], after = proposal.observations[index];
+      if (before.observationId !== after.observationId) fail('invalid-parsed-import');
+      if (!same(before, after) &&
+        (!retryRunIds.has(before.importRunId) || !validObservationRetry(before, after))) fail('invalid-parsed-import');
+    }
     const addedRuns = proposal.imports.length - current.imports.length;
-    if (addedRuns < 1) fail('invalid-parsed-import');
+    if (addedRuns < 1 && retryRunIds.size < 1) fail('invalid-parsed-import');
     this.stageCheckpoint();
     this.ledger = structuredClone(proposal);
     this.updateDirty();
