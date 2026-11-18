@@ -59,7 +59,7 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
     physicalLine: parsed.records.length + 3,
     sourceDescription: 'Synthetic malformed date row',
     normalizedDescription: 'synthetic malformed date row',
-    sourceFields: { ...parsed.records[0].sourceFields, Date: 'not-a-date' },
+    sourceFields: { ...parsed.records[0].sourceFields, DATE: 'not-a-date' },
     sourceRecordId: null,
     sourceRowFingerprint: 'b'.repeat(64),
     effectiveDate: null,
