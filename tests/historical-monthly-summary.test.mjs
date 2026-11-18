@@ -154,3 +154,62 @@ test('validates summary values and provenance even when the month itself is inva
   assert.ok(result.findings.some(f => f.code === 'invalid-month'));
   assert.ok(result.findings.some(f => f.code === 'invalid-summary-value' && f.field === 'incomeTotal'));
 });
+
+
+test('rejects malformed supplied breakdown containers but permits omission', () => {
+  const malformedValues = [42, 'invalid', [], null];
+  for (const value of malformedValues) {
+    const source = record('2023-01', { breakdowns: value });
+    const result = validateHistoricalMonthlySummaries({
+      records: [source, record('2023-02'), record('2023-03')],
+      expectedMonthRange: range,
+    });
+    assert.ok(
+      result.findings.some(f => f.code === 'invalid-breakdowns-container' && f.recordIndex === 0),
+      `expected malformed container finding for ${String(value)}`,
+    );
+    assert.deepEqual(result.records[0].breakdowns, value);
+  }
+
+  const omitted = record('2023-01');
+  delete omitted.breakdowns;
+  const result = validateHistoricalMonthlySummaries({
+    records: [omitted, record('2023-02'), record('2023-03')],
+    expectedMonthRange: range,
+  });
+  assert.ok(!result.findings.some(f => f.code === 'invalid-breakdowns-container'));
+  assert.equal(Object.hasOwn(result.records[0], 'breakdowns'), false);
+});
+
+test('reports exact duplicate groups and conflicting overlaps independent of input order', () => {
+  const a = record('2023-01');
+  const b = record('2023-01', { summary: {
+    incomeTotal: money('101.00'),
+    expenseTotal: money('60.00'),
+    netCashFlow: money('41.00'),
+    netWorthSnapshot: money('500.00'),
+  } });
+  const cases = [
+    { records: [a, b, b], duplicateIndices: [1, 2] },
+    { records: [a, a, b], duplicateIndices: [0, 1] },
+    { records: [b, a, b], duplicateIndices: [0, 2] },
+    { records: [b, a, a], duplicateIndices: [1, 2] },
+  ];
+
+  for (const { records, duplicateIndices } of cases) {
+    const input = [...records, record('2023-02'), record('2023-03')];
+    const result = validateHistoricalMonthlySummaries({ records: input, expectedMonthRange: range });
+    const duplicateFindings = result.findings.filter(f =>
+      f.code === 'duplicate-month-summary' && f.month === '2023-01');
+    const overlapFindings = result.findings.filter(f =>
+      f.code === 'overlapping-month-summaries' && f.month === '2023-01');
+
+    assert.deepEqual(duplicateFindings.map(f => f.recordIndices), [duplicateIndices]);
+    assert.deepEqual(overlapFindings.map(f => f.recordIndices), [[0, 1, 2]]);
+    assert.deepEqual(
+      result.findings,
+      validateHistoricalMonthlySummaries({ records: input, expectedMonthRange: range }).findings,
+      'findings should be deterministic for the same ordered input',
+    );
+  }
+});
