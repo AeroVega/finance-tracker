@@ -123,6 +123,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     state.mappings.set(sourceKey, context);
     const changed = control => {
       if (control !== confirmed) confirmed.checked = false;
+      emptyCheck.checked = false;
       refreshEligibility();
     };
     for (const control of [select, start, end]) control.addEventListener('change', () => changed(control));
