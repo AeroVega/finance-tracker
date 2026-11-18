@@ -10,13 +10,13 @@ The Storage page now hosts a local import workflow for the three exact formats a
 - `sofi-csv-v1`
 - `fidelity-accounts-history-csv-v1`
 
-The controller first uses the read-only `previewProviderCsv` boundary to recognize an exact supported schema, then parses only that recognized format to build account-scoped controls. It uses `prepareCanonicalImport` for canonical validation and reconciliation. It stages the resulting proposal through `CanonicalWorkspaceSession.stageCanonicalImport`. It does not create accounts, upload source bytes, write to Drive, or save automatically. The existing Save changes action remains the only persistence path.
+The controller uses the read-only `previewProviderCsv` boundary to recognize and parse an exact supported schema, then uses its parsed source model to build account-scoped controls. It uses `prepareCanonicalImport` for canonical validation and reconciliation. It stages the resulting proposal through `CanonicalWorkspaceSession.stageCanonicalImport`. It does not create accounts, upload source bytes, write to Drive, or save automatically. The existing Save changes action remains the only persistence path.
 
 Every source account key must be mapped to a distinct existing ledger account at the same institution. Fidelity source account identifiers are shown only by their last four characters in the mapping label. Rows without source account identity are retained and require an explicit mapping. Header-only exports require an explicit source account key for Fidelity, an existing-account mapping, inclusive declared coverage, and a separate empty-export confirmation.
 
 ## Coverage and row handling
 
-Declared coverage is entered by the user for each mapped account and requires a separate explicit confirmation checkbox. Changing the account or either date clears that confirmation. Observed valid dates are displayed separately as a diagnostic range; they are not copied into the declaration. Every usable effective date is checked against the inclusive declared range, including rows that have another parser error. An out-of-range row blocks staging without dropping the row or widening coverage. Malformed dates remain review evidence and do not become invented dates.
+Declared coverage is entered by the user for each mapped account and requires a separate explicit confirmation checkbox. Changing the account or either date clears that confirmation and the header-only confirmation. Observed valid dates are displayed separately as a diagnostic range; they are not copied into the declaration. Every usable effective date is checked against the inclusive declared range, including rows that have another parser error. An out-of-range row blocks staging without dropping the row or widening coverage. Malformed dates remain review evidence and do not become invented dates.
 
 The selected file, active ledger identity, account mappings, coverage values and per-account confirmations are treated as one review context. If the active ledger changes while the file is being read or before staging, preparation is invalidated. The user must select and review the file again. Re-importing an already processed identical file for the same account is a no-op; it does not stage duplicate rows.
 
@@ -26,7 +26,7 @@ The canonical import engine retains its existing conservative matching and revie
 
 Staging is local to the current canonical session. The session validates the proposed ledger and requires existing ledger identity, account records and prior canonical collections to remain intact. Undo checkpoints now retain the complete ledger, so undoing an import also removes its added import runs, observations and activities without leaving orphan records. Save, uncertain-write handling, session ownership, recovery and reopen continue through the existing full-snapshot lifecycle.
 
-The source file bytes are not retained by this workflow. The canonical import run retains the file fingerprint, source format, account mapping, observed dates, declared coverage and import timestamps already defined by the ledger contract. Coverage remains unreconciled; a declared date range is not proof of completeness.
+No raw file bytes are added to the canonical ledger or persisted by this workflow; the browser reads the selected file in memory for recognition and parsing. The canonical import run retains the file fingerprint, source format, institution/account identity, observed dates, declared coverage and import timestamps already defined by the ledger contract. Coverage remains unreconciled; a declared date range is not proof of completeness.
 
 ## Privacy and limitations
 
