@@ -12,9 +12,23 @@ The caller supplies usable transaction dates as ISO dates or objects with a date
 
 Import mountImportCoverageSelector from components/import-coverage-selector.mjs. Supply a container element, observedDates, optional sourceCoverage {start,end}, optional priorConfirmedCoverageEnd, optional contextKey, and onConfirm/onCancel callbacks.
 
+
+Example caller setup:
+
+    const selector = mountImportCoverageSelector({
+      container: document.querySelector("#coverage"),
+      observedDates: [{ date: "2024-02-01", rowReference: 2 }],
+      sourceCoverage: { start: "2024-02-01", end: "2024-02-29" },
+      onConfirm(result) {
+        // Persist/accept only in the later caller workflow, not in this component.
+        console.log(result.coverage, result.observedDateRange);
+      },
+      onCancel() { /* accept nothing */ }
+    });
+
 The returned instance exposes getState(), updateContext(next), reset(), and destroy(). updateContext replaces file context, reapplies suggestions, and invalidates confirmation. reset restores current suggestions. destroy is idempotent, removes the instance's delegated click/change/keydown listeners, clears rendered content and clears model state.
 
-The onConfirm callback is emitted only after explicit user activation and valid dates, start <= end, at least one usable observed date, no malformed observed date values, and no out-of-range dates. It receives {status: confirmed, coverage, observedDateRange}. The coverage object contains start, end, and provenance: kind user-confirmed, coverageSource (source-metadata or user-declaration), confirmationMethod explicit-component-confirmation, sourceMetadata, priorConfirmedCoverageEnd, and contextKey. observedDateRange is the minimum/maximum usable transaction date and remains separate from declared coverage. This provenance records the user's explicit declaration; it does not certify provider completeness, parsing correctness, or reconciliation. Cancellation returns accepted:false and never calls onConfirm; it is terminal until reset or context replacement.
+The onConfirm callback is emitted only after explicit user activation and valid dates, start <= end, at least one usable observed date, no malformed observed date values, and no out-of-range dates. It receives {status: confirmed, coverage, observedDateRange}. The coverage object contains start, end, and provenance: kind user-confirmed, coverageSource (source-metadata only when both metadata dates are valid and unchanged; otherwise user-declaration), confirmationMethod explicit-component-confirmation, sourceMetadata, priorConfirmedCoverageEnd, and contextKey. observedDateRange is the minimum/maximum usable transaction date and remains separate from declared coverage. This provenance records the user's explicit declaration; it does not certify provider completeness, parsing correctness, or reconciliation. Cancellation returns accepted:false and never calls onConfirm; it is terminal until reset or context replacement.
 
 ## Interaction and accessibility
 
