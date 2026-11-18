@@ -53,7 +53,14 @@ export class FullSnapshotApplication {
  async readManifest(){const m=this.engine.verifiedManifest;if(!m)fail('verified-base-required');this.engine.assertVerifiedBaseline(m);return m;}
  async recover(){return this.#operation(async()=>{const ledger=await this.engine.recover();this.#status('ready');return ledger;});}
  async recoverStaleSession({confirm}={}){if(confirm!==true)fail('stale-session');this.invalidate();return this.start({recoverStale:true});}
- async handleOnline(){this.invalidate();await this.coordinator.resume();return this.start();}
+ async handleOnline(){
+  this.invalidate();
+  // Resume can fail before start() enters its state-reporting operation. Keep
+  // those failures observable without authorizing takeover or discarding drafts.
+  try{await this.coordinator.resume();}
+  catch(error){this.invalidate();this.#status(error.code==='stale-session'?'stale-session':this.engine.recoveryRequired?'recovery-required':'reconnecting',error);throw error;}
+  return this.start();
+ }
  async release(){
   this.acceptingWrites=false;this.#transfer=null;
   try{const result=await this.engine.release();if(result?.released!==true)fail('release-unconfirmed');this.invalidate();this.started=false;this.#status('released');this.#target?.removeEventListener?.('offline',this.#offline);this.#target?.removeEventListener?.('online',this.#onlineEvent);return result;}

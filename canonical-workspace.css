@@ -364,3 +364,13 @@ html:has(.canonical-workspace) { scroll-padding-bottom: calc(var(--draft-height)
   .canonical-workspace .draft-bar { position: static; margin-top: 24px; }
   .canonical-workspace .app-shell { padding-bottom: calc(var(--navigation-height) + 24px); }
 }
+
+/* Stable action discovery: disabled actions and their reasons stay in normal
+   document flow rather than covering mobile content with a growing overlay. */
+.action-option { min-width: 0; flex: 1 1 13rem; }
+.action-option > button { max-width: 100%; white-space: normal; }
+.action-help { margin: 6px 0 0; color: var(--muted); font-size: .72rem; line-height: 1.55; overflow-wrap: anywhere; }
+.canonical-workspace .draft-bar { position: static; margin-top: 24px; box-shadow: none; }
+.draft-bar .action-option { flex: 1 1 13rem; }
+.draft-bar .draft-indicator { flex-basis: 100%; }
+@media (max-width: 359px) { .draft-bar .action-option { flex-basis: 100%; } }

@@ -77,3 +77,21 @@ test('release waits for an admitted save and retains ownership if that save fail
   assert.equal((await h.lifecycle.release()).released,true);
  }finally{unblock?.();await close(h);}
 });
+
+test('expired existing-session reconnect exposes explicit stale recovery without changing saved data',async()=>{
+ const realNow=Date.now;let now=realNow();Date.now=()=>now;
+ const h=setup();try{
+  await h.lifecycle.start({initialize:true});await h.lifecycle.load();const expected=replayFixture(1).ledger;await h.lifecycle.save(expected);
+  now+=120001;const mutations=h.http.mutations;
+  await assert.rejects(h.lifecycle.handleOnline(),{code:'stale-session'});
+  assert.equal(h.lifecycle.state,'stale-session');assert.equal(h.lifecycle.acceptingWrites,false);assert.equal(h.http.mutations,mutations);
+  await h.lifecycle.recoverStaleSession({confirm:true});assert.deepEqual(await h.lifecycle.load(),expected);
+ }finally{await close(h);Date.now=realNow;}
+});
+for(const code of ['authorization-required','ownership-lost','ownership-unknown'])test(`reconnect ${code} never exposes stale takeover or starts a new session`,async()=>{
+ const h=setup();try{
+  await h.lifecycle.start({initialize:true});const mutations=h.http.mutations;
+  h.lifecycle.coordinator.resume=async()=>{throw Object.assign(new Error('Invented reconnect failure'),{code});};
+  await assert.rejects(h.lifecycle.handleOnline(),{code});assert.equal(h.lifecycle.state,'reconnecting');assert.equal(h.lifecycle.acceptingWrites,false);assert.equal(h.http.mutations,mutations);
+ }finally{await close(h);}
+});

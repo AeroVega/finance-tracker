@@ -68,3 +68,18 @@ reject another account on connect and recovery refresh, cancel Picker with an
 unsaved draft, test failed folder admission/release, verify successful release
 removes visible records on physical iPhone/iPad Safari, and verify browser-local
 designation survives reload. No real financial data is authorized.
+
+## Unavailable actions and reconnect recovery
+
+Storage actions remain visible when unavailable. Disabled controls have adjacent
+explanations rather than relying on hover text or disappearing. Their click
+handlers still enforce the same state, online, ownership and verification
+requirements. Contextual record panels and navigation disclosures remain
+contextual; visibility alone never grants permission to write.
+
+When an existing session reconnects, a failed lease revalidation now publishes
+its lifecycle state before returning the error. A conclusively stale lease
+exposes explicit stopped-session recovery; an unknown owner or failed
+authorization does not. Recovery still requires confirmation that all earlier
+tabs/devices stopped, rechecks the marker before takeover, and verifies the
+saved copy. Expiry alone never triggers automatic takeover or draft discard.

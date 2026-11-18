@@ -145,13 +145,11 @@ function refresh() {
   $('revert-all-changes').disabled = busy || !session.canRevertAll();
   $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
   $('reopen-ledger').disabled = busy || !ready;
-  $('release-ledger').disabled = busy || !lifecycle || Boolean(session.restoreExpected && session.restoreFolderId);
+  $('release-ledger').disabled = busy || navigator.onLine === false || Boolean(releaseUnavailableReason());
   const exportReady = ready && session.mode === 'saved' && Boolean(session.ledger) && !session.unverified && !session.needsReopen && !session.pendingSave;
   $('backup-draft-warning').hidden = !session.dirty;
   $('export-backup').disabled = busy || !exportReady || session.dirty;
-  $('backup-save-first').hidden = !session.dirty;
-  $('backup-save-first').disabled = busy || !session.canSave();
-  $('backup-saved-only').hidden = !session.dirty;
+  $('backup-save-first').disabled = busy || !session.dirty || !session.canSave();
   $('backup-saved-only').disabled = busy || !exportReady || !session.dirty;
   $('backup-encrypt').disabled = busy;
   $('backup-password').disabled = busy || !$('backup-encrypt').checked;
@@ -159,16 +157,12 @@ function refresh() {
   $('backup-file').disabled = busy || Boolean(lifecycle);
   $('restore-password').disabled = busy || Boolean(lifecycle);
   $('stage-backup').disabled = busy || Boolean(lifecycle) || !$('backup-file').files?.length;
-  $('restore-backup').hidden = !session.backupPreview;
   $('restore-backup').disabled = busy || Boolean(lifecycle) || !session.backupPreview || session.dirty || session.mode !== 'preview' || session.unverified || !configured || navigator.onLine === false;
-  $('verify-save-outcome').hidden = !session.unverified && !session.recoveryOutcome;
   $('verify-save-outcome').disabled = busy || navigator.onLine === false || !lifecycle || (!session.unverified && !['not-saved','different','unverifiable'].includes(session.recoveryOutcome)) || session.recoveryOutcome === 'checking';
-  $('retry-save').hidden = session.recoveryOutcome !== 'not-saved';
   $('retry-save').disabled = busy || navigator.onLine === false || !lifecycle || session.recoveryOutcome !== 'not-saved';
-  $('recover-ledger').hidden = lifecycle?.state !== 'recovery-required';
   $('recover-ledger').disabled = busy || navigator.onLine === false || lifecycle?.state !== 'recovery-required' || !lifecycle?.coordinator?.canWrite;
-  $('recover-stale').hidden = lifecycle?.state !== 'stale-session';
   $('recover-stale').disabled = busy || navigator.onLine === false || lifecycle?.state !== 'stale-session';
+  $('draft-storage-link').disabled = busy || session.mode !== 'preview' || session.unverified || Boolean(lifecycle);
   $('close-detail').disabled = busy;
   for (const button of reviewButtons.values()) button.disabled = busy;
   for (const button of homeButtons.values()) button.disabled = busy;
@@ -194,18 +188,59 @@ function refresh() {
   else text = session.ledger ? 'All changes saved and verified.' : 'No ledger loaded. Open your saved year or try a local preview.';
   if ($('save-state').textContent !== text) $('save-state').textContent = text;
   $('save-state').dataset.state = session.unverified ? 'unverified' : session.dirty ? 'dirty' : busy ? 'busy' : 'clean';
-  $('draft-bar').hidden = !busy && !session.dirty && !session.unverified && !needsRecovery;
+  $('draft-bar').hidden = false;
   $('draft-bar').dataset.state = session.unverified ? 'unverified' : busy ? 'busy' : 'dirty';
-  $('draft-summary').textContent = busy ? 'Working. Keep this tab open.' : session.unverified ? 'Save unverified. Check Storage.' : needsRecovery ? 'Recovery needed. Open Storage.' : `${session.stagedHistory.length} staged change${session.stagedHistory.length === 1 ? '' : 's'} · not saved`;
-  $('save-ledger').hidden = session.mode === 'preview';
-  $('draft-storage-link').hidden = session.mode !== 'preview' || session.unverified || busy;
+  $('draft-summary').textContent = busy ? 'Working. Keep this tab open.' : session.unverified ? 'Save unverified. Check Storage.' : needsRecovery ? 'Recovery needed. Open Storage.' : session.dirty ? `${session.stagedHistory.length} staged change${session.stagedHistory.length === 1 ? '' : 's'} · not saved` : session.ledger ? 'No staged changes' : 'No ledger loaded';
   $('data-mode').dataset.mode = session.mode;
   $('data-mode').textContent = session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
+  explainActionAvailability();
   $('storage-format').textContent = session.mode === 'preview'
     ? 'Local preview, no saved format yet. Saving to a new folder will use full-snapshot v1. Old-format folders are unsupported.'
     : session.ledger && session.store?.base
       ? `Last verified saved format: ${session.store.valueCodec}.${session.needsReopen ? ' Reopen to verify the current copy.' : ''}`
       : 'No saved format currently verified. New synthetic copies use full-snapshot v1; old formats are unsupported.';
+}
+// Explain disabled actions where they remain discoverable, including touch and
+// keyboard users. Eligibility remains enforced by the controls and handlers.
+function releaseUnavailableReason() {
+  const lifecycle = storage.lifecycle;
+  if (!lifecycle) return 'Connect to a storage session before releasing it.';
+  if (session.restoreExpected && session.restoreFolderId) return 'Finish restore verification before closing this session.';
+  const attempt = session.pendingSave, evidence = attempt?.lifecycle?.engine?.saveAttempt;
+  if (evidence?.authorityDispatched && evidence.sequence !== attempt?.priorSequence)
+    return 'Verify the save outcome before closing this session; the draft may already be saved.';
+  if (lifecycle.coordinator?.canWrite !== true || lifecycle.engine?.recoveryRequired)
+    return 'Recover and verify session ownership before closing this session.';
+  return '';
+}
+function explainActionAvailability() {
+  const offline = navigator.onLine === false;
+  const reasons = {
+    'save-ledger': session.mode === 'preview' ? 'Save a local preview to a new folder instead.' : 'Open a verified saved copy and stage a change before saving.',
+    'draft-storage-link': 'Load a local preview without an active storage session to choose its destination.',
+    'save-preview': session.backupPreview ? 'Use Restore backup below for a validated backup preview.' : 'Load a local preview, connect Google services, and release any active session first.',
+    'undo-last-change': 'Stage an editable change before undoing it.',
+    'revert-all-changes': 'Stage editable changes before reverting them.',
+    'reopen-ledger': 'Connect to a ready saved copy before reopening it.',
+    'release-ledger': releaseUnavailableReason(),
+    'export-backup': session.dirty ? 'Choose Save changes, then download, or Back up saved copy only for this draft.' : 'Open and verify a saved copy before downloading its backup.',
+    'backup-save-first': 'Stage a change in an editable saved copy to save it before downloading.',
+    'backup-saved-only': 'Available when a verified saved copy has staged changes to exclude.',
+    'stage-backup': 'Release the active session and choose a local backup file first.',
+    'restore-backup': session.dirty ? 'Undo changes to the validated backup preview before restoring it.' : 'Validate a backup preview and release any active session before restoring to a new empty folder.',
+    'verify-save-outcome': 'Available when a selected session has an unresolved save outcome to check.',
+    'retry-save': 'Verification must first prove this exact draft was not saved. Other outcomes cannot be retried.',
+    'recover-ledger': 'Available only for an interrupted operation with retained write ownership.',
+    'recover-stale': 'Available only after a selected session is conclusively stale; confirm the prior session has stopped.'
+  };
+  const networkActions = new Set(['save-ledger','save-preview','reopen-ledger','release-ledger','export-backup','backup-save-first','backup-saved-only','restore-backup','verify-save-outcome','retry-save','recover-ledger','recover-stale']);
+  for (const [id, reason] of Object.entries(reasons)) {
+    const button = $(id); button.hidden = false;
+    button.setAttribute('aria-describedby', id + '-help');
+    $(id + '-help').textContent = button.disabled
+      ? busy ? 'Wait for the current operation to finish.' : offline && networkActions.has(id) ? 'Reconnect to the internet before using this action.' : reason
+      : 'Available. ' + ({'retry-save':'Requires your explicit confirmation.', 'recover-stale':'Confirm every prior session has stopped.', 'release-ledger':'Verified closure clears loaded records and unsaved edits.', 'draft-storage-link':'Open Storage to choose a new folder.'}[id] || '');
+  }
 }
 async function run(message, operation, formStatus = null, actionId = 'workspace-action') {
   if (busy) return;
@@ -819,6 +854,7 @@ action('reopen-ledger', 'Reopening and verifying saved records. No new financial
   if (!confirmReplace()) return;
   await session.reopen(); render({ reset: true }); announce('Saved records reopened and verified.', 'success'); return true;
 });
+$('draft-storage-link').addEventListener('click', () => { if (!$('draft-storage-link').disabled) pages.go('storage'); });
 action('release-ledger', 'Closing and verifying the storage session.', async () => {
   if ((session.dirty || hasUnfinishedDetail() || hasUnfinishedEvidence()) && !window.confirm('Close the storage session without saving? After verified closure, loaded records and unsaved edits will be cleared from this tab. Saved Drive records are unchanged.')) { announce('Release cancelled. Your local draft and session are unchanged.'); return; }
   await session.release(); clearLoadedWorkspace(); announce('Storage session closed and verified. Loaded records, unsaved edits and this tab’s access token were cleared. This does not erase browser or device traces.', 'success');
