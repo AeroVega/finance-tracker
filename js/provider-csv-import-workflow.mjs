@@ -1,5 +1,4 @@
 import { previewProviderCsv } from './provider-csv-preview.mjs';
-import { parseRecognizedProviderCsv } from './provider-csv.mjs';
 import { prepareCanonicalImport } from './canonical-import.mjs';
 import { isCalendarDate } from './import-reconciliation.mjs';
 import { fail } from './app-error.mjs';
@@ -174,28 +173,22 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
       const bytes = await selected.arrayBuffer();
       if (!isCurrent()) return;
       if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
-      // The existing preview is the read-only recognition boundary. Parse again
-      // only after it has selected exactly one supported schema so the UI can
-      // construct account-scoped mapping controls without exposing raw rows.
+      // The existing preview is the read-only recognition boundary. It
+      // returns the parsed source model for local mapping controls; no proposed
+      // ledger is persisted or accepted by this call.
       const preview = await previewProviderCsv({ bytes });
       if (!isCurrent()) return;
       if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
       if (preview.status !== 'preview') {
         summary.textContent = preview.status === 'ambiguous'
           ? 'The headers match more than one supported format. No parser was selected.'
-          : preview.status === 'parse-error'
+          : ['invalid-source-encoding', 'invalid-source-bytes', 'missing-csv-header', 'empty-input'].includes(preview.reason) || preview.status === 'parse-error'
             ? safeError({ code: preview.reason })
             : 'The headers are not an exact supported export format. No parser was selected.';
         return;
       }
-      const detection = await parseRecognizedProviderCsv({ bytes });
-      if (!isCurrent()) return;
-      if (!ledgerIsCurrent()) { invalidate(safeError({ code: 'reconnect-required' })); return; }
-      if (detection.status !== 'recognized') {
-        summary.textContent = 'The headers are not an exact supported export format. No parser was selected.';
-        return;
-      }
-      state.parsed = detection.parsed;
+      if (!preview.parsed) fail('invalid-parsed-import');
+      state.parsed = preview.parsed;
       state.baseLedger = baseLedger;
       const parsed = state.parsed;
       summary.textContent = parsed.sourceFormat + ' · ' + parsed.records.length + ' transaction rows · ' +
