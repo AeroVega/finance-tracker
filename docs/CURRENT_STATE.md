@@ -2,8 +2,8 @@
 
 **Checked:** 2026-11-17
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
-**Main baseline:** `2bc738b45b38ccc8024396d8577c1e6da3dabe1d` (PR47 cleanup plus PR48 CSV preview)
-**Active work:** test-first recovery and portable backup/restore on a separate branch; not yet merged or deployed.
+**Main baseline:** `26472cd2610c89ee4ee33180324813e2ec7b4674` (current `main` at implementation start)
+**Active work:** supported provider CSV import workflow on `feature/supported-csv-import-workflow`; draft PR, independent review, automated CI and owner acceptance are pending. No merge or deployment is authorized.
 
 This is the concise current direction and permission boundary. [Project status](PROJECT_STATUS.md) retains dated historical evidence; the focused [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
 
@@ -13,7 +13,7 @@ The owner selected **full-snapshot v1** as the continuing format after live synt
 
 Create new synthetic year and Save preview to a new folder require a fresh empty synthetic folder. Open saved synthetic year only opens a supported existing full-snapshot copy. Old per-record, grouped, fragmented and partitioned layouts are unsupported, not converted, overwritten or deleted. Remove obsolete format implementations and their exclusive regression/benchmark paths rather than maintaining multiple application storage formats. Preserve shared financial validation, transport, diagnostics, ownership, integrity and recovery safeguards.
 
-The format is synthetic-only and **not Alpha-complete**. Import remains unavailable. Recovery orchestration and portable backup/restore are being implemented and validated in the next PR; they are not yet live-accepted. See the [backup/recovery contract](FULL_SNAPSHOT_BACKUP_RECOVERY.md). Snapshot size is capped at 8 MiB, envelope/manifest at 16 KiB, and history at 10,000 commits. Full-history cost grows with retained snapshots. These limits are not bounded whole-database memory or Safari capacity claims. There is no compare-and-swap guarantee or production authorization.
+The format remains synthetic-only and **not Alpha-complete**. The supported Wells Fargo, SoFi and Fidelity CSV application workflow is implemented on a separate branch using the existing parser, canonical preparation/reconciliation and explicit-save session. It is not yet independently reviewed, CI-verified, owner-accepted, merged or deployed. No real provider export has been used. Recovery and portable backup/restore remain implemented in the selected full-snapshot route; do not infer live acceptance beyond the evidence recorded in the relevant PRs. See the [backup/recovery contract](FULL_SNAPSHOT_BACKUP_RECOVERY.md). Snapshot size is capped at 8 MiB, envelope/manifest at 16 KiB, and history at 10,000 commits. Full-history cost grows with retained snapshots. These limits are not bounded whole-database memory or Safari capacity claims. There is no compare-and-swap guarantee or production authorization.
 
 ## Acceptance and verification
 
@@ -26,7 +26,7 @@ The format is synthetic-only and **not Alpha-complete**. Import remains unavaila
 
 ## Authorization and data boundaries
 
-The owner approved the detailed test-first recovery/backup plan and implementation in a new PR after cleanup. This authorizes synthetic-only implementation, tests and a draft PR, not merge, deployment, production configuration changes or real-data access. Backup is the last verified saved logical database, optionally password-encrypted. Restore is fresh-empty-folder-only with independent verification. Drafts remain in memory only; safe recovery is automatic, retry explicit.
+The owner approved synthetic-only implementation of the supported CSV application workflow in a new draft PR. This authorizes code, synthetic tests and a draft PR, not merge, deployment, production configuration changes or real-data access. Backup is the last verified saved logical database, optionally password-encrypted. Restore is fresh-empty-folder-only with independent verification. Drafts remain in memory only; safe recovery is automatic, retry explicit.
 
 Use invented fixtures only. Do not access real transaction records, the private workbook, owner Drive financial data or production credentials. Do not access, delete or modify existing Drive folders as part of code cleanup. Production financial-data persistence is **NO-GO** until separate security/privacy/OAuth/cost/recovery review and explicit owner activation approval.
 
