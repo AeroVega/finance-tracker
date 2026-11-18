@@ -56,7 +56,7 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
   const bytes = new TextEncoder().encode(csvText);
   const { parsed } = await parseRecognizedProviderCsv({ bytes });
   assert.equal(parsed.records.at(-1).valid, false);
-  assert.equal(parsed.records.at(-1).effectiveDate, null);
+  assert.equal(parsed.records.at(-1).effectiveDate, '2026-03-02');
   const accountId = recipe.accounts.checking;
   const input = {
     parsed,
@@ -64,12 +64,14 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
     accountMappings: { default: accountId },
     coverageByAccount: { [accountId]: { start: '2026-01-01', end: '2026-01-31', provenance: 'user-confirmed' } },
   };
+  assert.throws(() => prepareCanonicalImport(session.ledger, input), /activity-outside-declared-coverage/);
+  input.coverageByAccount[accountId].end = '2026-03-31';
   const first = prepareCanonicalImport(session.ledger, input);
   assert.equal(first.ledger.imports.at(-1).status, 'needs-review');
   session.stageCanonicalImport(first.ledger);
   const changedCoverage = {
     ...input,
-    coverageByAccount: { [accountId]: { start: '2025-12-31', end: '2026-01-31', provenance: 'user-confirmed' } },
+    coverageByAccount: { [accountId]: { start: '2025-12-31', end: '2026-03-31', provenance: 'user-confirmed' } },
   };
   assert.throws(() => prepareCanonicalImport(session.ledger, changedCoverage), /import-coverage-conflict/);
 

@@ -1,9 +1,9 @@
 # Current project state
 
-**Checked:** 2026-11-17
+**Checked:** 2026-11-18
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
 **Main baseline:** `26472cd2610c89ee4ee33180324813e2ec7b4674` (current `main` at implementation start)
-**Active work:** supported provider CSV import workflow on `feature/supported-csv-import-workflow`; draft PR, independent review, automated CI and owner acceptance are pending. No merge or deployment is authorized.
+**Active work:** supported provider CSV import workflow on `feature/supported-csv-import-workflow`; draft PR53; overnight corrections and synthetic regression verification are in progress. Exact-head CI and owner acceptance are tracked in the PR evidence. No merge or deployment is authorized.
 
 This is the concise current direction and permission boundary. [Project status](PROJECT_STATUS.md) retains dated historical evidence; the focused [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
 

@@ -3,6 +3,7 @@ import { parseRecognizedProviderCsv } from './provider-csv.mjs';
 import { prepareCanonicalImport } from './canonical-import.mjs';
 import { isCalendarDate } from './import-reconciliation.mjs';
 import { fail } from './app-error.mjs';
+import { mountImportCoverageSelector } from '../components/import-coverage-selector.mjs';
 
 const element = (document, tag, attributes = {}, text = '') => {
   const node = document.createElement(tag);
@@ -70,13 +71,14 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     state.finishedMessage = '';
     state.noOp = false;
     emptyCheck.checked = false;
-    for (const mapping of state.mappings.values()) mapping.confirmed.checked = false;
+    for (const mapping of state.mappings.values()) mapping.accepted = null;
     stage.disabled = true;
     previewSummary.textContent = '';
     discrepancy.textContent = message;
   }
   function resetState({ clearFile = false } = {}) {
     state.parsed = null;
+    for (const mapping of state.mappings.values()) mapping.selector?.destroy();
     state.mappings.clear();
     state.baseLedger = null;
     state.staged = false;
@@ -120,40 +122,43 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     const rangeNote = element(document, 'p', { className: 'field-help' }, observed
       ? 'Observed transaction dates: ' + observed.start + ' through ' + observed.end + '. This is not declared coverage.'
       : 'No usable transaction dates were observed. Enter the coverage from the statement/export evidence.');
-    const startLabel = element(document, 'label', {}, 'Declared coverage start (inclusive)');
-    const start = element(document, 'input', { type: 'date' });
-    startLabel.append(start);
-    const endLabel = element(document, 'label', {}, 'Declared coverage end (inclusive)');
-    const end = element(document, 'input', { type: 'date' });
-    endLabel.append(end);
-    const confirmLabel = element(document, 'label', { className: 'checkbox-field' });
-    const confirmed = element(document, 'input', { type: 'checkbox' });
-    confirmLabel.append(confirmed, element(document, 'span', {}, 'I confirm these inclusive dates match the source export or statement evidence.'));
-    const coverageSource = element(document, 'p', { className: 'field-help' }, 'Coverage is not inferred from observed rows. Changing the account or either date clears this confirmation.');
-    if (!ledger) {
-      const unavailable = element(document, 'p', { className: 'field-help' }, 'Open or create a synthetic ledger before mapping. No accounts can be created by this import workflow.');
-      wrap.append(legend, accountLabel, unavailable, rangeNote, startLabel, endLabel, confirmLabel, coverageSource);
-      for (const control of [start, end, confirmed]) control.disabled = true;
-    } else {
-      if (!options.length) wrap.append(legend, accountLabel, element(document, 'p', { className: 'field-help' }, 'No existing account at this institution is available. Add an account through the normal account workflow; this importer never creates one.'));
-      else wrap.append(legend, accountLabel, rangeNote, startLabel, endLabel, confirmLabel, coverageSource);
-    }
-    const context = { sourceKey, institutionId, select, start, end, confirmed, observed, records, manual };
+    const coverageRoot = element(document, 'div', { className: 'provider-import-coverage' });
+    const context = { sourceKey, institutionId, select, observed, records, manual, accepted: null, selector: null };
     state.mappings.set(sourceKey, context);
-    const changed = control => {
-      if (control !== confirmed) confirmed.checked = false;
+    wrap.append(legend, accountLabel, rangeNote, coverageRoot);
+    const changed = () => {
+      context.accepted = null;
       state.validated = false;
       state.noOp = false;
       previewSummary.textContent = '';
-      emptyCheck.checked = false;
       refreshEligibility();
     };
-    for (const control of [select, start, end]) control.addEventListener('change', () => changed(control));
-    confirmed.addEventListener('change', onConfirmationChange);
+    const coverageContext = () => ({
+      observedDates: records.map(row => ({ date: row.effectiveDate, rowReference: row.rowOrdinal })),
+      sourceCoverage: state.parsed?.sourceCoverage ?? null,
+      priorConfirmedCoverageEnd: ledger?.imports?.filter(run => run.accountId === select.value)
+        .map(run => run.declaredCoverage?.end).filter(isCalendarDate).sort().at(-1) ?? null,
+      contextKey: state.parsed?.fileFingerprint + ':' + select.value,
+      reviewedEmptyExport: records.length === 0 && state.parsed?.records.length === 0 && emptyCheck.checked
+    });
+    context.selector = mountImportCoverageSelector({
+      container: coverageRoot, ...coverageContext(),
+      onConfirm: result => { context.accepted = result; state.validated = false; refreshEligibility(); },
+      onInvalidate: changed,
+      onCancel: changed
+    });
+    context.updateCoverageContext = () => { changed(); context.selector.updateContext(coverageContext()); };
+    select.addEventListener('change', context.updateCoverageContext);
+    if (!ledger || !options.length) {
+      wrap.append(element(document, 'p', { className: 'field-help' },
+        !ledger ? 'Open a synthetic ledger before mapping; nothing has been uploaded or saved.' :
+        'No compatible existing account is available. The importer never creates accounts.'));
+    }
     return wrap;
   }
   function renderMappings() {
     mappings.replaceChildren();
+    for (const mapping of state.mappings.values()) mapping.selector?.destroy();
     state.mappings.clear();
     const parsed = state.parsed;
     if (!parsed) return;
@@ -190,9 +195,9 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     resetState();
     if (!selected) return;
     const token = state.context;
+    const isCurrent = () => token === state.context && file.files?.[0] === selected;
     const baseLedger = getLedger();
     try {
-      const isCurrent = () => token === state.context && file.files?.[0] === selected;
       const ledgerIsCurrent = () => getLedger() === baseLedger;
       const bytes = await selected.arrayBuffer();
       if (!isCurrent()) return;
@@ -233,13 +238,15 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       }
       refreshEligibility();
     } catch (error) {
+      if (!isCurrent()) return;
       summary.textContent = safeError(error);
       invalidate('The file was not accepted. No changes were staged.');
     }
   }
   function checkContext() {
     if (state.parsed && getLedger() !== state.baseLedger && !state.contextInvalidated) {
-      invalidate(safeError({ code: 'reconnect-required' }));
+      clear();
+      discrepancy.textContent = 'The active ledger changed. Select the file again to review against the current ledger.';
       return false;
     }
     return !state.contextInvalidated;
@@ -255,11 +262,12 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     const accountMappings = {}, coverageByAccount = {}, mappedAccounts = new Set();
     for (const [key, mapping] of state.mappings) {
       const accountId = mapping.select.value;
-      const start = mapping.start.value, end = mapping.end.value;
+      const coverage = mapping.accepted?.coverage;
+      const start = coverage?.start, end = coverage?.end;
       if (!accountId) fail('account-mapping-required');
       if (!isCalendarDate(start) || !isCalendarDate(end)) fail('coverage-dates-required');
       if (start > end) fail('coverage-order-invalid');
-      if (!mapping.confirmed.checked) fail('coverage-confirmation-required');
+      if (!mapping.accepted || mapping.selector.getState().confirmed === null) fail('coverage-confirmation-required');
       const account = ledger.accounts.find(item => item.accountId === accountId);
       if (!account || account.institutionId !== parsed.institutionId) fail('account-mapping-conflict');
       if (mappedAccounts.has(accountId)) fail('distinct-account-required');
@@ -267,7 +275,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       const outOfRange = mapping.records.filter(row => isCalendarDate(row.effectiveDate) && (row.effectiveDate < start || row.effectiveDate > end));
       if (outOfRange.length) fail('activity-outside-declared-coverage');
       accountMappings[String(key)] = accountId;
-      coverageByAccount[accountId] = { start, end, provenance: 'user-confirmed' };
+      coverageByAccount[accountId] = { start, end, provenance: 'user-confirmed', confirmationEvidence: structuredClone(coverage.provenance) };
     }
     if (!Object.keys(accountMappings).length) fail('explicit-account-mapping-required');
     const result = prepareCanonicalImport(ledger, { parsed, accountMappings, coverageByAccount, syntheticOnly: true });
@@ -314,6 +322,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     }
   }
   function refreshAvailability() {
+    if (!checkContext()) { stage.disabled = true; return; }
     if (state.staged || !state.parsed) return;
     if (!checkContext()) { stage.disabled = true; return; }
     const unavailable = getUnavailableReason();
@@ -358,7 +367,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       discrepancy.textContent = 'No file upload or Drive write occurred. Existing review decisions remain in the Review page.';
       stage.disabled = true;
       try { onStaged(); } catch {
-        discrepancy.textContent = 'The import was staged locally, but the workspace view could not refresh. Reload before taking another action.';
+        discrepancy.textContent = 'The import was staged locally, but the workspace view could not refresh. The draft remains in memory. Do not reload before saving or explicitly discarding it.';
       }
     } catch (error) {
       previewSummary.textContent = '';
@@ -374,7 +383,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     previewSummary.textContent = '';
     refreshEligibility();
   };
-  const onEmptyConfirmation = onConfirmationChange;
+  const onEmptyConfirmation = () => { for (const mapping of state.mappings.values()) mapping.updateCoverageContext(); onConfirmationChange(); };
   stage.addEventListener('click', onStage);
   reset.addEventListener('click', onReset);
   file.addEventListener('change', onFileChange);

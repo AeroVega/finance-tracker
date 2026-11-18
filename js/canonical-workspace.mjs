@@ -16,7 +16,9 @@ import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs'
 
 const $ = id => document.getElementById(id);
 let providerImportWorkflow = null;
-const pages = createWorkspacePages({document, window, onNavigate: page => leaveBreadcrumb({e:'page.view', page})});
+let sourceReviewPage = 0, sourceReviewScope = null;
+const sourceReviewUpdates = [];
+const pages = createWorkspacePages({document, window, onNavigate: page => { leaveBreadcrumb({e:'page.view', page}); if (page !== 'storage') providerImportWorkflow?.reset(); }});
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
   if (text !== undefined) result.textContent = text;
@@ -63,7 +65,7 @@ const storage = new DashboardSyntheticStorage({
     if (!status.code) clearDiagnostic($('connection-status'));
     // Candidate authorization/Picker work does not change the active session.
     // Only an actual lifecycle interruption invalidates its writable draft.
-    if (status.state !== 'ready' && !(status.state === 'connecting' && session.ready())) session.invalidate();
+    if (status.state !== 'ready' && !(status.state === 'connecting' && session.ready())) { session.invalidate(); providerImportWorkflow?.reset(); }
     $('connection-status').textContent = status.state === 'ready'
       ? 'Connected to a synthetic copy. Opening and saves verify its canonical records.'
       : status.code ? showDiagnostic({code: status.code}, {surface: 'workspace', target: $('connection-status'), reportId: status.reportId, page: pages.current}) : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
@@ -122,6 +124,7 @@ function refresh() {
   if (needsRecovery) $('recovery-tools').open = true;
   pages.setLoaded(Boolean(session.ledger));
   const ready = session.ready(), editable = !busy && session.canEdit();
+  for (const update of sourceReviewUpdates) update();
   $('start-preview').disabled = busy || Boolean(lifecycle);
   $('welcome-panel').hidden = Boolean(session.ledger);
   $('overview-loaded').hidden = !session.ledger;
@@ -301,6 +304,7 @@ function clearLoadedWorkspace() {
   renderedPositionDate = null; selectedActivity = null; detailEditorBaseline = null;
   page = 0; reviewQueueButton = null; composingSearch = false;
   reviewButtons.clear(); homeButtons.clear(); editorAccounts.clear();
+  sourceReviewUpdates.length = 0; sourceReviewPage = 0; sourceReviewScope = null;
   positionButtons.length = 0; holdingRows.length = 0; componentRows.length = 0;
   for (const id of ['summary-cards','recent-activities','transaction-rows','review-queue','position-totals','position-accounts','holdings-accounts','position-coverage','detail-source','detail-history','component-rows','holdings-rows',
     'account-filter','month-filter','transfer-counterparty','balance-account','reconcile-account','reconcile-opening','reconcile-closing','closure-anchor','holdings-account']) $(id).replaceChildren();
@@ -415,13 +419,7 @@ function render({ reset = false } = {}) {
     });
     $('review-queue').append(reviewButton);
   }
-  if (view.review.sourceCount) $('review-queue').append(node('p', `Showing ${Math.min(10, view.review.sourceCount)} of ${view.review.sourceCount} unresolved source observations in this account and period. Search does not filter this queue. Open the advanced import workbench for the full queue.`));
-  for (const observation of view.sourceReviews.slice(0, 10)) {
-    const item = node('article', undefined, 'review-item');
-    item.append(node('h3', observation.sourceDescription || 'Unresolved source observation', 'review-title'), node('p', `${observation.accountName || ''} · ${label(observation.reasonCode)}`, 'review-meta'));
-    $('review-queue').append(item);
-  }
-  if (view.review.sourceCount) $('review-queue').append(node('p', 'Source matching, rejection and reversal are available in the advanced import workbench. Save and release this session before opening that tool.'));
+  renderSourceReviews();
   if (!reviewCount) {
     const empty = node('article', undefined, 'review-empty');
     const link = node('a', 'Check account-month coverage →', 'inline-action'); link.href = '#reconciliation';
@@ -579,6 +577,93 @@ function renderPosition() {
     }
   } else $('position-coverage-help').textContent = 'Select an activity month above to inspect account-month coverage. Declared imports alone do not prove completeness.';
 }
+// Source review is part of the same in-memory draft and explicit-save path.
+// Pagination bounds DOM work without hiding the remaining source evidence.
+function renderSourceReviews() {
+  sourceReviewUpdates.length = 0;
+  const scope = JSON.stringify([view.scope.accountId, view.scope.month]);
+  if (sourceReviewScope !== scope) { sourceReviewPage = 0; sourceReviewScope = scope; }
+  const unresolved = view.sourceReviews.map(row => session.ledger.observations.find(o => o.observationId === row.observationId));
+  const latest = new Map();
+  for (const decision of session.ledger.reviewDecisions) latest.set(decision.observationId, decision);
+  const resolved = session.ledger.observations.filter(o => o.resolved && latest.has(o.observationId) &&
+    (!view.scope.accountId || o.accountId === view.scope.accountId) &&
+    (!view.scope.month || !o.candidate.effectiveDate || o.candidate.effectiveDate.startsWith(view.scope.month)));
+  const entries = [...unresolved, ...resolved];
+  if (!entries.length) return;
+  const pagesCount = Math.ceil(entries.length / 10);
+  sourceReviewPage = Math.min(sourceReviewPage, pagesCount - 1);
+  const status = node('p', `Source decisions: page ${sourceReviewPage + 1} of ${pagesCount}. ${unresolved.length} unresolved and ${resolved.length} resolved. Search does not filter this queue.`);
+  $('review-queue').append(status);
+  const navigation = node('div', undefined, 'storage-actions');
+  for (const [text, delta] of [['Previous source page', -1], ['Next source page', 1]]) {
+    const button = node('button', text); button.type = 'button';
+    const update = () => { button.disabled = busy || sourceReviewPage + delta < 0 || sourceReviewPage + delta >= pagesCount; };
+    sourceReviewUpdates.push(update); update();
+    button.addEventListener('click', () => { if (!button.disabled) { sourceReviewPage += delta; render(); } });
+    navigation.append(button);
+  }
+  $('review-queue').append(navigation);
+  const effective = getEffectiveActivities(session.ledger);
+  for (const observation of entries.slice(sourceReviewPage * 10, sourceReviewPage * 10 + 10)) {
+    const item = node('article', undefined, 'review-item');
+    item.dataset.observationId = observation.observationId;
+    const candidate = observation.candidate;
+    item.append(node('h3', candidate.sourceDescription || 'Source observation', 'review-title'),
+      node('p', `Row ${observation.rowOrdinal} · ${candidate.effectiveDate || 'Unknown date'} · ${label(observation.reasonCode)} · ${observation.resolved ? 'Resolved' : 'Needs review'}`, 'review-meta'),
+      evidenceDetails('Inspect retained source evidence', () => ({sourceFields: observation.sourceFields, candidate})));
+    const rationaleLabel = node('label', 'Reason for this decision');
+    const rationale = node('textarea'); rationaleLabel.append(rationale); item.append(rationaleLabel);
+    const help = node('p', '', 'field-help'); item.append(help);
+    const actions = node('div', undefined, 'storage-actions');
+    const controls = [];
+    const act = (text, callback, available = () => true) => {
+      const button = node('button', text); button.type = 'button';
+      const update = () => { button.disabled = busy || !session.canEdit() || !rationale.value.trim() || !available(); };
+      controls.push(update); sourceReviewUpdates.push(update); update();
+      button.addEventListener('click', () => {
+        if (button.disabled) return;
+        return run('Staging the source review decision locally.', () => {
+          callback(rationale.value.trim()); render(); refresh();
+          announce('Source decision staged locally. Use Save changes to persist it.', 'success');
+        });
+      });
+      actions.append(button);
+    };
+    if (observation.resolved) {
+      const decision = latest.get(observation.observationId);
+      item.append(evidenceDetails('Inspect latest review decision', () => decision));
+      act('Reverse source decision', reason => session.reverseSourceReview({reviewDecisionId: decision.reviewDecisionId, rationale: reason}));
+      help.textContent = 'Enter a reason to stage a reversal. Later dependent changes may prevent reversal; they are never discarded.';
+    } else {
+      const valid = candidate.valid !== false && isCalendarDate(candidate.effectiveDate);
+      const missingCurrency = candidate.errorCode === 'missing-currency' && ['missing-currency','review-decision-reversed'].includes(observation.reasonCode);
+      const currency = node('input'); currency.type = 'text'; currency.maxLength = 3;
+      if (missingCurrency) {
+        const currencyLabel = node('label', 'Confirmed currency from source evidence (three-letter code)');
+        currencyLabel.append(currency); item.append(currencyLabel);
+        currency.addEventListener('input', () => controls.forEach(update => update()));
+        sourceReviewUpdates.push(() => {currency.disabled = busy || !session.canEdit();});
+      }
+      const targetLabel = node('label', 'Existing activity to match (same account and currency)');
+      const target = node('select'); addOptions(target, effective.filter(a => a.active && a.accountId === observation.accountId && a.currency === candidate.currency)
+        .map(a => [a.activityId, `${a.effectiveDate || 'Unknown date'} · ${a.sourceDescription} · ${exactSignedDecimal(a) ?? 'Unknown amount'}`]), '', 'Choose a matching activity');
+      targetLabel.append(target); item.append(targetLabel);
+      act('Keep as a separate activity', reason => session.reviewSource({observationId: observation.observationId, action:'keep-separate', rationale:reason, currency:missingCurrency ? currency.value.trim() : null}), () => valid || (missingCurrency && /^[A-Z]{3}$/.test(currency.value.trim()) && isCalendarDate(candidate.effectiveDate)));
+      act('Match selected activity', reason => session.reviewSource({observationId:observation.observationId, action:'match', activityId:target.value, rationale:reason}), () => valid && Boolean(target.value));
+      act('Reject source row', reason => session.reviewSource({observationId:observation.observationId, action:'reject', rationale:reason}));
+      target.addEventListener('change', () => controls.forEach(update => update()));
+      sourceReviewUpdates.push(() => {target.disabled = busy || !session.canEdit();});
+      help.textContent = missingCurrency ? 'Inspect source evidence, enter its explicit currency and a reason before keeping this row. No currency is inferred.' : valid ? 'Enter a reason. Matching also requires a target; incompatible amounts are rejected without changing the draft.' : 'Malformed rows cannot be accepted or matched. Inspect the retained evidence, then explicitly reject the row with a reason or import a corrected export.';
+    }
+    const decisionHelp = help.textContent;
+    sourceReviewUpdates.push(() => { help.textContent = busy ? 'Wait for the current operation to finish.' : !session.canEdit() ? 'Reopen or recover an editable session before staging a decision. ' + decisionHelp : decisionHelp; });
+    rationale.addEventListener('input', () => controls.forEach(update => update()));
+    sourceReviewUpdates.push(() => {rationale.disabled = busy || !session.canEdit();});
+    item.append(actions); $('review-queue').append(item);
+  }
+}
+
 function evidenceDetails(title, read) {
   const details = node('details'), summary = node('summary', title);
   details.append(summary);
@@ -917,7 +1002,7 @@ $('transaction-search').addEventListener('compositionend', () => { composingSear
 $('previous-page').addEventListener('click', () => { if (!busy && page > 0) { page--; render(); } });
 $('next-page').addEventListener('click', () => { if (!busy && view && page + 1 < view.pages) { page++; render(); } });
 window.addEventListener('beforeunload', event => { if (busy || session.dirty || hasUnfinishedDetail() || hasUnfinishedEvidence()) { event.preventDefault(); event.returnValue = ''; } });
-window.addEventListener('offline', () => { session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
+window.addEventListener('offline', () => { providerImportWorkflow?.reset(); session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
 providerImportWorkflow = mountProviderImportWorkflow({
   root: $('provider-import-workflow'),

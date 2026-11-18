@@ -12,6 +12,27 @@ const accountFor = (ledger, accountId) => ledger.accounts.find(a => a.accountId 
 const activityFor = (ledger, activityId) => ledger.activities.find(a => a.activityId === activityId) ?? fail('unknown-activity');
 const zeroCounts = () => ({ rowsSeen:0, rowsRecognized:0, created:0, matched:0, review:0, rejected:0, ignored:0 });
 
+// The optional evidence extends legacy string provenance without changing its
+// meaning: it records an explicit UI confirmation, never financial completeness.
+function validCoverageEvidence(coverage, {accountId, fileFingerprint, rowsSeen}) {
+  if (!Object.hasOwn(coverage, 'confirmationEvidence')) return true;
+  const evidence = coverage.confirmationEvidence;
+  if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence) ||
+    Object.keys(evidence).sort().join(',') !== 'confirmationMethod,contextKey,coverageSource,kind,priorConfirmedCoverageEnd,reviewedEmptyExport,sourceMetadata' ||
+    coverage.provenance !== 'user-confirmed' || evidence.kind !== 'user-confirmed' ||
+    !['source-metadata', 'user-declaration'].includes(evidence.coverageSource) ||
+    evidence.confirmationMethod !== 'explicit-component-confirmation' ||
+    typeof evidence.reviewedEmptyExport !== 'boolean' ||
+    evidence.reviewedEmptyExport !== (rowsSeen === 0) ||
+    evidence.contextKey !== `${fileFingerprint}:${accountId}` ||
+    (evidence.priorConfirmedCoverageEnd !== null && !isCalendarDate(evidence.priorConfirmedCoverageEnd))) return false;
+  const metadata = evidence.sourceMetadata;
+  if (metadata !== null && (typeof metadata !== 'object' || Array.isArray(metadata))) return false;
+  if (evidence.coverageSource === 'source-metadata' &&
+    (!metadata || metadata.start !== coverage.start || metadata.end !== coverage.end)) return false;
+  return true;
+}
+
 export function createLedger(options = {}) {
   return { format:'finance-tracker-canonical-ledger', version:1, syntheticOnly:true, ledgerId:id(options), createdAt:stamp(options), accounts:[], imports:[], observations:[], activities:[], events:[], reviewDecisions:[] };
 }
@@ -52,6 +73,7 @@ function validateAndProject(ledger) {
   for (const run of ledger.imports) {
     const account = findAccount(run.accountId);
     if (run.institutionId!==account.institutionId || !['processed','needs-review'].includes(run.status) || typeof run.fileFingerprint !== 'string' || !run.fileFingerprint || !run.declaredCoverage || !isCalendarDate(run.declaredCoverage.start) || !isCalendarDate(run.declaredCoverage.end) || run.declaredCoverage.start > run.declaredCoverage.end || !['user-confirmed','source-confirmed'].includes(run.declaredCoverage.provenance)) fail('invalid-import');
+    if (!validCoverageEvidence(run.declaredCoverage, run)) fail('invalid-import');
     if(!Array.isArray(run.retryAttempts) || run.retryAttempts.some(attempt=>!uuid.test(attempt.attemptId)||!Number.isFinite(Date.parse(attempt.startedAt))||!Number.isFinite(Date.parse(attempt.completedAt))||!['processed','needs-review'].includes(attempt.priorStatus)||!['processed','needs-review'].includes(attempt.status)||!attempt.priorCounts||!attempt.counts)) fail('invalid-retry-audit');
     for(const attempt of run.retryAttempts) {if(ids.has(attempt.attemptId)) fail('duplicate-attempt-id');ids.add(attempt.attemptId);}
     if(run.sourceFileRetentionStatus!=='not-retained'||run.privateSourceFileRef!==null||run.sourceFileRetainedAt!==null||run.sourceFileRetentionExpiresAt!==null||run.sourceFileDeletedAt!==null||run.coverageReconciled!==false) fail('unsupported-synthetic-retention-or-completeness');
@@ -226,10 +248,34 @@ export function registerAccount(ledger, account, options = {}) {
 
 function canonicalRow(record, account) {
   const candidate={...clone(record),accountId:account.accountId,institutionId:account.institutionId,postedDate:record.postedDate ?? null,settlementDate:record.settlementDate ?? null,sourceRecordId:record.sourceRecordId ?? null,sourceAction:record.sourceAction ?? null,normalizedDescription:record.normalizedDescription ?? null,lifecycleStatus:record.lifecycleStatus ?? 'unknown',activityKind:'unclassified',categoryId:null,amountMinor:null,amountDecimal:null,currency:record.currency ?? (account.institutionId==='fidelity'?null:account.currency),transferGroupId:null};
+  // Source account keys are only needed to choose the canonical account. They
+  // must not survive in stored candidates/activities or portable backups.
+  if (account.institutionId === 'fidelity') {
+    delete candidate.sourceAccountKey;
+    if (candidate.sourceFields && Object.hasOwn(candidate.sourceFields, 'Account Number')) candidate.sourceFields['Account Number'] = null;
+  }
   try { if(record.amountText!==null && record.amountText!==undefined) { if(!candidate.currency) fail('missing-currency'); Object.assign(candidate,parseMoney(record.amountText,candidate.currency)); } }
   catch { if(candidate.valid!==false) candidate.errorCode=candidate.currency===null?'missing-currency':'invalid-money'; candidate.valid=false; }
   return candidate;
 }
+// Only the two approved Fidelity mapping-key redactions may differ when an
+// older saved observation is retried. All other normalization remains exact;
+// retained source evidence is never rewritten by this comparison.
+function sameRetryCandidate(candidate, previous, sourceRecord, sourceFormat) {
+  if (canonicalizeJcs(candidate) === canonicalizeJcs(previous)) return true;
+  if (candidate.institutionId !== 'fidelity' || sourceFormat !== 'fidelity-accounts-history-csv-v1') return false;
+  const comparable = clone(previous);
+  if (Object.hasOwn(comparable, 'sourceAccountKey')) {
+    if (comparable.sourceAccountKey !== sourceRecord.sourceAccountKey) return false;
+    delete comparable.sourceAccountKey;
+  }
+  if (comparable.sourceFields && Object.hasOwn(comparable.sourceFields, 'Account Number') && comparable.sourceFields['Account Number'] !== null) {
+    if (comparable.sourceFields['Account Number'] !== sourceRecord.sourceAccountKey) return false;
+    comparable.sourceFields['Account Number'] = null;
+  }
+  return canonicalizeJcs(candidate) === canonicalizeJcs(comparable);
+}
+
 // Operation-local indexes preserve Array.find's first match before final validation.
 function firstBy(records, key) {
   const index=new Map();
@@ -269,6 +315,7 @@ export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageB
     const coverage=coverageByAccount?.[account.accountId];
     if(!coverage || !['user-confirmed','source-confirmed'].includes(coverage.provenance) || !isCalendarDate(coverage.start) || !isCalendarDate(coverage.end) || coverage.start>coverage.end) fail('confirmed-coverage-required');
     const records=parsed.records.filter(r=>r.sourceAccountKey===key);
+    if (!validCoverageEvidence(coverage, {accountId:account.accountId,fileFingerprint:parsed.fileFingerprint,rowsSeen:records.length})) fail('confirmed-coverage-required');
     if(records.some(r=>isCalendarDate(r.effectiveDate) && (r.effectiveDate<coverage.start||r.effectiveDate>coverage.end))) fail('activity-outside-declared-coverage');
     const prior=next.imports.find(r=>r.accountId===account.accountId && r.sourceFormat===parsed.sourceFormat && r.fileFingerprint===parsed.fileFingerprint);
     if(prior && (prior.declaredCoverage.start!==coverage.start || prior.declaredCoverage.end!==coverage.end)) fail('import-coverage-conflict');
@@ -279,11 +326,13 @@ export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageB
       const recordByOrdinal=firstBy(records,'rowOrdinal');
       const unresolved=prior.observationIds.map(value=>observationById.get(value)).filter(o=>!o.resolved&&['review','rejected'].includes(o.disposition));
       const retryRows=unresolved.map(o=>canonicalRow(recordByOrdinal.get(o.rowOrdinal)??fail('retry-row-missing'),account));
-      if(retryRows.some((candidate,i)=>canonicalizeJcs(candidate)!==canonicalizeJcs(unresolved[i].candidate))) fail('retry-normalization-changed');
+      if(retryRows.some((candidate,i)=>!sameRetryCandidate(candidate,unresolved[i].candidate,recordByOrdinal.get(unresolved[i].rowOrdinal),parsed.sourceFormat))) fail('retry-normalization-changed');
       const retry=reconcileImport({institutionId:account.institutionId,accountId:account.accountId,sourceFormat:parsed.sourceFormat,fileFingerprint:parsed.fileFingerprint,rows:retryRows,...reconciliationEvidence(next),idFactory:()=>id(options)});
       const time=stamp(options),priorStatus=prior.status,priorCounts=clone(prior.counts);
       for(const a of retry.activities) next.activities.push({...a,createdAt:time,updatedAt:time});
-      retry.observations.forEach((result,i)=>Object.assign(unresolved[i],result));
+      // The bounded compatibility comparison may ignore old identifier fields,
+      // but a retry must retain the exact original observation source evidence.
+      retry.observations.forEach((result,i)=>Object.assign(unresolved[i],result,{sourceFields:unresolved[i].sourceFields}));
       const unresolvedByOrdinal=firstBy(unresolved,'rowOrdinal');
       const commandIds=new Set(next.events.map(event=>event.commandId));
       for(const e of retry.events) {

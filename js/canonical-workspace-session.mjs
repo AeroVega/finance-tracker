@@ -1,4 +1,4 @@
-import { applyFinancialEvent, registerAccount, validateLedger, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
+import { applyFinancialEvent, applyReviewDecision, reverseReviewDecision, registerAccount, validateLedger, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
 
@@ -158,6 +158,26 @@ export class CanonicalWorkspaceSession {
     this.ledger = next;
     this.updateDirty();
     return this.ledger;
+  }
+
+  reviewSource({ observationId, action, activityId = null, rationale, currency = null }) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
+    const next = applyReviewDecision(this.ledger, { observationId, action, activityId, rationale: rationale.trim(), currency });
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return next;
+  }
+
+  reverseSourceReview({ reviewDecisionId, rationale }) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
+    const next = reverseReviewDecision(this.ledger, { reviewDecisionId, rationale: rationale.trim() });
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return next;
   }
 
   stageCheckpoint() {

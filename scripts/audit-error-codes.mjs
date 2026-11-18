@@ -62,8 +62,8 @@ export function scanSource(source, file='source.mjs') {
 export function auditErrorCodes(root, entries) {
   const sites=[],dynamic=[];
   // Registry and message compatibility modules define codes rather than emit them.
-  for(const file of fs.readdirSync(path.join(root,'js')).filter(f=>/\.(?:mjs|js)$/.test(f)&&!['error-registry.mjs','app-diagnostic-codes.mjs','app-diagnostic-messages.mjs'].includes(f)).sort()) {
-    const result=scanSource(fs.readFileSync(path.join(root,'js',file),'utf8'),`js/${file}`);
+  for (const directory of ['js', 'components']) for(const file of (fs.existsSync(path.join(root,directory)) ? fs.readdirSync(path.join(root,directory)) : []).filter(f=>/\.(?:mjs|js)$/.test(f)&&!['error-registry.mjs','app-diagnostic-codes.mjs','app-diagnostic-messages.mjs'].includes(f)).sort()) {
+    const result=scanSource(fs.readFileSync(path.join(root,directory,file),'utf8'),`${directory}/${file}`);
     sites.push(...result.sites);dynamic.push(...result.dynamic);
   }
   const referenced=new Set(sites.map(s=>s.code));

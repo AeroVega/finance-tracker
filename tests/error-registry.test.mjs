@@ -74,6 +74,6 @@ test('audit handles multiline calls, ternaries, code fields and regex quotes, ig
 
 test('source location allowlist covers shipped modules without accepting arbitrary paths',async()=>{
  const {DIAGNOSTIC_FILES}=await import('../js/diagnostic-files.mjs');
- const actual=[];for(const dir of ['js','prototype'])for(const file of fs.readdirSync(path.join(root,dir))){if(/\.(?:mjs|js)$/.test(file))actual.push(dir+'/'+file);}
+ const actual=[];for(const dir of ['js','prototype','components'])for(const file of fs.readdirSync(path.join(root,dir))){if(/\.(?:mjs|js)$/.test(file))actual.push(dir+'/'+file);}
  assert.deepEqual([...DIAGNOSTIC_FILES].sort(),actual.sort());
 });

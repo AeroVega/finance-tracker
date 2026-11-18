@@ -138,6 +138,28 @@ test('bounded year option supports leap years without accepting extra data', asy
 // Pinned from the pre-batch recipe at ebf1ef1. This guards the complete ordered
 // evidence graph, including stable IDs and command signatures, not only totals.
 test('batch generation preserves the pre-batch canonical year byte for byte',()=>{
-  const digest=createHash('sha256').update(canonicalizeJcs(fixture.ledger)).digest('hex');
+  // PR53 intentionally removes transient Fidelity account keys from persisted
+  // records. Reconstitute ONLY those documented fields in this invented recipe
+  // to retain the original full-graph oracle for every other byte.
+  for (const observation of fixture.ledger.observations.filter(o => o.candidate.institutionId === 'fidelity')) {
+    assert.equal(observation.sourceFields['Account Number'], null);
+    assert.equal(observation.candidate.sourceFields['Account Number'], null);
+    assert.equal(Object.hasOwn(observation.candidate, 'sourceAccountKey'), false);
+  }
+  const legacy = structuredClone(fixture.ledger);
+  const restore = record => {
+    if (record.institutionId !== 'fidelity') return;
+    assert.equal(Object.hasOwn(record, 'sourceAccountKey'), false);
+    record.sourceAccountKey = 'INVENTED-YEAR-BROKERAGE';
+    record.sourceFields['Account Number'] = 'INVENTED-YEAR-BROKERAGE';
+  };
+  legacy.activities.forEach(restore);
+  for (const observation of legacy.observations) {
+    restore(observation.candidate);
+    if (observation.candidate.institutionId === 'fidelity') {
+      observation.sourceFields['Account Number'] = 'INVENTED-YEAR-BROKERAGE';
+    }
+  }
+  const digest=createHash('sha256').update(canonicalizeJcs(legacy)).digest('hex');
   assert.equal(digest,'bc1da7ad6dc32cd3230285b71bedc5ae05357da9e2957dd1ae2d567ca261d5a3');
 });
