@@ -124,9 +124,9 @@ async function parseCsv({ bytes, sourceFormat }, recognize) {
     parsed[rowIndex] = null;
     if (blank(row) || (fidelity && row.cells.length === 2 && row.cells[0] === 'This is invented explanatory footer text' && row.cells[1] === ' not a transaction row.')) { ignoredCount++; continue; }
     const sourceFields = Object.fromEntries(headers.map((h, i) => [h, row.cells[i] ?? null]));
-    const fingerprintFields = { ...sourceFields };
     // Retain surplus cells rather than losing evidence on malformed rows.
     if (row.cells.length > headers.length) sourceFields.__extraCells = row.cells.slice(headers.length);
+    const fingerprintFields = { ...sourceFields };
     const get = key => optional(sourceFields[key]);
     const rawAmount = get(wf ? 'AMOUNT' : 'Amount');
     const rawDate = get(wf ? 'DATE' : fidelity ? 'Run Date' : 'Date');
