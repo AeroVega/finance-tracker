@@ -48,6 +48,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   const fileLabel = element(document, 'label', { for: 'provider-import-file' }, 'CSV export');
   const file = element(document, 'input', { id: 'provider-import-file', type: 'file', accept: '.csv,text/csv' });
   const summary = element(document, 'p', { className: 'field-help', role: 'status', 'aria-live': 'polite' }, 'No file selected.');
+  const previewSummary = element(document, 'p', { className: 'provider-import-preview', role: 'status', 'aria-live': 'polite' });
   const mappings = element(document, 'div', { className: 'provider-import-mappings' });
   const emptyConfirmation = element(document, 'label', { className: 'checkbox-field' });
   const emptyCheck = element(document, 'input', { type: 'checkbox' });
@@ -58,7 +59,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   const reset = element(document, 'button', { type: 'button', className: 'text-button', disabled: '' }, 'Discard selected file');
   const actions = element(document, 'div', { className: 'storage-actions' });
   actions.append(stage, reset);
-  root.append(heading, intro, fileLabel, file, summary, mappings, emptyConfirmation, discrepancy, actions);
+  root.append(heading, intro, fileLabel, file, summary, previewSummary, mappings, emptyConfirmation, discrepancy, actions);
 
   function invalidate(message = 'Import confirmation cleared. Review the file and coverage again.') {
     state.context++;
@@ -69,6 +70,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     emptyCheck.checked = false;
     for (const mapping of state.mappings.values()) mapping.confirmed.checked = false;
     stage.disabled = true;
+    previewSummary.textContent = '';
     discrepancy.textContent = message;
   }
   function resetState({ clearFile = false } = {}) {
@@ -84,6 +86,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     emptyCheck.checked = false;
     invalidate('No import is staged. Choose a CSV file to begin.');
     summary.textContent = 'No file selected.';
+    previewSummary.textContent = '';
     reset.disabled = !file.files?.length;
   }
   function clear() { resetState({ clearFile: true }); }
@@ -137,6 +140,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     const changed = control => {
       if (control !== confirmed) confirmed.checked = false;
       state.validated = false;
+      previewSummary.textContent = '';
       emptyCheck.checked = false;
       refreshEligibility();
     };
@@ -284,12 +288,19 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       return;
     }
     try {
-      prepare();
+      const result = prepare();
       state.validated = true;
+      const counts = result.summary;
+      previewSummary.textContent = result.ledger.imports.length === getLedger().imports.length
+        ? 'This exact file has already been imported for the selected account. No duplicate rows or new import run will be staged.'
+        : state.parsed.records.length === 0
+          ? 'Ready to stage a confirmed header-only export. It will record an empty import run with no transaction rows.'
+          : 'Read-only reconciliation preview: ' + counts.created + ' new, ' + counts.matched + ' matched, ' + counts.review + ' for review, ' + counts.rejected + ' rejected, ' + counts.ignored + ' ignored. Nothing has been staged yet.';
       stage.disabled = false;
       discrepancy.textContent = 'Mapping and inclusive coverage are valid. Stage this import to add it to the unsaved ledger draft.';
     } catch (error) {
       state.validated = false;
+      previewSummary.textContent = '';
       if (error?.code === 'reconnect-required') invalidate(safeError(error));
       else { stage.disabled = true; discrepancy.textContent = safeError(error); }
     }
@@ -331,12 +342,14 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       state.finishedMessage = 'This file is already staged. Select another export to prepare another import.';
       summary.textContent = 'Import staged locally: ' + result.summary.created + ' created, ' + result.summary.matched + ' matched, ' +
         result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Use the workspace's explicit save action to persist this draft.';
+      previewSummary.textContent = 'Import staged locally: ' + result.summary.created + ' new, ' + result.summary.matched + ' matched, ' + result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored.';
       discrepancy.textContent = 'No file upload or Drive write occurred. Existing review decisions remain in the Review page.';
       stage.disabled = true;
       try { onStaged(); } catch {
         discrepancy.textContent = 'The import was staged locally, but the workspace view could not refresh. Reload before taking another action.';
       }
     } catch (error) {
+      previewSummary.textContent = '';
       if (error?.code === 'reconnect-required') invalidate(safeError(error));
       else { discrepancy.textContent = safeError(error); stage.disabled = true; }
     }
