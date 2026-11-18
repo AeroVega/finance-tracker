@@ -119,41 +119,42 @@ export function validateHistoricalMonthlySummaries({ records, expectedMonthRange
     const current = monthIndex(month);
     if (current === null) {
       findings.push(finding('invalid-month', { recordIndex: index, month: month ?? null }));
-      continue;
-    }
-    if (current < start || current > end) {
-      findings.push(finding('month-outside-expected-range', { recordIndex: index, month }));
-    }
-    if (!byMonth.has(month)) byMonth.set(month, []);
-    byMonth.get(month).push({ record, index });
-
-    if (!record.summary || typeof record.summary !== 'object' || Array.isArray(record.summary)) {
-      findings.push(finding('invalid-summary', { recordIndex: index, month }));
     } else {
-      for (const field of REQUIRED_TOTALS) {
-        if (record.summary[field] === undefined || record.summary[field] === null) {
-          findings.push(finding('missing-summary-value', { recordIndex: index, month, field }));
-        } else if (!parseMoney(record.summary[field])) {
-          findings.push(finding('invalid-summary-value', { recordIndex: index, month, field }));
-        }
+      if (current < start || current > end) {
+        findings.push(finding('month-outside-expected-range', { recordIndex: index, month }));
       }
-      if (record.summary.netCashFlow !== undefined && record.summary.netCashFlow !== null &&
-          !parseMoney(record.summary.netCashFlow)) {
-        findings.push(finding('invalid-summary-value', { recordIndex: index, month, field: 'netCashFlow' }));
-      }
-      if (record.summary.netCashFlow === null) {
-        findings.push(finding('missing-summary-value', { recordIndex: index, month, field: 'netCashFlow' }));
-      }
+      if (!byMonth.has(month)) byMonth.set(month, []);
+      byMonth.get(month).push({ record, index });
     }
 
-    const provenance = record.provenance;
+    const summary = record?.summary;
+    if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+      findings.push(finding('invalid-summary', { recordIndex: index, month: month ?? null }));
+    }
+    const summaryValues = summary && typeof summary === 'object' ? summary : {};
+    for (const field of REQUIRED_TOTALS) {
+      if (summaryValues[field] === undefined || summaryValues[field] === null) {
+        findings.push(finding('missing-summary-value', { recordIndex: index, month: month ?? null, field }));
+      } else if (!parseMoney(summaryValues[field])) {
+        findings.push(finding('invalid-summary-value', { recordIndex: index, month: month ?? null, field }));
+      }
+    }
+    if (summaryValues.netCashFlow !== undefined && summaryValues.netCashFlow !== null &&
+        !parseMoney(summaryValues.netCashFlow)) {
+      findings.push(finding('invalid-summary-value', { recordIndex: index, month: month ?? null, field: 'netCashFlow' }));
+    }
+    if (summaryValues.netCashFlow === null) {
+      findings.push(finding('missing-summary-value', { recordIndex: index, month: month ?? null, field: 'netCashFlow' }));
+    }
+
+    const provenance = record?.provenance;
     for (const field of ['workbook', 'worksheet', 'mapping']) {
       if (typeof provenance?.[field] !== 'string' || !provenance[field].trim()) {
         findings.push(finding('missing-provenance', { recordIndex: index, month, field }));
       }
     }
     for (const [breakdownField, totalField] of BREAKDOWN_FIELDS) {
-      validateBreakdown(record, month, breakdownField, totalField, findings);
+      validateBreakdown(record ?? {}, month ?? null, breakdownField, totalField, findings);
     }
   }
 
