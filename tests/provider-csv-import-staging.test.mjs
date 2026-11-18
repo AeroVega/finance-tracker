@@ -67,6 +67,11 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
   const first = prepareCanonicalImport(session.ledger, input);
   assert.equal(first.ledger.imports[0].status, 'needs-review');
   session.stageCanonicalImport(first.ledger);
+  const changedCoverage = {
+    ...input,
+    coverageByAccount: { [accountId]: { start: '2025-12-31', end: '2026-01-31', provenance: 'user-confirmed' } },
+  };
+  assert.throws(() => prepareCanonicalImport(session.ledger, changedCoverage), /import-coverage-conflict/);
 
   const retry = prepareCanonicalImport(session.ledger, input);
   assert.equal(retry.ledger.imports.length, first.ledger.imports.length);
