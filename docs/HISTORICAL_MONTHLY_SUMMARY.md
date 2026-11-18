@@ -10,7 +10,7 @@ This module accepts only explicitly normalized synthetic records. It does not in
 
 ## API
 
-Import `validateHistoricalMonthlySummaries` from `js/historical-monthly-summary.mjs`.
+Import `validateHistoricalMonthlySummaries` from `scripts/historical-monthly-summary.mjs`.
 
 ```js
 const result = validateHistoricalMonthlySummaries({
