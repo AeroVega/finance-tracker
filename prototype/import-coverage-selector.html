@@ -5,5 +5,5 @@
 import {mountImportCoverageSelector} from "../components/import-coverage-selector.mjs";
 const result=document.querySelector("#result");
 const instance=mountImportCoverageSelector({container:document.querySelector("#selector"),contextKey:"invented-file-001",observedDates:[{date:"2024-02-01",rowReference:2},{date:"2024-02-14",rowReference:3},{date:"2024-02-29",rowReference:4},{date:"2024-03-02",rowReference:5}],sourceCoverage:{start:"2024-02-01",end:"2024-02-29",provider:"invented metadata"},onConfirm:coverage=>{result.textContent=JSON.stringify({accepted:true,coverage},null,2);},onCancel:outcome=>{result.textContent=JSON.stringify(outcome,null,2);}});
-window.addEventListener("pagehide",()=>instance.destroy(),{once:true});
+// The component owns and detaches only its container listeners; the demo adds no global listeners.
 </script></body></html>
