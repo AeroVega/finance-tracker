@@ -32,8 +32,8 @@ const safeError = error => ({
   'invalid-parsed-import': 'The canonical import proposal could not be validated. No changes were staged.'
 }[error?.code] || 'The import could not be prepared. No changes were staged.');
 
-export function mountProviderImportWorkflow({ root, getLedger, stageImport, onStaged = () => {} }) {
-  if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function') fail('invalid-options');
+export function mountProviderImportWorkflow({ root, getLedger, stageImport, canStage = () => true, getUnavailableReason = () => null, onStaged = () => {} }) {
+  if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function' || typeof canStage !== 'function' || typeof getUnavailableReason !== 'function') fail('invalid-options');
   const document = root.ownerDocument;
   const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false };
   root.replaceChildren();
@@ -256,6 +256,12 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
       stage.disabled = true;
       return;
     }
+    const unavailable = getUnavailableReason();
+    if (unavailable || !canStage()) {
+      stage.disabled = true;
+      discrepancy.textContent = unavailable || 'The current workspace session cannot stage changes.';
+      return;
+    }
     try {
       prepare();
       stage.disabled = false;
@@ -267,6 +273,12 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
   }
   function onStage() {
     if (stage.disabled) return;
+    const unavailable = getUnavailableReason();
+    if (unavailable || !canStage()) {
+      stage.disabled = true;
+      discrepancy.textContent = unavailable || 'The current workspace session cannot stage changes.';
+      return;
+    }
     try {
       const result = prepare();
       if (result.ledger.imports.length === getLedger().imports.length) {
@@ -298,6 +310,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
   return {
     reset: clear,
     checkContext,
+    refresh: refreshEligibility,
     destroy() {
       clear();
       stage.removeEventListener('click', onStage);
