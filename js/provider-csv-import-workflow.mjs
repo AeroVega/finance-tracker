@@ -24,7 +24,7 @@ const safeError = error => ({
 }[error?.code] || 'The import could not be prepared. No changes were staged.');
 
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, onStaged = () => {} }) {
-  if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function') throw new TypeError('invalid-import-workflow-host');
+  if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function') throw Object.assign(new TypeError('invalid-options'), { code: 'invalid-options' });
   const document = root.ownerDocument;
   const state = { bytes: null, parsed: null, fingerprint: null, context: 0, mappings: new Map(), preview: null };
   root.replaceChildren();
@@ -152,9 +152,9 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     }
   }
   function prepare() {
-    if (!state.parsed || !getLedger()) throw new TypeError('no-ledger-open');
+    if (!state.parsed || !getLedger()) throw Object.assign(new TypeError('canonical-ledger-required'), { code: 'canonical-ledger-required' });
     const parsed = state.parsed;
-    if (!parsed.records.length && !emptyCheck.checked) throw new TypeError('empty-export-confirmation-required');
+    if (!parsed.records.length && !emptyCheck.checked) throw Object.assign(new TypeError('explicit-account-mapping-required'), { code: 'explicit-account-mapping-required' });
     const accountMappings = {}, coverageByAccount = {};
     for (const [key, mapping] of state.mappings) {
       const accountId = mapping.select.value;
@@ -169,7 +169,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     }
     if (!Object.keys(accountMappings).length) throw new TypeError('explicit-account-mapping-required');
     const result = prepareCanonicalImport(getLedger(), { parsed, accountMappings, coverageByAccount, syntheticOnly: true });
-    if (result.ledger === getLedger() || !result.runIds.length) throw new TypeError('import-proposal-has-no-new-run');
+    if (result.ledger === getLedger() || !result.runIds.length) throw Object.assign(new TypeError('invalid-parsed-import'), { code: 'invalid-parsed-import' });
     return result;
   }
   function refreshEligibility() {
