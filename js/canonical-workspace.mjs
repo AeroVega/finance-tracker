@@ -15,6 +15,7 @@ import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
 import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs';
 
 const $ = id => document.getElementById(id);
+let providerImportWorkflow = null;
 const pages = createWorkspacePages({document, window, onNavigate: page => leaveBreadcrumb({e:'page.view', page})});
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
@@ -114,6 +115,7 @@ function announce(text, kind = 'info') {
   }
 }
 function refresh() {
+  providerImportWorkflow?.checkContext();
   refreshDiagnosticHistory();
   const lifecycle = storage.lifecycle;
   const needsRecovery = ['recovery-required', 'stale-session'].includes(lifecycle?.state);
@@ -917,7 +919,7 @@ $('next-page').addEventListener('click', () => { if (!busy && view && page + 1 <
 window.addEventListener('beforeunload', event => { if (busy || session.dirty || hasUnfinishedDetail() || hasUnfinishedEvidence()) { event.preventDefault(); event.returnValue = ''; } });
 window.addEventListener('offline', () => { session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
-mountProviderImportWorkflow({
+providerImportWorkflow = mountProviderImportWorkflow({
   root: $('provider-import-workflow'),
   getLedger: () => session.ledger,
   stageImport: proposal => {
