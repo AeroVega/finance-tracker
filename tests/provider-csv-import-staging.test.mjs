@@ -45,3 +45,48 @@ test('import staging rejects a no-op proposal and keeps the current draft untouc
   assert.deepEqual(session.ledger, recipe.ledger);
   assert.equal(session.dirty, false);
 });
+
+test('canonical staging accepts only the importer’s bounded unresolved-run retry and can undo it', async () => {
+  const recipe = await createSyntheticFinancialYear();
+  const session = new CanonicalWorkspaceSession({ storage: { lifecycle: null }, online: () => true });
+  session.preview(recipe.ledger);
+  const bytes = await readFile(new URL('../fixtures/wells-fargo.csv', import.meta.url));
+  const { parsed: source } = await parseRecognizedProviderCsv({ bytes: new Uint8Array(bytes) });
+  const parsed = structuredClone(source);
+  parsed.fileFingerprint = 'synthetic-unresolved-retry-fingerprint';
+  parsed.records.push({
+    ...structuredClone(parsed.records[0]),
+    rowOrdinal: parsed.records.length + 1,
+    physicalLine: parsed.records.length + 3,
+    sourceDescription: 'Synthetic malformed date row',
+    normalizedDescription: 'synthetic malformed date row',
+    sourceFields: { ...parsed.records[0].sourceFields, Date: 'not-a-date' },
+    effectiveDate: null,
+    valid: false,
+    errorCode: 'invalid-date',
+  });
+  parsed.rowsSeen++;
+  const accountId = recipe.accounts.checking;
+  const input = {
+    parsed,
+    syntheticOnly: true,
+    accountMappings: { default: accountId },
+    coverageByAccount: { [accountId]: { start: '2026-01-01', end: '2026-01-31', provenance: 'user-confirmed' } },
+  };
+  const first = prepareCanonicalImport(session.ledger, input);
+  assert.equal(first.ledger.imports[0].status, 'needs-review');
+  session.stageCanonicalImport(first.ledger);
+
+  const retry = prepareCanonicalImport(session.ledger, input);
+  assert.equal(retry.ledger.imports.length, first.ledger.imports.length);
+  assert.equal(retry.ledger.imports[0].retryAttempts.length, 1);
+  assert.equal(retry.ledger.imports[0].status, 'needs-review');
+  session.stageCanonicalImport(retry.ledger);
+  assert.deepEqual(session.ledger, retry.ledger);
+
+  session.undoLastStagedChange();
+  assert.deepEqual(session.ledger, first.ledger);
+  session.undoLastStagedChange();
+  assert.deepEqual(session.ledger, recipe.ledger);
+  assert.equal(session.dirty, false);
+});
