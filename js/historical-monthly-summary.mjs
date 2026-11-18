@@ -1,5 +1,5 @@
-const MONTH_RE = /^(\\d{4})-(0[1-9]|1[0-2])$/;
-const MONEY_RE = /^-?(?:0|[1-9]\\d{0,29})(?:\\.\\d{1,18})?$/;
+const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+const MONEY_RE = /^-?(?:0|[1-9]\d{0,29})(?:\.\d{1,18})?$/;
 const REQUIRED_TOTALS = ['incomeTotal', 'expenseTotal', 'netWorthSnapshot'];
 const BREAKDOWN_FIELDS = [
   ['incomeSources', 'incomeTotal'],
@@ -78,7 +78,7 @@ function validateBreakdown(record, month, field, totalField, findings) {
   }
   const amounts = breakdown.items.map(item => parseMoney(item?.amount));
   if (amounts.some(value => !value)) return;
-  const sum = addExact(amounts);
+  const sum = amounts.length ? addExact(amounts) : { coefficient: 0n, scale: total.scale, currency: total.currency };
   if (sum.mismatch || sum.currency !== total.currency) {
     findings.push(finding('breakdown-currency-mismatch', { month, field, totalField }));
     return;
