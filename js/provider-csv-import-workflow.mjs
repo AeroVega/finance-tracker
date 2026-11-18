@@ -42,7 +42,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   const document = root.ownerDocument;
   const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false, validated: false, finishedMessage: '' };
   root.replaceChildren();
-  const heading = element(document, 'h3', {}, 'Import a supported CSV');
+  const heading = element(document, 'h4', {}, 'Import a supported CSV');
   const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then use the workspace's explicit save action.');
   const fileLabel = element(document, 'label', { for: 'provider-import-file' }, 'CSV export');
   const file = element(document, 'input', { id: 'provider-import-file', type: 'file', accept: '.csv,text/csv' });
@@ -65,6 +65,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     state.validated = false;
     state.staged = false;
     state.finishedMessage = '';
+    emptyCheck.checked = false;
     for (const mapping of state.mappings.values()) mapping.confirmed.checked = false;
     stage.disabled = true;
     discrepancy.textContent = message;
