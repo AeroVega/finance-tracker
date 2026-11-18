@@ -153,14 +153,14 @@ export class CanonicalWorkspaceSession {
     const current = this.ledger;
     if (proposal.ledgerId !== current.ledgerId || proposal.createdAt !== current.createdAt ||
       proposal.syntheticOnly !== true || !same(proposal.accounts, current.accounts) ||
-      !same(proposal.positionEvents ?? [], current.positionEvents ?? [])) fail('invalid-import-proposal');
+      !same(proposal.positionEvents ?? [], current.positionEvents ?? [])) fail('invalid-parsed-import');
     for (const key of ['activities', 'events', 'imports', 'observations', 'reviewDecisions']) {
       const before = current[key], after = proposal[key];
       if (!Array.isArray(after) || after.length < before.length ||
-        !before.every((record, index) => same(record, after[index]))) fail('invalid-import-proposal');
+        !before.every((record, index) => same(record, after[index]))) fail('invalid-parsed-import');
     }
     const addedRuns = proposal.imports.length - current.imports.length;
-    if (addedRuns < 1) fail('import-proposal-has-no-new-run');
+    if (addedRuns < 1) fail('invalid-parsed-import');
     this.stageCheckpoint();
     this.ledger = structuredClone(proposal);
     this.updateDirty();
