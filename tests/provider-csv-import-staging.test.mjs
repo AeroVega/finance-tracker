@@ -53,7 +53,6 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
   const bytes = await readFile(new URL('../fixtures/wells-fargo.csv', import.meta.url));
   const { parsed: source } = await parseRecognizedProviderCsv({ bytes: new Uint8Array(bytes) });
   const parsed = structuredClone(source);
-  parsed.fileFingerprint = 'synthetic-unresolved-retry-fingerprint';
   parsed.records.push({
     ...structuredClone(parsed.records[0]),
     rowOrdinal: parsed.records.length + 1,
@@ -61,7 +60,8 @@ test('canonical staging accepts only the importer’s bounded unresolved-run ret
     sourceDescription: 'Synthetic malformed date row',
     normalizedDescription: 'synthetic malformed date row',
     sourceFields: { ...parsed.records[0].sourceFields, Date: 'not-a-date' },
-    sourceRowFingerprint: 'synthetic-malformed-row-fingerprint',
+    sourceRecordId: null,
+    sourceRowFingerprint: 'b'.repeat(64),
     effectiveDate: null,
     valid: false,
     errorCode: 'invalid-date',
