@@ -1,6 +1,6 @@
 # Read-only provider CSV import preview
 
-**Status:** implemented on `feature/provider-csv-import-preview`; synthetic tests are included. This module is not wired into the application UI or persistence path.
+**Status:** read-only preview utility retained as the parser/canonical-validation boundary. The supported application import path is now documented in [PROVIDER_CSV_IMPORT_WORKFLOW.md](PROVIDER_CSV_IMPORT_WORKFLOW.md); its review, CI and owner-acceptance gates remain separate.
 
 ## API
 
@@ -66,7 +66,7 @@ Repeated-looking rows are counted individually. The preview does not deduplicate
 - Recognition uses the first nonblank decoded CSV record. Whitespace-only cells are not blank, matching the existing parser. Malformed CSV syntax returns `parse-error`, even when no supported header can yet be established.
 - No real financial files or live provider exports were used. The supported variants are the synthetic-tested variants documented by the existing parser and tests.
 - Account mapping and user/source-confirmed declared coverage are not guessed.
-- This module is not connected to UI, Drive, storage, recovery, or production import workflows.
+- This preview utility itself remains read-only and is not the UI controller. The application controller stages a validated proposal through the canonical workspace session; persistence still requires the existing explicit Save changes action.
 - It does not prove complete coverage, validate balances against statements, or decide financial classifications.
 
 ## Focused tests
