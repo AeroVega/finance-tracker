@@ -291,7 +291,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       const result = prepare();
       state.validated = true;
       const counts = result.summary;
-      previewSummary.textContent = result.ledger.imports.length === getLedger().imports.length
+      previewSummary.textContent = result.summary.noOp === state.mappings.size
         ? 'This exact file has already been imported for the selected account. No duplicate rows or new import run will be staged.'
         : state.parsed.records.length === 0
           ? 'Ready to stage a confirmed header-only export. It will record an empty import run with no transaction rows.'
@@ -327,7 +327,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     }
     try {
       const result = prepare();
-      if (result.ledger.imports.length === getLedger().imports.length) {
+      if (result.summary.noOp === state.mappings.size) {
         state.staged = true;
         state.validated = false;
         state.finishedMessage = 'This exact file has already been imported for the selected account. No duplicate rows or new import run were staged.';
