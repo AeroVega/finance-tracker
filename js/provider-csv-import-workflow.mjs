@@ -70,6 +70,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     const ledger = getLedger();
     const wrap = element(document, 'fieldset', { className: 'provider-import-account' });
     const legend = element(document, 'legend', {}, manual ? 'Header-only source account' :
+      sourceKey === null ? 'Rows missing account identity · assign explicitly' :
       institutionId === 'fidelity' ? 'Fidelity source account · ending ' + String(sourceKey).slice(-4) : 'Bank account in file');
     const accountLabel = element(document, 'label', {}, 'Map to an existing ledger account');
     const select = element(document, 'select');
@@ -113,13 +114,12 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
       mappings.append(add);
       return;
     }
-    if (parsed.records.some(row => row.sourceAccountKey === null)) {
-      discrepancy.textContent = 'Some rows have no source account identity. They are retained for review, but this file cannot be staged until the identity problem is resolved.';
-    }
     for (const key of keys) {
       const rows = parsed.records.filter(row => row.sourceAccountKey === key);
       mappings.append(buildMapping(key, parsed.institutionId, rows));
     }
+    const unidentified = parsed.records.filter(row => row.sourceAccountKey === null);
+    if (unidentified.length) mappings.append(buildMapping(null, parsed.institutionId, unidentified));
   }
   async function readFile(selected) {
     state.context++;
@@ -154,7 +154,6 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
   function prepare() {
     if (!state.parsed || !getLedger()) throw new TypeError('no-ledger-open');
     const parsed = state.parsed;
-    if (parsed.records.some(row => row.sourceAccountKey === null)) throw new TypeError('source-account-identity-required');
     if (!parsed.records.length && !emptyCheck.checked) throw new TypeError('empty-export-confirmation-required');
     const accountMappings = {}, coverageByAccount = {};
     for (const [key, mapping] of state.mappings) {
@@ -188,6 +187,11 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, onSt
     if (stage.disabled) return;
     try {
       const result = prepare();
+      if (result.ledger.imports.length === getLedger().imports.length) {
+        stage.disabled = true;
+        discrepancy.textContent = 'This exact file has already been imported for the selected account and coverage. No duplicate rows or new import run were staged.';
+        return;
+      }
       stageImport(result.ledger);
       state.preview = null;
       summary.textContent = 'Import staged locally: ' + result.summary.created + ' created, ' + result.summary.matched +
