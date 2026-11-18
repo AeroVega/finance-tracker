@@ -41,7 +41,7 @@ test('distinguishes a valid zero from a missing summary value', () => {
     incomeTotal: null, expenseTotal: money('0.00'), netWorthSnapshot: money('0.00'),
   } });
   const result = validateHistoricalMonthlySummaries({ records: [zero, missing], expectedMonthRange: range });
-  assert.ok(!codes(result).includes('missing-summary-value') || result.findings.some(f => f.month === '2023-02' && f.field === 'incomeTotal'));
+  assert.ok(result.findings.some(f => f.code === 'missing-summary-value' && f.month === '2023-02' && f.field === 'incomeTotal'));
   assert.ok(result.findings.some(f => f.code === 'missing-summary-value' && f.month === '2023-02' && f.field === 'incomeTotal'));
   assert.ok(!result.findings.some(f => f.month === '2023-01' && f.field === 'incomeTotal'));
   assert.equal(result.records[0].summary.incomeTotal.amount, '0.00');
