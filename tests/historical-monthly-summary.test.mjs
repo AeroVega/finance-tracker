@@ -194,9 +194,11 @@ test('reports exact duplicate groups and conflicting overlaps independent of inp
     { records: [a, a, b], duplicateIndices: [0, 1] },
     { records: [b, a, b], duplicateIndices: [0, 2] },
     { records: [b, a, a], duplicateIndices: [1, 2] },
+    { records: [a, a, b, b], duplicateGroups: [[0, 1], [2, 3]] },
+    { records: [b, a, b, a], duplicateGroups: [[0, 2], [1, 3]] },
   ];
 
-  for (const { records, duplicateIndices } of cases) {
+  for (const { records, duplicateIndices, duplicateGroups } of cases) {
     const input = [...records, record('2023-02'), record('2023-03')];
     const result = validateHistoricalMonthlySummaries({ records: input, expectedMonthRange: range });
     const duplicateFindings = result.findings.filter(f =>
@@ -204,8 +206,9 @@ test('reports exact duplicate groups and conflicting overlaps independent of inp
     const overlapFindings = result.findings.filter(f =>
       f.code === 'overlapping-month-summaries' && f.month === '2023-01');
 
-    assert.deepEqual(duplicateFindings.map(f => f.recordIndices), [duplicateIndices]);
-    assert.deepEqual(overlapFindings.map(f => f.recordIndices), [[0, 1, 2]]);
+    const expectedDuplicateGroups = duplicateGroups ?? [duplicateIndices];
+    assert.deepEqual(duplicateFindings.map(f => f.recordIndices), expectedDuplicateGroups);
+    assert.deepEqual(overlapFindings.map(f => f.recordIndices), [[...records.keys()]]);
     assert.deepEqual(
       result.findings,
       validateHistoricalMonthlySummaries({ records: input, expectedMonthRange: range }).findings,
