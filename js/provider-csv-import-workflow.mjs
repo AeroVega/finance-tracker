@@ -35,7 +35,7 @@ const safeError = error => ({
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, canStage = () => true, getUnavailableReason = () => null, onStaged = () => {} }) {
   if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function' || typeof canStage !== 'function' || typeof getUnavailableReason !== 'function') fail('invalid-options');
   const document = root.ownerDocument;
-  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false };
+  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false, validated: false };
   root.replaceChildren();
   const heading = element(document, 'h3', {}, 'Import a supported CSV');
   const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then choose Save changes.');
@@ -57,6 +57,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   function invalidate(message = 'Import confirmation cleared. Review the file and coverage again.') {
     state.context++;
     state.contextInvalidated = true;
+    state.validated = false;
     for (const mapping of state.mappings.values()) mapping.confirmed.checked = false;
     stage.disabled = true;
     discrepancy.textContent = message;
@@ -66,6 +67,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     state.mappings.clear();
     state.baseLedger = null;
     state.staged = false;
+    state.validated = false;
     if (clearFile) file.value = '';
     mappings.replaceChildren();
     emptyConfirmation.hidden = true;
@@ -124,6 +126,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     state.mappings.set(sourceKey, context);
     const changed = control => {
       if (control !== confirmed) confirmed.checked = false;
+      state.validated = false;
       emptyCheck.checked = false;
       refreshEligibility();
     };
@@ -266,12 +269,26 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     }
     try {
       prepare();
+      state.validated = true;
       stage.disabled = false;
       discrepancy.textContent = 'Mapping and inclusive coverage are valid. Stage this import to add it to the unsaved ledger draft.';
     } catch (error) {
+      state.validated = false;
       if (error?.code === 'reconnect-required') invalidate(safeError(error));
       else { stage.disabled = true; discrepancy.textContent = safeError(error); }
     }
+  }
+  function refreshAvailability() {
+    if (state.staged || !state.parsed) return;
+    if (!checkContext()) { stage.disabled = true; return; }
+    const unavailable = getUnavailableReason();
+    if (unavailable || !canStage()) {
+      stage.disabled = true;
+      discrepancy.textContent = unavailable || 'The current workspace session cannot stage changes.';
+      return;
+    }
+    if (state.validated) stage.disabled = false;
+    else refreshEligibility();
   }
   function onStage() {
     if (stage.disabled) return;
@@ -312,7 +329,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   return {
     reset: clear,
     checkContext,
-    refresh: refreshEligibility,
+    refresh: refreshAvailability,
     destroy() {
       clear();
       stage.removeEventListener('click', onStage);
