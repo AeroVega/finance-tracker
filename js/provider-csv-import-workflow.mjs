@@ -35,7 +35,7 @@ const safeError = error => ({
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, canStage = () => true, getUnavailableReason = () => null, onStaged = () => {} }) {
   if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function' || typeof canStage !== 'function' || typeof getUnavailableReason !== 'function') fail('invalid-options');
   const document = root.ownerDocument;
-  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false, validated: false };
+  const state = { parsed: null, context: 0, mappings: new Map(), baseLedger: null, contextInvalidated: true, staged: false, validated: false, finishedMessage: '' };
   root.replaceChildren();
   const heading = element(document, 'h3', {}, 'Import a supported CSV');
   const intro = element(document, 'p', { className: 'panel-copy' }, 'Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then choose Save changes.');
@@ -68,6 +68,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     state.baseLedger = null;
     state.staged = false;
     state.validated = false;
+    state.finishedMessage = '';
     if (clearFile) file.value = '';
     mappings.replaceChildren();
     emptyConfirmation.hidden = true;
@@ -253,7 +254,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   function refreshEligibility() {
     if (state.staged) {
       stage.disabled = true;
-      discrepancy.textContent = 'This file is already staged. Select another export to prepare another import.';
+      discrepancy.textContent = state.finishedMessage || 'This file is already staged. Select another export to prepare another import.';
       return;
     }
     if (!state.parsed) {
@@ -301,13 +302,18 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     try {
       const result = prepare();
       if (result.ledger.imports.length === getLedger().imports.length) {
+        state.staged = true;
+        state.validated = false;
+        state.finishedMessage = 'This exact file has already been imported for the selected account. No duplicate rows or new import run were staged.';
         stage.disabled = true;
-        discrepancy.textContent = 'This exact file has already been imported for the selected account. No duplicate rows or new import run were staged.';
+        discrepancy.textContent = state.finishedMessage;
         return;
       }
       stageImport(result.ledger);
       state.baseLedger = getLedger();
       state.staged = true;
+      state.validated = false;
+      state.finishedMessage = 'This file is already staged. Select another export to prepare another import.';
       summary.textContent = 'Import staged locally: ' + result.summary.created + ' created, ' + result.summary.matched + ' matched, ' +
         result.summary.review + ' for review, ' + result.summary.rejected + ' rejected, ' + result.summary.ignored + ' ignored. Choose Save changes to persist this draft.';
       discrepancy.textContent = 'No file upload or Drive write occurred. Existing review decisions remain in the Review page.';
