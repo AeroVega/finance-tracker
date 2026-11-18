@@ -148,7 +148,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       refreshEligibility();
     };
     for (const control of [select, start, end]) control.addEventListener('change', () => changed(control));
-    confirmed.addEventListener('change', refreshEligibility);
+    confirmed.addEventListener('change', onConfirmationChange);
     return wrap;
   }
   function renderMappings() {
@@ -274,6 +274,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     return result;
   }
   function refreshEligibility() {
+    state.validated = false;
     if (state.staged) {
       stage.disabled = true;
       discrepancy.textContent = state.finishedMessage || 'This file is already staged. Select another export to prepare another import.';
@@ -366,7 +367,13 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   }
   const onFileChange = () => readFile(file.files?.[0]);
   const onReset = clear;
-  const onEmptyConfirmation = refreshEligibility;
+  const onConfirmationChange = () => {
+    state.noOp = false;
+    state.finishedMessage = '';
+    previewSummary.textContent = '';
+    refreshEligibility();
+  };
+  const onEmptyConfirmation = onConfirmationChange;
   stage.addEventListener('click', onStage);
   reset.addEventListener('click', onReset);
   file.addEventListener('change', onFileChange);
@@ -382,6 +389,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       reset.removeEventListener('click', onReset);
       file.removeEventListener('change', onFileChange);
       emptyCheck.removeEventListener('change', onEmptyConfirmation);
+      for (const mapping of state.mappings.values()) mapping.confirmed.removeEventListener('change', onConfirmationChange);
       root.replaceChildren();
     }
   };
