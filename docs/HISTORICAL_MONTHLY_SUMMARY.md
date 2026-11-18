@@ -46,7 +46,7 @@ const result = validateHistoricalMonthlySummaries({
 
 The expected month range is mandatory and inclusive. Month labels must be real `YYYY-MM` calendar months. Monetary values use exact decimal strings plus an explicit three-letter uppercase currency code; no binary floating point, exponent notation, rounding, or implicit currency conversion is used. Decimal precision is limited to 18 fractional digits and 30 integer digits for this foundation.
 
-Required summary values are `incomeTotal`, `expenseTotal`, and `netWorthSnapshot`. `netCashFlow` is optional and is never inferred. A missing/null required value is a review finding; a zero amount is a valid supplied value. A present malformed amount is preserved and reported.
+Required summary values are `incomeTotal`, `expenseTotal`, and `netWorthSnapshot`. `netCashFlow` is optional and is never inferred; omitting it or supplying `null` both mean that no cash-flow value was supplied. A missing/null required value is a review finding; a zero amount is a valid supplied value. A present malformed non-null amount is preserved and reported.
 
 Breakdowns are optional. Each supplied breakdown declares `complete: true|false` and an `items` array of labeled money values. Only a declared-complete breakdown is compared with its corresponding monthly total. Partial breakdowns remain preserved and are not expected to sum to the total. A complete breakdown without a usable total, malformed items, or mismatched currency is reported rather than repaired.
 
