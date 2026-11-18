@@ -23,6 +23,7 @@ const safeError = error => ({
   'empty-input': 'The selected file is empty and has no supported header row.',
   'invalid-csv-quoting': 'The CSV quoting is malformed.',
   'account-mapping-conflict': 'Each source account must map to a distinct existing account at the same institution.',
+  'import-coverage-conflict': 'This file was already imported with different declared coverage. Prior coverage provenance is not silently rewritten; a dedicated correction flow is required.',
   'distinct-account-required': 'Map every source account to a different existing account.',
   'activity-outside-declared-coverage': 'At least one usable transaction date falls outside the declared inclusive coverage. The row was retained.',
   'confirmed-coverage-required': 'Enter and explicitly confirm valid inclusive coverage for every mapped account.',
@@ -36,7 +37,7 @@ const safeError = error => ({
   'reopen-before-editing': 'The workspace session is no longer writable. Reopen or recover the saved ledger before staging.',
   'operation-in-progress': 'Wait for the current storage operation to finish before staging an import.',
   'invalid-parsed-import': 'The canonical import proposal could not be validated. No changes were staged.'
-}[error?.code] || 'The import could not be prepared. No changes were staged.');
+}[error?.code ?? error?.message] || 'The import could not be prepared. No changes were staged.');
 
 export function mountProviderImportWorkflow({ root, getLedger, stageImport, canStage = () => true, getUnavailableReason = () => null, onStaged = () => {} }) {
   if (!root || typeof getLedger !== 'function' || typeof stageImport !== 'function' || typeof canStage !== 'function' || typeof getUnavailableReason !== 'function') fail('invalid-options');
