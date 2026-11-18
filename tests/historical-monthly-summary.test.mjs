@@ -41,8 +41,7 @@ test('distinguishes a valid zero from a missing summary value', () => {
     incomeTotal: null, expenseTotal: money('0.00'), netWorthSnapshot: money('0.00'),
   } });
   const result = validateHistoricalMonthlySummaries({ records: [zero, missing], expectedMonthRange: range });
-  assert.ok(result.findings.some(f => f.code === 'missing-summary-value' && f.month === '2023-02' && f.field === 'incomeTotal'));
-  assert.ok(result.findings.some(f => f.code === 'missing-summary-value' && f.month === '2023-02' && f.field === 'incomeTotal'));
+  assert.equal(result.findings.filter(f => f.code === 'missing-summary-value' && f.month === '2023-02' && f.field === 'incomeTotal').length, 1);
   assert.ok(!result.findings.some(f => f.month === '2023-01' && f.field === 'incomeTotal'));
   assert.equal(result.records[0].summary.incomeTotal.amount, '0.00');
 });
@@ -130,4 +129,28 @@ test('empty input is preserved and reports the entire expected range as missing'
 test('requires a valid explicit expected month range', () => {
   assert.throws(() => validateHistoricalMonthlySummaries({ records: [], expectedMonthRange: { start: '2023-02', end: '2023-01' } }), /valid-expected-month-range-required/);
   assert.throws(() => validateHistoricalMonthlySummaries({ records: [] }), /valid-expected-month-range-required/);
+});
+
+test('reports currency mismatches and treats an empty complete breakdown as exact zero', () => {
+  const mismatch = record('2023-01', { breakdowns: {
+    incomeSources: { complete: true, items: [{ label: 'Foreign source', amount: money('100.00', 'EUR') }] },
+  } });
+  const emptyZero = record('2023-02', { summary: {
+    incomeTotal: money('0.00'), expenseTotal: money('0.00'), netWorthSnapshot: money('0.00'),
+  }, breakdowns: {
+    incomeSources: { complete: true, items: [] },
+    expenseCategories: { complete: true, items: [] },
+  } });
+  const result = validateHistoricalMonthlySummaries({ records: [mismatch, emptyZero, record('2023-03')], expectedMonthRange: range });
+  assert.ok(result.findings.some(f => f.code === 'breakdown-currency-mismatch' && f.month === '2023-01'));
+  assert.ok(!result.findings.some(f => f.code === 'inconsistent-breakdown-total' && f.month === '2023-02'));
+});
+
+test('validates summary values and provenance even when the month itself is invalid', () => {
+  const invalid = record('2023-00', { summary: {
+    incomeTotal: money('not-a-number'), expenseTotal: money('1.00'), netWorthSnapshot: money('1.00'),
+  } });
+  const result = validateHistoricalMonthlySummaries({ records: [invalid], expectedMonthRange: range });
+  assert.ok(result.findings.some(f => f.code === 'invalid-month'));
+  assert.ok(result.findings.some(f => f.code === 'invalid-summary-value' && f.field === 'incomeTotal'));
 });
