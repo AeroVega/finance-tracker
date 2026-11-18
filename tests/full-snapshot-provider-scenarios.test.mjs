@@ -36,17 +36,17 @@ for (const profile of Object.keys(DRIVE_PROFILES)) test('provider profile lifecy
   } finally {await cleanup(h);}
 });
 
-for (const occurrence of [1, 2]) test('lost manifest response at publication ' + occurrence + ' retains draft and requires recovery', async () => {
+for (const occurrence of [1, 2]) test('lost manifest response at publication ' + occurrence + ' automatically verifies the intended save without duplicate publication', async () => {
   const h = setup();
   try {
     h.session.preview(replayFixture(1).ledger); await h.session.savePreviewToNewCopy();
     h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented',rationale:'Invented'});
     const draft = structuredClone(h.session.ledger);
     h.http.fault({category:'update', kind:manifestKind, occurrence, after:true, effect:'lost-response'});
-    await assert.rejects(h.session.save()); assert.equal(h.http.rules[0].fired, true);
-    assert.deepEqual(h.session.ledger,draft); assert.equal(h.session.unverified,true);
-    assert.equal(h.storage.lifecycle.state,'recovery-required');
-    await h.session.recover(); assert.equal(h.session.canSave(),false); assert.equal(h.session.needsReopen,true);
+    await h.session.save(); assert.equal(h.http.rules[0].fired, true);
+    assert.deepEqual(h.session.ledger,draft); assert.equal(h.session.unverified,false);
+    assert.equal(h.session.recoveryOutcome,'saved');assert.equal(h.storage.lifecycle.state,'ready');
+    assert.equal(h.session.canSave(),false); assert.equal(h.session.needsReopen,false);
     await h.session.reopen(); assert.deepEqual(h.session.ledger,draft);
   } finally {await cleanup(h);}
 });

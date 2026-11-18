@@ -278,28 +278,22 @@ test('pending save gates repeat actions and page-exit warnings until commit and 
   assert.equal(h.intervals.size, 0);
 });
 
-for (const committed of [false, true]) test(`${committed ? 'lost commit response' : 'rejected save'} keeps draft and blocks retries until verified reopen`, async () => {
+for (const committed of [false, true]) test(`${committed ? 'lost commit response is automatically verified' : 'rejected save retains draft until verified reopen'}`, async () => {
   const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
   const proposed = structuredClone(h.modelSession.ledger);
   h.state.loseResponse = committed; h.state.failSave = !committed;
   await h.click('save-ledger');
   assert.equal(h.state.writes, committed ? 1 : 0);
+  if(committed){assert.equal(h.modelSession.recoveryOutcome,'saved');assert.equal(h.modelSession.unverified,false);assert.deepEqual(h.modelSession.ledger,proposed);assert.equal(h.get('save-ledger').disabled,true);assert.equal(h.state.recovers,1);return;}
   assert.equal(h.get('save-state').dataset.state, 'unverified');
   assert.equal(h.get('action-status').dataset.kind, 'error');
-  assert.match(h.get('save-state').textContent, /Save unverified/);
+  assert.match(h.get('save-state').textContent, /outcome could not be verified/);
   assert.equal(h.get('save-ledger').disabled, true);
   assert.equal(h.get('stage-correction').disabled, true);
   assert.deepEqual(h.modelSession.ledger, proposed);
   await h.click('save-ledger');
   assert.equal(h.state.writes, committed ? 1 : 0);
   h.state.loseResponse = false; h.state.failSave = false;
-  if (committed) {
-    assert.equal(h.get('recover-ledger').hidden, false);
-    await h.click('recover-ledger');
-    assert.equal(h.state.recovers, 1);
-    assert.equal(h.get('save-ledger').disabled, true);
-    assert.deepEqual(h.modelSession.ledger, proposed);
-  }
   await h.click('reopen-ledger');
   assert.equal(h.get('save-state').dataset.state, 'clean');
   assert.equal(h.get('action-status').dataset.kind, 'success');
@@ -981,18 +975,11 @@ test('staged changes persist across pages and explicit save remains available wi
   assert.deepEqual(await h.storedLedger(), proposed);
 });
 
-test('page navigation during an uncertain save preserves warning, recovery and the staged ledger', async () => {
-  const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
-  h.state.loseResponse = true; await h.click('save-ledger');
-  assert.equal(h.modelSession.unverified, true);
-  assert.equal(h.get('draft-bar').hidden, false);
-  assert.match(h.get('draft-summary').textContent, /Save unverified/);
-  const draft = structuredClone(h.modelSession.ledger), writes = h.state.writes;
-  await h.navigate('#position'); await h.navigate('#storage');
-  assert.equal(h.get('recover-ledger').hidden, false);
-  assert.deepEqual(h.modelSession.ledger,draft); assert.equal(h.state.writes,writes);
-  assert.equal(h.get('save-ledger').disabled,true);
-  assert.match(h.get('save-state').textContent,/Recover if offered/);
+test('page navigation after automatically recovered save preserves verified ledger without duplicate writes', async () => {
+  const h=await workspacePage();await h.click('open-ledger');await h.stageAmount();const draft=structuredClone(h.modelSession.ledger);
+  h.state.loseResponse=true;await h.click('save-ledger');assert.equal(h.modelSession.recoveryOutcome,'saved');assert.equal(h.modelSession.unverified,false);
+  const writes=h.state.writes;await h.navigate('#position');await h.navigate('#storage');
+  assert.deepEqual(h.modelSession.ledger,draft);assert.equal(h.state.writes,writes);assert.equal(h.get('save-ledger').disabled,true);assert.equal(h.get('draft-bar').hidden,true);
 });
 
 test('review drilldown opens Activity and first-run preview opens Home without storage calls', async () => {

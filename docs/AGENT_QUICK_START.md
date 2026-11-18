@@ -30,7 +30,7 @@ If sources disagree, do not silently combine them. Report the conflict and corre
 - **Full-snapshot v1** is the selected physical application format. A commit envelope binds one entire validated canonical logical ledger; the manifest has published/clean acknowledgement states. Read [the active contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md).
 - **Canonical ledger** is the financial domain model, not an instruction to retain older canonical persistence layouts.
 - Legacy canonical v1–v5, locator catalogs, physical-root and framed-archive versions belong to the earlier storage design. Their retained documentation is historical rationale, not a second supported application route. See [terminology](STORAGE_TERMINOLOGY.md).
-- Import and portable backup/restore remain product requirements but are not currently available on the full-snapshot route. Never imply otherwise from legacy implementation history.
+- Import remains a product requirement. Portable backup/restore and user-facing recovery are the active next PR; see current state for validation and deployment status. Legacy implementation history is not evidence for this route.
 
 ## Evidence vocabulary
 

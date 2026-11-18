@@ -46,7 +46,7 @@ export function createFullSnapshotStorage({folderId,accessToken,fetchImpl=global
  return new FullSnapshotStorage({folderId,accessToken,fetchImpl,cryptoImpl,setIntervalImpl,clearIntervalImpl,visibilityDelayMs});
 }
 class FullSnapshotStorage {
- #epoch=Object.freeze({});#context=null;#baseline=null;#busy=false;#recoveryRequired=false;#stopHeartbeat=null;#manifestId=null;
+ #epoch=Object.freeze({});#context=null;#baseline=null;#busy=false;#recoveryRequired=false;#stopHeartbeat=null;#manifestId=null;#saveAttempt=null;#saveSequence=0;
  constructor({folderId,accessToken,fetchImpl,cryptoImpl,setIntervalImpl,clearIntervalImpl,visibilityDelayMs}){
   Object.defineProperty(this,'folderId',{value:id(folderId),enumerable:true});this.crypto=cryptoImpl;this.setIntervalImpl=setIntervalImpl;this.clearIntervalImpl=clearIntervalImpl;
   this.coordinator=new SessionCoordinator({adapter:createDriveSessionAdapter({folderId,accessToken,fetchImpl,cryptoImpl})});
@@ -54,6 +54,7 @@ class FullSnapshotStorage {
    responseLimits:{'snapshot-object':FULL_SNAPSHOT_LIMITS.snapshotBytes,'commit-record':FULL_SNAPSHOT_LIMITS.envelopeBytes,'stored-object':FULL_SNAPSHOT_LIMITS.manifestBytes,manifest:FULL_SNAPSHOT_LIMITS.manifestBytes},
    captureMutationGuard:()=>this.#capture(),onExpiredMutation:()=>this.invalidate()});
  }
+ get saveAttempt(){return this.#saveAttempt?clone(this.#saveAttempt):null;}
  get manifestFileId(){return this.#manifestId;}
  get recoveryRequired(){return this.#recoveryRequired;}
  #assertBaseline(){const record=this.#baseline,epoch=this.#epoch,adapter=this.adapter,coordinator=this.coordinator,transport=getNativeDriveReadCheck(adapter);
@@ -183,9 +184,9 @@ class FullSnapshotStorage {
   const after=this.#metadata(await this.adapter.readMetadata(fileId),fileId,kind,sha256,transactionId);check();
   const settled=await this.#settleImmutable(before,after,ref,kind,transactionId);check();this.#remember(ref,kind,transactionId,settled);return ref;
  }
- async #publish(next,expected){
+ async #publish(next,expected,{saveAttempt=false}={}){
   await this.#close(expected);this.#capture()();
-  let dispatched=false;try{await this.adapter.publishManifest(this.#manifestId,next,{beforeMutation:async()=>{await this.#exact(expected);dispatched=true;this.#recoveryRequired=true;}});this.#capture()();
+  let dispatched=false;try{await this.adapter.publishManifest(this.#manifestId,next,{beforeMutation:async()=>{await this.#exact(expected);dispatched=true;if(saveAttempt&&this.#saveAttempt)this.#saveAttempt.authorityDispatched=true;this.#recoveryRequired=true;}});this.#capture()();
    if(!same(await this.#selected(),next))fail('manifest-readback-mismatch');
   }catch(error){if(dispatched)fail('write-unresolved',{cause:error});throw error;}
  }
@@ -211,7 +212,9 @@ class FullSnapshotStorage {
   // serializer may allocate a string; this is not a constant-memory promise.
   validateLedger(input);const raw=bytes(input,FULL_SNAPSHOT_LIMITS.snapshotBytes),candidate=JSON.parse(dec.decode(raw));
   return this.#run(async()=>{
+   this.#saveAttempt=null;
    const baseline=this.#baseline;if(!baseline)fail('verified-base-required');baseline.owner();const base=await this.#selected();if(!same(base,baseline.manifest)||base.pending)fail('base-conflict');
+   this.#saveAttempt={sequence:++this.#saveSequence,base:clone(base),candidate:null,authorityDispatched:false};
    if(revision(base.revision)>=BigInt(FULL_SNAPSHOT_LIMITS.maxHistory))fail('byte-limit');
    const current=await this.#current(base);assertCanonicalLedgerTransition(current.ledger,candidate);await this.#close(base);
    if(same(current.ledger,candidate))return clone(current.ledger);
@@ -219,14 +222,14 @@ class FullSnapshotStorage {
    const value={format:ENVELOPE,version:1,databaseId:base.databaseId,copyId:base.copyId,revision:String(revision(base.revision)+1n),transactionId,parent:base.head,previousManifestHash:await this.#digest(bytes(base,FULL_SNAPSHOT_LIMITS.manifestBytes)),snapshot,profile:PROFILE};
    const head=await this.#create(bytes(value,FULL_SNAPSHOT_LIMITS.envelopeBytes),'commit-record',transactionId,base);
    const next=clean(base.databaseId,base.copyId,value.revision,head),published={...next,pending:{state:'published',base:clone(base)}};
-   manifest(published);envelope(value,published,head);this.#capture()();
+   manifest(published);envelope(value,published,head);this.#capture()();this.#saveAttempt.candidate=clone(next);
    // Candidate and transition were validated above; both immutable canonical
    // encodings have independently bound actual GET receipts. Publication still
    // closes all witnesses, then the actual base/new bodies are read below.
-   await this.#publish(published,base);
+   await this.#publish(published,base,{saveAttempt:true});
    // Re-read actual base and new bytes after publication, not a cached upload.
    const old=await this.#current(base),after=await this.#current(published);assertCanonicalLedgerTransition(old.ledger,after.ledger);if(!same(after.ledger,candidate))fail('canonical-preparation-mismatch');
-   await this.#publish(next,published);await this.#close(next);this.#baseline={manifest:clone(next),owner:this.#context.owner};this.#recoveryRequired=false;return clone(after.ledger);
+   await this.#publish(next,published,{saveAttempt:true});await this.#close(next);this.#baseline={manifest:clone(next),owner:this.#context.owner};this.#recoveryRequired=false;return clone(after.ledger);
   });
  }
  async recover(){

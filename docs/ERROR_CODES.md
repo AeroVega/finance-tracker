@@ -15,18 +15,19 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 - Trusted app file/line/column plus a stamped commit locate source. Function names are omitted. Unminified static modules need no source maps; if bundling/minification is ever adopted, retain source maps before relying on those frames.
 - The literal-code audit reports computed/forwarded calls separately. Zero unknown literal codes is not proof that every dynamic path was exercised.
 
-## Registered codes (658)
+## Registered codes (665)
 
 ### backup / integrity
 
 `archive-canonical-profile-mismatch` · `archive-hash-mismatch` · `archive-identity-mismatch`
-`archive-object-hash-mismatch` · `backup-commit-readback-failed` · `backup-manifest-readback-failed`
-`backup-metadata-mismatch` · `backup-metadata-unavailable` · `backup-object-not-visible`
-`backup-object-readback-failed` · `backup-quarantined` · `backup-structure-invalid` · `catalog-changed`
-`clean-v4-manifest-required` · `commit-hash-mismatch` · `commit-identity-mismatch`
-`concurrent-verification-read` · `copy-mismatch` · `copy-quarantined` · `copy-readback-mismatch`
-`copy-source-hash-mismatch` · `disconnected-history` · `duplicate-archive-object`
-`duplicate-object-identity` · `external-original-retention-not-supported`
+`archive-object-hash-mismatch` · `backup-commit-readback-failed` · `backup-decryption-failed`
+`backup-manifest-readback-failed` · `backup-metadata-mismatch` · `backup-metadata-unavailable`
+`backup-object-not-visible` · `backup-object-readback-failed` · `backup-password-mismatch`
+`backup-password-required` · `backup-quarantined` · `backup-staged-changes`
+`backup-structure-invalid` · `catalog-changed` · `clean-v4-manifest-required` · `commit-hash-mismatch`
+`commit-identity-mismatch` · `concurrent-verification-read` · `copy-mismatch` · `copy-quarantined`
+`copy-readback-mismatch` · `copy-source-hash-mismatch` · `disconnected-history`
+`duplicate-archive-object` · `duplicate-object-identity` · `external-original-retention-not-supported`
 `fresh-destination-required` · `header-byte-limit` · `history-mismatch` · `invalid-backup-config`
 `invalid-backup-copy-id` · `invalid-backup-source` · `invalid-base64` · `invalid-bytes`
 `invalid-catalog-archive` · `invalid-chunk` · `invalid-commit-hash` · `invalid-copy-identity`
@@ -39,22 +40,23 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 `invalid-verification-result` · `journal-identity-mismatch` · `lineage-verifier-unavailable`
 `manifest-byte-limit` · `missing-archive-object` · `noncanonical-header` · `not-restorable-backup`
 `object-byte-limit` · `object-hash-mismatch` · `physical-archive-locator` · `published-copy-mismatch`
-`restore-incomplete` · `same-backup-destination` · `snapshot-object-set-mismatch` · `source-changed`
-`source-changed-during-backup` · `source-commit-invalid` · `source-evidence-binding-mismatch`
-`source-evidence-byte-limit` · `source-evidence-bytes-changed` · `source-evidence-cycle`
-`source-evidence-database-mismatch` · `source-evidence-format` · `source-evidence-hash-mismatch`
-`source-evidence-manifest-mismatch` · `source-evidence-metadata-mismatch`
-`source-evidence-missing-file` · `source-evidence-missing-object` · `source-evidence-read-only`
-`source-evidence-required` · `source-evidence-size-mismatch` · `source-evidence-unreferenced-file`
-`source-evidence-version-changed` · `source-lock-and-sink-required` · `source-lock-required`
-`source-object-hash-mismatch` · `source-originals-changed` · `source-version-changed`
-`staged-object-hash-mismatch` · `staged-object-id-mismatch` · `staged-object-mismatch`
-`storage-binding-mismatch` · `structural-validation-failed` · `structural-validator-required`
-`structural-verification-failed` · `structural-verifier-required` · `target-lock-required`
-`terminal-commitment-mismatch` · `terminal-count-mismatch` · `trailing-bytes` · `truncated-stream`
-`unfinished-history` · `unguarded-copy-write` · `unsupported-archive` · `unsupported-root-profile`
+`restore-incomplete` · `restore-verification-mismatch` · `same-backup-destination`
+`snapshot-object-set-mismatch` · `source-changed` · `source-changed-during-backup`
+`source-commit-invalid` · `source-evidence-binding-mismatch` · `source-evidence-byte-limit`
+`source-evidence-bytes-changed` · `source-evidence-cycle` · `source-evidence-database-mismatch`
+`source-evidence-format` · `source-evidence-hash-mismatch` · `source-evidence-manifest-mismatch`
+`source-evidence-metadata-mismatch` · `source-evidence-missing-file` · `source-evidence-missing-object`
+`source-evidence-read-only` · `source-evidence-required` · `source-evidence-size-mismatch`
+`source-evidence-unreferenced-file` · `source-evidence-version-changed`
+`source-lock-and-sink-required` · `source-lock-required` · `source-object-hash-mismatch`
+`source-originals-changed` · `source-version-changed` · `staged-object-hash-mismatch`
+`staged-object-id-mismatch` · `staged-object-mismatch` · `storage-binding-mismatch`
+`structural-validation-failed` · `structural-validator-required` · `structural-verification-failed`
+`structural-verifier-required` · `target-lock-required` · `terminal-commitment-mismatch`
+`terminal-count-mismatch` · `trailing-bytes` · `truncated-stream` · `unfinished-history`
+`unguarded-copy-write` · `unsupported-archive` · `unsupported-root-profile`
 `unsupported-root-version` · `unsupported-stream-version` · `verification-closed`
-`verification-plan-unavailable`
+`verification-plan-unavailable` · `verified-backup-required` · `verified-retry-required`
 
 ### catalog / integrity
 
