@@ -4,6 +4,7 @@ import { successfulActionSummary } from '../../js/success-metrics.mjs';
 import { showDiagnostic, clearDiagnostic, diagnosticMessage } from '../../js/app-diagnostics.mjs';
 import { leaveBreadcrumb, registerContextProvider, recentReports } from '../../js/error-reporting.mjs';
 import { installDiagnosticSelfTest } from '../../js/diagnostic-selftest.mjs';
+import { mountProviderImportWorkflow } from '../../js/provider-csv-import-workflow.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
@@ -25,7 +26,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
     let id = '';
     const events = new Map();
     return {
-      tagName: tag.toUpperCase(), children: [], dataset: {}, attributes: {}, value: '', textContent: '', disabled: false, checked: false,
+      tagName: tag.toUpperCase(), ownerDocument: null, children: [], dataset: {}, attributes: {}, value: '', textContent: '', disabled: false, checked: false,
       get id() { return id; }, set id(value) { id = value; nodes.set(value, this); },
       append(...children) { this.children.push(...children); if (this.tagName === 'SELECT' && !this.value) this.value = children[0]?.value || ''; },
       replaceChildren(...children) { this.children.forEach(forget); this.children = []; this.append(...children); },
@@ -61,7 +62,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   } } };
   const document = { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body'),
     addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); } };
-  imports = {FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
+  imports = {FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
   const executable = script.replace(/^import \{([^}]+)\} from '[^']+';$/gm, (_, names) => {
     for (const name of names.split(',').map(name => name.trim())) assert.ok(name in imports, `Missing import ${name}`);
     return '';
@@ -71,6 +72,8 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
     sessionStorage: { getItem: key => session.get(key) ?? null, setItem(key, value) { if (observed.storageFailure) throw new Error('Invented storage refusal'); session.set(key, value); }, removeItem: key => session.delete(key) },
     setInterval(callback) { intervals.add(callback); return callback; }, clearInterval: callback => intervals.delete(callback),
     setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout, fetch() { throw new Error('Network is forbidden in controller tests'); } };
+  for (const node of nodes.values()) node.ownerDocument = document;
+  document.body.ownerDocument = document;
   vm.runInNewContext(executable, context, { filename: `${name}.mjs` });
   await new Promise(setImmediate);
   return {
