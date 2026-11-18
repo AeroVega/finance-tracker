@@ -68,12 +68,12 @@ export function createImportCoverageModel(initial={}) {
     confirm(){active();if(cancelled)return {status:"cancelled",accepted:false};const validation=evaluateImportCoverage({start,end,observedDates:context.observedDates||[]});
       if(!validation.valid)return {status:"review-required",validation};
       const sorted=[...validation.observedDates].sort();
-      confirmed={coverage:{start,end,provenance:{kind:"user-confirmed",coverageSource:(isRealIsoDate(context.sourceCoverage?.start)&&isRealIsoDate(context.sourceCoverage?.end)&&start===context.sourceCoverage.start&&end===context.sourceCoverage.end)?"source-metadata":"user-declaration",
+      confirmed={status:"confirmed",coverage:{start,end,provenance:{kind:"user-confirmed",coverageSource:(isRealIsoDate(context.sourceCoverage?.start)&&isRealIsoDate(context.sourceCoverage?.end)&&start===context.sourceCoverage.start&&end===context.sourceCoverage.end)?"source-metadata":"user-declaration",
         confirmationMethod:"explicit-component-confirmation",sourceMetadata:context.sourceCoverage?structuredClone(context.sourceCoverage):null,
         priorConfirmedCoverageEnd:isRealIsoDate(context.priorConfirmedCoverageEnd)?context.priorConfirmedCoverageEnd:null,
         contextKey:context.contextKey??null}},
         observedDateRange:{start:sorted[0]??null,end:sorted[sorted.length-1]??null}};
-      return {status:"confirmed",...structuredClone(confirmed)};},
+      return structuredClone(confirmed);},
     cancel(){active();confirmed=null;cancelled=true;return {status:"cancelled",accepted:false};},
     reset(){active();start=hint.start||"";end=hint.end||"";cancelled=false;invalidate();return state();},
     destroy(){if(destroyed)return;confirmed=null;context={};dates={usable:[],unusable:[]};hint={start:null,end:null};start="";end="";cancelled=false;destroyed=true;}
