@@ -15,7 +15,7 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 - Trusted app file/line/column plus a stamped commit locate source. Function names are omitted. Unminified static modules need no source maps; if bundling/minification is ever adopted, retain source maps before relying on those frames.
 - The literal-code audit reports computed/forwarded calls separately. Zero unknown literal codes is not proof that every dynamic path was exercised.
 
-## Registered codes (670)
+## Registered codes (672)
 
 ### backup / integrity
 
@@ -72,6 +72,10 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 `object-location-mismatch` · `pending-aborted-transaction` · `pending-manifest-mismatch`
 `read-only-copy` · `recovery-base-mismatch` · `staged-commit-mismatch` · `synthetic-catalog-required`
 `transaction-already-exists` · `transaction-unresolved`
+
+### csv / input
+
+`empty-export-confirmation-required` · `import-coverage-conflict`
 
 ### csv / integrity
 
