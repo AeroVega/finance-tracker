@@ -15,6 +15,7 @@ Import mountImportCoverageSelector from components/import-coverage-selector.mjs.
 
 Example caller setup:
 
+    let acceptedCoverage = null;
     const selector = mountImportCoverageSelector({
       container: document.querySelector("#coverage"),
       observedDates: [{ date: "2024-02-01", rowReference: 2 }],
