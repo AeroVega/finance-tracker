@@ -271,6 +271,7 @@ export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageB
     const records=parsed.records.filter(r=>r.sourceAccountKey===key);
     if(records.some(r=>isCalendarDate(r.effectiveDate) && (r.effectiveDate<coverage.start||r.effectiveDate>coverage.end))) fail('activity-outside-declared-coverage');
     const prior=next.imports.find(r=>r.accountId===account.accountId && r.sourceFormat===parsed.sourceFormat && r.fileFingerprint===parsed.fileFingerprint);
+    if(prior && (prior.declaredCoverage.start!==coverage.start || prior.declaredCoverage.end!==coverage.end)) fail('import-coverage-conflict');
     if(prior?.status==='processed') { runIds.push(prior.importRunId); summary.noOp++; continue; }
     if(prior) {
       // Resume unresolved occurrences, preserving the identity and effects of accepted rows.
