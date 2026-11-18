@@ -389,7 +389,6 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       reset.removeEventListener('click', onReset);
       file.removeEventListener('change', onFileChange);
       emptyCheck.removeEventListener('change', onEmptyConfirmation);
-      for (const mapping of state.mappings.values()) mapping.confirmed.removeEventListener('change', onConfirmationChange);
       root.replaceChildren();
     }
   };
