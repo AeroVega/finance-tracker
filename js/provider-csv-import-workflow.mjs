@@ -213,7 +213,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       renderMappings();
       reset.disabled = false;
       if (!baseLedger) {
-        invalidate('Open or create a synthetic ledger before mapping. The selected file has not been uploaded or saved.');
+         invalidate('No synthetic ledger was open when the file was read. Open or create one, discard this file, then select it again; nothing was uploaded or saved.');
         return;
       }
       refreshEligibility();
