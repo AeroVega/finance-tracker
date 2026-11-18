@@ -8,15 +8,12 @@ This file is the active dependency/acceptance queue. It does not grant permissio
 
 ## Immediate priorities
 
-- **Cleanup is merged in PR47.** Current main and evidence are recorded in [current state](CURRENT_STATE.md).
+1. **Supported CSV application workflow.** The first implementation is on `feature/supported-csv-import-workflow`. Complete independent adversarial review, synthetic tests, exact-head CI, and bounded owner acceptance before considering merge. Keep real exports gated.
+2. **Monthly-summary persistence and review — separate PR.** Migrate the existing monthly net-worth snapshots and historical category/income/expense totals without inventing transaction-level detail. Preserve source granularity, provenance, month coverage, and reconciliation status. Review discrepancies explicitly; missing data remains unavailable, not zero.
+3. **Purpose-built workbook converter — separate PR.** Build a dedicated converter for the legacy workbook after the monthly-summary contract is settled. Use invented workbook fixtures in CI; do not commit or upload the private workbook. Keep source worksheet/cell provenance and make conversion results inspectable before import.
+4. **Remaining production controls.** Review account/database binding, OAuth lifecycle, privacy boundaries, cost/quotas and safe session cleanup with synthetic data. Production remains NO-GO until every applicable gate and explicit owner activation approval pass.
 
-1. **Active next PR: recovery and backup/restore.** Strengthen user-facing recovery and implement portable backup/restore for the selected full-snapshot format. The protocol recovery engine already exists and must retain full ancestry audit, pending-publication resolution, explicit uncertainty and verified-reopen requirements. Use the upgraded simulator extensively for interruption, corruption, authorization, uncertain-write and fresh-restore/reopen scenarios before asking the owner to deploy and test. Do not fold this implementation into the cleanup PR.
-2. **Keep acceptance scoped to evidence.** The reported 11-second open and 25-second persisted save are accepted. The last reported seed was 42 seconds; seed performance is separate and does not reopen that gate. Test changed behavior and regressions without inferring universal sub-30-second operations or Alpha completeness.
-3. **Finish the Alpha financial-history path.** Implement and verify the distinct monthly-summary migration from January 2023 using invented workbook fixtures first. Preserve source granularity, provenance, month coverage and reconciliation results; never convert monthly totals into fabricated transaction rows.
-4. **Complete supported owner-file ingestion.** Bring supported Wells Fargo, SoFi and Fidelity exports through the actual application workflow: strict format recognition, account mapping, user-adjustable declared coverage, observed-date validation, discrepancy resolution, duplicate/re-import safety and verified persistence. Real files remain gated.
-5. **Complete remaining production controls.** Implement and review account/database binding, OAuth lifecycle, privacy boundaries, cost/quotas and safe session cleanup with synthetic data. Production remains NO-GO until every applicable gate and explicit owner activation approval pass.
-
-The next-PR sequence above is owner-directed, not a delivery-date commitment. Later work remains ordered by dependency, risk and reviewability.
+The sequence is owner-directed, not a delivery-date commitment. Keep the three financial-history workstreams in distinct PRs so review, rollback and provenance remain clear.
 
 ## Acceptance boundaries
 
