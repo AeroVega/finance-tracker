@@ -41,11 +41,11 @@ function suggestions(context) {
 }
 export function evaluateImportCoverage({start,end,observedDates=[]}={}) {
   const dates=observed(observedDates), errors=[];
-  if(!isRealIsoDate(start)) errors.push({code:"invalid-start-date"});
-  if(!isRealIsoDate(end)) errors.push({code:"invalid-end-date"});
-  if(isRealIsoDate(start)&&isRealIsoDate(end)&&start>end) errors.push({code:"reversed-date-range"});
-  if(!dates.usable.length) errors.push({code:"no-usable-transaction-dates"});
-  if(dates.unusable.length) errors.push({code:"unusable-observed-dates"});
+  if(!isRealIsoDate(start)) errors.push({reason:"invalid-start-date"});
+  if(!isRealIsoDate(end)) errors.push({reason:"invalid-end-date"});
+  if(isRealIsoDate(start)&&isRealIsoDate(end)&&start>end) errors.push({reason:"reversed-date-range"});
+  if(!dates.usable.length) errors.push({reason:"no-usable-transaction-dates"});
+  if(dates.unusable.length) errors.push({reason:"unusable-observed-dates"});
   const outside=isRealIsoDate(start)&&isRealIsoDate(end)&&start<=end
     ?dates.usable.filter(x=>x.date<start||x.date>end):[];
   return {valid:!errors.length&&!outside.length,errors,outside,unusableObserved:dates.unusable,
@@ -100,7 +100,7 @@ export function mountImportCoverageSelector({container,observedDates=[],sourceCo
   const resetSelection=focus=>{const previous=model.getState().confirmed;model.reset();const s=model.getState();views.start=monthFor(s.start);views.end=monthFor(s.end);notifyInvalidation("reset",previous);render(focus);};
   const render=focus=>{
     if(disposed)return;const s=model.getState(),v=s.validation;
-    const messages=v.errors.map(x=>({ "invalid-start-date":"Enter a real calendar start date.","invalid-end-date":"Enter a real calendar end date.","reversed-date-range":"Start must be on or before end.","no-usable-transaction-dates":"No usable transaction dates were supplied; review is required.","unusable-observed-dates":"Some supplied transaction dates are unusable; review is required."}[x.code]));
+    const messages=v.errors.map(x=>({ "invalid-start-date":"Enter a real calendar start date.","invalid-end-date":"Enter a real calendar end date.","reversed-date-range":"Start must be on or before end.","no-usable-transaction-dates":"No usable transaction dates were supplied; review is required.","unusable-observed-dates":"Some supplied transaction dates are unusable; review is required."}[x.reason]));
     const outside=v.outside.map(x=>"<li>"+x.date+(x.rowReference===null?"":" (row "+escapeHtml(x.rowReference)+")")+"</li>").join("");
     const hints=[s.suggestions.start?"Suggested start: "+s.suggestions.start+" ("+s.suggestions.startSource+")":"",s.suggestions.end?"Suggested end: "+s.suggestions.end+" ("+s.suggestions.endSource+")":""].filter(Boolean).join(" · ");
     container.innerHTML="<div class='ics'><header><h2>Declare import coverage</h2><p>Choose the inclusive dates this file is intended to cover. Suggestions are not confirmation.</p></header><p class='ics-hints' aria-live='polite'>"+(hints||"No suggestions available.")+"</p><div class='ics-fields'><label>Start date (inclusive)<input type='date' data-field='start' value='"+s.start+"'></label><label>End date (inclusive)<input type='date' data-field='end' value='"+s.end+"'></label></div><div class='ics-calendars'>"+calendar("start",s.start,views.start)+calendar("end",s.end,views.end)+"</div><section class='ics-review' aria-live='polite'><h3>Coverage review</h3><p>"+v.usableObservedCount+" usable transaction date(s) observed. Observed dates do not prove completeness.</p>"+(messages.length?"<ul class='ics-errors'>"+messages.map(x=>"<li>"+x+"</li>").join("")+"</ul>":"")+(outside?"<p>Out-of-range transaction dates; rows are retained for review:</p><ul>"+outside+"</ul>":"")+(v.unusableObserved.length?"<p>"+v.unusableObserved.length+" unusable date value(s) require review.</p>":"")+(s.confirmed?"<p role='status'>Coverage explicitly confirmed.</p>":"")+"</section><footer><button type='button' data-action='reset'>Reset suggestions</button><button type='button' data-action='cancel'>Cancel</button><button type='button' data-action='confirm' "+(v.valid&&!s.cancelled?"":"disabled")+">Confirm coverage</button></footer></div>";
