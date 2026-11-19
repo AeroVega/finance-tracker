@@ -3,6 +3,14 @@
 // Unknown/ambiguous validation remains loud: the same slug can be raised while
 // reading stored data, not only while entering a form. No code grants retry rights.
 const workspace = {
+  'invalid-historical-summary-input': 'Select supported normalized historical summary JSON with a valid expected month range.',
+  'invalid-historical-summary-review': 'Decide which valid rows to accept or exclude, with a reason for each choice. Only one source can be accepted per month.',
+  'invalid-historical-summary-ledger': 'The saved historical summary or its decision evidence is invalid. Keep this copy unchanged.',
+  'stale-historical-summary-review': 'The working ledger changed. Review the historical data again before staging.',
+  'historical-detail-not-reconciled': 'The transaction detail does not yet qualify to replace the workbook summary.',
+  'unsupported-ledger-version-transition': 'The ledger format changed in an unsupported way. Keep the original copy unchanged.',
+  'records-must-be-an-array': 'The normalized history must include an array of records.',
+  'valid-expected-month-range-required': 'Choose a valid inclusive month range for the normalized history.',
   'backup-password-mismatch': 'The passwords do not match. Enter the same password twice before creating the encrypted backup.',
   'backup-password-required': 'Enter a password to use an encrypted backup. A lost password cannot be recovered.',
   'backup-decryption-failed': 'The backup could not be decrypted. Check the password and file; no Drive copy was changed.',
@@ -268,6 +276,9 @@ const codeGroups = {
   `,
   import: `
     account-already-exists account-mapping-conflict activity-outside-declared-coverage
+    invalid-historical-summary-input invalid-historical-summary-review invalid-historical-summary-ledger invalid-historical-record-shape
+    stale-historical-summary-review historical-detail-not-reconciled unsupported-ledger-version-transition
+    records-must-be-an-array valid-expected-month-range-required
     candidate-money-mismatch category-required classification-amount-conflict classification-history-mismatch
     confirmed-coverage-required conflicting-match-requires-correction correction-evidence-required
     correction-history-mismatch cyclic-refund-link duplicate-attempt-id duplicate-row-ordinal

@@ -1,3 +1,5 @@
+import { fail as appFail } from './app-error.mjs';
+import { HISTORICAL_COLLECTIONS, prepareHistoricalReconciliation, prepareHistoricalSummaries } from './historical-monthly-summary.mjs';
 import { applyFinancialEvent, applyReviewDecision, reverseReviewDecision, registerAccount, validateLedger, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
@@ -192,7 +194,8 @@ export class CanonicalWorkspaceSession {
     validateLedger(proposal);
     const current = this.ledger;
     if (proposal.ledgerId !== current.ledgerId || proposal.createdAt !== current.createdAt ||
-      proposal.syntheticOnly !== true || !same(proposal.accounts, current.accounts) ||
+      proposal.syntheticOnly !== true || proposal.version !== current.version || !same(proposal.accounts, current.accounts) ||
+      Object.keys(HISTORICAL_COLLECTIONS).some(key => !same(proposal[key] ?? null, current[key] ?? null)) ||
       !same(proposal.positionEvents ?? [], current.positionEvents ?? [])) fail('invalid-parsed-import');
     for (const key of ['activities', 'events']) {
       const before = current[key], after = proposal[key];
@@ -236,6 +239,36 @@ export class CanonicalWorkspaceSession {
     this.ledger = structuredClone(proposal);
     this.updateDirty();
     return this.ledger;
+  }
+
+  stageHistoricalSummaries({input, decisions, expectedLedger}) {
+    this.#assertHistoricalReviewCurrent(expectedLedger);
+    const next = prepareHistoricalSummaries(expectedLedger, {input, decisions});
+    return this.#applyHistoryStage(next);
+  }
+
+  async stageHistoricalReconciliation({month, reason, evidence, expectedLedger, signal}) {
+    if (signal?.aborted) appFail('stale-historical-summary-review');
+    this.#assertHistoricalReviewCurrent(expectedLedger);
+    const lifecycle = this.storage.lifecycle, store = this.store;
+    const next = await prepareHistoricalReconciliation(expectedLedger, {month, reason, evidence});
+    this.#assertHistoricalReviewCurrent(expectedLedger);
+    if (signal?.aborted || lifecycle !== this.storage.lifecycle || store !== this.store) appFail('stale-historical-summary-review');
+    return this.#applyHistoryStage(next);
+  }
+
+  #assertHistoricalReviewCurrent(expectedLedger) {
+    if (!this.canEdit()) appFail('reopen-before-editing');
+    if (this.ledger !== expectedLedger) appFail('stale-historical-summary-review');
+  }
+
+  #applyHistoryStage(next) {
+    if (next === this.ledger) return next;
+    validateLedger(next);
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return next;
   }
 
   addAccount({ institutionId, accountType, displayName, currency }) {

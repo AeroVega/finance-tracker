@@ -15,7 +15,7 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 - Trusted app file/line/column plus a stamped commit locate source. Function names are omitted. Unminified static modules need no source maps; if bundling/minification is ever adopted, retain source maps before relying on those frames.
 - The literal-code audit reports computed/forwarded calls separately. Zero unknown literal codes is not proof that every dynamic path was exercised.
 
-## Registered codes (672)
+## Registered codes (681)
 
 ### backup / integrity
 
@@ -178,12 +178,14 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 `correction-evidence-required` · `correction-history-mismatch` · `cyclic-refund-link`
 `duplicate-attempt-id` · `duplicate-row-ordinal` · `event-command-conflict`
 `event-command-id-required` · `explicit-account-mapping-required`
-`explicit-currency-resolution-required` · `import-counts-mismatch` · `import-status-mismatch`
-`inactive-financial-target` · `inactive-match-target` · `invalid-account` · `invalid-activity`
-`invalid-activity-kind` · `invalid-activity-money` · `invalid-bank-correction`
+`explicit-currency-resolution-required` · `historical-detail-not-reconciled` · `import-counts-mismatch`
+`import-status-mismatch` · `inactive-financial-target` · `inactive-match-target` · `invalid-account`
+`invalid-activity` · `invalid-activity-kind` · `invalid-activity-money` · `invalid-bank-correction`
 `invalid-canonical-ledger` · `invalid-category-correction` · `invalid-classification`
 `invalid-effective-refund` · `invalid-event-command` · `invalid-event-metadata` · `invalid-event-money`
-`invalid-exact-amount` · `invalid-financial-commands` · `invalid-import` · `invalid-import-counts`
+`invalid-exact-amount` · `invalid-financial-commands` · `invalid-historical-record-shape`
+`invalid-historical-summary-input` · `invalid-historical-summary-ledger`
+`invalid-historical-summary-review` · `invalid-import` · `invalid-import-counts`
 `invalid-import-observations` · `invalid-ledger-collection` · `invalid-lifecycle-event`
 `invalid-money` · `invalid-observation` · `invalid-observation-state`
 `invalid-or-duplicate-record-id` · `invalid-parsed-import` · `invalid-posted-date`
@@ -194,14 +196,17 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 `ledger-session-busy` · `ledger-session-closed` · `missing-currency` · `non-json-ledger`
 `observation-account-conflict` · `observation-already-resolved` · `observation-evidence-mismatch`
 `observation-outside-declared-coverage` · `observation-resolution-without-decision`
-`posting-status-history-mismatch` · `posting-status-unchanged` · `refund-evidence-required`
-`refund-exceeds-original` · `retry-normalization-changed` · `retry-row-missing`
-`review-reversal-dependency` · `rows-must-be-array` · `session-activity-id-required`
-`session-generation-exhausted` · `session-json-and-storage-binding-required` · `session-json-required`
+`posting-status-history-mismatch` · `posting-status-unchanged` · `records-must-be-an-array`
+`refund-evidence-required` · `refund-exceeds-original` · `retry-normalization-changed`
+`retry-row-missing` · `review-reversal-dependency` · `rows-must-be-array`
+`session-activity-id-required` · `session-generation-exhausted`
+`session-json-and-storage-binding-required` · `session-json-required`
 `session-primitive-event-metadata-required` · `session-revision-exhausted`
-`stale-ledger-session-revision` · `synthetic-only-required` · `unknown-account` · `unknown-activity`
-`unsupported-classification` · `unsupported-financial-event` · `unsupported-money-precision`
-`unsupported-persisted-event` · `unsupported-synthetic-retention-or-completeness` · `uuid-v4-required`
+`stale-historical-summary-review` · `stale-ledger-session-revision` · `synthetic-only-required`
+`unknown-account` · `unknown-activity` · `unsupported-classification` · `unsupported-financial-event`
+`unsupported-ledger-version-transition` · `unsupported-money-precision` · `unsupported-persisted-event`
+`unsupported-synthetic-retention-or-completeness` · `uuid-v4-required`
+`valid-expected-month-range-required`
 
 ### lifecycle / defect
 

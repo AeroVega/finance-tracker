@@ -1,0 +1,53 @@
+{
+  "format": "finance-tracker-historical-monthly-summaries",
+  "version": 1,
+  "expectedMonthRange": { "start": "2023-01", "end": "2023-03" },
+  "records": [
+    {
+      "month": "2023-01",
+      "scope": { "kind": "aggregate" },
+      "summary": {
+        "incomeTotal": { "amount": "1000.00", "currency": "USD" },
+        "expenseTotal": { "amount": "600.00", "currency": "USD" },
+        "netWorthSnapshot": { "amount": "25000.00", "currency": "USD" }
+      },
+      "breakdowns": {
+        "incomeSources": {
+          "complete": false,
+          "items": [{ "label": "Invented contract work", "amount": { "amount": "50.00", "currency": "USD" } }]
+        },
+        "expenseCategories": {
+          "complete": true,
+          "items": [{ "label": "Invented living", "amount": { "amount": "600.00", "currency": "USD" } }]
+        }
+      },
+      "provenance": {
+        "workbook": "invented-history.xlsx",
+        "worksheet": "Invented monthly summary",
+        "mapping": "invented-mapping-v1",
+        "sourceId": "invented-workbook-edition-1",
+        "converterVersion": "example-only",
+        "range": "A2:F2",
+        "cells": { "incomeTotal": "B2", "expenseTotal": "C2", "netWorthSnapshot": "D2" },
+        "snapshotAsOf": "2023-01-31"
+      }
+    },
+    {
+      "month": "2023-03",
+      "scope": { "kind": "aggregate" },
+      "summary": {
+        "incomeTotal": { "amount": "0.00", "currency": "USD" },
+        "expenseTotal": { "amount": "420.00", "currency": "USD" },
+        "netWorthSnapshot": { "amount": "24700.00", "currency": "USD" }
+      },
+      "provenance": {
+        "workbook": "invented-history.xlsx",
+        "worksheet": "Invented monthly summary",
+        "mapping": "invented-mapping-v1",
+        "sourceId": "invented-workbook-edition-1",
+        "converterVersion": "example-only",
+        "range": "A4:F4"
+      }
+    }
+  ]
+}

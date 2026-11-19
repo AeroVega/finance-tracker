@@ -1,3 +1,4 @@
+import { HISTORICAL_LEDGER_VERSION, validateHistoricalLedger } from './historical-monthly-summary.mjs';
 import { validatePositionEvents } from './financial-position-contract.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal, sameComposite } from './import-reconciliation.mjs';
@@ -43,7 +44,7 @@ export function validateLedger(ledger) {
 }
 
 function validateAndProject(ledger) {
-  if (!ledger || ledger.format !== 'finance-tracker-canonical-ledger' || ledger.version !== 1 || ledger.syntheticOnly !== true || !uuid.test(ledger.ledgerId) || !Number.isFinite(Date.parse(ledger.createdAt))) fail('invalid-canonical-ledger');
+  if (!ledger || ledger.format !== 'finance-tracker-canonical-ledger' || ![1,HISTORICAL_LEDGER_VERSION].includes(ledger.version) || ledger.syntheticOnly !== true || !uuid.test(ledger.ledgerId) || !Number.isFinite(Date.parse(ledger.createdAt))) fail('invalid-canonical-ledger');
   const ids = new Set([ledger.ledgerId]);
   // These indexes belong to this validation only. Every record and reference is
   // still checked below, in the same order, before the ledger can be used.
@@ -150,6 +151,7 @@ function validateAndProject(ledger) {
     ids.add(event.eventId);
     commands.set(event.commandId,event);
   }
+  validateHistoricalLedger(ledger,ids);
   inspectJson(ledger);
   return {replay,ids,commands,byId};
 }
