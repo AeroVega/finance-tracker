@@ -126,6 +126,7 @@ async function parseCsv({ bytes, sourceFormat }, recognize) {
     const sourceFields = Object.fromEntries(headers.map((h, i) => [h, row.cells[i] ?? null]));
     // Retain surplus cells rather than losing evidence on malformed rows.
     if (row.cells.length > headers.length) sourceFields.__extraCells = row.cells.slice(headers.length);
+    const fingerprintFields = { ...sourceFields };
     const get = key => optional(sourceFields[key]);
     const rawAmount = get(wf ? 'AMOUNT' : 'Amount');
     const rawDate = get(wf ? 'DATE' : fidelity ? 'Run Date' : 'Date');
@@ -135,9 +136,13 @@ async function parseCsv({ bytes, sourceFormat }, recognize) {
     const effectiveDate = rawDate === null ? null : date(rawDate, wf ? 'both' : fidelity ? 'us' : 'iso');
     const settlement = get('Settlement Date');
     const currency = get('Currency');
+    const sourceAccountKey = fidelity ? get('Account Number') : 'default';
+    // The full Fidelity account number is used only as an in-memory mapping key.
+    // Its one-way row fingerprint preserves source identity without persisting it.
+    if (fidelity) sourceFields['Account Number'] = null;
     const record = {
       sourceRowFingerprint: null,
-      sourceAccountKey: fidelity ? get('Account Number') : 'default', sourceFields,
+      sourceAccountKey, sourceFields,
       rowOrdinal: row.rowOrdinal, physicalLine: row.physicalLine, sourceDescription,
       normalizedDescription: sourceDescription.trim().replace(/\s+/g, ' ').toLowerCase(),
       sourceAction: get(fidelity ? 'Action' : 'Type'), sourceRecordId: null,
@@ -162,7 +167,7 @@ async function parseCsv({ bytes, sourceFormat }, recognize) {
     }
     record.errorCode = errors[0] ?? null; record.valid = errors.length === 0;
     records.push(record);
-    pending.push({ record, result: sha256Hex(canonicalizeJcs(sourceFields)).then(
+    pending.push({ record, result: sha256Hex(canonicalizeJcs(fingerprintFields)).then(
       value => ({ ok: true, value }), error => ({ ok: false, error }),
     ) });
     if (pending.length === HASH_BATCH_SIZE) await flush();

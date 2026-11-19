@@ -23,7 +23,7 @@ jobs:
           node-version: 26
       - name: Check browser module syntax
         run: |
-          find js prototype -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+          find js components prototype -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
       - name: Check registered diagnostic codes and generated reference
         run: |
           node scripts/audit-error-codes.mjs

@@ -1,5 +1,6 @@
 // Public source paths only. CI checks this manifest against shipped modules.
 export const DIAGNOSTIC_FILES = Object.freeze([
+  "components/import-coverage-selector.mjs",
   "js/full-snapshot-storage.mjs",
   "js/full-snapshot-backup.mjs",
   "js/full-snapshot-application.mjs",
@@ -36,6 +37,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/immutable-content-type.mjs",
   "js/import-reconciliation.mjs",
   "js/provider-csv-preview.mjs",
+  "js/provider-csv-import-workflow.mjs",
   "js/provider-csv.mjs",
   "js/session-claim-diagnostic.mjs",
   "js/session-coordination.mjs",

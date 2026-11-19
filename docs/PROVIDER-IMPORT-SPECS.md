@@ -69,7 +69,7 @@ The observed table has 18 columns:
 | --- | --- | --- |
 | `Run Date` | Activity/run date | Observed format: `MM/DD/YYYY`. Keep distinct from settlement date. |
 | `Account` | Source account name/type | Examples include an employer 401(k) and an individual brokerage account. Do not commit account-specific values from sanitized samples. |
-| `Account Number` | Source account identifier | Treat as sensitive; use only for account mapping and never log or commit raw identifiers. |
+| `Account Number` | Source account identifier | Treat as sensitive; use only as an in-memory mapping key. The parser redacts it from canonical `sourceFields`; the one-way row fingerprint is computed from the original field values. Never log or commit raw identifiers. |
 | `Action` | Activity/event description | Important for interpreting contributions, dividends, reinvestments, market-value changes, and fees. Preserve the original value. |
 | `Symbol` | Investment ticker/symbol | May be blank, including for some retirement-plan activities. |
 | `Description` | Security or investment description | Preserve the original text. |
@@ -127,7 +127,7 @@ The canonical transaction model should be provider-independent and include, at m
 - Optional source balance and optional check/reference number where available.
 - Review/deduplication state where needed.
 
-Exact field names and types remain an implementation decision. Avoid inventing missing source fields: represent absent optional values as absent/null, not misleading placeholder text. Preserve raw source fields or an equivalent audit record so normalization is reversible and explainable.
+Exact field names and types remain an implementation decision. Avoid inventing missing source fields: represent absent optional values as absent/null, not misleading placeholder text. Preserve raw source fields or an equivalent audit record so normalization is reversible and explainable. Redact sensitive identifiers such as Fidelity Account Number from persisted source fields; retain a one-way fingerprint of the original row instead.
 
 ## Import, duplicate, and reconciliation rules
 

@@ -1,6 +1,6 @@
 # Declared import coverage selector
 
-**Status:** Isolated reusable component and synthetic demonstration. Not wired into the production import workflow and not an import-completion or Alpha implementation.
+**Status:** Reusable component integrated into the supported CSV workflow on PR53, with a standalone synthetic demonstration retained. This integration is not complete Alpha acceptance or real-data authorization.
 
 ## Semantics
 
@@ -49,8 +49,12 @@ Run a local static server from the repository root, e.g. python3 -m http.server 
 
 ## Tests
 
-Run `node --test tests/import-coverage-selector.test.mjs`. Component validation and lifecycle failures use the established `fail()`/`AppError` contract with existing registered `invalid-options` and `unknown` codes; no shared registry change is needed. The component remains outside the shipped diagnostic source inventory because it is not shipped or wired into the application.
+Run `node --test tests/import-coverage-selector.test.mjs`. Component validation and lifecycle failures use the established `fail()`/`AppError` contract with existing registered `invalid-options` and `unknown` codes; no shared registry change is needed. The component is now included in the shipped diagnostic source inventory, error-code audit, and browser-module syntax checks.
 
 ## Remaining limits
 
 This component does not parse files, decide parser row validity, map accounts, prepare canonical imports, reconcile duplicates, persist transactions, retain source files, or provide provider-file acceptance. The future caller must pass dates it considers usable and retain source rows independently. Physical iPhone/iPad Safari, VoiceOver, touch/keyboard interoperability, and owner integration acceptance remain outstanding. No real financial data, private workbook, Drive, or production credentials were used. No merge or deployment is included.
+
+### Application empty-export adapter
+
+The supported CSV workflow may pass `reviewedEmptyExport: true` only for a recognized header-only export after explicit owner confirmation. This permits a date declaration with zero observed items; it never permits malformed dates or implies reconciled completeness. The structured confirmation provenance records this fact and the file/account context. Other callers retain the default review-required behavior when no usable dates exist.

@@ -25,6 +25,18 @@ test('all existing deliberately invented fixtures parse; account split and no gu
     assert.ok(result.records.every(r => r.currency === null));
   }
 });
+test('Fidelity account numbers remain mapping-only and are redacted from persisted source fields', async () => {
+  const bytes = await readFile(new URL('../fixtures/fidelity.csv', import.meta.url));
+  const result = await parseProviderCsv({ bytes, sourceFormat: fidelity });
+  assert.deepEqual(result.sourceAccountKeys, ['000000000', '000000001']);
+  for (const record of result.records) {
+    assert.ok(record.sourceAccountKey);
+    assert.equal(record.sourceFields['Account Number'], null);
+    const rawFingerprintFields = { ...record.sourceFields, 'Account Number': record.sourceAccountKey };
+    assert.equal(record.sourceRowFingerprint, createHash('sha256').update(canonicalizeJcs(rawFingerprintFields), 'utf8').digest('hex'));
+    assert.equal(JSON.stringify(record.sourceFields).includes(record.sourceAccountKey), false);
+  }
+});
 test('BOM, CRLF, quoted comma, escaped quotes, multiline cell, exact source preservation and ordinals', async () => {
   const result = await parse('\uFEFF\r\n' + header + '\r\n03/02/2026,"  Invented, ""shop""\r\n second line  ",-0012.3400,,Posted\r\n03/03/2026,Next,0,,Pending\r\n');
   const first = result.records[0];

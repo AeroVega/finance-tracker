@@ -59,6 +59,8 @@ const inputs = {
   'coverage-dates-required': 'Choose both declared coverage dates for every account.',
   'coverage-order-invalid': 'Declared end must be on or after declared start.',
   'coverage-confirmation-required': 'Confirm the declared coverage for every account.',
+  'empty-export-confirmation-required': 'Confirm that this recognized header-only export intentionally contains zero transaction rows.',
+  'import-coverage-conflict': 'This file was already imported with different declared coverage. Prior coverage provenance is not silently rewritten; a dedicated correction flow is required.',
   'currency-required': 'Enter an explicit three-letter ISO currency such as USD. No currency is assumed.',
   'review-reversal-dependency': 'This decision has later changes that depend on it. It cannot be returned to review automatically.',
   'account-name-required': 'Enter a name for each new invented account.',
@@ -204,7 +206,7 @@ const codeGroups = {
   `,
   csv: `
     invalid-csv-quoting invalid-source-bytes invalid-source-encoding missing-csv-header unsupported-csv-header
-    unsupported-source-format
+    unsupported-source-format empty-export-confirmation-required import-coverage-conflict
   `,
   diag: `
     clipboard-unavailable
@@ -342,7 +344,7 @@ const codeGroups = {
     verified-draft-required verified-preview-required
   `,
 };
-const inputCodes = new Set(`category-required correction-rationale-required transfer-link-rationale-required
+const inputCodes = new Set(`category-required correction-rationale-required transfer-link-rationale-required empty-export-confirmation-required import-coverage-conflict
  account-mapping-required coverage-dates-required coverage-order-invalid coverage-confirmation-required
  currency-required account-name-required distinct-account-required evidence-required review-rationale-required
  match-target-required`.split(/\s+/).filter(Boolean));

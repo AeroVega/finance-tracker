@@ -1,0 +1,12 @@
+.provider-import-panel{margin-block:1rem}
+.provider-import-panel #provider-import-workflow{display:grid;gap:1rem}
+.provider-import-panel input,.provider-import-panel select{font:inherit;min-height:44px;max-width:100%;width:100%;padding:.65rem .75rem;border:1px solid var(--border,#52616b);border-radius:.5rem;background:var(--surface,#101820);color:inherit}
+.provider-import-panel label{display:grid;gap:.4rem;font-weight:600}
+.provider-import-panel .provider-import-account{display:grid;gap:.75rem;min-width:0;padding:1rem;border:1px solid var(--border,#52616b);border-radius:.75rem}
+.provider-import-panel .provider-import-account legend{padding-inline:.35rem;font-weight:700}
+.provider-import-panel .provider-import-mappings{display:grid;gap:.75rem}
+.provider-import-panel .checkbox-field{display:flex;align-items:center;gap:.65rem;min-height:44px}
+.provider-import-panel .checkbox-field input{width:1.15rem;min-height:1.15rem}
+.provider-import-panel .storage-actions{display:flex;flex-wrap:wrap;gap:.75rem}
+.provider-import-panel .status-message{overflow-wrap:anywhere}
+/* Each account needs the full available width for its two coverage calendars. */

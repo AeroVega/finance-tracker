@@ -1,6 +1,6 @@
 # Read-only provider CSV import preview
 
-**Status:** implemented on `feature/provider-csv-import-preview`; synthetic tests are included. This module is not wired into the application UI or persistence path.
+**Status:** read-only preview utility retained as the parser/canonical-validation boundary. The supported application import path is now documented in [PROVIDER_CSV_IMPORT_WORKFLOW.md](PROVIDER_CSV_IMPORT_WORKFLOW.md); its review, CI and owner-acceptance gates remain separate.
 
 ## API
 
@@ -38,7 +38,7 @@ The function returns a preview object. It does not mutate the supplied ledger, p
 - `requirements.declaredCoverage[]`: mapped canonical account IDs that still need declared coverage.
 - `canonicalValidation`: `not-run`, `passed`, or `failed`. It is run only when a ledger, all required mappings, and coverage declarations are supplied. It calls the existing `prepareCanonicalImport` validation/reconciliation path and discards the proposed ledger.
 
-For bank formats the source account key is `default`; it still requires explicit mapping to an existing canonical account. Fidelity rows use the source Account Number as a source key; it must be mapped to an existing Fidelity account. Raw source account identifiers are sensitive: do not log or display them in production UI without an explicit privacy design.
+For bank formats the source account key is `default`; it still requires explicit mapping to an existing canonical account. Fidelity rows use the source Account Number as an in-memory source key; it must be mapped to an existing Fidelity account. The parser redacts that column from returned `sourceFields` before canonical observations can persist it. The one-way row fingerprint is computed from the original source fields, preserving evidence integrity without retaining the raw account number. The full key remains only in the transient parsed model for explicit mapping and must never be logged or displayed; the application shows only its last four characters.
 
 ## Recognition and parsing
 
@@ -66,7 +66,7 @@ Repeated-looking rows are counted individually. The preview does not deduplicate
 - Recognition uses the first nonblank decoded CSV record. Whitespace-only cells are not blank, matching the existing parser. Malformed CSV syntax returns `parse-error`, even when no supported header can yet be established.
 - No real financial files or live provider exports were used. The supported variants are the synthetic-tested variants documented by the existing parser and tests.
 - Account mapping and user/source-confirmed declared coverage are not guessed.
-- This module is not connected to UI, Drive, storage, recovery, or production import workflows.
+- This preview utility itself remains read-only and is not the UI controller. The application controller stages a validated proposal through the canonical workspace session; persistence still requires the existing explicit Save changes action.
 - It does not prove complete coverage, validate balances against statements, or decide financial classifications.
 
 ## Focused tests

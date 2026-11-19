@@ -534,11 +534,11 @@ test('unresolved source preview reports full scoped count and refreshes after re
   const emptyAccount = ledger.accounts.at(-1).accountId;
   const h = await workspacePage({ledger}); await h.click('open-ledger'); await h.choose('month-filter', '2026-01');
   assert.match(h.get('review-summary').textContent, /12 source observations await a decision/);
-  assert.match(text(h.get('review-queue')), /Showing 10 of 12 unresolved source observations in this account and period/);
+  assert.match(text(h.get('review-queue')), /Source decisions: page 1 of 2. 12 unresolved/);
   assert.equal(h.get('review-queue').children.filter(item => item.tagName === 'ARTICLE').length, 10);
   assert.equal(h.get('transaction-count').textContent, '1');
   await h.search('nothing matches');
-  assert.match(text(h.get('review-queue')), /Showing 10 of 12/);
+  assert.match(text(h.get('review-queue')), /Source decisions: page 1 of 2. 12 unresolved/);
   assert.match(text(h.get('review-queue')), /Search does not filter this queue/);
   await h.choose('month-filter', '2026-02');
   assert.match(h.get('review-summary').textContent, /1 source observations await a decision/);
@@ -551,7 +551,7 @@ test('unresolved source preview reports full scoped count and refreshes after re
   ledger = applyReviewDecision(ledger, {observationId:rejected.observationId, action:'reject', rationale:'Invented decision from advanced workbench'}, options);
   await h.replaceSavedLedger(ledger); await h.click('reopen-ledger'); await h.choose('month-filter', '2026-01');
   assert.match(h.get('review-summary').textContent, /11 source observations await a decision/);
-  assert.match(text(h.get('review-queue')), /Showing 10 of 11/);
+  assert.match(text(h.get('review-queue')), /Source decisions: page 1 of 2. 11 unresolved and 1 resolved/);
   assert.equal(h.modelSession.ledger.activities.length, 1);
   assert.equal(h.state.writes, 0);
 });
