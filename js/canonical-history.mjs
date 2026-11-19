@@ -1,14 +1,16 @@
+import { fail as appFail } from './app-error.mjs';
+import { HISTORICAL_LEDGER_VERSION, HISTORICAL_COLLECTIONS } from './historical-monthly-summary.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 
-export const CANONICAL_COLLECTIONS = Object.freeze({accounts:'accountId',imports:'importRunId',observations:'observationId',activities:'activityId',events:'eventId',reviewDecisions:'reviewDecisionId',positionEvents:'eventId'});
+export const CANONICAL_COLLECTIONS = Object.freeze({accounts:'accountId',imports:'importRunId',observations:'observationId',activities:'activityId',events:'eventId',reviewDecisions:'reviewDecisionId',positionEvents:'eventId',...HISTORICAL_COLLECTIONS});
 const collections = CANONICAL_COLLECTIONS;
-const immutable = new Set(['accounts','activities','events','reviewDecisions','positionEvents']);
+const immutable = new Set(['accounts','activities','events','reviewDecisions','positionEvents',...Object.keys(HISTORICAL_COLLECTIONS)]);
 const observationMutable = new Set(['activityId','disposition','reasonCode','resolved']);
 const importMutable = new Set(['status','counts','latestActivityDate','errorCode','retryAttempts']);
 const immutableFields = (record,mutable) => Object.fromEntries(Object.entries(record).filter(([key])=>!mutable.has(key)));
 const same = (a,b) => canonicalizeJcs(a) === canonicalizeJcs(b);
 const fail = code => { throw Object.assign(new Error(code),{code}); };
-const metadata = ledger => Object.fromEntries(Object.entries(ledger).filter(([name]) => !Object.hasOwn(collections,name)));
+const metadata = ledger => Object.fromEntries(Object.entries(ledger).filter(([name]) => name !== 'version' && !Object.hasOwn(collections,name)));
 
 /** Validate a transition, not just two individually valid ledgers. Retained
  * commits use this same check on cold open and independent archive restore. */
@@ -16,6 +18,8 @@ export function assertCanonicalLedgerTransition(before,after) {
   if (before === null) return;
   if (!after) fail('history-removal-refused');
   if (before.ledgerId !== after.ledgerId) fail('ledger-identity-mismatch');
+  if (before.version !== after.version && !(before.version === 1 && after.version === HISTORICAL_LEDGER_VERSION &&
+    after.historicalSummaryBatches?.length)) appFail('unsupported-ledger-version-transition');
   if (!same(metadata(before),metadata(after))) fail('ledger-metadata-rewrite-refused');
   for (const [name,idField] of Object.entries(collections)) {
     if (Object.hasOwn(before,name) && !Object.hasOwn(after,name)) fail('history-removal-refused');

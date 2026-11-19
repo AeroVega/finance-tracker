@@ -13,12 +13,13 @@ import { showDiagnostic, clearDiagnostic } from './app-diagnostics.mjs';
 import { leaveBreadcrumb, registerContextProvider, recentReports } from './error-reporting.mjs';
 import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
 import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs';
+import { mountHistoricalMonthlySummaryWorkflow } from './historical-monthly-summary-workflow.mjs';
 
 const $ = id => document.getElementById(id);
-let providerImportWorkflow = null;
+let providerImportWorkflow = null, historicalSummaryWorkflow = null;
 let sourceReviewPage = 0, sourceReviewScope = null;
 const sourceReviewUpdates = [];
-const pages = createWorkspacePages({document, window, onNavigate: page => { leaveBreadcrumb({e:'page.view', page}); if (page !== 'storage') providerImportWorkflow?.reset(); }});
+const pages = createWorkspacePages({document, window, onNavigate: page => { leaveBreadcrumb({e:'page.view', page}); if (page !== 'storage') providerImportWorkflow?.reset(); historicalSummaryWorkflow?.refresh(); }});
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
   if (text !== undefined) result.textContent = text;
@@ -65,7 +66,15 @@ const storage = new DashboardSyntheticStorage({
     if (!status.code) clearDiagnostic($('connection-status'));
     // Candidate authorization/Picker work does not change the active session.
     // Only an actual lifecycle interruption invalidates its writable draft.
-    if (status.state !== 'ready' && !(status.state === 'connecting' && session.ready())) { session.invalidate(); providerImportWorkflow?.reset(); }
+    if (status.state !== 'ready' && !(status.state === 'connecting' && session.ready())) {
+      session.invalidate();
+      providerImportWorkflow?.reset();
+      // A local preview with no selected lifecycle survives candidate sign-in
+      // or picker cancellation. Only an established interruption clears its review.
+      if (session.mode !== 'preview' || storage.lifecycle || session.needsReopen || session.unverified) {
+        historicalSummaryWorkflow?.reset();
+      }
+    }
     $('connection-status').textContent = status.state === 'ready'
       ? 'Connected to a synthetic copy. Opening and saves verify its canonical records.'
       : status.code ? showDiagnostic({code: status.code}, {surface: 'workspace', target: $('connection-status'), reportId: status.reportId, page: pages.current}) : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
@@ -118,6 +127,7 @@ function announce(text, kind = 'info') {
 }
 function refresh() {
   providerImportWorkflow?.refresh();
+  historicalSummaryWorkflow?.refresh();
   refreshDiagnosticHistory();
   const lifecycle = storage.lifecycle;
   const needsRecovery = ['recovery-required', 'stale-session'].includes(lifecycle?.state);
@@ -283,7 +293,7 @@ const action = (id, message, callback) => $(id).addEventListener('click', () => 
   if (!$(id).disabled) return run(message, callback, formStatuses[id], id);
 });
 function hasUnfinishedEvidence() {
-  return holdingRows.length > 0 || componentRows.length > 0 || $('statement-full-month').checked ||
+  return historicalSummaryWorkflow?.hasUnfinishedReview() || holdingRows.length > 0 || componentRows.length > 0 || $('statement-full-month').checked ||
     ['balance-date','balance-amount','balance-source','holdings-date','holdings-source','reconcile-source','closure-source','new-account-name'].some(id => $(id).value.trim());
 }
 function confirmReplace(message = 'Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.') {
@@ -299,6 +309,7 @@ function addOptions(select, options, selected, first) {
 // Drop application-owned financial references and rendered copies only after
 // verified closure. This is not a claim of browser/OS memory zeroization.
 function clearLoadedWorkspace() {
+  historicalSummaryWorkflow?.reset();
   cancelSearch();
   view = null; viewLedger = null; viewReader = null; homeView = null; positionRender = null;
   renderedPositionDate = null; selectedActivity = null; detailEditorBaseline = null;
@@ -892,8 +903,15 @@ action('preview-year', 'Preparing the invented year locally. No Google connectio
 action('save-preview', 'Saving this exact local preview into a newly selected, empty synthetic Drive folder and independently verifying it. Keep this tab open.', async () => {
   await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success'); return true;
 });
+async function saveWorkspaceChanges() {
+  const reviewedLedger = session.ledger, lifecycle = storage.lifecycle, folderId = lifecycle?.folderId;
+  await session.save();
+  if (lifecycle && lifecycle === storage.lifecycle && lifecycle.folderId === folderId) {
+    historicalSummaryWorkflow?.adoptVerifiedSave(reviewedLedger,session.ledger);
+  }
+}
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
-  await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
+  await saveWorkspaceChanges(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
 });
 function recoveryMessage() {
   return ({checking:'Checking what reached Drive. Your draft remains in this tab; keep it open.',saved:'Your draft was found saved and verified. No retry is needed.', 'not-saved':'The save was conclusively not published. Your draft is preserved. Retry only with the explicit confirmation below.',different:'Drive contains different saved records. Your draft is preserved. Do not retry blindly; review the saved copy first.',unverifiable:'The save outcome could not be verified. Your draft is preserved. Recheck when connected; do not retry blindly.'})[session.recoveryOutcome] || 'Save unverified. Your draft remains in this tab. Verify the save outcome before retrying.';
@@ -904,7 +922,7 @@ async function downloadBackup({excludeStaged=false,saveFirst=false}={}) {
     if (encrypted && !password) fail('backup-password-required');
     if (encrypted && password !== $('backup-password-confirm').value) fail('backup-password-mismatch');
     if (!encrypted && !window.confirm('Download an unencrypted backup? This file contains readable synthetic financial data. Keep it private.')) { announce('Backup cancelled. No file was downloaded.'); return; }
-    if (saveFirst) await session.save();
+    if (saveFirst) await saveWorkspaceChanges();
     const bytes=await session.exportBackup({password,excludeStaged});
     const url=URL.createObjectURL(new Blob([bytes],{type:'application/json'}));
     const link=node('a');link.href=url;link.download='finance-tracker-synthetic-backup.json';
@@ -1002,7 +1020,7 @@ $('transaction-search').addEventListener('compositionend', () => { composingSear
 $('previous-page').addEventListener('click', () => { if (!busy && page > 0) { page--; render(); } });
 $('next-page').addEventListener('click', () => { if (!busy && view && page + 1 < view.pages) { page++; render(); } });
 window.addEventListener('beforeunload', event => { if (busy || session.dirty || hasUnfinishedDetail() || hasUnfinishedEvidence()) { event.preventDefault(); event.returnValue = ''; } });
-window.addEventListener('offline', () => { providerImportWorkflow?.reset(); session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
+window.addEventListener('offline', () => { providerImportWorkflow?.reset(); historicalSummaryWorkflow?.reset(); session.invalidate(); refresh(); announce('Offline. Loaded records remain visible; saved-copy edits and saves are blocked. Reconnect and reopen after returning online.'); });
 window.addEventListener('online', refresh);
 providerImportWorkflow = mountProviderImportWorkflow({
   root: $('provider-import-workflow'),
@@ -1023,6 +1041,22 @@ providerImportWorkflow = mountProviderImportWorkflow({
     refresh();
     announce('Supported CSV import staged locally. Review unresolved rows, then use the workspace explicit save action when ready.', 'success');
   }
+});
+historicalSummaryWorkflow = mountHistoricalMonthlySummaryWorkflow({
+  root: $('historical-summary-workflow'),
+  getLedger: () => session.ledger,
+  isActive: () => pages.current === 'storage',
+  getUnavailableReason: () => {
+    if (busy || session.busy) return 'Wait for the current workspace or storage action to finish.';
+    if (!session.ledger) return 'Open or create a synthetic ledger before staging history.';
+    if (session.unverified) return 'Verify the save outcome before staging history.';
+    if (session.needsReopen) return 'Reconnect and reopen the verified ledger before staging history.';
+    if (!session.canEdit()) return 'This ledger is read-only. Reopen it before staging history.';
+    return null;
+  },
+  stageSummaries: proposal => session.stageHistoricalSummaries(proposal),
+  stageReconciliation: proposal => session.stageHistoricalReconciliation(proposal),
+  onStaged: message => { render(); refresh(); announce(message,'success'); }
 });
 refresh();
 // Prepare only invented data ahead of the click so OAuth starts within the

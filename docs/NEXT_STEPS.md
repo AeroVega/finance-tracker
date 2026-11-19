@@ -1,6 +1,6 @@
 # Next steps
 
-**Updated:** 2026-11-17
+**Updated:** 2026-11-19
 **Current baseline:** [current main and scoped evidence](CURRENT_STATE.md)
 **Release target:** 2027-01-01 for v1.0.0, conditional on all release gates.
 
@@ -8,8 +8,8 @@ This file is the active dependency/acceptance queue. It does not grant permissio
 
 ## Immediate priorities
 
-1. **Supported CSV application workflow.** The first implementation is on `feature/supported-csv-import-workflow`. Complete independent adversarial review, synthetic tests, exact-head CI, and bounded owner acceptance before considering merge. Keep real exports gated.
-2. **Monthly-summary persistence and review — separate PR.** Migrate the existing monthly net-worth snapshots and historical category/income/expense totals without inventing transaction-level detail. Preserve source granularity, provenance, month coverage, and reconciliation status. Review discrepancies explicitly; missing data remains unavailable, not zero.
+1. **Supported CSV application workflow.** [PR 53](https://github.com/AeroVega/finance-tracker/pull/53) merged after green CI and owner confirmation of the Wells Fargo workflow. Keep real exports gated and do not extrapolate to every provider or device.
+2. **Monthly-summary persistence and review — separate PR.** Verify the [normalized-history workflow](HISTORICAL_MONTHLY_SUMMARY.md) with invented input. Review workbook-derived monthly net worth, income and expense totals without inventing transaction-level detail. Preserve provenance, month coverage and explicit reconciliation. Missing data remains unavailable, not zero.
 3. **Purpose-built workbook converter — separate PR.** Build a dedicated converter for the legacy workbook after the monthly-summary contract is settled. Use invented workbook fixtures in CI; do not commit or upload the private workbook. Keep source worksheet/cell provenance and make conversion results inspectable before import.
 4. **Remaining production controls.** Review account/database binding, OAuth lifecycle, privacy boundaries, cost/quotas and safe session cleanup with synthetic data. Production remains NO-GO until every applicable gate and explicit owner activation approval pass.
 

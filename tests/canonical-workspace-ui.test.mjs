@@ -60,7 +60,13 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
     async prepare() {}
     async connect(options) {
       state.connects.push(options);
-      if (state.connectionError) throw Object.assign(new Error('Private provider detail'), {code:state.connectionError});
+      if (state.connectionError) {
+        if (state.publishCandidateFailure) {
+          this.options.onStatus({state:'connecting'});
+          this.options.onStatus({state:'error',code:state.connectionError});
+        }
+        throw Object.assign(new Error('Private provider detail'), {code:state.connectionError});
+      }
       if (options.requireEmpty === true) {
         assert.equal(options.requireExisting, undefined);
         await createCopy(null);
@@ -81,6 +87,10 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
   }
   class BrowserSession extends CanonicalWorkspaceSession {
     constructor(options) { super({...options, online:() => browserNavigator?.onLine !== false}); session = this; }
+    async stageHistoricalReconciliation(options) {
+      if (state.historyReconciliationGate) await state.historyReconciliationGate.promise;
+      return super.stageHistoricalReconciliation(options);
+    }
   }
   const page = await pageController('canonical-workspace', {DashboardSyntheticStorage:Storage,
     CanonicalWorkspaceSession:BrowserSession, createWorkspacePages, createWorkspaceViewReader: (...args) => {
@@ -1428,4 +1438,274 @@ test('release stays visible but disabled until ownership and save outcome permit
   h.modelSession.recoveryOutcome = 'not-saved';
   await h.event('online');
   assert.equal(h.get('release-ledger').disabled, false, 'verified not-saved draft can be explicitly discarded');
+});
+
+const inventedHistory = (workbook = 'Invented monthly records.xlsx', amount = '123.4500') => ({
+  format:'finance-tracker-historical-monthly-summaries',version:1,
+  expectedMonthRange:{start:'2023-01',end:'2023-03'},
+  records:[{
+    month:'2023-01',
+    summary:{incomeTotal:{amount,currency:'USD'},expenseTotal:{amount:'0.00',currency:'USD'},netWorthSnapshot:{amount:'912.34',currency:'USD'}},
+    provenance:{workbook,worksheet:'Monthly',mapping:'invented-v1'},scope:{kind:'aggregate'}
+  }]
+});
+function historyTestFile(data, gate) {
+  const bytes = new TextEncoder().encode(JSON.stringify(data));
+  return {size:bytes.byteLength,async arrayBuffer() { if (gate) await gate.promise; return bytes.buffer; }};
+}
+async function selectHistoryFile(h, file) {
+  const picker = h.get('historical-summary-file');
+  picker.files = [file]; picker.value = 'invented.json';
+  await picker.emit('change');
+}
+
+test('Storage history preview shows gaps and conflicts, then stages locally and independently reopens saved data', async () => {
+  const h = await workspacePage();
+  await h.navigate('#storage');
+  assert.equal(h.get('historical-summary-stage').disabled,true);
+  await h.click('open-ledger');
+  await h.navigate('#storage');
+  const file = inventedHistory('<img src="invalid">');
+  file.records.push({...inventedHistory('Other invented source.xlsx','20.00').records[0]});
+  await selectHistoryFile(h,historyTestFile(file));
+  await h.click('historical-summary-preview');
+  assert.match(h.get('historical-preview-status').textContent,/2 expected month\(s\) absent/);
+  assert.match(text(h.get('historical-summary-workflow')),/overlapping month summaries/);
+  assert.match(text(h.get('historical-preview-rows')),/<img src="invalid">/);
+  assert.match(text(h.get('historical-preview-rows')),/Expenses: 0.00 USD/);
+  for (const [choice, rationale] of [['accept','Verified synthetic primary source'],['accept','Overlapping alternate source']].entries()) {
+    await h.choose('historical-record-' + choice + '-action',rationale[0]);
+    const field = h.get('historical-record-' + choice + '-reason');
+    field.value = rationale[1]; await field.emit('input');
+  }
+  assert.equal(h.get('historical-summary-stage').disabled,true);
+  assert.match(h.get('historical-stage-help').textContent,/at most one source/);
+  await h.choose('historical-record-1-action','exclude');
+  assert.equal(h.state.writes,0);
+  assert.equal(h.get('historical-summary-stage').disabled,false);
+  await h.click('historical-summary-stage');
+  assert.equal(h.state.writes,0);
+  assert.equal(h.modelSession.dirty,true);
+  assert.match(text(h.get('historical-month-view')),/Historical workbook summary/);
+  assert.match(text(h.get('historical-month-view')),/123.4500 USD/);
+  assert.match(text(h.get('historical-month-view')),/Net-worth snapshot \(workbook\): 912.34 USD/);
+  assert.match(text(h.get('historical-month-view')),/Other invented source.xlsx/);
+  assert.equal(h.get('historical-reconcile-stage').disabled,true);
+  assert.match(h.get('historical-reconcile-help').textContent,/workbook summary remains the source/);
+  await h.click('save-ledger');
+  assert.equal(h.state.writes,1);
+  const saved = await h.storedLedger();
+  assert.deepEqual(saved.historicalSummaryBatches[0].entries.map(row => row.action),['accept','exclude']);
+  await h.click('reopen-ledger');
+  assert.match(text(h.get('historical-month-view')),/123.4500 USD/);
+  assert.equal(h.modelSession.dirty,false);
+  await h.click('release-ledger');
+  assert.doesNotMatch(text(h.get('historical-summary-workflow')),/123.4500|Other invented source/);
+  assert.equal(h.get('historical-summary-stage').disabled,true);
+});
+
+test('late historical file reads cannot overwrite a newer selection or resurrect discarded preview after navigation', async () => {
+  const h = await workspacePage();
+  await h.click('open-ledger');
+  await h.navigate('#storage');
+  const first = deferred();
+  await selectHistoryFile(h,historyTestFile(inventedHistory('Old file.xlsx'),first));
+  const stale = h.click('historical-summary-preview');
+  await selectHistoryFile(h,historyTestFile(inventedHistory('New file.xlsx','42.00')));
+  await h.click('historical-summary-preview');
+  first.resolve(); await stale;
+  assert.match(text(h.get('historical-preview-rows')),/New file.xlsx/);
+  assert.doesNotMatch(text(h.get('historical-preview-rows')),/Old file.xlsx/);
+  const next = deferred();
+  await selectHistoryFile(h,historyTestFile(inventedHistory('Removed file.xlsx'),next));
+  const pending = h.click('historical-summary-preview');
+  await h.navigate('#overview');
+  next.resolve(); await pending;
+  await h.navigate('#storage');
+  assert.equal(h.get('historical-summary-file').value,'');
+  assert.equal(h.get('historical-summary-stage').disabled,true);
+  assert.doesNotMatch(text(h.get('historical-summary-workflow')),/(New|Removed) file.xlsx/);
+  assert.equal(h.state.writes,0);
+});
+
+test('Storage reconciliation switches only cash-flow source, preserves net worth and requires explicit confirmation', async () => {
+  const {ledger} = replayFixture();
+  const setupSession = new CanonicalWorkspaceSession({storage:{lifecycle:null},online:()=>true});
+  setupSession.preview(ledger);
+  setupSession.correct({activityId:ledger.activities[0].activityId,type:'classification',activityKind:'spending',rationale:'Invented source reviewed'});
+  const h = await workspacePage({ledger:setupSession.ledger});
+  await h.click('open-ledger');
+  await h.navigate('#storage');
+  const file = inventedHistory();
+  file.expectedMonthRange = {start:'2026-01',end:'2026-01'};
+  file.records[0].month = '2026-01';
+  file.records[0].scope = {kind:'accounts',accountIds:[ledger.accounts[0].accountId]};
+  await selectHistoryFile(h,historyTestFile(file));
+  await h.click('historical-summary-preview');
+  await h.choose('historical-record-0-action','accept');
+  const reviewReason = h.get('historical-record-0-reason');
+  reviewReason.value = 'Verified invented source'; await reviewReason.emit('input');
+  await h.click('historical-summary-stage');
+  assert.match(text(h.get('historical-month-view')),/Historical workbook summary/);
+  assert.match(text(h.get('historical-month-view')),/Invented replay account/);
+  const button = h.get('historical-reconcile-stage');
+  assert.equal(button.disabled,true);
+  for (const [field, value] of [['reason','All in-scope source records checked'],['evidence','Invented January records']]) {
+    const control = h.get('historical-reconcile-' + field);
+    assert.equal(control.disabled,false);
+    control.value = value; await control.emit('input');
+  }
+  assert.equal(button.disabled,true);
+  await h.choose('historical-reconcile-confirm',true);
+  assert.equal(button.disabled,false);
+  const gate = deferred();
+  h.state.historyReconciliationGate = gate;
+  const staleReconciliation = h.click('historical-reconcile-stage');
+  await h.navigate('#overview');
+  gate.resolve(); await staleReconciliation;
+  assert.equal(h.modelSession.ledger.historicalReconciliations.length,0);
+  await h.navigate('#storage');
+  await h.until(() => /Historical workbook summary/.test(text(h.get('historical-month-view'))));
+  h.state.historyReconciliationGate = null;
+  for (const [field, value] of [['reason','All in-scope source records checked'],['evidence','Invented January records']]) {
+    const control = h.get('historical-reconcile-' + field);
+    control.value = value; await control.emit('input');
+  }
+  await h.choose('historical-reconcile-confirm',true);
+  await h.click('historical-reconcile-stage');
+  await h.until(() => /Reconciled transaction detail/.test(text(h.get('historical-month-view'))));
+  assert.equal(h.state.writes,0);
+  assert.match(text(h.get('historical-month-view')),/Expenses: 12.34 USD/);
+  assert.match(text(h.get('historical-month-view')),/Net-worth snapshot \(workbook\): 912.34 USD/);
+  assert.match(text(h.get('historical-month-view')),/All in-scope source records checked/);
+  assert.equal(button.disabled,true);
+});
+
+async function chooseHistoricalReview(h, index, value) {
+  await h.choose('historical-record-' + index + '-action','accept');
+  const field = h.get('historical-record-' + index + '-reason');
+  field.value = value; await field.emit('input');
+}
+
+test('canceling candidate authorization preserves a paged history review in the unchanged local preview', async () => {
+  const h = await workspacePage();
+  await h.navigate('#storage'); await h.click('preview-year'); await h.navigate('#storage');
+  const input = inventedHistory();
+  input.expectedMonthRange.end = '2024-01';
+  input.records = Array.from({length:13},(_,index) => ({
+    ...structuredClone(input.records[0]),month:new Date(Date.UTC(2023,index,1)).toISOString().slice(0,7)
+  }));
+  const file = historyTestFile(input);
+  await selectHistoryFile(h,file);
+  await h.click('historical-summary-preview');
+  await chooseHistoricalReview(h,0,'First page reviewed');
+  await h.click('historical-next');
+  await chooseHistoricalReview(h,12,'Second page reviewed');
+  const original = h.modelSession.ledger;
+  h.state.connectionError = 'authorization-cancelled';
+  h.state.publishCandidateFailure = true;
+  await h.click('save-preview');
+  assert.equal(h.modelSession.ledger,original);
+  assert.equal(h.modelSession.mode,'preview');
+  assert.equal(h.state.writes,0);
+  assert.match(h.get('action-status').textContent,/cancelled/i);
+  assert.equal(h.get('historical-summary-file').files[0],file);
+  assert.equal(h.get('historical-summary-file').value,'invented.json');
+  assert.match(h.get('historical-review-range').textContent,/Showing records 13–13 of 13/);
+  assert.equal(h.get('historical-record-12-reason').value,'Second page reviewed');
+  await h.click('historical-prev');
+  assert.equal(h.get('historical-record-0-action').value,'accept');
+  assert.equal(h.get('historical-record-0-reason').value,'First page reviewed');
+  h.state.connectionError = null;
+  await h.click('save-preview');
+  assert.equal(h.modelSession.mode,'saved');
+  assert.equal(h.state.writes,1);
+  assert.equal(h.get('historical-summary-file').value,'');
+  assert.equal(h.get('historical-preview-rows').children.length,0);
+});
+
+for (const saveAction of ['save-ledger','backup-save-first']) test(saveAction + ' preserves unfinished history review when it verifies the same ledger in the same folder',async () => {
+  const {ledger} = replayFixture();
+  const setupSession = new CanonicalWorkspaceSession({storage:{lifecycle:null},online:()=>true});
+  setupSession.preview(ledger);
+  setupSession.correct({activityId:ledger.activities[0].activityId,type:'classification',activityKind:'spending',rationale:'Reviewed invented purchase'});
+  const h = await workspacePage({ledger:setupSession.ledger});
+  await h.click('open-ledger'); await h.navigate('#storage');
+  const first = inventedHistory();
+  first.expectedMonthRange = {start:'2026-01',end:'2026-01'};
+  first.records[0].month = '2026-01';
+  first.records[0].scope = {kind:'accounts',accountIds:[ledger.accounts[0].accountId]};
+  await selectHistoryFile(h,historyTestFile(first));
+  await h.click('historical-summary-preview');
+  await chooseHistoricalReview(h,0,'First batch reviewed');
+  await h.click('historical-summary-stage');
+  await h.until(() => !h.get('historical-reconcile-reason').disabled);
+  for (const [field, value] of [['reason','Reviewed January coverage'],['evidence','Invented January source']]) {
+    const control = h.get('historical-reconcile-' + field);
+    control.value = value; await control.emit('input');
+  }
+  await h.choose('historical-reconcile-confirm',true);
+  const second = historyTestFile(inventedHistory('Invented second batch.xlsx'));
+  await selectHistoryFile(h,second);
+  await h.click('historical-summary-preview');
+  await chooseHistoricalReview(h,0,'Second batch reviewed');
+  const original = h.modelSession.ledger;
+  await h.click(saveAction);
+  assert.equal(h.state.writes,1);
+  assert.notEqual(h.modelSession.ledger,original);
+  assert.deepEqual(h.modelSession.ledger,original);
+  assert.match(h.get('action-status').textContent,saveAction === 'save-ledger' ? /Changes saved and independently verified/ : /Backup download requested/);
+  assert.equal(h.get('historical-summary-file').files[0],second);
+  assert.equal(h.get('historical-record-0-action').value,'accept');
+  assert.equal(h.get('historical-record-0-reason').value,'Second batch reviewed');
+  assert.equal(h.get('historical-summary-stage').disabled,false);
+  assert.equal(h.get('historical-reconcile-reason').value,'Reviewed January coverage');
+  assert.equal(h.get('historical-reconcile-evidence').value,'Invented January source');
+  assert.equal(h.get('historical-reconcile-confirm').checked,true);
+  assert.equal(h.get('historical-reconcile-stage').disabled,false);
+  if (saveAction === 'save-ledger') {
+    await h.click('release-ledger');
+    assert.equal(h.get('historical-summary-file').value,'');
+    assert.equal(h.get('historical-preview-rows').children.length,0);
+    assert.equal(h.get('historical-reconcile-reason').value,'');
+    assert.equal(h.get('historical-reconcile-confirm').checked,false);
+  } else {
+    // Staging after rebinding must use the newly verified ledger reference.
+    await h.click('historical-summary-stage');
+    assert.equal(h.modelSession.ledger.historicalSummaryBatches.length,2);
+    assert.equal(h.state.writes,1);
+    await selectHistoryFile(h,historyTestFile(inventedHistory('Invented third batch.xlsx')));
+    await h.click('historical-summary-preview');
+    await chooseHistoricalReview(h,0,'Unstaged third batch');
+    await h.click('undo-last-change');
+    assert.equal(h.modelSession.ledger.historicalSummaryBatches.length,1);
+    assert.equal(h.get('historical-summary-file').value,'');
+    assert.equal(h.get('historical-preview-rows').children.length,0);
+  }
+});
+
+test('a file read pending during an equivalent verified save refreshes against the new ledger',async () => {
+  const h = await workspacePage();
+  await h.click('open-ledger'); await h.navigate('#storage');
+  await selectHistoryFile(h,historyTestFile(inventedHistory()));
+  await h.click('historical-summary-preview');
+  await chooseHistoricalReview(h,0,'First batch reviewed');
+  await h.click('historical-summary-stage');
+  const firstRead = deferred();
+  const content = new TextEncoder().encode(JSON.stringify(inventedHistory('Invented pending workbook.xlsx')));
+  let calls = 0;
+  await selectHistoryFile(h,{size:content.byteLength,async arrayBuffer() {
+    if (++calls === 1) await firstRead.promise;
+    return content.buffer;
+  }});
+  const pending = h.click('historical-summary-preview');
+  await h.click('save-ledger');
+  await h.until(() => /Invented pending workbook.xlsx/.test(text(h.get('historical-preview-rows'))));
+  firstRead.resolve(); await pending;
+  assert.equal(calls,2);
+  assert.match(text(h.get('historical-preview-rows')),/Invented pending workbook.xlsx/);
+  await chooseHistoricalReview(h,0,'Reviewed after save');
+  await h.click('historical-summary-stage');
+  assert.equal(h.modelSession.ledger.historicalSummaryBatches.length,2);
+  assert.equal(h.state.writes,1);
 });

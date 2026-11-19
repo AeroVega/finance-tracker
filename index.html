@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="canonical-workspace.css">
   <link rel="stylesheet" href="components/import-coverage-selector.css">
   <link rel="stylesheet" href="components/provider-csv-import-workflow.css">
+  <link rel="stylesheet" href="components/historical-monthly-summary-workflow.css">
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
   <script src="js/build-info.js" defer></script>
@@ -230,6 +231,10 @@
         <h3 id="provider-import-heading">Bring in transaction history</h3>
         <p class="field-help">Supported CSV exports are parsed locally and staged into the open canonical ledger. This does not create accounts, upload the file, or save changes automatically.</p>
         <div id="provider-import-workflow"></div>
+      </section>
+      <section class="session-panel historical-summary-panel" aria-labelledby="historical-summary-heading">
+        <h3 id="historical-summary-heading">Historical monthly summaries</h3>
+        <div id="historical-summary-workflow"></div>
       </section>
       <section class="ledger-entry" aria-labelledby="entry-heading">
         <div class="entry-copy"><span class="entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5zM3 10h18"/></svg></span><div><p class="eyebrow">CONNECT A SYNTHETIC LEDGER</p><h2 id="entry-heading">Create or open a synthetic year</h2><p>Create a new invented year in an empty synthetic Drive folder, or open a copy you already saved.</p></div></div>

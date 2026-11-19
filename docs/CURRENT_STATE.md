@@ -1,9 +1,9 @@
 # Current project state
 
-**Checked:** 2026-11-18
+**Checked:** 2026-11-19
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
-**Main baseline:** `26472cd2610c89ee4ee33180324813e2ec7b4674` (current `main` at implementation start)
-**Active work:** supported provider CSV import workflow on `feature/supported-csv-import-workflow`; draft PR53; overnight corrections and synthetic regression verification are in progress. Exact-head CI and owner acceptance are tracked in the PR evidence. No merge or deployment is authorized.
+**Main baseline:** `2f527adb663e7112bd31d480fceede4b62f1baa4` ([PR 53](https://github.com/AeroVega/finance-tracker/pull/53) merged)
+**Active work:** historical monthly summaries on `feature/alpha-historical-monthly-summaries`. This separate Alpha increment uses invented normalized JSON. No merge or deployment of this work is authorized.
 
 This is the concise current direction and permission boundary. [Project status](PROJECT_STATUS.md) retains dated historical evidence; the focused [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
 
@@ -13,7 +13,7 @@ The owner selected **full-snapshot v1** as the continuing format after live synt
 
 Create new synthetic year and Save preview to a new folder require a fresh empty synthetic folder. Open saved synthetic year only opens a supported existing full-snapshot copy. Old per-record, grouped, fragmented and partitioned layouts are unsupported, not converted, overwritten or deleted. Remove obsolete format implementations and their exclusive regression/benchmark paths rather than maintaining multiple application storage formats. Preserve shared financial validation, transport, diagnostics, ownership, integrity and recovery safeguards.
 
-The format remains synthetic-only and **not Alpha-complete**. The supported Wells Fargo, SoFi and Fidelity CSV application workflow is implemented on a separate branch using the existing parser, canonical preparation/reconciliation and explicit-save session. It is not yet independently reviewed, CI-verified, owner-accepted, merged or deployed. No real provider export has been used. Recovery and portable backup/restore remain implemented in the selected full-snapshot route; do not infer live acceptance beyond the evidence recorded in the relevant PRs. See the [backup/recovery contract](FULL_SNAPSHOT_BACKUP_RECOVERY.md). Snapshot size is capped at 8 MiB, envelope/manifest at 16 KiB, and history at 10,000 commits. Full-history cost grows with retained snapshots. These limits are not bounded whole-database memory or Safari capacity claims. There is no compare-and-swap guarantee or production authorization.
+The format remains synthetic-only and **not Alpha-complete**. The supported Wells Fargo, SoFi and Fidelity CSV application workflow is merged. The owner confirmed the Wells Fargo import, save and reopen path on the PR head; that is not evidence for all providers/devices. Post-merge Node and Pages workflows succeeded; this is not an independent live-browser check. The [historical-summary contract](HISTORICAL_MONTHLY_SUMMARY.md) describes the separate Alpha increment, which has not been merged, deployed or owner-accepted. Recovery and portable backup/restore remain implemented in the selected full-snapshot route; do not infer live acceptance beyond the evidence recorded in the relevant PRs. See the [backup/recovery contract](FULL_SNAPSHOT_BACKUP_RECOVERY.md). Snapshot size is capped at 8 MiB, envelope/manifest at 16 KiB, and history at 10,000 commits. Full-history cost grows with retained snapshots. These limits are not bounded whole-database memory or Safari capacity claims. There is no compare-and-swap guarantee or production authorization.
 
 ## Acceptance and verification
 
@@ -26,7 +26,7 @@ The format remains synthetic-only and **not Alpha-complete**. The supported Well
 
 ## Authorization and data boundaries
 
-The owner approved synthetic-only implementation of the supported CSV application workflow in a new draft PR. This authorizes code, synthetic tests and a draft PR, not merge, deployment, production configuration changes or real-data access. Backup is the last verified saved logical database, optionally password-encrypted. Restore is fresh-empty-folder-only with independent verification. Drafts remain in memory only; safe recovery is automatic, retry explicit.
+The owner approved synthetic-only implementation of historical monthly summary review and persistence in a separate draft PR. This authorizes code, synthetic tests and a draft PR, not merge, deployment, production configuration changes or real-data access. Backup is the last verified saved logical database, optionally password-encrypted. Restore is fresh-empty-folder-only with independent verification. Drafts remain in memory only; safe recovery is automatic, retry explicit.
 
 Use invented fixtures only. Do not access real transaction records, the private workbook, owner Drive financial data or production credentials. Do not access, delete or modify existing Drive folders as part of code cleanup. Production financial-data persistence is **NO-GO** until separate security/privacy/OAuth/cost/recovery review and explicit owner activation approval.
 
@@ -36,7 +36,7 @@ Preserve the $0 recurring-cost constraint, permanent manual file imports, no sto
 
 The performance objective for the reported synthetic save/open is accepted. Recovery and portable backup/restore are implemented in the selected full-snapshot route; preserve their existing contracts and do not reopen unchanged acceptance gates without a demonstrated defect.
 
-Complete independent adversarial review, synthetic tests, exact-head CI and bounded owner acceptance for the supported CSV workflow before considering merge. Then implement monthly-summary persistence/review in a separate PR, followed by the purpose-built legacy workbook converter in another separate PR. Keep remaining production controls as a distinct NO-GO review. The dependency order and acceptance boundaries are maintained in [NEXT_STEPS.md](NEXT_STEPS.md). Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
+Verify historical monthly-summary persistence/review in its separate PR, followed by the purpose-built legacy workbook converter in another separate PR. Keep remaining production controls as a distinct NO-GO review. The dependency order and acceptance boundaries are maintained in [NEXT_STEPS.md](NEXT_STEPS.md). Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
 
 ## Reading map
 
