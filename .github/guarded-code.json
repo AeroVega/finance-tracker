@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "areas": {
+    "google-boundary": {
+      "name": "Google account, folder and OAuth",
+      "paths": [
+        "js/dashboard-synthetic-storage.mjs", "js/google-config.js", "js/google-config-validation.mjs",
+        "js/google-startup-diagnostics.mjs",
+        "index.html", "js/app.js", "docs/PRIVACY_SESSION.md"
+      ],
+      "tests": [
+        "dashboard-synthetic-storage", "privacy-account", "google-startup-diagnostics",
+        "full-snapshot-google-ui-scenarios", "full-snapshot-seeding-ui"
+      ],
+      "manual": "With a dedicated synthetic account/folder, test allowed sign-in and reopen, canceled sign-in and folder selection, wrong account or folder refusal, and expiration followed by explicit reauthorization. Verify an unchanged or wrong folder is not written."
+    },
+    "session-privacy": {
+      "name": "Ownership, release and privacy",
+      "paths": [
+        "index.html", "js/app.js", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs",
+        "js/dashboard-synthetic-storage.mjs", "js/session-coordination.mjs",
+        "js/full-snapshot-application.mjs", "js/workspace-navigation.js", "js/workspace-pages.mjs",
+        "js/workspace-chrome.mjs", "js/historical-monthly-summary-workflow.mjs",
+        "js/canonical-workspace-model.mjs", "js/canonical-month-index.mjs", "js/financial-position.mjs",
+        "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs", "js/success-metrics.mjs",
+        "js/provider-csv-import-workflow.mjs", "js/provider-csv-preview.mjs", "js/provider-csv.mjs",
+        "js/app-diagnostic-codes.mjs", "js/app-diagnostic-messages.mjs", "js/app-diagnostics.mjs",
+        "js/boot-diagnostics.js", "js/diagnostic-context.mjs", "js/diagnostic-files.mjs",
+        "js/diagnostic-selftest.mjs", "js/app-error.mjs", "js/error-registry.mjs",
+        "js/error-reporting.mjs", "js/session-claim-diagnostic.mjs", "js/storage-write-diagnostic.mjs",
+        "js/stack-frames.mjs", "canonical-workspace.css", "diagnostics.css",
+        "design-system.css", "styles.css", "components/", "docs/PRIVACY_SESSION.md",
+        "docs/SESSION_COORDINATION.md", "docs/APP_DIAGNOSTICS.md", "manifest.webmanifest"
+      ],
+      "tests": [
+        "canonical-workspace-ui", "dashboard-clear-race", "dashboard-release-ui", "privacy-account",
+        "native-ownership-lifetime", "session-coordination", "session-write-guard-race",
+        "provider-import-privacy-boundary", "app-diagnostics", "error-reporting", "success-metrics"
+      ],
+      "manual": "In two tabs, verify the non-owner cannot write. Cancel release and confirm staged work stays. Complete release and confirm both financial displays and unfinished forms clear. Check history navigation and exported diagnostics for unintended financial data. Use supported Safari devices when browser behavior is affected."
+    },
+    "verified-storage": {
+      "name": "Verified save, recovery and storage limits",
+      "paths": [
+        "index.html", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs",
+        "js/dashboard-synthetic-storage.mjs", "js/session-coordination.mjs", "js/full-snapshot-application.mjs",
+        "js/full-snapshot-storage.mjs", "js/drive-session-adapter.mjs", "js/drive-transaction-engine.mjs",
+        "js/drive-request-metrics.mjs", "js/drive-response-transport.mjs", "js/transaction-protocol.mjs",
+        "js/drive-feasibility-spike.mjs", "js/success-metrics.mjs",
+        "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
+        "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs",
+        "js/canonical-history.mjs", "js/canonical-import.mjs", "js/byte-ownership.mjs",
+        "js/immutable-content-type.mjs", "js/utf8-length.mjs", "docs/APPLICATION_STORAGE_LIFECYCLE.md",
+        "docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md", "docs/STORAGE_SCALING_AND_PRODUCTION_READINESS.md",
+        "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md"
+      ],
+      "tests": [
+        "full-snapshot-storage", "full-snapshot-provider-scenarios", "full-snapshot-recovery-outcomes",
+        "full-snapshot-witness-concurrency", "full-snapshot-version-convergence",
+        "drive-session-adapter", "drive-mutation-lifetime", "drive-transaction-engine", "drive-request-metrics",
+        "transaction-protocol", "canonical-workspace-session", "drive-feasibility-spike", "historical-workspace-persistence",
+        "financial-position-adversarial"
+      ],
+      "manual": "Interrupt a synthetic save, follow recheck/recovery without blindly retrying, and independently reopen to verify one committed result. For limit or cost changes, record workload size, requests, rejection/recovery at admitted limits, and any current provider quota assumptions."
+    },
+    "backup-restore": {
+      "name": "Backup encryption and restore",
+      "paths": [
+        "index.html", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs",
+        "js/full-snapshot-application.mjs", "js/full-snapshot-backup.mjs", "js/full-snapshot-storage.mjs",
+        "js/transaction-protocol.mjs", "js/canonical-history.mjs", "js/canonical-import.mjs",
+        "js/byte-ownership.mjs", "js/utf8-length.mjs", "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md",
+        "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
+        "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs"
+      ],
+      "tests": [
+        "full-snapshot-backup", "full-snapshot-backup-session", "full-snapshot-backup-ui",
+        "historical-workspace-persistence"
+      ],
+      "manual": "Export an encrypted synthetic backup, verify wrong passphrase and nonempty destination are refused, restore to a different empty synthetic folder, and reopen independently. Compare records and verify the source was not changed. Do not publish backup contents or passphrases."
+    }
+  },
+  "controlPaths": [
+    ".github/", "AGENTS.md", "docs/GUARDED_CODE.md", "docs/SECURITY.md",
+    "scripts/check-guarded-code.mjs", "scripts/check-drive-simulator.mjs",
+    "tests/guarded-code.test.mjs", "tests/helpers/", "tests/fixtures/diagnostic-reports/",
+    "fixtures/fidelity.csv", "fixtures/sofi.csv", "fixtures/wells-fargo.csv",
+    "fixtures/historical-monthly-summary.synthetic.json"
+  ]
+}
