@@ -66,7 +66,15 @@ const storage = new DashboardSyntheticStorage({
     if (!status.code) clearDiagnostic($('connection-status'));
     // Candidate authorization/Picker work does not change the active session.
     // Only an actual lifecycle interruption invalidates its writable draft.
-    if (status.state !== 'ready' && !(status.state === 'connecting' && session.ready())) { session.invalidate(); providerImportWorkflow?.reset(); historicalSummaryWorkflow?.reset(); }
+    if (status.state !== 'ready' && !(status.state === 'connecting' && session.ready())) {
+      session.invalidate();
+      providerImportWorkflow?.reset();
+      // A local preview with no selected lifecycle survives candidate sign-in
+      // or picker cancellation. Only an established interruption clears its review.
+      if (session.mode !== 'preview' || storage.lifecycle || session.needsReopen || session.unverified) {
+        historicalSummaryWorkflow?.reset();
+      }
+    }
     $('connection-status').textContent = status.state === 'ready'
       ? 'Connected to a synthetic copy. Opening and saves verify its canonical records.'
       : status.code ? showDiagnostic({code: status.code}, {surface: 'workspace', target: $('connection-status'), reportId: status.reportId, page: pages.current}) : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
@@ -895,8 +903,15 @@ action('preview-year', 'Preparing the invented year locally. No Google connectio
 action('save-preview', 'Saving this exact local preview into a newly selected, empty synthetic Drive folder and independently verifying it. Keep this tab open.', async () => {
   await session.savePreviewToNewCopy(); render({ reset: true }); announce('The exact preview, including all staged corrections, was saved to a new synthetic folder and independently verified.', 'success'); return true;
 });
+async function saveWorkspaceChanges() {
+  const reviewedLedger = session.ledger, lifecycle = storage.lifecycle, folderId = lifecycle?.folderId;
+  await session.save();
+  if (lifecycle && lifecycle === storage.lifecycle && lifecycle.folderId === folderId) {
+    historicalSummaryWorkflow?.adoptVerifiedSave(reviewedLedger,session.ledger);
+  }
+}
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
-  await session.save(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
+  await saveWorkspaceChanges(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
 });
 function recoveryMessage() {
   return ({checking:'Checking what reached Drive. Your draft remains in this tab; keep it open.',saved:'Your draft was found saved and verified. No retry is needed.', 'not-saved':'The save was conclusively not published. Your draft is preserved. Retry only with the explicit confirmation below.',different:'Drive contains different saved records. Your draft is preserved. Do not retry blindly; review the saved copy first.',unverifiable:'The save outcome could not be verified. Your draft is preserved. Recheck when connected; do not retry blindly.'})[session.recoveryOutcome] || 'Save unverified. Your draft remains in this tab. Verify the save outcome before retrying.';
@@ -907,7 +922,7 @@ async function downloadBackup({excludeStaged=false,saveFirst=false}={}) {
     if (encrypted && !password) fail('backup-password-required');
     if (encrypted && password !== $('backup-password-confirm').value) fail('backup-password-mismatch');
     if (!encrypted && !window.confirm('Download an unencrypted backup? This file contains readable synthetic financial data. Keep it private.')) { announce('Backup cancelled. No file was downloaded.'); return; }
-    if (saveFirst) await session.save();
+    if (saveFirst) await saveWorkspaceChanges();
     const bytes=await session.exportBackup({password,excludeStaged});
     const url=URL.createObjectURL(new Blob([bytes],{type:'application/json'}));
     const link=node('a');link.href=url;link.download='finance-tracker-synthetic-backup.json';

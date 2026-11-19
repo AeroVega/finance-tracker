@@ -1,5 +1,6 @@
 import {fail} from './app-error.mjs';
 import {getHistoricalMonthlySummaryView,previewHistoricalMonthlySummaries} from './historical-monthly-summary.mjs';
+import {canonicalizeJcs} from './transaction-protocol.mjs';
 
 const MAX_INPUT_BYTES = 1024 * 1024;
 const PAGE_SIZE = 12;
@@ -61,7 +62,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     return [wrap,input];
   };
   let ledger = null, revision = 0, readRevision = 0, active = false, reading = false, staging = false;
-  let selected = null, input = null, preview = null, reviewPage = 0, viewRows = [], stagingRequest = null;
+  let selected = null, input = null, preview = null, reviewPage = 0, viewRows = [], stagingRequest = null, historyRequest = null;
   const decisions = new Map();
   const decisionControls = [];
   const fileLabel = el('label','Normalized history JSON file',{for:'historical-summary-file'});
@@ -280,11 +281,29 @@ export function mountHistoricalMonthlySummaryWorkflow({
       detail('Inspect this batch’s decisions and workbook evidence',batch));
   }
   function clearHistory() {
-    viewRows = []; historyMonth.replaceChildren(el('option','Choose a month',{value:''}));
+    historyRequest = null; viewRows = []; historyMonth.replaceChildren(el('option','Choose a month',{value:''}));
     historyBatch.replaceChildren(el('option','Choose a batch',{value:''}));
     history.replaceChildren(); batchView.replaceChildren();
     historyStatus.textContent = 'Open a synthetic ledger to see its historical months.';
     clearConfirmation(); reconcileStatus.textContent = ''; setStageHelp();
+  }
+  function loadHistory(base, priorMonth) {
+    const request = {};
+    historyRequest = request;
+    const isCurrent = () => historyRequest === request && base === getLedger() && isActive();
+    return Promise.resolve().then(() => getHistoricalMonthlySummaryView(base)).then(result => {
+      if (!isCurrent()) return;
+      viewRows = result;
+      historyMonth.replaceChildren(el('option','Choose a month',{value:''}),
+        ...viewRows.map(row => el('option',row.month,{value:row.month})));
+      historyMonth.value = viewRows.some(row => row.month === priorMonth) ? priorMonth : viewRows[0]?.month ?? '';
+      historyStatus.textContent = viewRows.length ? viewRows.length + ' reviewed months in this ledger. The workspace can include staged changes.' : 'No accepted historical summaries in this ledger.';
+      renderMonth();
+    }).catch(() => {
+      if (isCurrent()) historyStatus.textContent = 'Historical months could not be shown.';
+    }).finally(() => {
+      if (historyRequest === request) historyRequest = null;
+    });
   }
   function refresh() {
     const nextLedger = getLedger(), nextActive = isActive();
@@ -293,23 +312,30 @@ export function mountHistoricalMonthlySummaryWorkflow({
     stagingRequest?.abort();
     revision++; active = nextActive; ledger = nextLedger;
     clearPreview(); clearHistory();
-    const base = ledger, version = revision;
-    if (!base || !active) return;
+    if (!ledger || !active) return;
     historyStatus.textContent = 'Checking historical months…';
-    historyBatch.replaceChildren(el('option','Choose a batch',{value:''}), ...(base.historicalSummaryBatches ?? [])
+    historyBatch.replaceChildren(el('option','Choose a batch',{value:''}), ...(ledger.historicalSummaryBatches ?? [])
       .map((batch,index) => el('option','Batch ' + (index+1) + ' · ' + batch.recordedAt,{value:batch.batchId})));
     setStageHelp();
-    return Promise.resolve().then(() => getHistoricalMonthlySummaryView(base)).then(result => {
-      if (version !== revision || base !== getLedger() || !isActive()) return;
-      viewRows = result;
-      historyMonth.replaceChildren(el('option','Choose a month',{value:''}),
-        ...viewRows.map(row => el('option',row.month,{value:row.month})));
-      historyMonth.value = viewRows.some(row => row.month === priorMonth) ? priorMonth : viewRows[0]?.month ?? '';
-      historyStatus.textContent = viewRows.length ? viewRows.length + ' reviewed months in this ledger. The workspace can include staged changes.' : 'No accepted historical summaries in this ledger.';
-      renderMonth();
-    }).catch(() => {
-      if (version === revision && base === getLedger() && isActive()) historyStatus.textContent = 'Historical months could not be shown.';
-    });
+    return loadHistory(ledger,priorMonth);
+  }
+  function hasUnfinishedReview() {
+    return Boolean(selected || reason.value.trim() || evidence.value.trim() || confirm.checked);
+  }
+  // The workspace calls this only after a verified save in the same storage
+  // lifecycle. A different ledger object alone does not invalidate a review.
+  function adoptVerifiedSave(before, after) {
+    if (!active || !isActive() || !hasUnfinishedReview() || !before || !after ||
+        before !== ledger || before === after || after !== getLedger() ||
+        canonicalizeJcs(before) !== canonicalizeJcs(after)) return;
+    ledger = after;
+    if (historyRequest) void loadHistory(after,historyMonth.value);
+    if (reading) {
+      // Supersede the file read tied to the old object; the selection is still current.
+      reading = false;
+      setStageHelp();
+      void readPreview();
+    }
   }
   async function stageChange(which) {
     if (which.disabled || !isActive()) return;
@@ -361,7 +387,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
   refresh();
   return {
     refresh,
-    hasUnfinishedReview() { return Boolean(selected || reason.value.trim() || evidence.value.trim() || confirm.checked); },
+    hasUnfinishedReview,adoptVerifiedSave,
     reset() { stagingRequest?.abort(); revision++; active = false; ledger = null; clearPreview(); clearHistory(); }
   };
 }
