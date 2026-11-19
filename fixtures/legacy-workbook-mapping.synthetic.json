@@ -1,0 +1,35 @@
+{
+  "format": "finance-tracker-legacy-workbook-map",
+  "version": 1,
+  "worksheet": "Invented Monthly",
+  "rows": { "header": 1, "first": 2, "last": 4 },
+  "expectedMonthRange": { "start": "2023-01", "end": "2023-03" },
+  "source": {
+    "workbook": "invented-legacy.xlsx",
+    "sourceId": "invented-original-revision-1",
+    "mappingVersion": "invented-layout-v1"
+  },
+  "scope": { "kind": "aggregate" },
+  "month": { "column": "A", "header": "Month" },
+  "summary": {
+    "incomeTotal": { "column": "B", "header": "Total income", "currency": "USD" },
+    "expenseTotal": { "column": "C", "header": "Total expenses", "currency": "USD" },
+    "netWorthSnapshot": { "column": "D", "header": "Snapshot", "currency": "USD" },
+    "netCashFlow": { "column": "E", "header": "Saved cash flow", "currency": "USD" }
+  },
+  "breakdowns": {
+    "incomeSources": {
+      "complete": false,
+      "items": [
+        { "column": "F", "header": "Contract receipts", "label": "Invented receipts", "currency": "USD" }
+      ]
+    },
+    "expenseCategories": {
+      "complete": true,
+      "items": [
+        { "column": "G", "header": "Household expense", "label": "Invented household", "currency": "USD" }
+      ]
+    }
+  },
+  "snapshotDate": { "column": "H", "header": "Snapshot date" }
+}
