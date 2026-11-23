@@ -1,3 +1,4 @@
+import {fakeGoogleFolderProof} from './helpers/fake-google-folder-proof.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -9,20 +10,20 @@ import {FULL_SNAPSHOT_MANIFEST_NAME} from '../js/full-snapshot-storage.mjs';
 
 // Run the shipped controller, workspace session, picker/storage bridge and
 // protocol against invented HTTP responses. Only Google UI/config are replaced.
-async function setup({oauthFailure=null,pickerAction=null}={}){
+async function setup({oauthFailure=null,pickerAction=null,shared=false}={}){
  const http=new ScenarioFullSnapshotDrive();let storage,session,cancel=false,tokenRequests=0;
  const previous={window:globalThis.window,fetch:globalThis.fetch};
  class View{setIncludeFolders(){return this;}setSelectFolderEnabled(){return this;}setMimeTypes(){return this;}}
  class Picker{addView(){return this;}setOAuthToken(){return this;}setDeveloperKey(){return this;}setAppId(){return this;}setOrigin(){return this;}setTitle(){return this;}setCallback(cb){this.cb=cb;return this;}build(){return this;}setVisible(){queueMicrotask(()=>this.cb(pickerAction?{action:pickerAction}:cancel?{action:'cancel'}:{action:'picked',docs:[{id:http.folderId}]}));}}
  const accountPins=new Map();
  globalThis.window={localStorage:{getItem:key=>accountPins.get(key)??null,setItem:(key,value)=>accountPins.set(key,value)},location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback,error_callback})=>({requestAccessToken:()=>{tokenRequests++;if(oauthFailure==='throw')throw new Error('invented-private-provider-secret');else if(oauthFailure==='missing_token')callback({});else if(oauthFailure==='callback_unknown')callback({error:'invented-private-provider-secret'});else if(oauthFailure==='access_denied')callback({error:oauthFailure});else if(oauthFailure)error_callback({type:oauthFailure});else callback({access_token:'invented-test-token',expires_in:3600});}})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel',ERROR:'error',LOADED:'loaded'}}}};
- globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):http.fetch(url,options);
+ globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):(fakeGoogleFolderProof(url, options,{folderId:http.folderId,token:'invented-test-token',shared}) ?? http.fetch(url,options));
  const imports={};const source=await readFile(new URL('../js/canonical-workspace.mjs',import.meta.url),'utf8');
  for(const match of source.matchAll(/^import \{([^}]+)\} from '([^']+)';$/gm)){const module=await import(new URL('../js/'+match[2],import.meta.url));for(const name of match[1].split(',').map(x=>x.trim()))imports[name]=module[name];}
  imports.DashboardSyntheticStorage=class extends DashboardSyntheticStorage{constructor(options){super(options);storage=this;}async prepare(){this.config={clientId:'invented',apiKey:'invented',projectNumber:'1'};return this.config;}};
  imports.CanonicalWorkspaceSession=class extends CanonicalWorkspaceSession{constructor(options){super(options);session=this;}};
  const page=await pageController('canonical-workspace',imports,{htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs'});
- return {page,http,get tokenRequests(){return tokenRequests;},get storage(){return storage;},get session(){return session;},cancel(value){cancel=value;},failOAuth(value){oauthFailure=value;},async close(){http.beforeResponse=null;http.reboot();await storage.lifecycle?.release().catch(()=>{});storage.lifecycle?.coordinator.heartbeatStop?.();globalThis.window=previous.window;globalThis.fetch=previous.fetch;}};
+ return {page,http,get tokenRequests(){return tokenRequests;},get storage(){return storage;},get session(){return session;},cancel(value){cancel=value;},setShared(value){shared=value;},failOAuth(value){oauthFailure=value;},async close(){http.beforeResponse=null;http.reboot();await storage.lifecycle?.release().catch(()=>{});storage.lifecycle?.coordinator.heartbeatStop?.();globalThis.window=previous.window;globalThis.fetch=previous.fetch;}};
 }
 
 for (const oauthFailure of ['access_denied','popup_failed_to_open','popup_closed']) test('create handles OAuth '+oauthFailure+' without writes or stuck busy state', async()=>{
@@ -116,5 +117,30 @@ for (const [failure,code,message] of [
   assert.equal(h.session.ledger,draft);assert.equal(h.storage.lifecycle,lifecycle);assert.equal(h.storage.folderId,folder);
   assert.equal(h.storage.accessToken,token);assert.equal(h.storage.tokenExpiresAt,expires);
   assert.equal(h.http.mutations,mutations);assert.equal(h.session.canSave(),true);assert.equal(h.session.busy,false);assert.equal(h.storage.busy,false);
+ }finally{await h.close();}
+});
+
+test('restore refuses a shared destination before initialization and preserves verified preview',async()=>{
+ const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const {replayFixture}=await import('./helpers/ledger-replay-fixtures.mjs');
+ const h=await setup({shared:true});try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);
+  const source=replayFixture(1).ledger;
+  await h.session.importBackup(await encodeFullSnapshotBackup(source));
+  await assert.rejects(h.session.restoreBackupToNewCopy(),{code:'private-folder-proof-failed'});
+  assert.equal(h.storage.lifecycle,null);assert.equal(h.http.mutations,0);
+  assert.equal(h.session.backupPreview,true);assert.deepEqual(h.session.backupSource,source);
+  assert.equal(h.session.busy,false);
+ }finally{await h.close();}
+});
+
+test('reauthorization refuses a newly shared folder and keeps staged changes',async()=>{
+ const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented',rationale:'Invented'});
+  const draft=structuredClone(h.session.ledger),lifecycle=h.storage.lifecycle,mutations=h.http.mutations;
+  h.storage.tokenExpiresAt=1;h.setShared(true);
+  await assert.rejects(h.storage.refreshRecoveryAuthorization(),{code:'private-folder-proof-failed'});
+  assert.equal(h.storage.lifecycle,lifecycle);assert.equal(h.storage.accessToken,'');
+  assert.equal(h.http.mutations,mutations);assert.deepEqual(h.session.ledger,draft);assert.equal(h.session.dirty,true);
  }finally{await h.close();}
 });

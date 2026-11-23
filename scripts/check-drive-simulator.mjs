@@ -5,6 +5,7 @@ import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {resolve,extname,sep} from 'node:path';
 import {createRequire} from 'node:module';
+import {fakeGoogleFolderProof} from '../tests/helpers/fake-google-folder-proof.mjs';
 import {ScenarioFullSnapshotDrive} from '../tests/helpers/scenario-full-snapshot-drive.mjs';
 const require = createRequire(import.meta.url);
 const playwright = require('playwright');
@@ -46,9 +47,23 @@ try {
    if(url.origin===new URL(base).origin)return route.continue();
    if(['https://accounts.google.com/gsi/client','https://apis.google.com/js/api.js'].includes(url.href))return route.fulfill({contentType:'text/javascript',body:'/* Stub supplied by init script. */'});
    if(url.origin==='https://www.googleapis.com'){
-    if(url.search==='?fields=id,name,mimeType,trashed')return route.fulfill({json:{id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}});
-    const response=await http.fetch(url.href,{method:request.method(),headers:request.headers(),body:request.postDataBuffer()||undefined});
-    return route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:Buffer.from(await response.arrayBuffer())});
+    const headers=request.headers(),method=request.method();
+    const cors={'access-control-allow-origin':new URL(base).origin};
+    if(method==='OPTIONS')return route.fulfill({status:204,headers:{
+     ...cors,'access-control-allow-methods':'GET, POST, PATCH, OPTIONS',
+     'access-control-allow-headers':headers['access-control-request-headers']||''
+    }});
+    if(url.pathname==='/drive/v3/about'&&url.searchParams.get('fields')==='user(permissionId,emailAddress,me)'){
+     assert.equal(method,'GET');
+     assert.equal(headers.authorization,'Bearer invented-test-token');
+     return route.fulfill({headers:cors,json:{user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}});
+    }
+    if(url.pathname==='/drive/v3/files/'+http.folderId&&url.search==='?fields=id,name,mimeType,trashed'){
+     return route.fulfill({headers:cors,json:{id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}});
+    }
+    const response=fakeGoogleFolderProof(url.href,{method,headers,cache:'no-store'},{folderId:http.folderId,token:'invented-test-token'})
+     ?? await http.fetch(url.href,{method,headers,body:request.postDataBuffer()||undefined});
+    return route.fulfill({status:response.status,headers:{...Object.fromEntries(response.headers),...cors},body:Buffer.from(await response.arrayBuffer())});
    }
    throw Error('Unmodeled external request blocked: '+url.origin);
   });

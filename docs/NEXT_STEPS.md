@@ -23,7 +23,7 @@ The sequence is owner-directed, not a delivery-date commitment. Keep the three f
 - **Diagnostics:** PR40 is merged. Reports are bounded and privacy-safe, with Copy/Select only. They improve evidence; they do not prove a live provider cause or substitute for acceptance.
 - **Deployment:** successful CI or Pages workflow is not independent verification of the served SHA. Record each state separately.
 - **Data:** use invented fixtures only. No real transactions, private workbook, owner Drive financial data, or production credentials in repository/CI.
-- **Production:** NO-GO until the separate security/privacy/OAuth/cost/recovery review, live synthetic acceptance, and explicit owner authorization are complete. A separate real-data smoke test is not required.
+- **Production:** NO-GO until the separate security/privacy/OAuth/cost/recovery review, live synthetic acceptance, and explicit owner authorization are complete. A separate real-data smoke test is not required. Use the [owner acceptance and release checklist](OWNER_ACCEPTANCE.md) to record evidence for the exact candidate.
 
 ## Alpha completion review
 

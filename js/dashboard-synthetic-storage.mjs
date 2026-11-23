@@ -1,3 +1,4 @@
+import { provePrivateGoogleFolder } from './google-private-folder-proof.mjs';
 import {AppError} from './app-error.mjs';
 import {FullSnapshotApplication,inspectFullSnapshotFolder} from './full-snapshot-application.mjs';
 import { createDiagnostic, diagnosticMessage } from './app-diagnostics.mjs';
@@ -275,6 +276,9 @@ export class DashboardSyntheticStorage {
         picker.setVisible(true);
       });
 
+      // A Picker result is a candidate, not proof of ownership or privacy.
+      // Run before inspecting contents, releasing the old session, or writing.
+      await provePrivateGoogleFolder({ folderId: folder.id, ...candidate });
       // Refuse unsupported or otherwise nonempty folders before the lifecycle
       // creates or updates a session marker. A rejected folder stays untouched.
       const preflightAdapter = new GoogleDriveTransactionAdapter({
@@ -335,6 +339,8 @@ export class DashboardSyntheticStorage {
     try {
       const response=await requestToken(this.config.clientId);
       const candidate=await this.authorizeAccount(response,{refresh:true});
+      if(this.lifecycle!==lifecycle||this.folderId!==folderId)throw new AppError('reconnect-required');
+      await provePrivateGoogleFolder({ folderId, ...candidate });
       if(this.lifecycle!==lifecycle||this.folderId!==folderId)throw new AppError('reconnect-required');
       this.accessToken=candidate.token;
       this.tokenExpiresAt=candidate.expiresAt;

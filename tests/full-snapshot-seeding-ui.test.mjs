@@ -1,3 +1,4 @@
+import {fakeGoogleFolderProof} from './helpers/fake-google-folder-proof.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -16,7 +17,7 @@ async function setup(){
  class Picker{addView(){return this;}setOAuthToken(){return this;}setDeveloperKey(){return this;}setAppId(){return this;}setOrigin(){return this;}setTitle(){return this;}setCallback(cb){this.cb=cb;return this;}build(){return this;}setVisible(){queueMicrotask(()=>this.cb(cancel?{action:'cancel'}:{action:'picked',docs:[{id:http.folderId}]}));}}
  const accountPins=new Map();
  globalThis.window={localStorage:{getItem:key=>accountPins.get(key)??null,setItem:(key,value)=>accountPins.set(key,value)},location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>{tokenRequests++;callback({access_token:'invented-test-token',expires_in:3600});}})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel'}}}};
- globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):http.fetch(url,options);
+ globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):(fakeGoogleFolderProof(url, options,{folderId:http.folderId,token:'invented-test-token'}) ?? http.fetch(url,options));
  const imports={};const source=await readFile(new URL('../js/canonical-workspace.mjs',import.meta.url),'utf8');
  for(const match of source.matchAll(/^import \{([^}]+)\} from '([^']+)';$/gm)){const module=await import(new URL('../js/'+match[2],import.meta.url));for(const name of match[1].split(',').map(x=>x.trim()))imports[name]=module[name];}
  imports.DashboardSyntheticStorage=class extends DashboardSyntheticStorage{constructor(options){super(options);storage=this;}async prepare(){this.config={clientId:'invented',apiKey:'invented',projectNumber:'1'};return this.config;}};
@@ -87,4 +88,15 @@ test('cancelled reconnect through the shipped controller preserves the current w
   assert.equal(h.session.needsReopen,false);assert.equal(h.session.canSave(),true);
   assert.equal(h.page.get('save-ledger').disabled,false);
  }finally{await h.close();}
+});
+
+test('browser route folder-proof fixture matches only the intended evidence endpoints',async()=>{
+ const base='https://www.googleapis.com/drive/v3/files/invented-folder';
+ const opts={method:'GET',headers:{authorization:'Bearer invented-test-token'},cache:'no-store'};
+ const context={folderId:'invented-folder',token:'invented-test-token'};
+ const query='supportsAllDrives=true&includePermissionsForView=published&fields=permissions(id,type,role,pendingOwner,view)';
+ const owner=await fakeGoogleFolderProof(base+'/permissions?'+query,opts,context).json();
+ assert.deepEqual(owner,{permissions:[{id:'invented-owner',type:'user',role:'owner'}]});
+ assert.equal(fakeGoogleFolderProof(base+'-other/permissions?'+query,opts,context),undefined);
+ assert.equal(fakeGoogleFolderProof(base+'/permissions?fields=id',opts,context),undefined);
 });

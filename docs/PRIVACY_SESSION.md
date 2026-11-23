@@ -39,14 +39,16 @@ Use invented records and a separately authorized synthetic folder to:
 
 No real financial data is authorized.
 
-## Strict folder proof component (not active)
+## Strict folder admission
 
-`provePrivateGoogleFolder` is a read-only component for a future authorized
-admission path. Ordinary synthetic admission is unchanged. Pass the exact
-Picker folder and the token, expiration, and account ID from the same freshly
-verified candidate grant, before releasing any prior session, changing binding,
-or starting the new lifecycle. A refusal must not fall through to an admission
-path capable of accepting real data.
+Synthetic connect (including opening, new copy, and restore) now requires a
+private folder: one matching owner and no additional access grants. The check
+uses the exact selected folder and candidate sign-in before inspecting its
+contents, releasing an existing session, changing its binding, or starting the
+new session. Explicit recovery reauthorization repeats the check for the bound
+folder before replacing an expired token. It runs at these boundaries, not on
+every operation. If proof is unavailable, admission is refused without changing
+the existing copy or silently falling back to an unverified folder.
 
 Using the existing `drive.file` scope, it requires positive matching ownership,
 explicit unshared status, and read/add-child capabilities on the selected
@@ -58,6 +60,7 @@ permissions, create a marker, or inspect financial content.
 
 This is point-in-time evidence about the exact folder, not evidence of global
 emptiness, child-file privacy, or protection against concurrent ACL changes.
-No production activation follows. Before integration, verify field population
-and inherited sharing behavior with live invented-data Google cases and settle
-when to revalidate the proof during the active session.
+No production activation follows. Before relying on the check for production,
+verify field population and inherited sharing behavior with live invented-data
+Google cases. Changing sharing while the session is active is unsupported;
+stop and reconnect after correcting the folder's sharing settings.

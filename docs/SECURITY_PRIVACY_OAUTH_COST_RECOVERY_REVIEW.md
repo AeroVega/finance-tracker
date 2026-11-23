@@ -193,7 +193,7 @@ Historical owner-reported live synthetic checks exist for a prior temporary Driv
 
 1. **Production remains synthetic-only.** The UI and storage selection explicitly block production data; do not change this in this review.
 2. **Account-token binding is implemented but only browser-local.** The token-holder permission ID is checked and pinned; it is not a cross-device owner policy.
-3. **Account-folder authorization remains open.** Source does not establish folder owner/effective permissions, and `drive.file` enumeration cannot prove global emptiness or inspect inaccessible children.
+3. **Live account-folder authorization remains open.** The PR 57 candidate adds [strict folder admission](PRIVACY_SESSION.md#strict-folder-admission) for synthetic connect and recovery reauthorization. Verify provider field population and effective permissions on the candidate; `drive.file` enumeration cannot prove global emptiness or inspect inaccessible children.
 4. **No CAS or strong concurrent-writer exclusion.** The Drive session marker is best-effort; competing writes remain a residual risk.
 5. **Full-snapshot storage growth is unbounded in aggregate.** Each save writes a full snapshot and old snapshots remain; per-object/history-count caps do not provide a total byte/retention cap.
 6. **Browser and live provider acceptance is incomplete.** No current-revision physical iPhone/iPad Safari release/cache/download/backup KDF test or current live Google OAuth/Picker/revocation test is claimed.
@@ -212,6 +212,8 @@ Historical owner-reported live synthetic checks exist for a prior temporary Driv
 No application code was changed in that initial review because it did not reproduce a production-safe code fix within the existing synthetic-only authorization. No config, deployment, Google Cloud project, folder or data was activated or modified.
 
 ### Residual risks before any activation
+
+Run the [owner acceptance and release checklist](OWNER_ACCEPTANCE.md) against the exact candidate; the evidence below remains required.
 
 - Confirm actual Cloud Console configuration, app mode, authorized origin, API restrictions, enabled APIs and project billing/quota assignment.
 - Complete live synthetic tests on the exact deployed candidate: expected account, wrong account, expected folder, folder ownership/effective permission, unselected/inaccessible folder content, cancellation, token expiry, revocation, reauthorization, save, reopen, wrong-folder refusal, interrupted publication and fresh-empty restore.
