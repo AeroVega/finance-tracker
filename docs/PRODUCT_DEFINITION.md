@@ -270,7 +270,7 @@ The score must be explainable; it must not be a mysterious algorithm. Reports an
 
 Default canonical financial-history retention to indefinite, with automatic cleanup disabled. Retention settings should be user-configurable in Settings. Destructive cleanup must explain what will be removed, what summaries remain, and what backup safeguards apply; permanent deletion requires explicit authorization.
 
-This is a product-level direction for financial history. It does not silently change the separately approved 540-day policy for original imported source files; the relationship between those retention domains is explicitly listed as an open question.
+Canonical history is distinct from the original CSV file. **Owner-confirmed 2026-11-23:** Parse selected CSVs locally in the browser. The app must never upload or persist original CSV files, including in backups or restores. Preserve normalized records and necessary import provenance only, after explicit save to approved private storage. The owner may keep the original files locally. See [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files).
 
 ### 7.3 Historical continuity
 

@@ -35,7 +35,7 @@
       "tests": [
         "canonical-workspace-ui", "dashboard-clear-race", "dashboard-release-ui", "privacy-account",
         "native-ownership-lifetime", "session-coordination", "session-write-guard-race",
-        "provider-import-privacy-boundary", "app-diagnostics", "error-reporting", "success-metrics"
+        "provider-import-privacy-boundary", "provider-csv-import-workflow", "app-diagnostics", "error-reporting", "success-metrics"
       ],
       "manual": "In two tabs, verify the non-owner cannot write. Cancel release and confirm staged work stays. Complete release and confirm both financial displays and unfinished forms clear. Check history navigation and exported diagnostics for unintended financial data. Use supported Safari devices when browser behavior is affected."
     },
@@ -49,7 +49,7 @@
         "js/drive-feasibility-spike.mjs", "js/success-metrics.mjs",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
         "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs",
-        "js/canonical-history.mjs", "js/canonical-import.mjs", "js/source-original-retention.mjs", "js/byte-ownership.mjs",
+        "js/canonical-history.mjs", "js/canonical-import.mjs", "js/byte-ownership.mjs",
         "js/immutable-content-type.mjs", "js/utf8-length.mjs", "docs/APPLICATION_STORAGE_LIFECYCLE.md",
         "docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md", "docs/STORAGE_SCALING_AND_PRODUCTION_READINESS.md",
         "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md"
@@ -58,7 +58,7 @@
         "full-snapshot-storage", "full-snapshot-provider-scenarios", "full-snapshot-recovery-outcomes",
         "full-snapshot-witness-concurrency", "full-snapshot-version-convergence",
         "drive-session-adapter", "drive-mutation-lifetime", "drive-transaction-engine", "drive-request-metrics",
-        "transaction-protocol", "canonical-workspace-session", "drive-feasibility-spike", "source-original-retention", "historical-workspace-persistence",
+        "transaction-protocol", "canonical-workspace-session", "drive-feasibility-spike", "historical-workspace-persistence",
         "financial-position-adversarial"
       ],
       "manual": "Interrupt a synthetic save, follow recheck/recovery without blindly retrying, and independently reopen to verify one committed result. For limit or cost changes, record workload size, requests, rejection/recovery at admitted limits, and any current provider quota assumptions."
@@ -75,7 +75,7 @@
       ],
       "tests": [
         "full-snapshot-backup", "full-snapshot-backup-session", "full-snapshot-backup-ui",
-        "source-original-retention", "historical-workspace-persistence"
+        "provider-csv-import-workflow", "historical-workspace-persistence"
       ],
       "manual": "Export an encrypted synthetic backup, verify wrong passphrase and nonempty destination are refused, restore to a different empty synthetic folder, and reopen independently. Compare records and verify the source was not changed. Do not publish backup contents or passphrases."
     }

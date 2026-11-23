@@ -36,7 +36,7 @@ Preserve the $0 recurring-cost constraint, permanent manual file imports, no sto
 
 The performance objective for the reported synthetic save/open is accepted. Recovery and portable backup/restore are implemented in the selected full-snapshot route; preserve their existing contracts and do not reopen unchanged acceptance gates without a demonstrated defect.
 
-Close the [remaining readiness gates](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md#residual-risks-before-any-activation) in PR 57, including the missing originals lifecycle and candidate-specific synthetic acceptance. Do not infer readiness from merging the PR. Treat legacy Excel migration as separate work and do not reuse PR 56 as its design. Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
+Close the [remaining readiness gates](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md#residual-risks-before-any-activation) in PR 57, including verification that originals never enter persistence or backup/restore, and candidate-specific synthetic acceptance. Do not infer readiness from merging the PR. Treat legacy Excel migration as separate work and do not reuse PR 56 as its design. Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
 
 ## Reading map
 

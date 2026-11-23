@@ -1,6 +1,6 @@
 # Original Source File Retention
 
-> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+> **Historical, superseded on November 23, 2026.** The app no longer permits upload or storage of originals, including in archives. Owners may keep originals locally; see [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files). The 540-day guidance below is evidence about an earlier policy, not current requirements, and does not authorize legacy cleanup. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
 
 
 **Current implementation status:** Synthetic acceptance path implemented; owner-reported live retention/deletion rehearsal passed on 2026-11-04.
@@ -17,12 +17,6 @@ The current acceptance path can generate and retain an invented original. Real f
 The selected retention period is **540 days (18 months)**. Reaching exactly day 540 makes an original eligible for deletion; it does not guarantee deletion at that instant.
 
 The static application performs maintenance on connection and hourly while a page is open with a verified session. It cannot run while all devices are closed. Consequently, actual deletion may occur after the eligibility boundary.
-
-## Full-snapshot policy foundation
-
-The active synthetic ledger still accepts only explicit `not-retained` runs with null original-file locator and retention timestamps. The [shared policy module](../js/source-original-retention.mjs) computes expiry as exactly 540 days from a canonical UTC millisecond timestamp and classifies supplied metadata. Future export and restore code must permit source bytes only for an independently verified original classified `unexpired`. Each check uses the same original retention and expiry timestamps; neither archive creation nor restore can reset the clock. At the boundary, bytes are ineligible even if deletion is still pending.
-
-This policy slice performs no I/O and does not authenticate provider evidence. It does not upload originals, persist retention intents or receipts, delete files, carry originals in an archive, or enable production data. Those integrations and guarded synthetic acceptance are still required.
 
 ## Safe deletion requirements
 

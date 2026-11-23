@@ -14,7 +14,6 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/byte-ownership.mjs",
   "js/canonical-history.mjs",
   "js/canonical-import.mjs",
-  "js/source-original-retention.mjs",
   "js/canonical-month-index.mjs",
   "js/canonical-workspace-model.mjs",
   "js/canonical-workspace-session.mjs",

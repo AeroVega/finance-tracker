@@ -10,7 +10,7 @@ This is the source-independent contract that every file adapter must target. Pro
 
 ## 1. Core invariants
 
-1. **Preserve evidence.** A canonical activity is linked to one or more source observations. Retain selected source fields and the full original import file privately for audit/recovery. Full-file retention is a sensitive-data requirement, not evidence that a production storage boundary is approved or implemented.
+1. **Preserve evidence.** A canonical activity is linked to one or more source observations. Retain selected source fields privately for audit and recovery. Never upload or persist the full original CSV; the owner may keep it locally.
 2. **Do not lose multiplicity.** Similar-looking rows are not duplicates merely because date, amount, and description match.
 3. **Idempotent retries.** A content-identical file for the same institution/account/import context must not create duplicate side effects after a completed run. A retry after failure must be safe.
 4. **Row-level overlap reconciliation.** A newer export never replaces a whole date range. Reconcile each observation against known source observations and canonical activities.
@@ -113,7 +113,7 @@ Each source row that is accepted, matched, or sent to review is represented as a
 | `reasonCode` | string or null | yes | Machine-readable mapping/match/rejection rationale |
 | `observedAt` | ISO timestamp | yes | Time the row was processed |
 
-The full original file must be retained in the approved private storage boundary, alongside selected row-level `sourceFields`, subject to the approved retention lifecycle. Do not retain it in Git, public assets, public logs, test output, or the public repository. The approved retention period is **540 days (18 months)** from the time the original file is successfully retained in approved private storage. Record that retention timestamp in `sourceFileRetainedAt` and calculate `sourceFileRetentionExpiresAt` as 540 days later; eligibility for deletion does not itself prove deletion has completed. Do not assume indefinite retention. Keep file-retention state separate from the import's processing status: confirmed deletion must not rewrite a previously completed import as failed, and a failed deletion must remain visible and retryable. After confirmed deletion, clear the live private file locator and record the deletion state/time while preserving permitted row-level provenance and import metadata. Before production use, encryption/access controls, deletion behavior, export/backup lifecycle, revocation, and recovery semantics still require approval. The synthetic Drive probe does not validate these requirements.
+Current policy: Parse selected CSVs locally in the browser. The app must never upload or persist original CSV files, including in backups or restores. Preserve normalized records and necessary import provenance only, after explicit save to approved private storage. The owner may keep the original files locally. The active route records `not-retained` and null original-file locators and timestamps. See [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files).
 
 ### Import run
 
@@ -126,11 +126,11 @@ One import run is one attempt to process one selected file for one explicitly ma
 | `accountId` | string | yes | Resolved account |
 | `sourceFormat` | string | yes | Versioned adapter/format key |
 | `fileFingerprint` | string | yes | SHA-256 of file bytes; private metadata, never emit in public logs |
-| `privateSourceFileRef` | private opaque reference or null | yes | Locator for the retained original file in approved private storage; never log or expose publicly. A run cannot claim successful full-file retention if this reference is absent. It is null after confirmed deletion or when no retained original exists |
-| `sourceFileRetainedAt` | ISO timestamp or null | yes | Time the original file was successfully retained in approved private storage; null when no original is retained |
-| `sourceFileRetentionStatus` | enum | yes | `not-retained`, `retained`, `deletion-pending`, `deleted`, `deletion-failed`; retention state is separate from import processing status |
-| `sourceFileRetentionExpiresAt` | ISO timestamp or null | yes | Policy-derived deletion eligibility time; null only when no approved retention schedule applies or the policy has not yet been configured |
-| `sourceFileDeletedAt` | ISO timestamp or null | yes | Confirmed deletion time; populated only after deletion is verified |
+| `privateSourceFileRef` | private opaque reference or null | yes | Must be null on the active route; retained only for import-record schema compatibility |
+| `sourceFileRetainedAt` | ISO timestamp or null | yes | Must be null on the active route; retained only for import-record schema compatibility |
+| `sourceFileRetentionStatus` | enum | yes | Must be `not-retained` on the active route; separate from processing status |
+| `sourceFileRetentionExpiresAt` | ISO timestamp or null | yes | Must be null on the active route; retained only for import-record schema compatibility |
+| `sourceFileDeletedAt` | ISO timestamp or null | yes | Must be null on the active route; retained only for import-record schema compatibility |
 | `startedAt` | ISO timestamp | yes | Attempt start |
 | `completedAt` | ISO timestamp or null | yes | Null until terminal |
 | `status` | enum | yes | `validating`, `processing`, `processed`, `needs-review`, `failed`, `cancelled`, `no-op` |
@@ -221,7 +221,7 @@ The following clarifications are binding for this contract and its synthetic ref
 - **Transaction identity:** Match conservatively. A stable source ID is scoped to institution and account and must not override contradictory amount/currency evidence. Candidate activities must match both context fields. Contradictory repeated source IDs within one input file send all conflicting occurrences to review. Ambiguous candidates go to review. Distinct duplicate-shaped rows in one source file remain distinct unless source identity evidence establishes duplication. Identical completed-file retries are a separate idempotency case.
 - **Corrections/reversals/transfers:** Keep correction and reversal events append-only and linked to their targets. Reversal targets must match the current institution and account. Each monetary reversal must have matching currency, opposite nonzero sign, and absolute amount no greater than the original amount. This does not enforce cumulative reversal totals; cumulative accounting and effective-state reporting remain future work. Partial reversals must state the actual reversed amount and must not imply that the whole original event was reversed. Internal transfer sides require an explicit shared link backed by evidence; matching amounts alone are insufficient. Reporting must not double-count reversal/correction events or classify internal transfers as consolidated income/spending.
 - **Import outcomes:** Distinguish complete success (processed), valid empty success (processed with zero data rows and null coverage), partial results requiring review (needs-review), and failure (failed). For terminal row dispositions, created + matched + review + rejected + ignored = rowsRecognized; report accepted, rejected, and review-needed counts distinctly in user-facing summaries. A rejected row is not also counted as an accepted row.
-- **Source-file retention lifecycle:** Retain originals only in approved private storage for **540 days (18 months)** from successful retention. Record `sourceFileRetainedAt` and calculate `sourceFileRetentionExpiresAt` as 540 days later. Expiry marks deletion eligibility, not confirmed deletion. Track retention status separately from import status, distinguish confirmed deletion from failed/pending deletion, clear the live locator after confirmed deletion, and preserve only the source-row provenance/metadata permitted by the approved policy. Access controls, encryption, deletion, backup/restore lifecycle, revocation, and recovery semantics must still be approved. Any lifecycle tests use deliberately synthetic data only; PR #11 adds no production storage or deletion implementation.
+- **Original-file boundary:** Parse locally; retain only approved normalized data and provenance. Never retain or restore original CSV files. The earlier retention fields do not imply support for a storage lifecycle in the active route.
 
 ### Strengthened deterministic pre-merge test gate
 

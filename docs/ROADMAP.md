@@ -24,6 +24,7 @@ Consider deeper investment analysis, advanced planning/projections, expanded aut
 - Alpha and Beta are deployable development milestones, not semantic-version releases.
 - PR numbers do not prescribe merge order. Sequence by dependency, risk, reviewability, and readiness.
 - Use synthetic data for development and acceptance. A separate real-data smoke test is not required; this does not waive non-test production gates.
+- Original CSVs are parsed locally and never uploaded or persisted by the app; approved private persistence retains normalized records and required provenance only. See [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files).
 - Manual file imports remain permanent even if a sustainable authorized direct integration is later available.
 - Preserve the $0 recurring-cost constraint, privacy, correctness, and recoverability over schedule or visual polish.
 - January 1, 2027 is a target, not permission to weaken acceptance. Defer release if gates are unmet.

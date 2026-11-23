@@ -132,7 +132,7 @@ Restore validates the complete archive before folder selection, requires a new e
 6. If a save/restore result is Unverifiable, stop writes, keep the tab/folder and use explicit recovery. Do not retry until the app proves retry is safe.
 7. Treat downloaded backups as private files; the static app cannot remotely erase them.
 
-The approved 540-day original-source retention requirement must be enforced across actual original files and backups, and restore must not restart retention clocks. The selected full-snapshot backup is logical ledger content; this review did not independently establish deployed cleanup/confirmed deletion for every original-source object. Retention/deletion is another production verification gate.
+Current policy is local-only original CSV handling, per [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files). This supersedes the earlier retention/deletion requirement. Verify the candidate keeps original bytes out of app persistence, uploads and portable backups and cannot restore them from unsupported legacy archives.
 
 ## 6. Evidence inventory and tests
 
@@ -166,7 +166,7 @@ This follow-up covers main and the served Pages build at `16a5ff6134a414d4cc5ede
 - Exact-source local extended Node suite: **1,048 passed, 0 failed, 0 skipped**, with Node 24.22.3. Browser-module syntax, registered diagnostic audit, generated-reference check and documentation checks passed. [Main CI](https://github.com/AeroVega/finance-tracker/actions/runs/44591246432) passed the required jobs.
 - The [Pages deployment](https://github.com/AeroVega/finance-tracker/actions/runs/45122240988) succeeded. The served stamp matched main. All 52 compared files (index and checked-in JavaScript modules, excluding generated configuration and stamp) were byte-identical to source. Served Google configuration passed the repository's structural validator. This does not verify the actual Google project, deployed artifact inventory, browser caches or provider restrictions.
 - Chrome rendered the invented-data preview without Google sign-in. The unavailable recovery controls remained visible in the expanded recovery panel. Reload returned to No ledger loaded. The automated local Chromium harness was blocked at launch by the execution environment. Neither result establishes live Drive, network and retained-state privacy, or physical Safari acceptance.
-- The active import contract only accepts `not-retained` originals with null locator and retention times. The earlier retention rehearsal was for a historical storage route. The current portable archive is not an originals archive. The approved 540-day upload, verified deletion and restore behavior need implementation and tests in the active route.
+- The reviewed import contract accepts only `not-retained` originals with null locator and retention times. The earlier retention rehearsal was for a historical route. The current portable archive is not an originals archive; verify those current boundaries on the exact candidate.
 - The active [main ruleset](https://github.com/AeroVega/finance-tracker/rules/27070327) requires up-to-date branches with `test` and `transaction-contracts`, but not `Guarded code checks` or independent approval. Source controls alone do not close that enforcement gap. No settings changed.
 
 ### Full-snapshot growth rehearsal
@@ -199,17 +199,17 @@ Historical owner-reported live synthetic checks exist for a prior temporary Driv
 6. **Browser and live provider acceptance is incomplete.** No current-revision physical iPhone/iPad Safari release/cache/download/backup KDF test or current live Google OAuth/Picker/revocation test is claimed.
 7. **Project configuration and $0 proof are not available from source.** Console mode, billing, restrictions, quotas and current usage must be checked by the owner.
 8. **Uncertain-write evidence is memory-bound.** After page loss the last in-memory attempt cannot be classified; next open verifies saved content only.
-9. **Source-original retention/deletion was not proven end-to-end.** The 540-day requirement must apply to actual originals, backups and restore; confirmed deletion and retry need evidence.
+9. **No-original-file handling needs candidate verification.** With invented data, inspect import/save requests, stored fields and backup/restore behavior for original-file payloads or locators. Confirm that expected normalized row evidence and fingerprints still survive.
 10. **A later candidate needs new evidence.** The November 23 run establishes the exact reviewed main SHA, not a future PR 57 runtime or deployed candidate.
 
-### Changes made on this review branch
+### Changes made in the original November 22 review
 
 - Reconciled `docs/SECURITY.md` with the current source and production NO-GO boundary.
 - Updated `docs/GOOGLE_DRIVE_CONFIGURATION.md` to the current Google OAuth Personal/Testing app-mode guidance, `drive.file` scope meaning, current quota model, actual source behavior and project-specific verification gates.
 - Updated `docs/PRIVACY_SESSION.md` to distinguish browser-local account pinning from account/folder ownership, and application-reference clearing from secure erasure.
 - Updated `docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md` with the present full-snapshot protocol, recovery outcomes, backup constraints and a user-understandable recovery procedure.
 
-No application code was changed because this review did not reproduce a production-safe code fix within the existing synthetic-only authorization. No config, deployment, Google Cloud project, folder or data was activated or modified.
+No application code was changed in that initial review because it did not reproduce a production-safe code fix within the existing synthetic-only authorization. No config, deployment, Google Cloud project, folder or data was activated or modified.
 
 ### Residual risks before any activation
 
@@ -218,7 +218,7 @@ No application code was changed because this review did not reproduce a producti
 - Verify no financial data/token in built Pages assets, Git history, CI artifacts/logs, browser storage, URL, console, network diagnostics or caches.
 - Verify orderly release and abrupt shutdown/browser restore on physical iPhone and iPad Safari. Measure backup encryption KDF time/peak memory and download completion.
 - Verify live quota/usage/cost against the actual project and model storage growth at expected saves/history. Establish an owner-approved capacity/retention policy before history becomes large.
-- Verify 540-day source retention, confirmed deletion and restore non-resurrection in the active storage route.
+- Verify originals remain local on import and absent from app storage, backup and restore. This is not a change to the guarded review or live synthetic acceptance requirements.
 - Decide whether best-effort single-device coordination is acceptable for the intended operational procedure. If not, a server-enforced transactional authority would be required and would need a separately approved cost/architecture decision.
 - Decide how users should resolve uncertain last writes after a browser/device loss without falsely asserting draft outcome.
 

@@ -39,7 +39,7 @@ GitHub Pages serves public static content. Never publish private ledger records 
 
 Parse user-selected CSVs locally unless an approved design requires transfer. Validate structure, dates, amounts and row types; treat input as untrusted. Render descriptions as text, never executable HTML/code. Retain import provenance and use conservative duplicate matching. Ambiguous matches require review.
 
-Original import-file retention is 540 days from confirmed ingestion under the approved policy, implemented only in approved private storage. Expiry is not proof of deletion. Confirm deletion, preserve permitted provenance, and make failures visible/retryable. Backup/restore must not reintroduce expired originals. Production implementation and configuration require separate approval.
+Parse selected CSVs locally in the browser. The app must never upload or persist original CSV files, including in backups or restores. Preserve normalized records and necessary import provenance only, after explicit save to approved private storage. The owner may keep the original files locally. Verify on the active route that original bytes are absent from app-managed storage, network uploads, and portable backups; never restore original payloads from a legacy archive. Real-data activation still requires separate approval.
 
 ## Synchronization, backup and recovery
 

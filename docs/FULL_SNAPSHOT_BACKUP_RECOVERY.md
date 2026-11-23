@@ -25,7 +25,7 @@ A plaintext SHA-256 checksum detects accidental corruption, not malicious replac
 
 ## Retention and capacity
 
-Portable backup contains logical history and provenance, not physical Drive revision history. The 540-day source-import retention policy must apply consistently to private originals and backup copies: expired originals must not be restored. A restored copy preserves original retention timestamps; restore does not restart the clock. Confirmed deletion of private original files is distinct from expiry and from an inaccessible/ambiguous 404.
+Portable backup contains logical history and provenance, not original CSV payloads or physical Drive revision history. Restore must reject unsupported archives that carry originals. See [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files).
 
 The full-snapshot store retains all prior snapshots. Per-snapshot, manifest/envelope and commit-count caps do not cap aggregate history bytes. Every changed save uploads a full snapshot. Cold-open/recovery audits grow with retained commits; backup/restore are additional bounded but expensive operations. No automated garbage collection is implemented in the selected route.
 
