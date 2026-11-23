@@ -1,0 +1,8 @@
+html { color-scheme: light dark; font: 1rem/1.5 system-ui, sans-serif; }
+main { max-width: 55rem; margin: auto; padding: 1rem; }
+fieldset { margin-block: 1rem; }
+label { display: block; margin-block: .5rem; }
+input, button { font: inherit; padding: .3rem; max-width: 100%; }
+button { margin: .25rem; }
+.category { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; }
+li { margin-block: .4rem; }
