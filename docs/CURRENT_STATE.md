@@ -1,11 +1,11 @@
 # Current project state
 
-**Checked:** 2026-11-19
+**Checked:** 2026-11-22
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
-**Main baseline:** `2f527adb663e7112bd31d480fceede4b62f1baa4` ([PR 53](https://github.com/AeroVega/finance-tracker/pull/53) merged)
+**Main baseline:** `16a5ff6134a414d4cc5ede1e2ed4c3af551740f4` ([PR 55](https://github.com/AeroVega/finance-tracker/pull/55) merged)
 **Active work:** historical monthly summaries on `feature/alpha-historical-monthly-summaries`. This separate Alpha increment uses invented normalized JSON. No merge or deployment of this work is authorized.
 
-This is the concise current direction and permission boundary. [Project status](PROJECT_STATUS.md) retains dated historical evidence; the focused [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
+This is the concise current direction and permission boundary. The 2026-11-22 [security, privacy, OAuth, cost and recovery review](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md) records the latest production NO-GO analysis. [Project status](PROJECT_STATUS.md) retains dated historical evidence; the focused [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
 
 ## Chosen storage and application route
 
