@@ -64,3 +64,7 @@ No production activation follows. Before relying on the check for production,
 verify field population and inherited sharing behavior with live invented-data
 Google cases. Changing sharing while the session is active is unsupported;
 stop and reconnect after correcting the folder's sharing settings.
+
+## Unreleased session handoff
+
+Use **Release** for immediate orderly handoff. If the old device cannot release, wait for the heartbeat window to expire, then explicitly **Open saved synthetic year**. Only a verified stale marker qualifies; live or unverifiable ownership blocks the new session. Folder/account verification, marker read-back, pending-publication checks, and saved-ledger verification still apply. See [session coordination](SESSION_COORDINATION.md#heartbeats-crashes-and-handoff).

@@ -144,3 +144,59 @@ test('reauthorization refuses a newly shared folder and keeps staged changes',as
   assert.equal(h.http.mutations,mutations);assert.deepEqual(h.session.ledger,draft);assert.equal(h.session.dirty,true);
  }finally{await h.close();}
 });
+
+test('explicit Open refuses another fresh session without modifying saved data',async()=>{
+ const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  const other=new DashboardSyntheticStorage();other.config=h.storage.config;
+  const mutations=h.http.mutations;
+  await assert.rejects(other.connect({requireExisting:true}),{code:'session-active'});
+  assert.equal(h.http.mutations,mutations);assert.equal(other.lifecycle.acceptingWrites,false);
+ }finally{await h.close();}
+});
+
+test('explicit Open reclaims a conclusively stale session and verifies its published save',async()=>{
+ const realNow=Date.now;let now=realNow();
+ const h=await setup();let other;
+ try{
+  Date.now=()=>now;
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented',rationale:'Invented'});
+  const pending=structuredClone(h.session.ledger),original=h.http.applyRules.bind(h.http);
+  h.http.fault({category:'update',kind:'finance-tracker-full-snapshot-manifest',after:true,effect:'lost-response'});
+  // Stop the old session after a save reached durable publication.
+  h.http.applyRules=async(...args)=>{try{return await original(...args);}catch(error){h.storage.tokenExpiresAt=1;throw error;}};
+  await assert.rejects(h.session.save());
+  const manifest=()=>JSON.parse(new TextDecoder().decode([...h.http.files.values()].find(f=>f.metadata.name===FULL_SNAPSHOT_MANIFEST_NAME).bytes));
+  assert.equal(manifest().pending.state,'published');
+  const revision=manifest().revision;
+  h.http.applyRules=original;h.storage.lifecycle.coordinator.heartbeatStop?.();now+=120001;
+  other=new DashboardSyntheticStorage();other.config=h.storage.config;
+  await other.connect({requireExisting:true});
+  assert.equal(other.lifecycle.acceptingWrites,true);
+  assert.deepEqual(await other.createLedgerStore().load(),pending);
+  assert.equal(manifest().pending,null);assert.equal(manifest().revision,revision);
+ }finally{
+  try { await other?.release(); } finally { other?.lifecycle?.coordinator.heartbeatStop?.();await h.close();Date.now=realNow; }
+ }
+});
+
+test('reclaim opens the saved ledger without publishing an abandoned unsaved draft',async()=>{
+ const realNow=Date.now;let now=realNow();
+ const h=await setup();let other;
+ try{
+  Date.now=()=>now;
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  const saved=structuredClone(h.session.ledger);
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented',rationale:'Not saved'});
+  assert.notDeepEqual(h.session.ledger,saved);
+  h.storage.lifecycle.coordinator.heartbeatStop?.();now+=120001;
+  const requestStart=h.http.requests.length;
+  other=new DashboardSyntheticStorage();other.config=h.storage.config;
+  await other.connect({requireExisting:true});
+  assert.deepEqual(await other.createLedgerStore().load(),saved);
+  assert.equal(h.http.requests.slice(requestStart).some(row=>row.category==='update'&&row.kind==='finance-tracker-full-snapshot-manifest'),false);
+ }finally{
+  try { await other?.release(); } finally { other?.lifecycle?.coordinator.heartbeatStop?.();await h.close();Date.now=realNow; }
+ }
+});

@@ -190,7 +190,15 @@ class FullSnapshotStorage {
    if(!same(await this.#selected(),next))fail('manifest-readback-mismatch');
   }catch(error){if(dispatched)fail('write-unresolved',{cause:error});throw error;}
  }
+ async #verifyRecoveryManifest(m){
+  const ledger=await this.#audit(m);
+  const manifest=m.pending?{...m,pending:null}:m;
+  if(m.pending)await this.#publish(manifest,m);
+  await this.#close(manifest);
+  return {manifest,ledger};
+ }
  async start({initialize=false,recoverStale=false}={}){
+  if(initialize&&recoverStale)fail('invalid-initialization');
   if(recoverStale)await this.coordinator.recoverStale({confirm:true});else await this.coordinator.start();this.#stopHeartbeat?.();this.#stopHeartbeat=this.coordinator.startHeartbeat({setIntervalImpl:this.setIntervalImpl,clearIntervalImpl:this.clearIntervalImpl,isOnline:()=>true,onError:()=>this.invalidate()});
   try{return await this.#run(async()=>{
    await this.#owned();const files=await this.adapter.listChildren();this.#capture()();
@@ -203,7 +211,10 @@ class FullSnapshotStorage {
     let dispatched=false;try{await this.adapter.createImmutable({fileId:this.#manifestId,name:FULL_SNAPSHOT_MANIFEST_NAME,kind:MANIFEST,transactionId:this.crypto.randomUUID(),content:raw,expectedSha256:await this.#digest(raw),maxBytes:FULL_SNAPSHOT_LIMITS.manifestBytes,beforeMutation:async()=>{await this.#owned();const latest=await this.adapter.listChildren();this.#capture()();if(latest.some(f=>f.appProperties?.financeTrackerSession!=='v1'))fail('new-empty-folder-required');dispatched=true;}});}
     catch(error){if(dispatched){this.#recoveryRequired=true;fail('write-unresolved',{cause:error});}throw error;}
    }
-   const m=await this.#selected();if(m.pending)fail('recovery-required');const ledger=await this.#audit(m);await this.#close(m);this.#baseline={manifest:clone(m),owner:this.#context.owner};this.#recoveryRequired=false;return clone(ledger);
+   const m=await this.#selected();
+   if(m.pending&&!recoverStale)fail('recovery-required');
+   const {manifest,ledger}=await this.#verifyRecoveryManifest(m);
+   this.#baseline={manifest:clone(manifest),owner:this.#context.owner};this.#recoveryRequired=false;return clone(ledger);
   });}catch(error){this.invalidate();throw error;}
  }
  async open(){return this.#run(async()=>{const m=await this.#selected();if(m.pending)fail('recovery-required');const ledger=await this.#audit(m);await this.#close(m);this.#baseline={manifest:clone(m),owner:this.#context.owner};this.#recoveryRequired=false;return clone(ledger);});}
@@ -233,8 +244,7 @@ class FullSnapshotStorage {
   });
  }
  async recover(){
-  this.#baseline=null;return this.#run(async()=>{const m=await this.#selected(),ledger=await this.#audit(m);
-   if(m.pending){const next={...m,pending:null};await this.#publish(next,m);await this.#close(next);}else await this.#close(m);
+  this.#baseline=null;return this.#run(async()=>{const {ledger}=await this.#verifyRecoveryManifest(await this.#selected());
    // Recovery never seeds a save baseline. An explicit full open is required.
    this.#recoveryRequired=false;return clone(ledger);
   });

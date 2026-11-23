@@ -305,15 +305,23 @@ export class DashboardSyntheticStorage {
       if (!this.lifecycle) {
         this.lifecycle = new FullSnapshotApplication({folderId:this.folderId,accessToken:()=>this.token(),onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
       }
-      if (this.lifecycle.coordinator?.canWrite && this.lifecycle.state === "recovery-required") {
-        await this.lifecycle.recover();
-      } else if (this.lifecycle.coordinator?.session && this.lifecycle.started) {
-        await this.lifecycle.handleOnline();
-        if (this.lifecycle.state !== "ready") {
-          throw Object.assign(new Error("The existing storage session could not be revalidated. Writes remain disabled."), { code: "ownership-unknown" });
+      try {
+        if (this.lifecycle.coordinator?.canWrite && this.lifecycle.state === "recovery-required") {
+          await this.lifecycle.recover();
+        } else if (this.lifecycle.coordinator?.session && this.lifecycle.started) {
+          await this.lifecycle.handleOnline();
+          if (this.lifecycle.state !== "ready") {
+            throw Object.assign(new Error("The existing storage session could not be revalidated. Writes remain disabled."), { code: "ownership-unknown" });
+          }
+        } else {
+          await this.lifecycle.start({initialize:requireEmpty});
         }
-      } else {
-        await this.lifecycle.start({initialize:requireEmpty});
+      } catch (error) {
+        // Only an explicit Open/Reconnect can reclaim. The coordinator rereads
+        // the exact stale marker immediately before takeover; all other
+        // failures (including a fresh or uncertain competing marker) refuse.
+        if (!requireExisting || requireEmpty || error?.code !== 'stale-session') throw error;
+        await this.lifecycle.recoverStaleSession({ confirm: true });
       }
       const snapshot = await this.readSnapshot();
       this.onSnapshot(snapshot);

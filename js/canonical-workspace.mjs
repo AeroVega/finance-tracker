@@ -248,7 +248,7 @@ function explainActionAvailability() {
     'verify-save-outcome': 'Available when a selected session has an unresolved save outcome to check.',
     'retry-save': 'Verification must first prove this exact draft was not saved. Other outcomes cannot be retried.',
     'recover-ledger': 'Available only for an interrupted operation with retained write ownership.',
-    'recover-stale': 'Available only after a selected session is conclusively stale; confirm the prior session has stopped.'
+    'recover-stale': 'Open saved synthetic year handles expired heartbeats. Use this advanced fallback only if the selected session still needs recovery.'
   };
   const networkActions = new Set(['save-ledger','save-preview','reopen-ledger','release-ledger','export-backup','backup-save-first','backup-saved-only','restore-backup','verify-save-outcome','retry-save','recover-ledger','recover-stale']);
   for (const [id, reason] of Object.entries(reasons)) {
