@@ -99,7 +99,7 @@ html:has(.canonical-workspace) { scroll-padding-bottom: calc(var(--draft-height)
 #coverage-summary { margin: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; font-size: .78rem; }
 .welcome-features { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
 .welcome-features span { padding: 8px 12px; border: 1px solid #36534f; border-radius: 999px; font-size: .78rem; color: var(--accent); }
-.home-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .75fr); gap: 20px; align-items: start; }
+.home-grid { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1fr); gap: 20px; align-items: start; }
 .home-card { min-width: 0; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .card-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
 .card-heading h2, .attention-card h2 { margin: 8px 0 0; }
@@ -374,3 +374,23 @@ html:has(.canonical-workspace) { scroll-padding-bottom: calc(var(--draft-height)
 .draft-bar .action-option { flex: 1 1 13rem; }
 .draft-bar .draft-indicator { flex-basis: 100%; }
 @media (max-width: 359px) { .draft-bar .action-option { flex-basis: 100%; } }
+
+/* One month per row so exact amounts and source labels can wrap on a phone. */
+.home-trend { margin-top: 20px; }
+.home-trend h2 { margin: 0; }
+#home-trend-context { color: var(--muted); }
+#home-trend-months { padding: 0; list-style: none; }
+#home-trend-months li { min-width: 0; border-top: 1px solid var(--line); padding: 10px 0; }
+.home-trend-row, .home-trend-values { display: grid; align-items: start; gap: .3rem .9rem; }
+.home-trend-row { grid-template-columns: minmax(9rem, .8fr) minmax(0, 2fr); }
+.home-trend-values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.home-trend-month, .home-trend-amount { display: block; overflow-wrap: anywhere; }
+.home-trend-source { color: var(--muted); }
+.home-trend-bar { position: relative; display: grid; grid-template-columns: 1fr 1fr; align-items: center; height: 9px; margin: .25rem 0; border-radius: 2px; background: var(--line); }
+.home-trend-bar::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid var(--muted); }
+.home-trend-bar span { grid-column: 2; height: 5px; background: var(--accent, currentColor); }
+.home-trend-bar-spending span { background: currentColor; }
+.home-trend-bar-negative span { grid-column: 1; justify-self: end; }
+@media (max-width: 620px) {
+  .home-trend-row { grid-template-columns: minmax(0, 1fr); }
+}

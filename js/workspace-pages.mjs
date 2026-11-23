@@ -1,7 +1,7 @@
 /* Page navigation keeps the ledger and every editor mounted. It never reads or
    writes financial storage. Hashes contain page names only, never record IDs. */
 const pages = {
-  overview: {title:'Home', description:'Your known cash flow, with the evidence in reach.', group:'overview', period:true},
+  overview: {title:'Home', description:'See income, spending and what needs review.', group:'overview', period:true},
   transactions: {title:'Activity', description:'Follow a transaction from its source to its correction history.', group:'transactions', period:true},
   position: {title:'Accounts', description:'Dated balances. Clear evidence. Missing values stay unknown.', group:'position', date:true},
   holdings: {title:'Holdings', description:'What your investment statements actually support.', group:'position', date:true},

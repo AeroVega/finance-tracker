@@ -52,7 +52,7 @@
 
     <main class="app-shell" id="main-content" tabindex="-1">
       <header class="topbar">
-        <div><p class="eyebrow" id="page-eyebrow">YOUR WORKSPACE</p><h1 id="page-title" tabindex="-1">Home</h1><p class="intro" id="page-description">Your known cash flow, with the evidence in reach.</p></div>
+        <div><p class="eyebrow" id="page-eyebrow">YOUR WORKSPACE</p><h1 id="page-title" tabindex="-1">Home</h1><p class="intro" id="page-description">See income, spending and what needs review.</p></div>
         <a class="mode-pill" id="data-mode" href="#storage">Synthetic workspace</a>
       </header>
 
@@ -63,7 +63,7 @@
           <label for="account-filter">Account<select id="account-filter" disabled><option value="all">All accounts</option></select></label>
           <label id="month-scope" for="month-filter">Period<select id="month-filter" disabled><option value="all">Full year</option></select></label>
           <label id="position-date-scope" hidden for="position-date">Position as of<input id="position-date" type="date" disabled></label>
-          <p id="scope-help">Account and period apply across Overview, Activity and Review. Search changes activity rows only.</p>
+          <p id="scope-help">Account and period apply to the Home totals, Activity and Review. The monthly trend has its own six-month window. Search changes activity rows only.</p>
         </div></details>
 
       <p id="no-ledger-notice" class="quiet-placeholder" hidden>No ledger is open. <a href="#storage">Open a saved year or explore a local preview</a>.</p>
@@ -74,28 +74,35 @@
       <section id="overview" class="summary-section workspace-page" aria-labelledby="page-title">
         <div id="welcome-panel" class="welcome-panel"><p class="eyebrow">WELCOME TO YOUR WORKSPACE</p><h2>See your money.<br>Know what needs attention.</h2><p>Cash flow, account balances and a place to review the details. Try it with invented data before opening a saved year.</p><div class="welcome-features"><span>Income &amp; spending</span><span>Dated balances</span><span>Source-backed review</span></div><div class="welcome-actions"><button id="start-preview" type="button" class="primary-button">Explore a synthetic preview <span aria-hidden="true">→</span></button><a href="#storage" class="secondary-button">Open a saved year</a></div></div>
         <div id="overview-loaded" hidden>
-        <div class="section-heading"><div><p class="eyebrow">YOUR SELECTED PERIOD</p><h2 id="summary-heading">Cash flow at a glance</h2></div><p id="summary-scope">No ledger loaded</p></div>
+        <div class="section-heading"><div><p class="eyebrow">YOUR SELECTED PERIOD</p><h2 id="summary-heading">Income and spending</h2></div><p id="summary-scope">No ledger loaded</p></div>
 
         <div id="summary-cards" class="metric-grid">
           <article class="metric-card"><p class="metric-label">Known income <span class="metric-symbol positive" aria-hidden="true">+</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
           <article class="metric-card"><p class="metric-label">Known spending <span class="metric-symbol" aria-hidden="true">−</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
           <article class="metric-card metric-card-emphasis"><p class="metric-label">Known cash movement <span class="metric-symbol" aria-hidden="true">⇄</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only. Not a balance.</p></article>
         </div>
-        <div class="summary-context"><div><p>Known subtotals only. Transfers and card payments do not count as income or spending.</p><details class="summary-explainer"><summary>How these totals are calculated</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p></details></div><p id="coverage-summary">Coverage has not been loaded. Missing data is unavailable, not zero.</p></div>
+        <div class="summary-context"><div><p>These totals use transaction records, not imported monthly summaries. Transactions with missing or unresolved details can leave totals incomplete.</p><details class="summary-explainer"><summary>How these totals are calculated</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p></details></div><p id="coverage-summary">Coverage has not been loaded. Missing data is unavailable, not zero.</p></div>
         <div class="home-grid">
+          <section class="home-card attention-card" aria-labelledby="attention-heading">
+            <h2 id="attention-heading">Needs review</h2>
+            <p id="attention-count" class="attention-count">Unavailable</p>
+            <p id="overview-review-title">Open a ledger to see what needs review.</p>
+            <a href="#review" class="secondary-button">Review records <span aria-hidden="true">→</span></a>
+            <a href="#position" class="account-shortcut"><span class="destination-icon" aria-hidden="true">◎</span><span><strong>Accounts &amp; balances</strong><small>See what your dated evidence supports</small></span><span aria-hidden="true">→</span></a>
+          </section>
           <section class="home-card recent-card" aria-labelledby="recent-heading">
             <div class="card-heading"><div><p class="eyebrow">IN YOUR SELECTED PERIOD</p><h2 id="recent-heading">Recent activity</h2></div><a href="#transactions" class="inline-action">View all <span aria-hidden="true">→</span></a></div>
             <p class="card-hint">Latest source records, including items excluded from totals.</p>
             <div id="recent-activities" class="recent-activities"></div>
           </section>
-          <section class="home-card attention-card" aria-labelledby="attention-heading">
-            <p class="eyebrow">NEXT UP</p><h2 id="attention-heading">Review status</h2>
-            <p id="attention-count" class="attention-count">Unavailable</p>
-            <p id="overview-review-title">Open a ledger to see what needs review.</p>
-            <a href="#review" class="secondary-button">Open review <span aria-hidden="true">→</span></a>
-            <a href="#position" class="account-shortcut"><span class="destination-icon" aria-hidden="true">◎</span><span><strong>Accounts &amp; balances</strong><small>See what your dated evidence supports</small></span><span aria-hidden="true">→</span></a>
-          </section>
-        </div></div>
+        </div>
+        <section class="home-card home-trend" aria-labelledby="home-trend-title">
+          <h2 id="home-trend-title">Monthly income and spending</h2>
+          <p id="home-trend-context">Open a ledger to see the latest six months of available evidence.</p>
+          <ul id="home-trend-months" aria-label="Monthly values and sources"></ul>
+          <a href="#storage" class="inline-action">Inspect historical summaries in Storage <span aria-hidden="true">→</span></a>
+        </section>
+        </div>
       </section>
 
       <section class="panel position-panel workspace-page" id="position" hidden aria-labelledby="position-heading">

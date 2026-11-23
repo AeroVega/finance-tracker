@@ -14,6 +14,7 @@ import { leaveBreadcrumb, registerContextProvider, recentReports } from './error
 import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
 import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs';
 import { mountHistoricalMonthlySummaryWorkflow } from './historical-monthly-summary-workflow.mjs';
+import { mountHomeMonthlyTrend } from './home-monthly-trend.mjs';
 
 const $ = id => document.getElementById(id);
 let providerImportWorkflow = null, historicalSummaryWorkflow = null;
@@ -35,6 +36,7 @@ function money(value, currency) {
   return `${negative ? '-' : ''}${currency === 'USD' ? '$' : currency + ' '}${BigInt(whole).toLocaleString('en-US')}.${fraction.padEnd(2, '0')}`;
 }
 const monthLabel = month => new Date(month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const homeTrend = mountHomeMonthlyTrend({context:$('home-trend-context'), months:$('home-trend-months'), node, money, monthLabel});
 let freshYearLedger = null;
 let busy = false, configured = false, page = 0, selectedActivity = null, view = null, operationStarted = null;
 let viewLedger = null, viewReader = null, homeView = null, searchTimer = null, composingSearch = false;
@@ -310,6 +312,7 @@ function addOptions(select, options, selected, first) {
 // verified closure. This is not a claim of browser/OS memory zeroization.
 function clearLoadedWorkspace() {
   historicalSummaryWorkflow?.reset();
+  homeTrend.clear();
   cancelSearch();
   view = null; viewLedger = null; viewReader = null; homeView = null; positionRender = null;
   renderedPositionDate = null; selectedActivity = null; detailEditorBaseline = null;
@@ -366,6 +369,7 @@ function render({ reset = false } = {}) {
   if (!homeView || homeView.scope.accountId !== view.scope.accountId || homeView.scope.month !== view.scope.month) {
     homeView = viewReader.view({accountId:view.scope.accountId, month:view.scope.month, pageSize:4});
   }
+  homeTrend.refresh(session.ledger, viewReader, homeView);
   const recent = homeView;
   homeButtons.clear(); $('recent-activities').replaceChildren();
   for (const row of recent.rows) {
@@ -416,7 +420,7 @@ function render({ reset = false } = {}) {
   if (!view.filteredCount) $('empty-state').textContent = 'No activities match this selection. Change the account, month or search to see other records.';
   $('transaction-table-wrap').hidden = !view.filteredCount;
   $('page-status').textContent = `Page ${view.page + 1} of ${view.pages}`;
-  $('overview-review-title').textContent = reviewCount ? `${reviewCount} records need a second look` : 'No unresolved records in this account and period. Coverage still needs separate reconciliation.';
+  $('overview-review-title').textContent = reviewCount ? `${view.review.activityCount} activities and ${view.review.sourceCount} source records await a decision.` : 'No unresolved records in this account and period. Coverage may still be incomplete.';
   $('review-summary').textContent = `${view.review.activityCount} activities need review in this account and period. ${view.review.sourceCount} source observations await a decision. Unknown investment activity remains excluded from known totals.`;
   reviewQueueButton = null;
   $('review-queue').replaceChildren();

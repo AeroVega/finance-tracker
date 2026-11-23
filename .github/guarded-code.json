@@ -20,7 +20,7 @@
         "index.html", "js/app.js", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs",
         "js/dashboard-synthetic-storage.mjs", "js/session-coordination.mjs",
         "js/full-snapshot-application.mjs", "js/workspace-navigation.js", "js/workspace-pages.mjs",
-        "js/workspace-chrome.mjs", "js/historical-monthly-summary-workflow.mjs",
+        "js/workspace-chrome.mjs", "js/historical-monthly-summary-workflow.mjs", "js/home-monthly-trend.mjs",
         "js/canonical-workspace-model.mjs", "js/canonical-month-index.mjs", "js/financial-position.mjs",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs", "js/success-metrics.mjs",
         "js/provider-csv-import-workflow.mjs", "js/provider-csv-preview.mjs", "js/provider-csv.mjs",
@@ -33,7 +33,7 @@
         "docs/SESSION_COORDINATION.md", "docs/APP_DIAGNOSTICS.md", "manifest.webmanifest"
       ],
       "tests": [
-        "canonical-workspace-ui", "dashboard-clear-race", "dashboard-release-ui", "privacy-account",
+        "canonical-workspace-ui", "home-monthly-trend", "dashboard-clear-race", "dashboard-release-ui", "privacy-account",
         "native-ownership-lifetime", "session-coordination", "session-write-guard-race",
         "provider-import-privacy-boundary", "app-diagnostics", "error-reporting", "success-metrics"
       ],

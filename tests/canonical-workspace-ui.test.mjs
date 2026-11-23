@@ -1189,7 +1189,7 @@ test('an account with no activity shows an honest Home empty state and a separat
   await h.choose('account-filter', loan.value);
   assert.match(text(h.get('recent-activities')), /No activity/);
   assert.equal(h.get('attention-count').textContent, '0');
-  assert.match(h.get('overview-review-title').textContent, /Coverage still needs separate reconciliation/);
+  assert.match(h.get('overview-review-title').textContent, /Coverage may still be incomplete/);
   assert.match(text(h.get('review-queue')), /Check account-month coverage/);
   assert.equal(h.state.writes, 0);
 });
@@ -1486,6 +1486,9 @@ test('Storage history preview shows gaps and conflicts, then stages locally and 
   await h.click('historical-summary-stage');
   assert.equal(h.state.writes,0);
   assert.equal(h.modelSession.dirty,true);
+  await h.until(() => /Workbook-reported summary/.test(text(h.get('home-trend-months'))));
+  assert.match(text(h.get('home-trend-months')), /January 2023 Workbook-reported summary +Income \$123\.4500.*Spending \$0\.00/);
+  assert.doesNotMatch(text(h.get('home-trend-months')), /912\.34|Other invented source/);
   assert.match(text(h.get('historical-month-view')),/Historical workbook summary/);
   assert.match(text(h.get('historical-month-view')),/123.4500 USD/);
   assert.match(text(h.get('historical-month-view')),/Net-worth snapshot \(workbook\): 912.34 USD/);
@@ -1501,6 +1504,7 @@ test('Storage history preview shows gaps and conflicts, then stages locally and 
   assert.equal(h.modelSession.dirty,false);
   await h.click('release-ledger');
   assert.doesNotMatch(text(h.get('historical-summary-workflow')),/123.4500|Other invented source/);
+  assert.equal(h.get('home-trend-months').children.length,0);
   assert.equal(h.get('historical-summary-stage').disabled,true);
 });
 
