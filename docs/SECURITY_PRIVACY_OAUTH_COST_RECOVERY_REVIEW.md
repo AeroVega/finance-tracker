@@ -159,6 +159,16 @@ Key tests present on reviewed main:
 
 **Important qualification:** I inspected the test sources and the historical verification record; I did not execute a local suite in this review. The backup/recovery contract records a 934/934 extended Node run on its 2026-11-17 candidate, and a local browser harness attempt failed before opening Chromium; WebKit was not installed. That is not a test pass on this exact main SHA. The current Actions result on the exact reviewed head was not run/established in this review.
 
+### November 23 verification update
+
+This follow-up covers main and the served Pages build at `16a5ff6134a414d4cc5ede1e2ed4c3af551740f4`, not any later PR 57 candidate.
+
+- Exact-source local extended Node suite: **1,048 passed, 0 failed, 0 skipped**, with Node 24.22.3. Browser-module syntax, registered diagnostic audit, generated-reference check and documentation checks passed. [Main CI](https://github.com/AeroVega/finance-tracker/actions/runs/44591246432) passed the required jobs.
+- The [Pages deployment](https://github.com/AeroVega/finance-tracker/actions/runs/45122240988) succeeded. The served stamp matched main. All 52 compared files (index and checked-in JavaScript modules, excluding generated configuration and stamp) were byte-identical to source. Served Google configuration passed the repository's structural validator. This does not verify the actual Google project, deployed artifact inventory, browser caches or provider restrictions.
+- Chrome rendered the invented-data preview without Google sign-in. The unavailable recovery controls remained visible in the expanded recovery panel. Reload returned to No ledger loaded. The automated local Chromium harness was blocked at launch by the execution environment. Neither result establishes live Drive, network and retained-state privacy, or physical Safari acceptance.
+- The active import contract only accepts `not-retained` originals with null locator and retention times. The earlier retention rehearsal was for a historical storage route. The current portable archive is not an originals archive. The approved 540-day upload, verified deletion and restore behavior need implementation and tests in the active route.
+- The active [main ruleset](https://github.com/AeroVega/finance-tracker/rules/27070327) requires up-to-date branches with `test` and `transaction-contracts`, but not `Guarded code checks` or independent approval. Source controls alone do not close that enforcement gap. No settings changed.
+
 ### Synthetic vs live evidence
 
 Synthetic provider tests use HTTP-shaped fake responses and invented data. They do not use a Google account, real credentials, Drive folders, live API quotas, deployed Pages assets, iPhone Safari or iPad Safari. Simulator timings/request counts are scenario metrics and assumptions, not live cost/latency/usage evidence.
@@ -178,7 +188,7 @@ Historical owner-reported live synthetic checks exist for a prior temporary Driv
 7. **Project configuration and $0 proof are not available from source.** Console mode, billing, restrictions, quotas and current usage must be checked by the owner.
 8. **Uncertain-write evidence is memory-bound.** After page loss the last in-memory attempt cannot be classified; next open verifies saved content only.
 9. **Source-original retention/deletion was not proven end-to-end.** The 540-day requirement must apply to actual originals, backups and restore; confirmed deletion and retry need evidence.
-10. **Test evidence is not current-head proof.** Historical test runs were not rerun on the exact main SHA reviewed here.
+10. **A later candidate needs new evidence.** The November 23 run establishes the exact reviewed main SHA, not a future PR 57 runtime or deployed candidate.
 
 ### Changes made on this review branch
 
@@ -211,4 +221,4 @@ Once the outstanding controls are verified, activation must require a separate, 
 - The approved storage format/version and backup/recovery procedure.
 - Confirmation that the $0 recurring-cost and privacy boundaries are accepted.
 
-That approval is separate from approving this documentation PR, merging it, deploying code, or running a synthetic test. Until then, keep production financial persistence **NO-GO**.
+That approval is separate from reviewing or merging PR 57, deploying code, or running a synthetic test. The owner selected PR 57 for readiness fixes and verification. Legacy Excel migration is separate and does not use the closed PR 56 design. Until then, keep production financial persistence **NO-GO**.
