@@ -4,6 +4,8 @@ import { applyFinancialEvent, applyReviewDecision, reverseReviewDecision, regist
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
 
+import { FULL_SNAPSHOT_LIMITS } from './full-snapshot-storage.mjs';
+import { utf8ByteLength } from './utf8-length.mjs';
 import {encodeFullSnapshotBackup,decodeFullSnapshotBackup} from './full-snapshot-backup.mjs';
 
 const same=(a,b)=>canonicalizeJcs(a)===canonicalizeJcs(b);
@@ -317,6 +319,8 @@ export class CanonicalWorkspaceSession {
     }
     validateLedger(this.ledger);
     if (this.ledger.syntheticOnly !== true) fail('synthetic-data-required');
+    // Reject before connecting, which may initialize the destination.
+    if (utf8ByteLength(canonicalizeJcs(this.ledger)) > FULL_SNAPSHOT_LIMITS.snapshotBytes) appFail('byte-limit');
     const proposal = structuredClone(this.ledger);
     return this.operation(async () => {
       let store = null, writeStarted = false, writeVerified = false;

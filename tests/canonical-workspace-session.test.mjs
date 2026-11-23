@@ -5,6 +5,7 @@ import { CanonicalWorkspaceSession } from '../js/canonical-workspace-session.mjs
 import { createSyntheticFinancialYear } from '../js/synthetic-financial-year.mjs';
 import {webcrypto} from 'node:crypto';
 import {FullSnapshotApplication} from '../js/full-snapshot-application.mjs';
+import {FULL_SNAPSHOT_LIMITS} from '../js/full-snapshot-storage.mjs';
 import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
 
 const recipe = await createSyntheticFinancialYear();
@@ -144,6 +145,18 @@ for (const layout of ['full-snapshot-v1']) test(`${layout} workspace correction 
   assert.equal(h.session.store.valueCodec, layout); assert.deepEqual(h.session.ledger, proposal); assert.equal(h.calls.writes, 1);
 });
 
+
+test('oversized synthetic preview is rejected before connecting a destination', async () => {
+  const h = await setup('full-snapshot-v1', true);
+  const oversized = {...recipe.ledger, inventedSizeFixture: 'X'.repeat(FULL_SNAPSHOT_LIMITS.snapshotBytes)};
+  h.session.preview(oversized);
+  const proposal = h.session.ledger;
+  await assert.rejects(h.session.savePreviewToNewCopy(), {code:'byte-limit'});
+  assert.deepEqual(h.calls.connects, []);
+  assert.equal(h.calls.writes, 0);
+  assert.equal(h.session.mode, 'preview');
+  assert.equal(h.session.ledger, proposal);
+});
 
 for (const corrected of [false, true]) test(`local preview saves ${corrected ? 'the staged draft' : 'the untouched original year'} to a new empty folder and verifies an independent reopen`, async () => {
   const h = await setup('full-snapshot-v1', true);
