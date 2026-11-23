@@ -36,6 +36,7 @@ const workspace = {
   'authorization-failed': 'Google authorization could not complete. Your selected folder and local draft are unchanged. Try connecting again; check Google access or browser restrictions if it keeps failing.',
   'picker-cancelled': 'Folder selection was cancelled. No saved records were replaced.',
   'synthetic-folder-required': 'Choose an existing invented-data folder with “synthetic” in its name. No saved records were replaced.',
+  'private-folder-proof-failed': 'The selected folder could not be confirmed as an unshared Drive folder owned only by this account. No folder changes were made.',
   'base-conflict': 'The saved copy changed. Reopen verified records before deciding what to retry.',
   'transaction-unresolved': 'The save result is uncertain. Recover if offered, then reopen saved records before retrying.',
   'reconnect-required': 'The connection could not be verified. Reconnect and reopen saved records before editing.',
@@ -307,7 +308,7 @@ const codeGroups = {
   lifecycle: `
     base-conflict catalog-required crypto-unavailable invalid-config invalid-path manifest-unavailable
     object-integrity-failure object-metadata-mismatch object-not-found paged-required recovery-required
-    storage-not-ready synthetic-folder-required verification-scope-closed
+    storage-not-ready synthetic-folder-required private-folder-proof-failed verification-scope-closed
   `,
   paged: `
     adapter-scope-mismatch ambiguous-manifest byte-limit canonical-commit-mismatch canonical-derived-mismatch

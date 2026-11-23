@@ -1,3 +1,4 @@
+import { isUnretainedSyntheticSource } from './source-original-retention.mjs';
 import { HISTORICAL_LEDGER_VERSION, validateHistoricalLedger } from './historical-monthly-summary.mjs';
 import { validatePositionEvents } from './financial-position-contract.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
@@ -77,7 +78,7 @@ function validateAndProject(ledger) {
     if (!validCoverageEvidence(run.declaredCoverage, run)) fail('invalid-import');
     if(!Array.isArray(run.retryAttempts) || run.retryAttempts.some(attempt=>!uuid.test(attempt.attemptId)||!Number.isFinite(Date.parse(attempt.startedAt))||!Number.isFinite(Date.parse(attempt.completedAt))||!['processed','needs-review'].includes(attempt.priorStatus)||!['processed','needs-review'].includes(attempt.status)||!attempt.priorCounts||!attempt.counts)) fail('invalid-retry-audit');
     for(const attempt of run.retryAttempts) {if(ids.has(attempt.attemptId)) fail('duplicate-attempt-id');ids.add(attempt.attemptId);}
-    if(run.sourceFileRetentionStatus!=='not-retained'||run.privateSourceFileRef!==null||run.sourceFileRetainedAt!==null||run.sourceFileRetentionExpiresAt!==null||run.sourceFileDeletedAt!==null||run.coverageReconciled!==false) fail('unsupported-synthetic-retention-or-completeness');
+    if(!isUnretainedSyntheticSource(run)||run.coverageReconciled!==false) fail('unsupported-synthetic-retention-or-completeness');
     const c=run.counts;
     if (!c || Object.keys(zeroCounts()).some(k=>!Number.isSafeInteger(c[k]) || c[k]<0) || c.created+c.matched+c.review+c.rejected+c.ignored!==c.rowsRecognized) fail('invalid-import-counts');
     const observationIds=Array.isArray(run.observationIds)?new Set(run.observationIds):null;

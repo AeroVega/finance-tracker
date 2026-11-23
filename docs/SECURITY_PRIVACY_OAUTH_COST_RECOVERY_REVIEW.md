@@ -169,6 +169,18 @@ This follow-up covers main and the served Pages build at `16a5ff6134a414d4cc5ede
 - The active import contract only accepts `not-retained` originals with null locator and retention times. The earlier retention rehearsal was for a historical storage route. The current portable archive is not an originals archive. The approved 540-day upload, verified deletion and restore behavior need implementation and tests in the active route.
 - The active [main ruleset](https://github.com/AeroVega/finance-tracker/rules/27070327) requires up-to-date branches with `test` and `transaction-contracts`, but not `Guarded code checks` or independent approval. Source controls alone do not close that enforcement gap. No settings changed.
 
+### Full-snapshot growth rehearsal
+
+On PR 57 revision `fe9e161`, [the invented history benchmark](../tests/benchmark-full-snapshot-history.mjs) seeded a synthetic year, made small classification changes and reopened with an independent application after each checkpoint. It verified ledger equality and retained an immutable snapshot for each changed save.
+
+| Changed saves after seed | Retained snapshot payload | Cold-open requests |
+| ---: | ---: | ---: |
+| 0 | 933,804 bytes | 31 |
+| 4 | 4,682,578 bytes | 67 |
+| 12 | 12,245,469 bytes | 139 |
+
+This measures the simulated workload, not live Google time, costs, Safari memory or the size of the owner's history. Even small edits add full copies. Before real-data use, define a supported history/workload and verify sustained cold-open and recovery costs on the intended device and Google project. Do not fix growth by silently skipping ancestry validation or deleting evidence.
+
 ### Synthetic vs live evidence
 
 Synthetic provider tests use HTTP-shaped fake responses and invented data. They do not use a Google account, real credentials, Drive folders, live API quotas, deployed Pages assets, iPhone Safari or iPad Safari. Simulator timings/request counts are scenario metrics and assumptions, not live cost/latency/usage evidence.

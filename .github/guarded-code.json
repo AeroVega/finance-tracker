@@ -5,11 +5,11 @@
       "name": "Google account, folder and OAuth",
       "paths": [
         "js/dashboard-synthetic-storage.mjs", "js/google-config.js", "js/google-config-validation.mjs",
-        "js/google-startup-diagnostics.mjs",
+        "js/google-startup-diagnostics.mjs", "js/google-private-folder-proof.mjs",
         "index.html", "js/app.js", "docs/PRIVACY_SESSION.md"
       ],
       "tests": [
-        "dashboard-synthetic-storage", "privacy-account", "google-startup-diagnostics",
+        "dashboard-synthetic-storage", "privacy-account", "google-private-folder-proof", "google-startup-diagnostics",
         "full-snapshot-google-ui-scenarios", "full-snapshot-seeding-ui"
       ],
       "manual": "With a dedicated synthetic account/folder, test allowed sign-in and reopen, canceled sign-in and folder selection, wrong account or folder refusal, and expiration followed by explicit reauthorization. Verify an unchanged or wrong folder is not written."
@@ -49,7 +49,7 @@
         "js/drive-feasibility-spike.mjs", "js/success-metrics.mjs",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
         "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs",
-        "js/canonical-history.mjs", "js/canonical-import.mjs", "js/byte-ownership.mjs",
+        "js/canonical-history.mjs", "js/canonical-import.mjs", "js/source-original-retention.mjs", "js/byte-ownership.mjs",
         "js/immutable-content-type.mjs", "js/utf8-length.mjs", "docs/APPLICATION_STORAGE_LIFECYCLE.md",
         "docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md", "docs/STORAGE_SCALING_AND_PRODUCTION_READINESS.md",
         "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md"
@@ -58,7 +58,7 @@
         "full-snapshot-storage", "full-snapshot-provider-scenarios", "full-snapshot-recovery-outcomes",
         "full-snapshot-witness-concurrency", "full-snapshot-version-convergence",
         "drive-session-adapter", "drive-mutation-lifetime", "drive-transaction-engine", "drive-request-metrics",
-        "transaction-protocol", "canonical-workspace-session", "drive-feasibility-spike", "historical-workspace-persistence",
+        "transaction-protocol", "canonical-workspace-session", "drive-feasibility-spike", "source-original-retention", "historical-workspace-persistence",
         "financial-position-adversarial"
       ],
       "manual": "Interrupt a synthetic save, follow recheck/recovery without blindly retrying, and independently reopen to verify one committed result. For limit or cost changes, record workload size, requests, rejection/recovery at admitted limits, and any current provider quota assumptions."
@@ -68,14 +68,14 @@
       "paths": [
         "index.html", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs",
         "js/full-snapshot-application.mjs", "js/full-snapshot-backup.mjs", "js/full-snapshot-storage.mjs",
-        "js/transaction-protocol.mjs", "js/canonical-history.mjs", "js/canonical-import.mjs",
+        "js/transaction-protocol.mjs", "js/canonical-history.mjs", "js/canonical-import.mjs", "js/source-original-retention.mjs",
         "js/byte-ownership.mjs", "js/utf8-length.mjs", "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
         "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs"
       ],
       "tests": [
         "full-snapshot-backup", "full-snapshot-backup-session", "full-snapshot-backup-ui",
-        "historical-workspace-persistence"
+        "source-original-retention", "historical-workspace-persistence"
       ],
       "manual": "Export an encrypted synthetic backup, verify wrong passphrase and nonempty destination are refused, restore to a different empty synthetic folder, and reopen independently. Compare records and verify the source was not changed. Do not publish backup contents or passphrases."
     }

@@ -38,3 +38,26 @@ Use invented records and a separately authorized synthetic folder to:
 - Verify successful release on physical iPhone and iPad Safari.
 
 No real financial data is authorized.
+
+## Strict folder proof component (not active)
+
+`provePrivateGoogleFolder` is a read-only component for a future authorized
+admission path. Ordinary synthetic admission is unchanged. Pass the exact
+Picker folder and the token, expiration, and account ID from the same freshly
+verified candidate grant, before releasing any prior session, changing binding,
+or starting the new lifecycle. A refusal must not fall through to an admission
+path capable of accepting real data.
+
+Using the existing `drive.file` scope, it requires positive matching ownership,
+explicit unshared status, and read/add-child capabilities on the selected
+folder. It then checks the [paginated permissions listing](https://developers.google.com/workspace/drive/api/reference/rest/v3/permissions/list)
+through its end for a single matching user-owner permission, including the
+published view in the request. Shared Drives, extra grants, unknown or
+insufficient evidence, and unusable tokens are not accepted. It does not change
+permissions, create a marker, or inspect financial content.
+
+This is point-in-time evidence about the exact folder, not evidence of global
+emptiness, child-file privacy, or protection against concurrent ACL changes.
+No production activation follows. Before integration, verify field population
+and inherited sharing behavior with live invented-data Google cases and settle
+when to revalidate the proof during the active session.

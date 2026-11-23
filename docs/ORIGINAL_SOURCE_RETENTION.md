@@ -18,6 +18,12 @@ The selected retention period is **540 days (18 months)**. Reaching exactly day 
 
 The static application performs maintenance on connection and hourly while a page is open with a verified session. It cannot run while all devices are closed. Consequently, actual deletion may occur after the eligibility boundary.
 
+## Full-snapshot policy foundation
+
+The active synthetic ledger still accepts only explicit `not-retained` runs with null original-file locator and retention timestamps. The [shared policy module](../js/source-original-retention.mjs) computes expiry as exactly 540 days from a canonical UTC millisecond timestamp and classifies supplied metadata. Future export and restore code must permit source bytes only for an independently verified original classified `unexpired`. Each check uses the same original retention and expiry timestamps; neither archive creation nor restore can reset the clock. At the boundary, bytes are ineligible even if deletion is still pending.
+
+This policy slice performs no I/O and does not authenticate provider evidence. It does not upload originals, persist retention intents or receipts, delete files, carry originals in an archive, or enable production data. Those integrations and guarded synthetic acceptance are still required.
+
 ## Safe deletion requirements
 
 An original is eligible for deletion only after its exact import identity, source hash, object kind, and folder are checked. Deletion must be confirmed by the provider, followed by absence verification under the same authorization and folder context, before its locator is cleared.
