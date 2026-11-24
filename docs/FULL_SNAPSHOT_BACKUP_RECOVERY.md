@@ -26,6 +26,8 @@ A plaintext SHA-256 checksum detects accidental corruption, not malicious replac
 
 ## Retention and capacity
 
+**Owner review trigger (decided 2026-11-24):** when the saved history passes 100 MB, or Open takes over 60 seconds on the owner's iPhone, stop and revisit retention before continuing.
+
 Portable backup contains logical history and provenance, not original CSV payloads or physical Drive revision history. Restore must reject unsupported archives that carry originals. See [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files).
 
 The full-snapshot store retains all prior snapshots. Per-snapshot, manifest/envelope and commit-count caps do not cap aggregate history bytes. Every changed save uploads a full snapshot. Cold-open/recovery audits grow with retained commits; backup/restore are additional bounded but expensive operations. No automated garbage collection is implemented in the selected route.

@@ -248,8 +248,8 @@ Run the [owner acceptance and release checklist](OWNER_ACCEPTANCE.md) against th
 | Physical iPhone/iPad Safari | User-confirmed (owner checklist) | Checked by the owner; measurements are not recorded here. |
 | Single-device coordination | Accepted by owner | Best-effort coordination with no strict locking (no Drive compare-and-swap). |
 | Backup cadence | Owner decision | One encrypted backup every 3 months; keep the latest two; password stored separately. Changes saved since the last backup are not in it. |
-| Capacity and retention policy | **Open** | Full-snapshot history grows with every changed save. The owner still needs to choose a history-size or open-time threshold that triggers review. |
-| Uncertain last write after tab or device loss | **Open** | Documented behavior: after page loss, Open verifies only the saved copy and never claims a lost draft's outcome; re-enter anything missing. Needs owner acceptance. |
+| Capacity and retention policy | Owner decision | Full-snapshot history grows with every changed save and is never pruned. When the saved history passes 100 MB, or Open takes over 60 seconds on the owner's iPhone, the owner stops and retention is revisited before continuing. |
+| Uncertain last write after tab or device loss | Accepted by owner | After page loss, Open verifies only the saved copy and never claims a lost draft's outcome; the owner checks the records and re-enters anything missing. |
 | Release decision and activation | **Open** | A separate profile-only release, a private-mode invented-data rehearsal, then explicit activation ([release gate](PERSISTENCE_DATA_CLASS.md#release-gate-what-static-code-can-and-cannot-enforce)). |
 
 ## 8. Owner approval gate — not yet requested
