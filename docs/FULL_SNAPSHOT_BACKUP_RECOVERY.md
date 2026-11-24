@@ -32,6 +32,8 @@ The full-snapshot store retains all prior snapshots. Per-snapshot, manifest/enve
 
 ## User procedure (synthetic acceptance; not production authorization)
 
+**Owner backup cadence (decided 2026-11-24):** one encrypted backup every 3 months; keep the latest two; password stored separately. A backup contains only what was saved when it was made. Optional: keep bank CSV exports made since the last backup until the next one, in case they need re-importing.
+
 1. Save the current draft and wait for an explicit verified Saved state, or choose the backup option that excludes the staged draft. Do not close the page during a write.
 2. Download a verified portable backup. Prefer password encryption when storing outside a trusted private location; keep the password separately because it cannot be recovered.
 3. Keep at least one prior known-good backup until the new copy has been restored and independently verified.

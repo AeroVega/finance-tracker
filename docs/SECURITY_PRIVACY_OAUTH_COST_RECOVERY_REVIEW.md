@@ -234,6 +234,24 @@ Run the [owner acceptance and release checklist](OWNER_ACCEPTANCE.md) against th
 - Decide whether best-effort single-device coordination is acceptable for the intended operational procedure. If not, a server-enforced transactional authority would be required and would need a separately approved cost/architecture decision.
 - Decide how users should resolve uncertain last writes after a browser/device loss without falsely asserting draft outcome.
 
+### Owner gate record (2026-11-24)
+
+**User-confirmed** results and owner decisions for PR 57, all with invented data. Sanitized: no account, folder or project identifiers. This record is not real-data activation.
+
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| Served build | User-confirmed | Served stamps matched `58f7a52`, `778b530` and `f387592` for their sessions. The footer said production storage was disabled; the build was synthetic-only. |
+| Live synthetic acceptance | User-confirmed pass on `58f7a52` | Wrong or unverifiable folder refused; cancel kept context; Google refused an unapproved account; CSV import and explicit save; originals absent from uploads, storage and backups; release cleared the workspace; independent reopen; plain and encrypted backup; wrong-password refusal; restore to a fresh folder; live marker refused a second device; expired-session recovery through Open. |
+| Token revocation and reconnect | User-confirmed pass on `f387592` | A save refused after revocation, with no write and the draft kept. After the lease expired, Verify save outcome re-signed in and proved not saved; the explicit retry saved; release and reopen showed the change. `778b530` and `8dc804e` exposed the gaps fixed in `fbb449e`–`2f6c1f2`. |
+| Required checks and review policy | Owner decision | **Guarded code checks** is required on `main` (verified via the API). Single-owner project: the owner reviews the exact-SHA diff; no independent approval ([guarded code](GUARDED_CODE.md#owner-and-reviewer-checklist)). |
+| Cloud Console, quota and $0 cost | User-confirmed | No billing account is linked to the project, so it cannot be charged. Drive API usage over 30 days was 188,576 requests, mostly testing; at 5–100 quota units each this is far below the daily no-charge threshold. The owner-only console and device item was checked by the owner; details are kept privately. |
+| Physical iPhone/iPad Safari | User-confirmed (owner checklist) | Checked by the owner; measurements are not recorded here. |
+| Single-device coordination | Accepted by owner | Best-effort coordination with no strict locking (no Drive compare-and-swap). |
+| Backup cadence | Owner decision | One encrypted backup every 3 months; keep the latest two; password stored separately. Changes saved since the last backup are not in it. |
+| Capacity and retention policy | **Open** | Full-snapshot history grows with every changed save. The owner still needs to choose a history-size or open-time threshold that triggers review. |
+| Uncertain last write after tab or device loss | **Open** | Documented behavior: after page loss, Open verifies only the saved copy and never claims a lost draft's outcome; re-enter anything missing. Needs owner acceptance. |
+| Release decision and activation | **Open** | A separate profile-only release, a private-mode invented-data rehearsal, then explicit activation ([release gate](PERSISTENCE_DATA_CLASS.md#release-gate-what-static-code-can-and-cannot-enforce)). |
+
 ## 8. Owner approval gate — not yet requested
 
 The [persistence data-class boundary](PERSISTENCE_DATA_CLASS.md) documents the
