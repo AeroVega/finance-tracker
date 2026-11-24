@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readdirSync,readFileSync,existsSync} from 'node:fs';
-import {resolve,dirname,relative} from 'node:path';
+import {resolve,dirname,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
 function files(directory){return readdirSync(resolve(root,directory),{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?files(directory+'/'+entry.name):/\.(?:m?js|cjs)$/.test(entry.name)?[directory+'/'+entry.name]:[]);}
-function imports(path){return [...readFileSync(resolve(root,path),'utf8').matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)['"](\.[^'"]+)['"]/g)].map(match=>relative(root,resolve(root,dirname(path),match[1].split(/[?#]/)[0])));}
+// Repository-relative paths always use '/', including on Windows.
+function imports(path){return [...readFileSync(resolve(root,path),'utf8').matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)['"](\.[^'"]+)['"]/g)].map(match=>relative(root,resolve(root,dirname(path),match[1].split(/[?#]/)[0])).split(sep).join('/'));}
 const retired=['application-storage-lifecycle','canonical-ledger-storage','canonical-paged-storage','canonical-partition-reader','canonical-partitions','catalog-backup','catalog-segments','catalog-storage','catalog-transaction-engine','drive-locator-catalog','framed-backup-stream','immutable-page-tree','legacy-canonical-evidence','legacy-canonical-fragments','locator-codec','owned-preparation-reader','paged-application-storage','paged-canonical-backup','paged-canonical-format','paged-physical-locators','physical-drive-adapter','physical-root-binding','portable-backup','synthetic-year-seeder','drive-folder-discovery','drive-original-retention','original-retention-policy','paged-archive-rehearsal','storage-diagnostics','synthetic-application-structure','synthetic-folder-picker'];
 test('remaining source and test imports resolve without retired storage modules',()=>{
  const missing=[];for(const path of ['js','tests','prototype'].flatMap(files))for(const target of imports(path))if(!existsSync(resolve(root,target)))missing.push(path+' -> '+target);
