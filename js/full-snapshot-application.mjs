@@ -1,9 +1,11 @@
-import {createFullSnapshotStorage,FULL_SNAPSHOT_MANIFEST_NAME,inspectSyntheticManifest} from './full-snapshot-storage.mjs';
+import {createFullSnapshotStorage,FULL_SNAPSHOT_MANIFEST_NAME,inspectManifest} from './full-snapshot-storage.mjs';
+import {releasedDataClass} from './release-profile.mjs';
 import {createDriveRequestMetrics} from './drive-request-metrics.mjs';
 import {fail} from './app-error.mjs';
 
 // New-format selection is explicit. Reject old folders before acquiring a marker.
-export async function inspectFullSnapshotFolder(adapter,{requireEmpty=false,requireExisting=false}={}){
+// The expected class is checked here, read-only, before any session marker.
+export async function inspectFullSnapshotFolder(adapter,{requireEmpty=false,requireExisting=false,dataClass='synthetic'}={}){
  const files=await adapter.listChildren();
  if(requireEmpty&&files.length)fail('new-empty-folder-required');
  const candidates=files.filter(file=>file.name===FULL_SNAPSHOT_MANIFEST_NAME||file.appProperties?.financeTrackerKind==='finance-tracker-full-snapshot-manifest');
@@ -11,16 +13,18 @@ export async function inspectFullSnapshotFolder(adapter,{requireEmpty=false,requ
  if(!candidates.length&&files.length)fail('unsupported-canonical-layout');
  if(requireExisting&&!candidates.length)fail('existing-copy-required');
  return {manifestFileId:candidates[0]?.id??null,
-  admission:requireExisting?await inspectSyntheticManifest(adapter,candidates[0].id):undefined};
+  admission:requireExisting?await inspectManifest(adapter,candidates[0].id,{dataClass}):undefined};
 }
 
 export class FullSnapshotApplication {
  #transfer=null;#generation=0;#busy=false;#onStatus;#online;#target;#offline;#onlineEvent;
- constructor({folderId,accessToken,fetchImpl=globalThis.fetch,onStatus=()=>{},isOnline=()=>globalThis.navigator?.onLine!==false,lifecycleTarget=globalThis, ...options}){
+ constructor({folderId,accessToken,fetchImpl=globalThis.fetch,onStatus=()=>{},isOnline=()=>globalThis.navigator?.onLine!==false,lifecycleTarget=globalThis,dataClass='synthetic',release,...options}){
+  // Release gate: a build constructs only the classes its reviewed profile lists.
+  this.dataClass=releasedDataClass(dataClass,release);
   this.folderId=folderId;this.fullSnapshot=true;this.state='disconnected';this.started=false;this.acceptingWrites=false;
   this.#onStatus=onStatus;this.#online=isOnline;this.#target=lifecycleTarget;
   this.requestMetrics=createDriveRequestMetrics();
-  this.engine=createFullSnapshotStorage({...options,folderId,accessToken,fetchImpl:this.requestMetrics.wrapFetch(fetchImpl)});
+  this.engine=createFullSnapshotStorage({...options,folderId,accessToken,dataClass:this.dataClass,fetchImpl:this.requestMetrics.wrapFetch(fetchImpl)});
   this.coordinator=this.engine.coordinator;this.transactionAdapter=this.engine.adapter;
   this.#offline=()=>{this.invalidate();this.coordinator.cancelPending?.();this.#status('offline');};
   this.#onlineEvent=()=>{this.invalidate();this.#status('reconnecting');};

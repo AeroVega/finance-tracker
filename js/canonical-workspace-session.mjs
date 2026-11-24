@@ -1,6 +1,7 @@
 import { fail as appFail } from './app-error.mjs';
 import { HISTORICAL_COLLECTIONS, prepareHistoricalReconciliation, prepareHistoricalSummaries } from './historical-monthly-summary.mjs';
-import { applyFinancialEvent, applyReviewDecision, reverseReviewDecision, registerAccount, validateLedger, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
+import { applyFinancialEvent, applyReviewDecision, reverseReviewDecision, registerAccount, validateLedgerOfClass, ledgerDataClass, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
+import { persistenceDataClass } from './persistence-data-class.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
 
@@ -53,6 +54,16 @@ export class CanonicalWorkspaceSession {
 
   invalidate() { if (this.mode === 'saved') this.needsReopen = true; }
 
+  // One class per session, fixed by the storage bridge before connection.
+  get dataClass() { return this.storage.dataClass ?? 'synthetic'; }
+  #validate(ledger) {
+    if (ledgerDataClass(ledger) !== this.dataClass) appFail('data-class-mismatch');
+    return validateLedgerOfClass(ledger, this.dataClass);
+  }
+  // Designation only narrows later Opens. Failing to record it never admits
+  // anything; the next Open asks again. It must not mark a verified copy unverified.
+  #designateVerifiedFolder() { try { this.storage.commitFolderDesignation?.(); } catch { /* see above */ } }
+
   ready() {
     const lifecycle = this.storage.lifecycle;
     return Boolean(this.online() && lifecycle?.state === 'ready' && lifecycle.acceptingWrites);
@@ -60,6 +71,8 @@ export class CanonicalWorkspaceSession {
 
   canEdit() {
     if (this.busy || !this.ledger || this.unverified || this.recoveryOutcome==='not-saved') return false;
+    // A draft of another class is never editable in this session.
+    if (persistenceDataClass('ledger', this.ledger) !== this.dataClass) return false;
     if (this.mode === 'preview') return true;
     return Boolean(this.ready() && !this.needsReopen && this.store?.base && this.store.lifecycle === this.storage.lifecycle);
   }
@@ -121,8 +134,7 @@ export class CanonicalWorkspaceSession {
 
   preview(ledger) {
     if (this.busy || this.storage.lifecycle) fail('release-before-preview');
-    validateLedger(ledger);
-    if (ledger.syntheticOnly !== true) fail('synthetic-data-required');
+    this.#validate(ledger);
     this.pendingSave=null;this.recoveryOutcome=null;this.backupPreview=false;this.backupSource=null;this.restoreExpected=null;this.restoreFolderId=null;
     this.ledger = structuredClone(ledger);
     this.mode = 'preview'; this.store = null; this.dirty = false;
@@ -193,10 +205,11 @@ export class CanonicalWorkspaceSession {
 
   stageCanonicalImport(proposal) {
     if (!this.canEdit()) fail('reopen-before-editing');
-    validateLedger(proposal);
+    this.#validate(proposal);
     const current = this.ledger;
     if (proposal.ledgerId !== current.ledgerId || proposal.createdAt !== current.createdAt ||
-      proposal.syntheticOnly !== true || proposal.version !== current.version || !same(proposal.accounts, current.accounts) ||
+      persistenceDataClass('ledger', proposal) !== persistenceDataClass('ledger', current) ||
+      proposal.version !== current.version || !same(proposal.accounts, current.accounts) ||
       Object.keys(HISTORICAL_COLLECTIONS).some(key => !same(proposal[key] ?? null, current[key] ?? null)) ||
       !same(proposal.positionEvents ?? [], current.positionEvents ?? [])) fail('invalid-parsed-import');
     for (const key of ['activities', 'events']) {
@@ -260,13 +273,15 @@ export class CanonicalWorkspaceSession {
   }
 
   #assertHistoricalReviewCurrent(expectedLedger) {
+    // Workbook-history import is a separate, synthetic-only workstream.
+    if (this.dataClass !== 'synthetic') appFail('data-class-mismatch');
     if (!this.canEdit()) appFail('reopen-before-editing');
     if (this.ledger !== expectedLedger) appFail('stale-historical-summary-review');
   }
 
   #applyHistoryStage(next) {
     if (next === this.ledger) return next;
-    validateLedger(next);
+    this.#validate(next);
     this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();
@@ -296,7 +311,7 @@ export class CanonicalWorkspaceSession {
     if (!this.stagedHistory.length) fail('no-staged-changes');
     const previous = this.stagedHistory.at(-1);
     const next = structuredClone(previous);
-    validateLedger(next);
+    this.#validate(next);
     this.stagedHistory.pop();
     this.ledger = next;
     this.updateDirty();
@@ -317,9 +332,9 @@ export class CanonicalWorkspaceSession {
     if (this.mode !== 'preview' || !this.ledger || this.busy || this.unverified || this.storage.lifecycle) {
       fail('verified-preview-required');
     }
-    validateLedger(this.ledger);
-    if (this.ledger.syntheticOnly !== true) fail('synthetic-data-required');
-    // Reject before connecting, which may initialize the destination.
+    // Reject a cross-class or oversized ledger before connecting, which may
+    // initialize the destination.
+    this.#validate(this.ledger);
     if (utf8ByteLength(canonicalizeJcs(this.ledger)) > FULL_SNAPSHOT_LIMITS.snapshotBytes) appFail('byte-limit');
     const proposal = structuredClone(this.ledger);
     return this.operation(async () => {
@@ -329,7 +344,7 @@ export class CanonicalWorkspaceSession {
         const lifecycle = this.storage.lifecycle;
         if (!this.ready() || !lifecycle) fail('reconnect-required');
         const genesis = await lifecycle.readManifest();
-        if (!lifecycle.fullSnapshot || genesis.syntheticOnly !== true ||
+        if (!lifecycle.fullSnapshot || persistenceDataClass('manifest', genesis) !== this.dataClass ||
           genesis.revision !== '0' || genesis.pending !== null) {
           fail('new-empty-folder-required');
         }
@@ -362,6 +377,7 @@ export class CanonicalWorkspaceSession {
         this.savedEventCount = reopened.events.length;
         this.pendingSave=null;this.recoveryOutcome=null;
         if(this.restoreExpected)return this.#verifyRestoredCopy();
+        this.#designateVerifiedFolder();
         return reopened;
       } catch (error) {
         const uncertain = writeStarted && (writeVerified || !store?.base);
@@ -442,7 +458,7 @@ export class CanonicalWorkspaceSession {
     return this.operation(async()=>{
       const lifecycle=this.storage.lifecycle,store=this.storage.createLedgerStore(),saved=await store.load({cold:true});
       if(!saved||!this.ready()||lifecycle!==this.storage.lifecycle||!same(saved,this.baselineLedger))fail('source-changed');
-      const raw=await encodeFullSnapshotBackup(saved,{password});
+      const raw=await encodeFullSnapshotBackup(saved,{password,dataClass:this.dataClass});
       lifecycle.engine.assertVerifiedBaseline(store.base);
       if(!this.ready()||lifecycle!==this.storage.lifecycle)fail('reconnect-required');
       return raw;
@@ -451,7 +467,8 @@ export class CanonicalWorkspaceSession {
   async importBackup(raw,{password}={}){
     if(this.busy||this.storage.lifecycle)fail('release-before-preview');
     return this.operation(async()=>{
-      const ledger=await decodeFullSnapshotBackup(raw,{password});
+      // The archive class must match this session before any preview changes.
+      const ledger=await decodeFullSnapshotBackup(raw,{password,dataClass:this.dataClass});
       if(this.storage.lifecycle)fail('release-before-preview');
       // Validation completes before replacing any in-memory preview.
       this.ledger=structuredClone(ledger);this.baselineLedger=structuredClone(ledger);this.mode='preview';this.store=null;this.dirty=false;this.unverified=false;this.needsReopen=false;this.stagedHistory=[];this.savedEventCount=ledger.events.length;
@@ -468,6 +485,7 @@ export class CanonicalWorkspaceSession {
       const lifecycle=this.storage.lifecycle,store=this.storage.createLedgerStore(),actual=await store.load();
       if(!this.ready()||lifecycle!==this.storage.lifecycle||!same(actual,expected)||!same(reportContents(actual),reportContents(expected)))fail('restore-verification-mismatch');
       this.store=store;this.ledger=actual;this.baselineLedger=structuredClone(actual);this.mode='saved';this.dirty=false;this.unverified=false;this.needsReopen=false;this.backupPreview=false;this.backupSource=null;this.restoreExpected=null;this.restoreFolderId=null;this.pendingSave=null;this.savedEventCount=actual.events.length;this.stagedHistory=[];
+      this.#designateVerifiedFolder();
       return actual;
     }catch(error){this.unverified=true;this.needsReopen=true;this.recoveryOutcome='unverifiable';throw error;}
   }

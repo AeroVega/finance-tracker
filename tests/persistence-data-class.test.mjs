@@ -13,7 +13,7 @@ const cryptoImpl=webcrypto;
 const production=({syntheticOnly,...record},version)=>({...record,version,dataClass:'production'});
 const ledger=()=>createLedger({now:'2026-11-23T00:00:00Z',idFactory:()=> '00000000-0000-4000-8000-000000000001'});
 
-test('headers discriminate supported synthetic and reserved production without ambiguous relabelling',()=>{
+test('headers discriminate supported synthetic and production without ambiguous relabelling',()=>{
  for(const [kind,format,legacy,future] of [
   ['ledger','finance-tracker-canonical-ledger',[1,2],3],
   ['manifest','finance-tracker-full-snapshot-manifest',[1],2],
@@ -26,7 +26,7 @@ test('headers discriminate supported synthetic and reserved production without a
    assert.equal(classify(kind,{...old,syntheticOnly:false}),null);
   }
   const next={format,version:future,dataClass:'production'};
-  assert.equal(classify(kind,next),'reserved-production');
+  assert.equal(classify(kind,next),'production');
   assert.equal(classify(kind,{...next,syntheticOnly:true}),null);
   assert.equal(classify(kind,{...next,dataClass:'invented'}),null);
   assert.equal(classify(kind,{...next,version:String(future)}),null);
@@ -43,17 +43,17 @@ test('current ledger validator and backup writer reject future or mixed headers'
  }
 });
 
-test('backup reader refuses both a reserved outer header and a checksummed cross-class inner ledger',async()=>{
+test('backup reader refuses both a production outer header and a checksummed cross-class inner ledger',async()=>{
  const old=ledger();
  const archive=await encodeFullSnapshotBackup(old,{cryptoImpl});
  assert.deepEqual(await decodeFullSnapshotBackup(archive,{cryptoImpl}),old);
  const decoded=JSON.parse(new TextDecoder().decode(archive));
- await assert.rejects(decodeFullSnapshotBackup(bytes(production(decoded,2)),{cryptoImpl}),{code:'unsupported-archive'});
+ await assert.rejects(decodeFullSnapshotBackup(bytes(production(decoded,2)),{cryptoImpl}),{code:'data-class-mismatch'});
  const next=production(old,3),sha256=await sha256Hex(canonicalizeJcs(next),cryptoImpl);
  await assert.rejects(decodeFullSnapshotBackup(bytes({...decoded,ledger:next,sha256}),{cryptoImpl}),error=>error.code==='invalid-backup-source'&&error.cause?.code==='invalid-canonical-ledger');
 });
 
-test('active synthetic storage refuses cross-class saves and refuses a reserved manifest on verified open',async()=>{
+test('active synthetic storage refuses cross-class saves and refuses a production manifest on verified open',async()=>{
  const http=new HttpFullSnapshotDrive();
  const store=createFullSnapshotStorage({
   folderId:http.folderId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,
@@ -69,14 +69,14 @@ test('active synthetic storage refuses cross-class saves and refuses a reserved 
   file.bytes=bytes(production(http.json(store.manifestFileId),2));
   file.metadata.size=String(file.bytes.length);
   file.metadata.version=String(BigInt(file.metadata.version)+1n);
-  await assert.rejects(store.open(),{code:'invalid-shape'});
+  await assert.rejects(store.open(),{code:'data-class-mismatch'});
   assert.equal(http.mutations,previous);
   assert.equal(store.verifiedManifest,null);
  }finally{ await store.release().catch(()=>{}); }
 });
 
 test('session start detects a changed manifest after read-only admission, without publishing financial data',async()=>{
- const {inspectSyntheticManifest}=await import('../js/full-snapshot-storage.mjs');
+ const {inspectManifest}=await import('../js/full-snapshot-storage.mjs');
  const http=new HttpFullSnapshotDrive();
  const settings={folderId:http.folderId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,
   cryptoImpl,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}};
@@ -85,7 +85,7 @@ test('session start detects a changed manifest after read-only admission, withou
  const fileId=prior.manifestFileId;
  await prior.release();
  const fresh=createFullSnapshotStorage(settings),reads=http.requests.length;
- const admission=await inspectSyntheticManifest(fresh.adapter,fileId);
+ const admission=await inspectManifest(fresh.adapter,fileId);
  assert.equal(http.requests.slice(reads).some(row=>row.method!=='GET'),false);
  const file=http.files.get(fileId);
  file.bytes=bytes({...http.json(fileId),databaseId:'other-invented-database'});
@@ -106,17 +106,17 @@ test('session start detects a changed manifest after read-only admission, withou
 });
 
 test('read-only admission refuses ambiguous manifest parents before reading contents',async()=>{
- const {inspectSyntheticManifest,FULL_SNAPSHOT_MANIFEST_NAME}=await import('../js/full-snapshot-storage.mjs');
+ const {inspectManifest,FULL_SNAPSHOT_MANIFEST_NAME}=await import('../js/full-snapshot-storage.mjs');
  const adapter={folderId:'invented-folder',async readMetadata(){
   return {id:'invented-manifest',name:FULL_SNAPSHOT_MANIFEST_NAME,trashed:false,
    parents:[this.folderId,'other-invented-folder'],version:'1',size:'32',
    appProperties:{financeTrackerKind:'finance-tracker-full-snapshot-manifest'}};
  },async readBytes(){ assert.fail('ambiguous parent must refuse before reading the body'); }};
- await assert.rejects(inspectSyntheticManifest(adapter,'invented-manifest'),{code:'manifest-metadata-mismatch'});
+ await assert.rejects(inspectManifest(adapter,'invented-manifest'),{code:'manifest-metadata-mismatch'});
 });
 
 test('read-only admission spends at most nine GETs on non-settling manifest versions',async()=>{
- const {inspectSyntheticManifest,FULL_SNAPSHOT_MANIFEST_NAME}=await import('../js/full-snapshot-storage.mjs');
+ const {inspectManifest,FULL_SNAPSHOT_MANIFEST_NAME}=await import('../js/full-snapshot-storage.mjs');
  const manifest=bytes({format:'finance-tracker-full-snapshot-manifest',version:1,
   syntheticOnly:true,databaseId:'invented-database',copyId:'invented-copy',revision:'0',head:null,pending:null});
  let metadataReads=0,bodyReads=0;
@@ -125,7 +125,7 @@ test('read-only admission spends at most nine GETs on non-settling manifest vers
    parents:[this.folderId],version:String(++metadataReads),size:String(manifest.length),
    appProperties:{financeTrackerKind:'finance-tracker-full-snapshot-manifest'}};
  },async readBytes(){bodyReads++;return manifest;}};
- await assert.rejects(inspectSyntheticManifest(adapter,'invented-manifest'),{code:'manifest-version-mismatch'});
+ await assert.rejects(inspectManifest(adapter,'invented-manifest'),{code:'manifest-version-mismatch'});
  assert.equal(metadataReads,5);
  assert.equal(bodyReads,4);
 });

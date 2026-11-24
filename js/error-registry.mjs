@@ -132,6 +132,9 @@ const extra = Object.freeze({
   'account-mismatch': 'This is not the designated Google account. Keep this tab open and reconnect using the original account.',
   'account-verification-failed': 'The Google account identity could not be verified. Keep your draft and retry with the same account.',
   'account-designation-unavailable': 'The browser could not retain the designated account. Allow site storage before connecting.',
+  'data-class-mismatch': 'This folder, backup or record belongs to a different data class than this session (synthetic test copy versus private database). Nothing was opened, restored or changed.',
+  'data-class-not-released': 'This build does not include private-database storage. It remains synthetic-only; no folder was selected or changed.',
+  'designated-folder-mismatch': 'This is not the private database folder designated in this browser. Nothing was opened or changed. Choose the designated folder, or explicitly designate a new empty folder when creating or restoring.',
   'conflicting-match-requires-correction': 'The selected match has a different account, currency or amount, or is missing an amount. Choose a compatible activity or resolve the evidence with an explicit correction before matching.',
   'inactive-match-target': 'The selected activity is no longer active. Choose an active match target before submitting this review decision.',
 
@@ -309,6 +312,7 @@ const codeGroups = {
     base-conflict catalog-required crypto-unavailable invalid-config invalid-path manifest-unavailable
     object-integrity-failure object-metadata-mismatch object-not-found paged-required recovery-required
     storage-not-ready synthetic-folder-required private-folder-proof-failed verification-scope-closed
+    data-class-mismatch data-class-not-released designated-folder-mismatch
   `,
   paged: `
     adapter-scope-mismatch ambiguous-manifest byte-limit canonical-commit-mismatch canonical-derived-mismatch
@@ -362,7 +366,7 @@ const inputCodes = new Set(`category-required correction-rationale-required tran
  match-target-required`.split(/\s+/).filter(Boolean));
 const stateCodes = new Set(`offline authorization-required authorization-cancelled authorization-popup-blocked authorization-failed picker-cancelled selection-cancelled
  session-active stale-session reconnect-required reopen-before-editing storage-not-ready read-only read-only-inspection
- preview-required verified-preview-required existing-copy-required`.split(/\s+/).filter(Boolean));
+ preview-required verified-preview-required existing-copy-required data-class-not-released designated-folder-mismatch`.split(/\s+/).filter(Boolean));
 const defectCodes = new Set(`unknown unexpected-error diagnostic-self-test module-load-failed
  invalid-options invalid-adapter invalid-adapter-config invalid-engine-config invalid-clock
  adapter-contract adapter-precondition-failed crypto-unavailable`.split(/\s+/).filter(Boolean));

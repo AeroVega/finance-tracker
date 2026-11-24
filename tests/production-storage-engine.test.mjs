@@ -1,17 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
-import {
- createFullSnapshotStorage,createProspectiveStorageForSimulation,inspectSyntheticManifest
-} from '../js/full-snapshot-storage.mjs';
-import {encodeProspectiveProductionBackup,decodeProspectiveProductionBackup} from '../js/full-snapshot-backup.mjs';
+import {createFullSnapshotStorage,inspectManifest} from '../js/full-snapshot-storage.mjs';
+import {encodeFullSnapshotBackup,decodeFullSnapshotBackup} from '../js/full-snapshot-backup.mjs';
 import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
 import {replayFixture} from './helpers/ledger-replay-fixtures.mjs';
 
-const options={cryptoImpl:webcrypto,password:'invented-archive-password'};
+const options={cryptoImpl:webcrypto,password:'invented-archive-password',dataClass:'production'};
 const fixture=()=>replayFixture(1).ledger;
 const prospective=({syntheticOnly,...ledger})=>({...ledger,version:3,dataClass:'production'});
-const connect=http=>createProspectiveStorageForSimulation({folderId:http.folderId,fetchImpl:http.fetch,cryptoImpl:webcrypto});
+// The production engine is the same native engine with class-bound headers.
+// Engine construction is not the release gate; see the application tests.
+const engine=(http,dataClass)=>createFullSnapshotStorage({folderId:http.folderId,accessToken:()=> 'invented-test-token',
+ fetchImpl:http.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},dataClass});
+const connect=async http=>engine(http,'production');
 
 test('native simulator recovers a durably pending v2 publication and independently reopens',async()=>{
  const http=new HttpFullSnapshotDrive(),store=await connect(http),ledger=prospective(fixture());
@@ -45,7 +47,8 @@ test('native simulator recovers a durably pending v2 publication and independent
   assert.equal(commit.dataClass,'production');
   assert.equal(commit.snapshot.fileId.length>0,true);
   assert.equal(store.verifiedManifest,null);
-  await assert.rejects(inspectSyntheticManifest(store.adapter,store.manifestFileId),{code:'invalid-shape'});
+  await assert.rejects(inspectManifest(store.adapter,store.manifestFileId),{code:'data-class-mismatch'});
+  assert.equal((await inspectManifest(store.adapter,store.manifestFileId,{dataClass:'production'})).dataClass,'production');
   http.respond=original;
   assert.deepEqual(await store.recover(),ledger);
   assert.equal(store.verifiedManifest,null);
@@ -61,20 +64,19 @@ test('native simulator recovers a durably pending v2 publication and independent
  }
 });
 
-test('native invented v2 archive round-trip restores to fresh lineage and v1 engine stays strict',async()=>{
+test('native invented v2 archive round-trip restores to fresh lineage and the synthetic engine stays strict',async()=>{
  const sourceHttp=new HttpFullSnapshotDrive(),source=await connect(sourceHttp);
  const destinationHttp=new HttpFullSnapshotDrive(),destination=await connect(destinationHttp);
  const syntheticHttp=new HttpFullSnapshotDrive();
  const synthetic=createFullSnapshotStorage({folderId:syntheticHttp.folderId,accessToken:()=> 'invented-test-token',
   fetchImpl:syntheticHttp.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},
-  // Untrusted caller options cannot select the profile of the app factory.
-  dataClass:'production'});
+  dataClass:'synthetic'});
  const ledger=prospective(fixture());
  try{
   await source.start({initialize:true});
   await source.save(ledger);
-  const archive=await encodeProspectiveProductionBackup(await source.open(),options);
-  const restored=await decodeProspectiveProductionBackup(archive,options);
+  const archive=await encodeFullSnapshotBackup(await source.open(),options);
+  const restored=await decodeFullSnapshotBackup(archive,options);
   await destination.start({initialize:true});
   await destination.save(restored);
   assert.deepEqual(await destination.open(),ledger);
@@ -89,10 +91,20 @@ test('native invented v2 archive round-trip restores to fresh lineage and v1 eng
  }
 });
 
-test('simulator factory supplies neither default network transport nor caller credentials',async()=>{
- await assert.rejects(createProspectiveStorageForSimulation({folderId:'invented-folder',cryptoImpl:webcrypto}),{code:'invalid-engine-config'});
- await assert.rejects(createProspectiveStorageForSimulation({folderId:'invented-folder',
-  fetchImpl:globalThis.fetch,cryptoImpl:webcrypto}),{code:'invalid-engine-config'});
+test('engine refuses an unknown class and a synthetic engine refuses a production folder before any write',async()=>{
+ assert.throws(()=>engine(new HttpFullSnapshotDrive(),'reserved-production'),{code:'invalid-engine-config'});
+ assert.throws(()=>engine(new HttpFullSnapshotDrive(),'unknown'),{code:'invalid-engine-config'});
+ const http=new HttpFullSnapshotDrive(),production=engine(http,'production');let synthetic;
+ try{
+  await production.start({initialize:true});await production.save(prospective(fixture()));await production.release();
+  const start=http.requests.length,manifest=structuredClone(http.files.get(production.manifestFileId));synthetic=engine(http,'synthetic');
+  await assert.rejects(synthetic.start(),{code:'data-class-mismatch'});
+  // Only session-marker requests may write; the production copy is untouched.
+  const writes=http.requests.slice(start).filter(row=>!['GET'].includes(row.method));
+  assert.ok(writes.length>0);assert.deepEqual(writes.filter(row=>row.kind!=='session-marker'&&row.category!=='generate-id'),[]);
+  assert.deepEqual(http.files.get(production.manifestFileId),manifest);
+  assert.equal(http.json(production.manifestFileId).dataClass,'production');
+ }finally{await synthetic?.release().catch(()=>{});await production.release().catch(()=>{});}
 });
 
 for(const part of ['commit','snapshot'])test('v2 refuses ambiguous '+part+' parent without writing',async()=>{

@@ -53,7 +53,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/transaction-protocol.mjs",
   "js/utf8-length.mjs",
   "js/persistence-data-class.mjs",
-  "js/prospective-production-snapshot.mjs",
+  "js/release-profile.mjs",
   "js/workspace-chrome.mjs",
   "js/workspace-navigation.js",
   "js/workspace-pages.mjs",

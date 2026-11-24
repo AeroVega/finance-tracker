@@ -1,5 +1,6 @@
-// Header discrimination only. A recognized future class is NOT a supported
-// format, activation, authorization, or proof of data provenance.
+// Header discrimination only. Recognizing the production class is NOT
+// activation, authorization, or proof of data provenance. Whether a build may
+// construct a production session is a release decision; see release-profile.mjs.
 export const HISTORICAL_LEDGER_VERSION = 2;
 
 const contracts = new Map([
@@ -11,11 +12,11 @@ const contracts = new Map([
 export function persistenceDataClass(kind, value) {
   const contract = contracts.get(kind);
   if (!contract || !value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const [format, legacyVersions, reservedVersion] = contract;
+  const [format, syntheticVersions, productionVersion] = contract;
   if (!Object.hasOwn(value, 'format') || value.format !== format || !Object.hasOwn(value, 'version')) return null;
-  if (legacyVersions.includes(value.version) &&
+  if (syntheticVersions.includes(value.version) &&
       !('dataClass' in value) && Object.hasOwn(value, 'syntheticOnly') && value.syntheticOnly === true) return 'synthetic';
-  if (value.version === reservedVersion &&
-      !('syntheticOnly' in value) && Object.hasOwn(value, 'dataClass') && value.dataClass === 'production') return 'reserved-production';
+  if (value.version === productionVersion &&
+      !('syntheticOnly' in value) && Object.hasOwn(value, 'dataClass') && value.dataClass === 'production') return 'production';
   return null;
 }

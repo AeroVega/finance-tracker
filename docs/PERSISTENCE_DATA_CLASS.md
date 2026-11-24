@@ -1,91 +1,138 @@
-# Persistence data-class boundary
+# Persistence data class and release gate
 
-The active route remains synthetic-only. The shared
-[header discriminator](../js/persistence-data-class.mjs) separates existing
-synthetic records from a proposed future production header. Header recognition
-does not decode a production record, prove data provenance, verify approval,
-or authorize any use of real data.
+**Status (PR 57 candidate, 2026-11-23):** implemented and tested with invented
+data in Node simulation only. The shipped [release profile](../js/release-profile.mjs)
+is **synthetic-only**, so the ordinary deployed build cannot construct a
+private-database session. Real-data use remains **NO-GO**; see
+[current state](CURRENT_STATE.md) and the [owner checklist](OWNER_ACCEPTANCE.md).
 
-| Artifact | Active synthetic header | Inactive production-header placeholder |
+## Two classes, one per session
+
+| Artifact | Synthetic header | Production header |
 | --- | --- | --- |
 | Canonical ledger | Versions 1 and 2 with `syntheticOnly: true` | Version 3 with `dataClass: "production"` |
 | Full-snapshot manifest | Version 1 with `syntheticOnly: true` | Version 2 with `dataClass: "production"` |
-| Portable backup envelope | Version 1 with `syntheticOnly: true` | Version 2 with `dataClass: "production"` |
+| Commit envelope | Version 1, profile `canonical-ledger-full-v1` | Version 2, profile `canonical-ledger-production-v3`, `dataClass: "production"` |
+| Portable backup | Version 1, plaintext or encrypted | Version 2, **encrypted only** |
 
-Existing synthetic writers still emit the same headers. Mixed markers,
-missing markers and unknown versions are rejected. The active validator,
-storage engine and backup codec continue to require the synthetic class;
-they have no production codec or fallback. A correctly checksummed backup
-does not override the inner ledger's class. Explicit Open now reads and validates the candidate manifest before changing
-its session marker or releasing another session. After acquiring ownership,
-it rechecks the same manifest ID and canonical contents before making
-financial data available or finalizing recovery. A concurrent change after
-preflight can still cause refusal after a session-marker write. An
-admission-only refusal releases a newly confirmed claim using normal
-readback; it never releases an older claim or clears a prior unresolved
-save. If the new release cannot be verified, it stops renewal rather than
-claiming success. This is not atomic admission or a complete ancestry check
-before claim. Independent cold restore verification repeats the private-folder
-proof and read-only manifest check before releasing or acquiring ownership.
+The [header discriminator](../js/persistence-data-class.mjs) recognizes exactly
+these headers. Mixed markers, missing markers and unknown versions are refused.
+A header does not prove that data is invented or real, and it authorizes nothing.
 
-## Before a production route is considered
+A session has exactly one class, chosen before connection and fixed until
+verified release. The class is threaded through the
+[storage engine](../js/full-snapshot-storage.mjs) (manifest, envelope and
+snapshot validation), the [application](../js/full-snapshot-application.mjs),
+the [Drive/Picker bridge](../js/dashboard-synthetic-storage.mjs), the
+[workspace session](../js/canonical-workspace-session.mjs) and the
+[backup codec](../js/full-snapshot-backup.mjs). Both classes use the same native
+engine: immutable Drive references, exact readback, session ownership,
+pending publication, recovery and fresh-lineage restore. There is no second
+storage format; the earlier detached hash-only fixture was removed.
 
-- Settle the future versions and exact schemas together. Bind the class and
-  database/copy identity across historical commits, pending manifests,
-  recovery, archive headers and the decrypted payload. Authenticate new
-  archive metadata. In particular, this change does not define a production
-  commit envelope or allow a synthetic record to be relabelled.
-- Extend read-only pre-admission checks for prospective production folders before
-  opening records, writing a session marker, or releasing another session.
-  Use the exact verified Google account and folder, not their names. Keep
-  workspace, CSV/historical import, and restore routes fail-closed across
-  classes. A marker does not prove a file is actually invented or private.
-- Separate synthetic candidate acceptance from activation. Follow the
-  [security review](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md)
-  for exact served-build, account, folder, privacy, backup and cost evidence.
-  A public page URL, browser setting, build label, or embedded identifier
-  cannot authenticate approval. No runtime activation switch is introduced.
+### Cross-class refusal (`data-class-mismatch`)
 
-## Detached v2/v3 proof (fixture only)
+Refusal happens at the earliest point that can observe the class, and always
+before touching the destination or replacing the current session or draft:
 
-The [prospective snapshot codec](../js/prospective-production-snapshot.mjs)
-is an early hash-only fixture, not a second durable provider format.
-It exercises only clean manifests with invented records. Each fixture commit binds
-production class, v3 ledger profile, database and copy identity, the previous
-manifest and parent commit, and the exact canonical snapshot. The verifier
-replays the complete bounded chain with existing ledger transition rules.
-A detached v2 archive uses the encrypted branch of the backup codec: its
-class and version are authenticated header fields, and inner validation
-requires matching v2 envelope and v3 ledger. A verified restore creates a
-fresh copy lineage while preserving the logical ledger. Synthetic v1
-archives retain the existing optional encryption and are not accepted by
-the detached v2 decoder.
+- **Folder:** the read-only manifest inspection before any session marker
+  refuses the other class. Under ownership the engine rechecks the same
+  manifest and its class. Production refuses a folder whose name contains
+  "synthetic" right after the Picker metadata read, before the privacy proof or
+  any folder-content read; synthetic keeps its existing name rule.
+  Names only refuse mix-ups; they never authorize a folder.
+- **Ledger:** preview, staging, undo and save-to-new-copy validate the session
+  class before any connection. Domain transitions preserve the declared class,
+  and `assertCanonicalLedgerTransition` refuses any header rewrite.
+- **CSV import:** the importer must name the expected class; the session's
+  staging boundary rejects a proposal of another class.
+- **Backup:** the cleartext archive header is checked before key derivation or
+  decryption. The decrypted inner header and ledger must match again. A
+  checksummed archive cannot relabel its inner ledger.
+- **Restore:** the backup class, the preview ledger class and the newly
+  created destination manifest class must all equal the session class.
 
-The 128-frame and 64 MiB aggregate verification limits are checkpoint
-limits, not proposed Drive capacity. The prototype intentionally excludes
-provider publication, pending recovery, browser/destination wiring and
-activation. The encrypted-only detached export is not an owner decision to
-permanently require encryption for all future production backups. No app
-entry point reads, writes, or converts a production ledger today.
+Existing synthetic ledgers, manifests and backups are unchanged and remain
+readable by synthetic sessions only.
 
+Workbook historical-summary staging stays synthetic-only and is refused in a
+production session; that workstream is separate (see PR 58).
 
-## Native provider simulation
+## Access authority for a private database
 
-The native storage engine's closed simulation profile is the prospective
-provider design. It uses the existing immutable Drive references, exact
-readback, session ownership, pending-publication and recovery paths. It emits
-v2 manifests and commits with explicit production class and binds the v3
-ledger validation profile. V2 witnesses require one exact parent for manifest,
-commit and snapshot; the existing v1 immutable-object compatibility path is
-unchanged. Fixture-only hashes use different type IDs and cannot be opened
-as native provider records. It does not change the v1 synthetic factory or
-the deployed app's synthetic-only folder admission.
+Google OAuth and Drive permissions are the access authority. The app adds
+checks that can only refuse:
 
-The isolated simulation factory runs only in Node's test runner with an
-injected fixture transport and a fixed invented token; it is not called by
-the browser app and accepts no production token, authorization input or
-transport default. The simulation verifies pending-publication recovery,
-independent reopen and fresh-lineage restore with invented records. It does
-not establish live provider behavior or grant permission to use real data.
-Before any app wiring, verify exact release-artifact approval and provider
-account/folder admission; never use the test-runner check as an authorization policy.
+1. **One designated Google account.** `about.get` identity, explicit
+   confirmation, and a local SHA-256 fingerprint of the permission ID. A
+   different account is refused; reauthorization must return the same account.
+2. **One exact private folder.** The [private-folder proof](../js/google-private-folder-proof.mjs)
+   requires an unshared, non-shared-drive folder owned only by the designated
+   account before any session release, manifest read or write. In addition, a
+   production session keeps a per-browser fingerprint of (account, folder).
+   Open refuses any other folder (`designated-folder-mismatch`) after the Picker
+   metadata read but before the privacy proof or any
+   folder-content read. A first Open asks to designate. Creating or restoring into a
+   new empty folder asks to replace the designation, and the fingerprint moves
+   only after that new copy is independently verified; a failed restore keeps
+   the previous designation. Clearing site data removes the fingerprint and
+   requires designation again. The fingerprint is not a credential, never
+   leaves the browser, and is not written to diagnostics.
+3. **One active device.** The existing best-effort session marker: an active
+   claim refuses another device; a conclusively expired one is reclaimed
+   through normal Open without publishing the abandoned draft. There is no
+   Drive compare-and-swap; see [session coordination](SESSION_COORDINATION.md).
+
+No URL flag, browser storage value, folder name or automatic discovery can
+select or authorize the production class.
+
+## Release gate: what static code can and cannot enforce
+
+`RELEASE_PROFILE.dataClasses` in [release-profile.mjs](../js/release-profile.mjs)
+lists the classes this exact source revision can construct. It is checked when
+the bridge and application are constructed and when the class is changed. The
+class selector is hidden and disabled unless the profile lists `production`.
+
+**Enforced by code:** an ordinary build cannot open, create, restore or import
+a private database, and cannot be switched by page input.
+
+**Not enforced by code:** whether a given release *should* list `production`.
+A static page cannot verify an owner's approval, and anyone who can publish a
+modified page can change its code. The control is therefore the **release
+decision**, recorded outside the page:
+
+1. The candidate that adds `production` is a separate, reviewed commit that
+   changes only the release profile (and the assertion that pins it), on top of
+   an already-reviewed tree.
+2. The owner's approval names the full commit SHA, the Pages origin and path,
+   the deployment workflow run, the verified served build stamp, the
+   designated account (confirmed privately, not in the repository) and the
+   dedicated folder workflow. The served `js/release-profile.mjs` and build
+   stamp must be compared byte-for-byte with that commit.
+3. Deployment from that commit requires GitHub protections that make an
+   unreviewed change visible: required checks including **Guarded code
+   checks**, independent approval, and restricted Pages deployment. At the
+   time of writing these are **not** all enforced on `main`; that is a blocker
+   for any production release, not a pass.
+4. The first live use of an approved production-capable release is an
+   invented-data rehearsal under [OWNER_ACCEPTANCE.md](OWNER_ACCEPTANCE.md).
+   Real-data activation is a further explicit owner decision. A merge, a
+   deployment or a synthetic acceptance pass is not activation.
+
+## Verification (invented data only)
+
+- [Production app flow](../tests/production-app-flow.test.mjs) runs the
+  shipped controller, session, bridge, engine and codec against simulated
+  Drive folders with a test-only release profile: locked default, private
+  create / CSV import / explicit save / release / independent reopen,
+  cross-class refusal in both directions, wrong/shared/unverifiable/undesignated
+  folders, canceled authorization, expiry and reconnect, interrupted save and
+  recovery, active versus expired ownership, encrypted restore to a fresh empty
+  folder with independent comparison, and privacy of uploads, diagnostics and
+  browser storage.
+- [Production storage engine](../tests/production-storage-engine.test.mjs)
+  covers v2 pending-publication recovery, archive round-trip, ambiguous parents
+  and class refusal at the engine level.
+
+Simulation does not establish live Google OAuth, Picker, Drive permission
+fields, quota, or physical Safari behavior.

@@ -3,7 +3,7 @@
 **Checked:** 2026-11-23
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
 **Main baseline:** `16a5ff6134a414d4cc5ede1e2ed4c3af551740f4` ([PR 55](https://github.com/AeroVega/finance-tracker/pull/55) merged)
-**Active work:** [PR 57](https://github.com/AeroVega/finance-tracker/pull/57) is the real-data readiness workstream. Keep testing synthetic. Legacy Excel migration is separate; [PR 56](https://github.com/AeroVega/finance-tracker/pull/56) closed without merging and its converter is not the migration plan.
+**Active work:** [PR 57](https://github.com/AeroVega/finance-tracker/pull/57) is the real-data readiness workstream. Its candidate wires a private-database data class through the app behind a [release gate](PERSISTENCE_DATA_CLASS.md) that is **off** in this source: the deployed build stays synthetic-only. Keep testing synthetic. Legacy Excel migration is separate; [PR 56](https://github.com/AeroVega/finance-tracker/pull/56) closed without merging and its converter is not the migration plan.
 
 This is the concise current direction and permission boundary. The 2026-11-22 [security, privacy, OAuth, cost and recovery review](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md) records the latest production NO-GO analysis. [Project status](PROJECT_STATUS.md) retains dated historical evidence; the focused [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
 
@@ -36,7 +36,7 @@ Preserve the $0 recurring-cost constraint, permanent manual file imports, no sto
 
 The performance objective for the reported synthetic save/open is accepted. Recovery and portable backup/restore are implemented in the selected full-snapshot route; preserve their existing contracts and do not reopen unchanged acceptance gates without a demonstrated defect.
 
-Close the [remaining readiness gates](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md#residual-risks-before-any-activation) in PR 57, including verification that originals never enter persistence or backup/restore, and candidate-specific synthetic acceptance. Do not infer readiness from merging the PR. Treat legacy Excel migration as separate work and do not reuse PR 56 as its design. Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
+Close the [remaining readiness gates](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md#residual-risks-before-any-activation) in PR 57: candidate-specific synthetic acceptance of the exact served build, GitHub enforcement of guarded checks and independent approval, and independent review. A production-capable release is a separate owner decision for one exact commit; see the [release gate](PERSISTENCE_DATA_CLASS.md#release-gate-what-static-code-can-and-cannot-enforce). Do not infer readiness from merging the PR. Treat legacy Excel migration as separate work and do not reuse PR 56 as its design. Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
 
 ## Reading map
 

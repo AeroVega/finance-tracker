@@ -211,7 +211,7 @@ test('reconnect rejects an unadmitted manifest before touching Drive or replacin
   file.bytes=new TextEncoder().encode(JSON.stringify({...header,version:2,dataClass:'production'}));
   file.metadata.size=String(file.bytes.length);
   file.metadata.version=String(BigInt(file.metadata.version)+1n);
-  await assert.rejects(h.session.open(),{code:'invalid-shape'});
+  await assert.rejects(h.session.open(),{code:'data-class-mismatch'});
   assert.equal(h.storage.lifecycle,old);
   assert.deepEqual(h.session.ledger,draft);
   assert.equal(h.session.dirty,true);

@@ -5,7 +5,7 @@ import {GoogleDriveTransactionAdapter,getNativeDriveReadCheck} from './drive-tra
 import {createDriveSessionAdapter} from './drive-session-adapter.mjs';
 import {SessionCoordinator,createNativeOwnershipGuard,getNativeOwnershipCapability} from './session-coordination.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
-import {validateLedger,validateProspectiveProductionLedger} from './canonical-import.mjs';
+import {validateLedger,validateProductionLedger} from './canonical-import.mjs';
 import {assertCanonicalLedgerTransition} from './canonical-history.mjs';
 import {utf8ByteLength} from './utf8-length.mjs';
 
@@ -15,10 +15,14 @@ const MANIFEST='finance-tracker-full-snapshot-manifest',ENVELOPE='finance-tracke
 const SYNTHETIC_PROFILE=Object.freeze({
  class:'synthetic',marker:'syntheticOnly',markerValue:true,version:1,commitProfile:PROFILE,validateLedger
 });
-const PROVIDER_SIMULATION_PROFILE=Object.freeze({
- class:'reserved-production',marker:'dataClass',markerValue:'production',version:2,
- commitProfile:'canonical-ledger-production-v3',validateLedger:validateProspectiveProductionLedger
+// Same immutable references, ownership, pending publication and readback as
+// synthetic. Only the class-bound headers and ledger validator differ.
+const PRODUCTION_PROFILE=Object.freeze({
+ class:'production',marker:'dataClass',markerValue:'production',version:2,
+ commitProfile:'canonical-ledger-production-v3',validateLedger:validateProductionLedger
 });
+const PROFILES=Object.freeze({synthetic:SYNTHETIC_PROFILE,production:PRODUCTION_PROFILE});
+const profileFor=dataClass=>Object.hasOwn(PROFILES,dataClass)?PROFILES[dataClass]:fail('invalid-engine-config');
 const enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:true});
 const clone=x=>structuredClone(x),same=(a,b)=>canonicalizeJcs(a)===canonicalizeJcs(b);
 const metadataFields=['id','name','mimeType','parents','appProperties','size','version','trashed'];
@@ -33,6 +37,8 @@ const bytes=(value,max)=>{const text=canonicalizeJcs(value);if(utf8ByteLength(te
 const reference=(r,max)=>{fields(r,['fileId','sha256','byteLength']);id(r.fileId);hash(r.sha256);if(!Number.isSafeInteger(r.byteLength)||r.byteLength<1||r.byteLength>max)fail('byte-limit');return r;};
 const clean=(profile,databaseId,copyId,rev,head)=>({format:MANIFEST,version:profile.version,[profile.marker]:profile.markerValue,databaseId,copyId,revision:rev,head,pending:null});
 function manifest(m,allowPending=true,profile=SYNTHETIC_PROFILE){
+ // A recognized header of the other class is refused as such, before shape.
+ const declared=persistenceDataClass('manifest',m);if(declared&&declared!==profile.class)fail('data-class-mismatch');
  fields(m,['format','version',profile.marker,'databaseId','copyId','revision','head','pending']);
  if(persistenceDataClass('manifest',m)!==profile.class)fail('unsupported-canonical-layout');
  id(m.databaseId);id(m.copyId);const n=revision(m.revision);
@@ -43,8 +49,8 @@ function manifest(m,allowPending=true,profile=SYNTHETIC_PROFILE){
 // A bounded read-only admission receipt. It is checked again under ownership
 // and is never used as a save baseline or claim of provider atomicity.
 const hasExactParent=(value,folderId)=>Array.isArray(value.parents)&&value.parents.length===1&&value.parents[0]===folderId;
-export async function inspectSyntheticManifest(adapter,fileId){
- const folderId=id(adapter.folderId);
+export async function inspectManifest(adapter,fileId,{dataClass='synthetic'}={}){
+ const profile=profileFor(dataClass),folderId=id(adapter.folderId);
  const checkMetadata=m=>{
   if(m?.id!==fileId||m.name!==FULL_SNAPSHOT_MANIFEST_NAME||m.trashed!==false||
     m.appProperties?.financeTrackerKind!==MANIFEST||!hasExactParent(m,folderId)||
@@ -70,31 +76,23 @@ export async function inspectSyntheticManifest(adapter,fileId){
  }
  let value;
  try{value=JSON.parse(dec.decode(raw));}catch(cause){fail('invalid-json',{cause});}
- return Object.freeze({folderId,fileId,canonical:canonicalizeJcs(manifest(value))});
+ return Object.freeze({folderId,fileId,dataClass,canonical:canonicalizeJcs(manifest(value,true,profile))});
 }
 function envelope(e,m,ref,profile){
- fields(e,['format','version','databaseId','copyId','revision','transactionId','parent','previousManifestHash','snapshot','profile',...(profile===PROVIDER_SIMULATION_PROFILE?['dataClass']:[])]);
+ fields(e,['format','version','databaseId','copyId','revision','transactionId','parent','previousManifestHash','snapshot','profile',...(profile===PRODUCTION_PROFILE?['dataClass']:[])]);
  if(e.format!==ENVELOPE||e.version!==profile.version||e.profile!==profile.commitProfile||
-  (profile===PROVIDER_SIMULATION_PROFILE&&e.dataClass!==profile.markerValue))fail('unsupported-canonical-profile');
+  (profile===PRODUCTION_PROFILE&&e.dataClass!==profile.markerValue))fail('unsupported-canonical-profile');
  if(e.databaseId!==m.databaseId||e.copyId!==m.copyId||e.revision!==m.revision||revision(e.revision)===0n)fail('history-mismatch');
  id(e.transactionId);hash(e.previousManifestHash);reference(e.snapshot,FULL_SNAPSHOT_LIMITS.snapshotBytes);
  if((revision(e.revision)===1n)!==(e.parent===null))fail('history-mismatch');if(e.parent)reference(e.parent,FULL_SNAPSHOT_LIMITS.envelopeBytes);
  if(e.snapshot.fileId===ref.fileId)fail('invalid-plan');return e;
 }
 
+// The data class is fixed per engine. Whether a build may request the
+// production class is decided by the application's release gate, not here.
 export function createFullSnapshotStorage({folderId,accessToken,fetchImpl=globalThis.fetch,cryptoImpl=globalThis.crypto,
- setIntervalImpl=globalThis.setInterval,clearIntervalImpl=globalThis.clearInterval,visibilityDelayMs=500}={}) {
- return new FullSnapshotStorage({folderId,accessToken,fetchImpl,cryptoImpl,setIntervalImpl,clearIntervalImpl,visibilityDelayMs},SYNTHETIC_PROFILE);
-}
-
-// Not an app configuration switch. It has no production credential parameter,
-// no default transport, and only runs under Node's test runner.
-export async function createProspectiveStorageForSimulation({folderId,fetchImpl,cryptoImpl}={}){
- const {default:testingProcess}=await import('node:process');
- if(!testingProcess.env.NODE_TEST_CONTEXT||typeof fetchImpl!=='function'||fetchImpl===globalThis.fetch||!cryptoImpl)
-  fail('invalid-engine-config');
- return new FullSnapshotStorage({folderId,accessToken:()=> 'invented-test-token',fetchImpl,cryptoImpl,
-  visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{}},PROVIDER_SIMULATION_PROFILE);
+ setIntervalImpl=globalThis.setInterval,clearIntervalImpl=globalThis.clearInterval,visibilityDelayMs=500,dataClass='synthetic'}={}) {
+ return new FullSnapshotStorage({folderId,accessToken,fetchImpl,cryptoImpl,setIntervalImpl,clearIntervalImpl,visibilityDelayMs},profileFor(dataClass));
 }
 class FullSnapshotStorage {
 #profile;
@@ -107,6 +105,7 @@ class FullSnapshotStorage {
    responseLimits:{'snapshot-object':FULL_SNAPSHOT_LIMITS.snapshotBytes,'commit-record':FULL_SNAPSHOT_LIMITS.envelopeBytes,'stored-object':FULL_SNAPSHOT_LIMITS.manifestBytes,manifest:FULL_SNAPSHOT_LIMITS.manifestBytes},
    captureMutationGuard:()=>this.#capture(),onExpiredMutation:()=>this.invalidate()});
  }
+ get dataClass(){return this.#profile.class;}
  get saveAttempt(){return this.#saveAttempt?clone(this.#saveAttempt):null;}
  get manifestFileId(){return this.#manifestId;}
  get recoveryRequired(){return this.#recoveryRequired;}
@@ -131,7 +130,7 @@ class FullSnapshotStorage {
  }
  #metadata(m,fileId,kind,sha,transactionId){
   if(m?.id!==fileId||m.trashed!==false||!m.parents?.includes(this.folderId)||
-    (this.#profile===PROVIDER_SIMULATION_PROFILE&&!hasExactParent(m,this.folderId))||typeof m.version!=='string'||!(/^[1-9][0-9]*$/).test(m.version)||!(/^(0|[1-9][0-9]*)$/).test(m.size))fail('metadata-mismatch');
+    (this.#profile===PRODUCTION_PROFILE&&!hasExactParent(m,this.folderId))||typeof m.version!=='string'||!(/^[1-9][0-9]*$/).test(m.version)||!(/^(0|[1-9][0-9]*)$/).test(m.size))fail('metadata-mismatch');
   if(kind&&m.appProperties?.financeTrackerKind!==kind)fail('metadata-mismatch');
   if(sha&&(m.appProperties?.financeTrackerHash!==sha||m.name!=='ft-full-'+sha+'.bin'||m.mimeType!=='application/octet-stream'))fail('metadata-mismatch');
   if(transactionId&&m.appProperties?.financeTrackerTransaction!==transactionId)fail('metadata-mismatch');return m;
@@ -314,7 +313,7 @@ class FullSnapshotStorage {
    if(same(current.ledger,candidate))return clone(current.ledger);
    const transactionId=this.crypto.randomUUID(),snapshot=await this.#create(raw,'snapshot-object',transactionId,base);
    const value={format:ENVELOPE,version:this.#profile.version,databaseId:base.databaseId,copyId:base.copyId,revision:String(revision(base.revision)+1n),transactionId,parent:base.head,previousManifestHash:await this.#digest(bytes(base,FULL_SNAPSHOT_LIMITS.manifestBytes)),snapshot,profile:this.#profile.commitProfile,
-    ...(this.#profile===PROVIDER_SIMULATION_PROFILE?{dataClass:this.#profile.markerValue}:{})};
+    ...(this.#profile===PRODUCTION_PROFILE?{dataClass:this.#profile.markerValue}:{})};
    const head=await this.#create(bytes(value,FULL_SNAPSHOT_LIMITS.envelopeBytes),'commit-record',transactionId,base);
    const next=clean(this.#profile,base.databaseId,base.copyId,value.revision,head),published={...next,pending:{state:'published',base:clone(base)}};
    manifest(published,true,this.#profile);envelope(value,published,head,this.#profile);this.#capture()();this.#saveAttempt.candidate=clone(next);
@@ -328,7 +327,7 @@ class FullSnapshotStorage {
   });
  }
  #assertAdmission(admission,m){
-  if(admission&&(admission.folderId!==this.folderId||admission.fileId!==this.#manifestId||
+  if(admission&&(admission.folderId!==this.folderId||admission.fileId!==this.#manifestId||admission.dataClass!==this.#profile.class||
     admission.canonical!==canonicalizeJcs(m)))fail('base-conflict');
  }
  async recover({admission}={}){

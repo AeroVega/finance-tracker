@@ -1,6 +1,6 @@
 import {persistenceDataClass} from './persistence-data-class.mjs';
 import {fail} from './app-error.mjs';
-import {validateLedger,validateProspectiveProductionLedger} from './canonical-import.mjs';
+import {validateLedger,validateProductionLedger} from './canonical-import.mjs';
 import {canonicalizeJcs,sha256Hex} from './transaction-protocol.mjs';
 import {copyOwnedBytes} from './byte-ownership.mjs';
 import {utf8ByteLength} from './utf8-length.mjs';
@@ -15,8 +15,13 @@ export const FULL_SNAPSHOT_BACKUP_LIMITS=Object.freeze({ledgerBytes,plaintextByt
  archiveBytes:Math.ceil((plaintextBytes+16)/3)*4+2048,depth:64,passwordBytes:1024,pbkdf2Iterations:600000});
 const enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true});
 const typedByteLength=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype),'byteLength').get;
-const SYNTHETIC=Object.freeze({dataClass:'synthetic',version:1,field:'syntheticOnly',marker:true,validate:validateLedger});
-const PROSPECTIVE=Object.freeze({dataClass:'reserved-production',version:2,field:'dataClass',marker:'production',validate:validateProspectiveProductionLedger});
+const SYNTHETIC=Object.freeze({dataClass:'synthetic',version:1,field:'syntheticOnly',marker:true,validate:validateLedger,encrypted:false});
+// Production archives are encrypted-only in this release: a readable private
+// download is too easy to mishandle. Their class/version are authenticated
+// AES-GCM additional data and must match the decrypted inner ledger.
+const PRODUCTION=Object.freeze({dataClass:'production',version:2,field:'dataClass',marker:'production',validate:validateProductionLedger,encrypted:true});
+const PROFILES=Object.freeze({synthetic:SYNTHETIC,production:PRODUCTION});
+const profileFor=dataClass=>Object.hasOwn(PROFILES,dataClass)?PROFILES[dataClass]:fail('unsupported-archive');
 const header=(protection,profile)=>({format:FORMAT,version:profile.version,[profile.field]:profile.marker,protection});
 function shape(value,keys){
  if(!value||Object.getPrototypeOf(value)!==Object.prototype||Object.keys(value).length!==keys.length||keys.some(key=>!Object.hasOwn(value,key)))fail('invalid-shape');
@@ -75,7 +80,10 @@ async function keyFor(password,salt,cryptoImpl){
  }finally{material.fill(0);}
 }
 function checkHeader(value,profile){
- if(persistenceDataClass('backup',value)!==profile.dataClass||![PLAIN,SEALED].includes(value.protection))fail('unsupported-archive');
+ const declared=persistenceDataClass('backup',value);
+ // Refuse the other class from the cleartext header, before KDF or decryption.
+ if(declared&&declared!==profile.dataClass)fail('data-class-mismatch');
+ if(declared!==profile.dataClass||![PLAIN,SEALED].includes(value.protection))fail('unsupported-archive');
 }
 async function decodePlain(value,cryptoImpl,profile){
  checkHeader(value,profile);if(value.protection!==PLAIN)fail('unsupported-archive');
@@ -96,14 +104,11 @@ async function decodePlain(value,cryptoImpl,profile){
  * https://developer.mozilla.org/en-US/docs/Web/API/Pbkdf2Params
  * Entire bounded archive is held in memory; this is not a streaming/Safari claim.
  */
-export function encodeFullSnapshotBackup(source,options){return encode(source,options,SYNTHETIC);}
-// Deliberately unreachable from application import/export. This checkpoint
-// only admits encrypted prospective archives to the detached fixture path.
-export function encodeProspectiveProductionBackup(source,options){return encode(source,options,PROSPECTIVE);}
+export function encodeFullSnapshotBackup(source,{dataClass='synthetic',...options}={}){return encode(source,options,profileFor(dataClass));}
 async function encode(source,{cryptoImpl=globalThis.crypto,password}={},profile){
  const text=canonical(source);admitText(text,FULL_SNAPSHOT_BACKUP_LIMITS.ledgerBytes);
  const detached=ledger(text,profile);
- if(profile===PROSPECTIVE&&password===undefined)fail('backup-password-required');
+ if(profile.encrypted&&password===undefined)fail('backup-password-required');
  if(password!==undefined)passwordBytes(password).fill(0);
  const value={...header(PLAIN,profile),sha256:await sha256Hex(text,cryptoImpl),ledger:detached};
  const clear=enc.encode(canonical(value));
@@ -125,13 +130,12 @@ async function encode(source,{cryptoImpl=globalThis.crypto,password}={},profile)
  * Restore must create a fresh empty copy with new physical lineage. No checksum
  * or password can prove a supplied file's external origin or missing revisions.
  */
-export function decodeFullSnapshotBackup(input,options){return decode(input,options,SYNTHETIC);}
-export function decodeProspectiveProductionBackup(input,options){return decode(input,options,PROSPECTIVE);}
+export function decodeFullSnapshotBackup(input,{dataClass='synthetic',...options}={}){return decode(input,options,profileFor(dataClass));}
 async function decode(input,{cryptoImpl=globalThis.crypto,password}={},profile){
  // The plaintext envelope adds one container outside the bounded ledger.
  // Encrypted envelope shape is independently restricted to header/KDF scalars.
  const bytes=own(input),value=parse(textOf(bytes),FULL_SNAPSHOT_BACKUP_LIMITS.archiveBytes,FULL_SNAPSHOT_BACKUP_LIMITS.depth+1);checkHeader(value,profile);
- if(value.protection===PLAIN){if(profile===PROSPECTIVE||password!==undefined)fail('unsupported-archive');if(bytes.length>FULL_SNAPSHOT_BACKUP_LIMITS.plaintextBytes)fail('byte-limit');return decodePlain(value,cryptoImpl,profile);}
+ if(value.protection===PLAIN){if(profile.encrypted||password!==undefined)fail('unsupported-archive');if(bytes.length>FULL_SNAPSHOT_BACKUP_LIMITS.plaintextBytes)fail('byte-limit');return decodePlain(value,cryptoImpl,profile);}
  shape(value,['format','version',profile.field,'protection','kdf','iv','ciphertext']);
  shape(value.kdf,['name','hash','iterations','salt']);
  if(value.kdf.name!=='PBKDF2'||value.kdf.hash!=='SHA-256'||value.kdf.iterations!==FULL_SNAPSHOT_BACKUP_LIMITS.pbkdf2Iterations)fail('unsupported-archive');

@@ -7,6 +7,7 @@ import { SURFACES } from './diagnostic-context.mjs';
 import { GoogleDriveTransactionAdapter } from "./drive-transaction-engine.mjs";
 import { validateGoogleConfig } from "./google-config-validation.mjs";
 import { googleStartupError } from "./google-startup-diagnostics.mjs";
+import { releasedDataClass } from "./release-profile.mjs";
 
 const DRIVE_FILES = "https://www.googleapis.com/drive/v3/files";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
@@ -116,6 +117,18 @@ async function accountFingerprint(id) {
   const bytes = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode('finance-tracker-account-v1:' + id));
   return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
 }
+// Production only: a per-browser hash of (designated account, folder). It can
+// refuse a folder, never admit one; Google OAuth and Drive permissions remain
+// the access authority. It is not logged, published or sent anywhere.
+const FOLDER_KEY = 'finance-tracker.designated-private-folder.v1';
+async function folderFingerprint(accountId, folderId) {
+  const bytes = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode('finance-tracker-folder-v1:' + accountId + ':' + folderId));
+  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+function readFolderPin() {
+  try { return window.localStorage.getItem(FOLDER_KEY); }
+  catch (cause) { throw new AppError('account-designation-unavailable', {cause}); }
+}
 async function verifiedAccount(token) {
   let response;
   try { response = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(permissionId,emailAddress,me)', {
@@ -145,7 +158,12 @@ export async function requireEmptySyntheticFolder(adapter) {
 }
 
 export class DashboardSyntheticStorage {
-  constructor({ diagnosticSurface = 'workspace', onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {} } = {}) {
+  constructor({ diagnosticSurface = 'workspace', onStatus = () => {}, onSnapshot = () => {}, onDiagnostic = () => {}, dataClass = 'synthetic', release } = {}) {
+    // Release gate first: an unreleased class cannot even be selected.
+    this.releaseProfile = release;
+    this.dataClass = releasedDataClass(dataClass, release);
+    this.folderFingerprint = "";
+    this.folderDesignation = null;
     this.diagnosticSurface = SURFACES.has(diagnosticSurface) ? diagnosticSurface : 'workspace';
     this.onStatus = onStatus;
     this.onSnapshot = onSnapshot;
@@ -162,6 +180,35 @@ export class DashboardSyntheticStorage {
   }
 
   createLedgerStore(){return this.lifecycle.createLedgerStore();}
+
+  /** Choose the session class before any connection, never while one exists. */
+  setDataClass(dataClass) {
+    if (this.busy || this.lifecycle) throw new AppError('release-before-preview');
+    this.dataClass = releasedDataClass(dataClass, this.releaseProfile);
+    this.folderFingerprint = ""; this.folderDesignation = null;
+    return this.dataClass;
+  }
+
+  #lifecycle(folderId) {
+    return new FullSnapshotApplication({folderId,accessToken:()=>this.token(),dataClass:this.dataClass,release:this.releaseProfile,
+      onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
+  }
+
+  /** Production: record a new designated folder only after independent verification. */
+  commitFolderDesignation() {
+    if (this.dataClass !== 'production') return;
+    const fingerprint = this.folderDesignation;
+    if (!fingerprint) return;
+    if (fingerprint !== this.folderFingerprint || !this.lifecycle || this.lifecycle.folderId !== this.folderId) throw new AppError('reconnect-required');
+    try {
+      window.localStorage.setItem(FOLDER_KEY, fingerprint);
+      if (window.localStorage.getItem(FOLDER_KEY) !== fingerprint) throw new AppError('account-designation-unavailable');
+    } catch (cause) {
+      if (cause instanceof AppError) throw cause;
+      throw new AppError('account-designation-unavailable', {cause});
+    }
+    this.folderDesignation = null;
+  }
 
   async prepare() {
     if (!this.readyPromise) {
@@ -246,7 +293,7 @@ export class DashboardSyntheticStorage {
           .setDeveloperKey(config.apiKey)
           .setAppId(config.projectNumber)
           .setOrigin(window.location.origin)
-          .setTitle("Choose a dedicated synthetic test folder")
+          .setTitle(this.dataClass === "production" ? "Choose your private database folder" : "Choose a dedicated synthetic test folder")
           .setCallback(async (data) => {
             const pickerResult = classifyPickerAction(data?.action, window.google.picker.Action);
             if (pickerResult === "pending") return;
@@ -261,12 +308,19 @@ export class DashboardSyntheticStorage {
               if (!metadataResponse.ok) throw new Error("Drive folder verification failed (HTTP " + metadataResponse.status + ").");
               const metadata = await metadataResponse.json();
               if (metadata.id !== item.id || metadata.trashed || metadata.mimeType !== FOLDER_MIME) throw new Error("Select an available Drive folder, not a file.");
-              if (metadata.name === PRODUCTION_FOLDER_NAME || !/synthetic/i.test(metadata.name || "")) {
+              // Names only refuse obvious mix-ups. They never authorize a folder.
+              if (this.dataClass === "production") {
+                if (/synthetic/i.test(metadata.name || "")) throw new AppError("data-class-mismatch");
+              } else if (metadata.name === PRODUCTION_FOLDER_NAME || !/synthetic/i.test(metadata.name || "")) {
                 throw new Error("For safety, select a dedicated folder whose name contains “synthetic”. The production database folder is blocked.");
               }
-              const confirmation = requireEmpty
-                ? "Confirm that “" + metadata.name + "” is a newly created EMPTY folder you checked in Google Drive, dedicated only to invented test data. This app cannot see files outside its drive.file access. Upload the synthetic year here?"
-                : "Confirm that “" + metadata.name + "” is a dedicated synthetic test folder containing no personal financial data. Only invented sample fixtures will be saved.";
+              const confirmation = this.dataClass === "production"
+                ? requireEmpty
+                  ? "Confirm that “" + metadata.name + "” is a newly created EMPTY folder you own in Google Drive, shared with no one, dedicated only to your private Finance Tracker database. This app cannot see files outside its drive.file access."
+                  : "Open “" + metadata.name + "” as your private Finance Tracker database? Use one device at a time."
+                : requireEmpty
+                  ? "Confirm that “" + metadata.name + "” is a newly created EMPTY folder you checked in Google Drive, dedicated only to invented test data. This app cannot see files outside its drive.file access. Upload the synthetic year here?"
+                  : "Confirm that “" + metadata.name + "” is a dedicated synthetic test folder containing no personal financial data. Only invented sample fixtures will be saved.";
               if (!window.confirm(confirmation)) {
                 throw new Error("Folder selection cancelled.");
               }
@@ -276,6 +330,21 @@ export class DashboardSyntheticStorage {
         picker.setVisible(true);
       });
 
+      // Production designation is local and read-only: refuse a different
+      // folder before the privacy proof, any content read, session release or write.
+      let fingerprint = "", designation = null;
+      if (this.dataClass === "production") {
+        fingerprint = await folderFingerprint(candidate.accountId, folder.id);
+        const pinned = readFolderPin();
+        if (pinned !== fingerprint) {
+          if (requireExisting && pinned) throw new AppError("designated-folder-mismatch");
+          const question = pinned
+            ? "Replace this browser’s designated private database folder with “" + folder.name + "”? The current designation stays until the new copy is independently verified. The previous folder is not changed or deleted."
+            : "Designate “" + folder.name + "” as the only private database folder in this browser? A non-secret fingerprint is remembered locally, not the folder name or ID.";
+          if (!window.confirm(question)) throw new AppError("authorization-cancelled");
+          designation = fingerprint;
+        }
+      }
       // A Picker result is a candidate, not proof of ownership or privacy.
       // Run before inspecting contents, releasing the old session, or writing.
       await provePrivateGoogleFolder({ folderId: folder.id, ...candidate });
@@ -286,7 +355,7 @@ export class DashboardSyntheticStorage {
         accessToken: candidateToken
       });
       if (requireEmpty) await requireEmptySyntheticFolder(preflightAdapter);
-      const {admission}=await inspectFullSnapshotFolder(preflightAdapter,{requireEmpty,requireExisting});
+      const {admission}=await inspectFullSnapshotFolder(preflightAdapter,{requireEmpty,requireExisting,dataClass:this.dataClass});
       candidateToken(); // Do not release an old session for a candidate that expired during the last read.
       if (this.lifecycle && this.lifecycle.folderId !== folder.id) {
         if (this.lifecycle.coordinator?.canWrite) {
@@ -303,9 +372,9 @@ export class DashboardSyntheticStorage {
       this.accountId = candidate.accountId;
       this.folderId = folder.id;
       this.folderName = folder.name;
-      if (!this.lifecycle) {
-        this.lifecycle = new FullSnapshotApplication({folderId:this.folderId,accessToken:()=>this.token(),onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
-      }
+      this.folderFingerprint = fingerprint;
+      this.folderDesignation = designation;
+      if (!this.lifecycle) this.lifecycle = this.#lifecycle(this.folderId);
       try {
         if (this.lifecycle.coordinator?.canWrite && this.lifecycle.state === "recovery-required") {
           await this.lifecycle.recover({admission});
@@ -324,9 +393,11 @@ export class DashboardSyntheticStorage {
         if (!requireExisting || requireEmpty || error?.code !== 'stale-session') throw error;
         await this.lifecycle.recoverStaleSession({ confirm: true, admission });
       }
+      // An existing copy is designated only after its full history verified.
+      if (requireExisting) this.commitFolderDesignation();
       const snapshot = await this.readSnapshot();
       this.onSnapshot(snapshot);
-      this.publish("ready", "Synthetic storage connected. CSV imports remain local to this page.", "success");
+      this.publish("ready", (this.dataClass === "production" ? "Private database connected." : "Synthetic storage connected.") + " CSV imports remain local to this page.", "success");
       return { folderName: this.folderName, snapshot };
     } catch (error) {
       const lifecycleState = this.lifecycle?.state || "error";
@@ -366,12 +437,12 @@ export class DashboardSyntheticStorage {
       await provePrivateGoogleFolder({folderId,accountId:this.accountId,
         token:this.token(),expiresAt:this.tokenExpiresAt});
       const preflight=new GoogleDriveTransactionAdapter({folderId,accessToken:()=>this.token()});
-      const {admission}=await inspectFullSnapshotFolder(preflight,{requireExisting:true});
+      const {admission}=await inspectFullSnapshotFolder(preflight,{requireExisting:true,dataClass:this.dataClass});
       if(this.lifecycle!==previous||this.folderId!==folderId)throw new AppError('reconnect-required');
       this.token();
       const result=await previous.release();
       if(result?.released!==true||this.lifecycle!==previous||this.folderId!==folderId)throw new AppError('release-unconfirmed');
-      const fresh=new FullSnapshotApplication({folderId,accessToken:()=>this.token(),onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
+      const fresh=this.#lifecycle(folderId);
       this.lifecycle=fresh;
       await fresh.start({admission});
       if(this.lifecycle!==fresh||this.folderId!==folderId)throw new AppError('reconnect-required');
@@ -419,7 +490,8 @@ export class DashboardSyntheticStorage {
       this.accessToken = "";
       this.tokenExpiresAt = 0;
       this.lifecycle = null;
-      this.publish("disconnected", "Synthetic storage session released.", "success");
+      this.folderFingerprint = ""; this.folderDesignation = null;
+      this.publish("disconnected", this.dataClass === "production" ? "Private database session released." : "Synthetic storage session released.", "success");
       this.onSnapshot([]);
       return result;
     } finally { this.busy = false; }

@@ -169,6 +169,16 @@ This follow-up covers main and the served Pages build at `16a5ff6134a414d4cc5ede
 - The reviewed import contract accepts only `not-retained` originals with null locator and retention times. The earlier retention rehearsal was for a historical route. The current portable archive is not an originals archive; verify those current boundaries on the exact candidate.
 - The active [main ruleset](https://github.com/AeroVega/finance-tracker/rules/27070327) requires up-to-date branches with `test` and `transaction-contracts`, but not `Guarded code checks` or independent approval. Source controls alone do not close that enforcement gap. No settings changed.
 
+### PR 57 candidate: private-database wiring behind a release gate (2026-11-23)
+
+This records implementation on the PR 57 branch, not live or owner evidence. The exact candidate SHA, test counts and CI runs are in the PR description.
+
+- **Implemented:** one data class per session through the actual app: Open/reconnect, CSV import with explicit save, independent reopen, encrypted backup and fresh-empty-folder restore, and recovery. Cross-class folders, ledgers, imports, backups and restore destinations are refused before the destination, session or draft changes. See the [data-class contract](PERSISTENCE_DATA_CLASS.md).
+- **Locked default:** the checked-in release profile lists only `synthetic`. The ordinary deployed build cannot construct a private session; page input cannot change that. Enabling it is a separate release decision for one exact commit.
+- **Private admission:** designated account; private-folder proof before any release, content read or write; read-only manifest class check before claim, rechecked under ownership; a per-browser designated-folder fingerprint that only refuses. Production backups are encrypted-only.
+- **Simulated with invented data:** wrong/shared/unverifiable/undesignated folders, canceled authorization and Picker, wrong account, expiry and reconnect, interrupted saves with recovery and no blind retry, active versus expired ownership, encrypted restore with independent comparison, and absence of originals, tokens, identifiers and amounts from uploads, diagnostics and browser storage.
+- **Not verified:** live Google OAuth/Picker/Drive permission fields, physical Safari, deployed private-mode behavior (not deployable without a release decision), and GitHub enforcement of guarded checks and independent approval (still not required on `main`; a **blocker** for any production-capable release).
+
 ### Full-snapshot growth rehearsal
 
 On PR 57 revision `fe9e161`, [the invented history benchmark](../tests/benchmark-full-snapshot-history.mjs) seeded a synthetic year, made small classification changes and reopened with an independent application after each checkpoint. It verified ledger equality and retained an immutable snapshot for each changed save.
@@ -191,7 +201,7 @@ Historical owner-reported live synthetic checks exist for a prior temporary Driv
 
 ### Findings
 
-1. **Production remains synthetic-only.** The UI and storage selection explicitly block production data; do not change this in this review.
+1. **Production remains synthetic-only in the shipped build.** The PR 57 candidate implements a private-database class behind a release profile that is off; see the candidate update above.
 2. **Account-token binding is implemented but only browser-local.** The token-holder permission ID is checked and pinned; it is not a cross-device owner policy.
 3. **Live account-folder authorization remains open.** The PR 57 candidate adds [strict folder admission](PRIVACY_SESSION.md#strict-folder-admission) for synthetic connect and recovery reauthorization. Verify provider field population and effective permissions on the candidate; `drive.file` enumeration cannot prove global emptiness or inspect inaccessible children.
 4. **No CAS or strong concurrent-writer exclusion.** The Drive session marker is best-effort; competing writes remain a residual risk.
@@ -199,7 +209,7 @@ Historical owner-reported live synthetic checks exist for a prior temporary Driv
 6. **Browser and live provider acceptance is incomplete.** No current-revision physical iPhone/iPad Safari release/cache/download/backup KDF test or current live Google OAuth/Picker/revocation test is claimed.
 7. **Project configuration and $0 proof are not available from source.** Console mode, billing, restrictions, quotas and current usage must be checked by the owner.
 8. **Uncertain-write evidence is memory-bound.** After page loss the last in-memory attempt cannot be classified; next open verifies saved content only.
-9. **No-original-file handling needs candidate verification.** With invented data, inspect import/save requests, stored fields and backup/restore behavior for original-file payloads or locators. Confirm that expected normalized row evidence and fingerprints still survive.
+9. **No-original-file handling is verified in simulation.** The candidate tests confirm original CSV bytes and headers are absent from uploads and encrypted backups while normalized rows and provenance persist. Live request capture remains open.
 10. **A later candidate needs new evidence.** The November 23 run establishes the exact reviewed main SHA, not a future PR 57 runtime or deployed candidate.
 
 ### Changes made in the original November 22 review
