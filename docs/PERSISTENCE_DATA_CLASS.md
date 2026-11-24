@@ -114,11 +114,10 @@ decision**, recorded outside the page:
    designated account (confirmed privately, not in the repository) and the
    dedicated folder workflow. The served `js/release-profile.mjs` and build
    stamp must be compared byte-for-byte with that commit.
-3. Deployment from that commit requires GitHub protections that make an
-   unreviewed change visible: required checks including **Guarded code
-   checks**, independent approval, and restricted Pages deployment. At the
-   time of writing these are **not** all enforced on `main`; that is a blocker
-   for any production release, not a pass.
+3. Deployment from that commit requires the required checks on `main`
+   (including **Guarded code checks**, enforced since 2026-11-23) and the
+   owner's review of the exact-SHA diff. This single-owner project does not
+   require independent human approval; see [guarded code](GUARDED_CODE.md#owner-and-reviewer-checklist).
 4. The first live use of an approved production-capable release is an
    invented-data rehearsal under [OWNER_ACCEPTANCE.md](OWNER_ACCEPTANCE.md).
    Real-data activation is a further explicit owner decision. A merge, a

@@ -177,7 +177,7 @@ This records implementation on the PR 57 branch, not live or owner evidence. The
 - **Locked default:** the checked-in release profile lists only `synthetic`. The ordinary deployed build cannot construct a private session; page input cannot change that. Enabling it is a separate release decision for one exact commit.
 - **Private admission:** designated account; private-folder proof before any release, content read or write; read-only manifest class check before claim, rechecked under ownership; a per-browser designated-folder fingerprint that only refuses. Production backups are encrypted-only.
 - **Simulated with invented data:** wrong/shared/unverifiable/undesignated folders, canceled authorization and Picker, wrong account, expiry and reconnect, interrupted saves with recovery and no blind retry, active versus expired ownership, encrypted restore with independent comparison, and absence of originals, tokens, identifiers and amounts from uploads, diagnostics and browser storage.
-- **Not verified:** live Google OAuth/Picker/Drive permission fields, physical Safari, deployed private-mode behavior (not deployable without a release decision), and GitHub enforcement of guarded checks and independent approval (still not required on `main`; a **blocker** for any production-capable release).
+- **Not verified:** live Google OAuth/Picker/Drive permission fields, physical Safari, deployed private-mode behavior (not deployable without a release decision), and the owner's exact-SHA diff review. Update 2026-11-23: **Guarded code checks** is now a required check on `main`; the owner decided this single-owner project does not require independent human approval.
 
 ### Full-snapshot growth rehearsal
 
