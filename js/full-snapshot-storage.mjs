@@ -1,5 +1,6 @@
 // Fresh-copy full-snapshot protocol, used by the explicit experimental application route.
 import {persistenceDataClass} from './persistence-data-class.mjs';
+import {releasedDataClass} from './release-profile.mjs';
 import {fail,AppError} from './app-error.mjs';
 import {GoogleDriveTransactionAdapter,getNativeDriveReadCheck} from './drive-transaction-engine.mjs';
 import {createDriveSessionAdapter} from './drive-session-adapter.mjs';
@@ -88,11 +89,11 @@ function envelope(e,m,ref,profile){
  if(e.snapshot.fileId===ref.fileId)fail('invalid-plan');return e;
 }
 
-// The data class is fixed per engine. Whether a build may request the
-// production class is decided by the application's release gate, not here.
+// The data class is fixed per engine. Every constructor applies the release
+// gate, so a synthetic-only build cannot build a production engine here either.
 export function createFullSnapshotStorage({folderId,accessToken,fetchImpl=globalThis.fetch,cryptoImpl=globalThis.crypto,
- setIntervalImpl=globalThis.setInterval,clearIntervalImpl=globalThis.clearInterval,visibilityDelayMs=500,dataClass='synthetic'}={}) {
- return new FullSnapshotStorage({folderId,accessToken,fetchImpl,cryptoImpl,setIntervalImpl,clearIntervalImpl,visibilityDelayMs},profileFor(dataClass));
+ setIntervalImpl=globalThis.setInterval,clearIntervalImpl=globalThis.clearInterval,visibilityDelayMs=500,dataClass='synthetic',release}={}) {
+ return new FullSnapshotStorage({folderId,accessToken,fetchImpl,cryptoImpl,setIntervalImpl,clearIntervalImpl,visibilityDelayMs},profileFor(releasedDataClass(dataClass,release)));
 }
 class FullSnapshotStorage {
 #profile;

@@ -24,7 +24,7 @@ export class FullSnapshotApplication {
   this.folderId=folderId;this.fullSnapshot=true;this.state='disconnected';this.started=false;this.acceptingWrites=false;
   this.#onStatus=onStatus;this.#online=isOnline;this.#target=lifecycleTarget;
   this.requestMetrics=createDriveRequestMetrics();
-  this.engine=createFullSnapshotStorage({...options,folderId,accessToken,dataClass:this.dataClass,fetchImpl:this.requestMetrics.wrapFetch(fetchImpl)});
+  this.engine=createFullSnapshotStorage({...options,folderId,accessToken,dataClass:this.dataClass,release,fetchImpl:this.requestMetrics.wrapFetch(fetchImpl)});
   this.coordinator=this.engine.coordinator;this.transactionAdapter=this.engine.adapter;
   this.#offline=()=>{this.invalidate();this.coordinator.cancelPending?.();this.#status('offline');};
   this.#onlineEvent=()=>{this.invalidate();this.#status('reconnecting');};

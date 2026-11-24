@@ -50,6 +50,7 @@ export class CanonicalWorkspaceSession {
     this.baselineLedger = null;
     this.stagedHistory = [];
     this.backupPreview=false;this.backupSource=null;this.restoreExpected=null;this.restoreFolderId=null;this.pendingSave=null;this.recoveryOutcome=null;
+    this.designationFailed=false;
   }
 
   invalidate() { if (this.mode === 'saved') this.needsReopen = true; }
@@ -60,9 +61,13 @@ export class CanonicalWorkspaceSession {
     if (ledgerDataClass(ledger) !== this.dataClass) appFail('data-class-mismatch');
     return validateLedgerOfClass(ledger, this.dataClass);
   }
-  // Designation only narrows later Opens. Failing to record it never admits
-  // anything; the next Open asks again. It must not mark a verified copy unverified.
-  #designateVerifiedFolder() { try { this.storage.commitFolderDesignation?.(); } catch { /* see above */ } }
+  // Designation only narrows later Opens and never admits anything. A failed
+  // write must not mark the verified copy unverified, but it is not hidden:
+  // the previous designation still applies until it is recorded.
+  #designateVerifiedFolder() {
+    this.designationFailed = false;
+    try { this.storage.commitFolderDesignation?.(); } catch { this.designationFailed = true; }
+  }
 
   ready() {
     const lifecycle = this.storage.lifecycle;

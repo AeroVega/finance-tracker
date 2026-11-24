@@ -29,7 +29,7 @@ const decode=bytes=>new TextDecoder().decode(bytes);
 
 async function setup({release=TEST_RELEASE}={}){
  const folders=new Map(),bodies=[],pins=new Map(),previous={window:globalThis.window,fetch:globalThis.fetch};
- let picked=null,pickerAction=null,oauth=null,account=OWNER,tokenRequests=0,confirmAnswer=()=>true,storage,session;
+ let picked=null,pickerAction=null,oauth=null,account=OWNER,tokenRequests=0,confirmAnswer=()=>true,failFolderPin=false,storage,session;
  const folder=(key,name,{shared=false,proofStatus=200}={})=>{
   const http=new ScenarioFullSnapshotDrive({folderId:'invented-folder-'+key,idPrefix:'invented-'+key+'-file-'});
   folders.set(http.folderId,{http,name,shared,proofStatus});return http;
@@ -39,7 +39,7 @@ async function setup({release=TEST_RELEASE}={}){
  class Picker{addView(){return this;}setOAuthToken(){return this;}setDeveloperKey(){return this;}setAppId(){return this;}setOrigin(){return this;}setTitle(title){this.title=title;return this;}setCallback(cb){this.cb=cb;return this;}build(){return this;}
   setVisible(){queueMicrotask(()=>this.cb(pickerAction?{action:pickerAction}:{action:'picked',docs:[{id:picked}]}));}}
  const confirmations=[];
- globalThis.window={localStorage:{getItem:key=>pins.get(key)??null,setItem:(key,value)=>pins.set(key,value)},location:{origin:'https://example.invalid'},
+ globalThis.window={localStorage:{getItem:key=>pins.get(key)??null,setItem:(key,value)=>{if(failFolderPin&&/folder/.test(key))throw new Error('Invented storage refusal');pins.set(key,value);}},location:{origin:'https://example.invalid'},
   confirm:question=>{confirmations.push(question);return confirmAnswer(question);},
   google:{accounts:{oauth2:{initTokenClient:({callback,error_callback})=>({requestAccessToken:()=>{tokenRequests++;
    if(oauth==='access_denied')callback({error:oauth});else if(oauth)error_callback({type:oauth});else callback({access_token:TOKEN,expires_in:3600});}})}},
@@ -65,7 +65,7 @@ async function setup({release=TEST_RELEASE}={}){
  await page.until(()=>!page.get('open-ledger').disabled);
  return {page,folders,bodies,pins,confirmations,folder,
   get storage(){return storage;},get session(){return session;},get tokenRequests(){return tokenRequests;},
-  pick(http){picked=http.folderId;},picker(value){pickerAction=value;},oauth(value){oauth=value;},account(value){account=value;},confirm(fn){confirmAnswer=fn;},
+  pick(http){picked=http.folderId;},failPin(value){failFolderPin=value;},picker(value){pickerAction=value;},oauth(value){oauth=value;},account(value){account=value;},confirm(fn){confirmAnswer=fn;},
   writes:http=>http.requests.filter(row=>row.method!=='GET').length,
   async close(){for(const {http} of folders.values()){http.beforeResponse=null;http.reboot();}await storage.lifecycle?.release().catch(()=>{});storage.lifecycle?.coordinator.heartbeatStop?.();globalThis.window=previous.window;globalThis.fetch=previous.fetch;}};
 }
@@ -94,7 +94,7 @@ async function importCsv(h,accountId,csv=RAW_CSV){
 }
 const manifestOf=http=>http.json([...http.files.values()].find(f=>f.metadata.name===FULL_SNAPSHOT_MANIFEST_NAME).metadata.id);
 async function independentOpen(http,dataClass){
- const store=createFullSnapshotStorage({folderId:http.folderId,accessToken:()=>TOKEN,fetchImpl:http.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},dataClass});
+ const store=createFullSnapshotStorage({folderId:http.folderId,accessToken:()=>TOKEN,fetchImpl:http.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},dataClass,release:TEST_RELEASE});
  // A refused claim has nothing to release; never mask its refusal.
  const ledger=await store.start(),manifest=store.verifiedManifest;await store.release();return {ledger,manifest};
 }
@@ -333,6 +333,21 @@ test('encrypted private backup restores to a fresh empty folder, verifies indepe
   // The previous folder is no longer designated in this browser.
   h.pick(a);await assert.rejects(h.session.open(),{code:'designated-folder-mismatch'});
   h.pick(b);await h.session.open();assert.deepEqual(h.session.ledger,source);
+ }finally{await h.close();}
+});
+
+test('a verified restore whose designation cannot be recorded is reported, not hidden, and stays verified',async()=>{
+ const h=await setup();const a=h.folder('a','invented private ledger'),b=h.folder('b','invented restore target');try{
+  await choosePrivate(h);await createPrivate(h,a);
+  const raw=await h.session.exportBackup({password:PASSWORD});await h.page.click('release-ledger');
+  const pinsBefore=new Map(h.pins);
+  h.page.get('restore-password').value=PASSWORD;h.page.get('backup-file').files=[{size:raw.length,arrayBuffer:async()=>raw.slice().buffer}];
+  await h.page.get('backup-file').emit('change');await h.page.click('stage-backup');assert.equal(h.session.backupPreview,true,h.page.get('action-status').textContent);
+  h.failPin(true);h.pick(b);await h.page.click('restore-backup');
+  assert.equal(h.session.unverified,false);assert.equal(h.session.mode,'saved');assert.equal(h.session.designationFailed,true);
+  assert.match(h.page.get('action-status').textContent,/could not record it as the designated private database folder/);
+  assert.deepEqual(h.pins,pinsBefore);
+  h.failPin(false);await h.page.click('release-ledger');h.pick(b);await assert.rejects(h.session.open(),{code:'designated-folder-mismatch'});
  }finally{await h.close();}
 });
 

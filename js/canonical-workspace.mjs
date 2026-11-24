@@ -902,6 +902,7 @@ action('create-ledger', 'Preparing a new copy in a new empty folder. Keep this t
     } else if (!confirmDiscardDetail()) return;
     render({ reset: true });
     await session.savePreviewToNewCopy(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview');
+    if (session.designationFailed) { announce(designationWarning('Private database created and independently verified')); return true; }
     announce('Private database created in the new folder and independently verified. Add accounts and import supported CSV files, then save.', 'success'); return true;
   }
   // Reuse an existing preview, including edits, rather than replacing its data.
@@ -936,6 +937,9 @@ async function saveWorkspaceChanges() {
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
   await saveWorkspaceChanges(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
 });
+function designationWarning(done) {
+  return done + ', but this browser could not record it as the designated private database folder. Any previous designation still applies, so Open will refuse this folder. Allow site storage; to designate this folder, clear this site’s data in the browser, then Open it again.';
+}
 function recoveryMessage() {
   return ({checking:'Checking what reached Drive. Your draft remains in this tab; keep it open.',saved:'Your draft was found saved and verified. No retry is needed.', 'not-saved':'The save was conclusively not published. Your draft is preserved. Retry only with the explicit confirmation below.',different:'Drive contains different saved records. Your draft is preserved. Do not retry blindly; review the saved copy first.',unverifiable:'The save outcome could not be verified. Your draft is preserved. Recheck when connected; do not retry blindly.'})[session.recoveryOutcome] || 'Save unverified. Your draft remains in this tab. Verify the save outcome before retrying.';
 }
@@ -981,7 +985,9 @@ action('stage-backup','Checking the local backup. No folder is selected or writt
 });
 action('restore-backup','Restoring the validated preview to a new empty synthetic folder and verifying it. Keep this tab open.',async()=>{
   if (!confirmDiscardDetail()) return;
-  await session.restoreBackupToNewCopy();render({reset:true});announce('Backup restored to a new synthetic copy and independently verified. The original folder was not changed.','success');return true;
+  await session.restoreBackupToNewCopy();render({reset:true});
+  if (session.designationFailed) { announce(designationWarning('Backup restored to a new copy and independently verified')); return true; }
+  announce('Backup restored to a new synthetic copy and independently verified. The original folder was not changed.','success');return true;
 });
 action('verify-save-outcome','Checking what reached Drive. Your draft stays in this tab.',async()=>{
   await session.resolveUncertainSave();render();announce(recoveryMessage(),session.recoveryOutcome==='saved'?'success':'info');

@@ -75,7 +75,9 @@ checks that can only refuse:
    folder-content read. A first Open asks to designate. Creating or restoring into a
    new empty folder asks to replace the designation, and the fingerprint moves
    only after that new copy is independently verified; a failed restore keeps
-   the previous designation. Clearing site data removes the fingerprint and
+   the previous designation. If the browser cannot record a new designation, the
+   verified copy stays open and verified, the app says the designation was not
+   updated, and the previous designation still applies. Clearing site data removes the fingerprint and
    requires designation again. The fingerprint is not a credential, never
    leaves the browser, and is not written to diagnostics.
 3. **One active device.** The existing best-effort session marker: an active
@@ -90,7 +92,10 @@ select or authorize the production class.
 
 `RELEASE_PROFILE.dataClasses` in [release-profile.mjs](../js/release-profile.mjs)
 lists the classes this exact source revision can construct. It is checked when
-the bridge and application are constructed and when the class is changed. The
+the storage engine, application and bridge are constructed and when the class
+is changed. Those constructors accept a substitute profile only so tests can
+stand in for a future approved release; the shipped controller always passes
+the checked-in profile. The
 class selector is hidden and disabled unless the profile lists `production`.
 
 **Enforced by code:** an ordinary build cannot open, create, restore or import

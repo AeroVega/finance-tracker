@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import {createFullSnapshotStorage,inspectManifest} from '../js/full-snapshot-storage.mjs';
+import {RELEASE_PROFILE} from '../js/release-profile.mjs';
 import {encodeFullSnapshotBackup,decodeFullSnapshotBackup} from '../js/full-snapshot-backup.mjs';
 import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
 import {replayFixture} from './helpers/ledger-replay-fixtures.mjs';
@@ -11,8 +12,10 @@ const fixture=()=>replayFixture(1).ledger;
 const prospective=({syntheticOnly,...ledger})=>({...ledger,version:3,dataClass:'production'});
 // The production engine is the same native engine with class-bound headers.
 // Engine construction is not the release gate; see the application tests.
-const engine=(http,dataClass)=>createFullSnapshotStorage({folderId:http.folderId,accessToken:()=> 'invented-test-token',
- fetchImpl:http.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},dataClass});
+// A test-only release profile stands in for a future approved release.
+const TEST_RELEASE=Object.freeze({dataClasses:Object.freeze(['synthetic','production'])});
+const engine=(http,dataClass,release=TEST_RELEASE)=>createFullSnapshotStorage({folderId:http.folderId,accessToken:()=> 'invented-test-token',
+ fetchImpl:http.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},dataClass,release});
 const connect=async http=>engine(http,'production');
 
 test('native simulator recovers a durably pending v2 publication and independently reopens',async()=>{
@@ -91,9 +94,12 @@ test('native invented v2 archive round-trip restores to fresh lineage and the sy
  }
 });
 
-test('engine refuses an unknown class and a synthetic engine refuses a production folder before any write',async()=>{
- assert.throws(()=>engine(new HttpFullSnapshotDrive(),'reserved-production'),{code:'invalid-engine-config'});
- assert.throws(()=>engine(new HttpFullSnapshotDrive(),'unknown'),{code:'invalid-engine-config'});
+test('engine applies the release gate, refuses an unknown class, and a synthetic engine refuses a production folder before any write',async()=>{
+ assert.throws(()=>engine(new HttpFullSnapshotDrive(),'reserved-production'),{code:'data-class-not-released'});
+ assert.throws(()=>engine(new HttpFullSnapshotDrive(),'unknown'),{code:'data-class-not-released'});
+ // The shipped profile refuses a production engine at the engine boundary too.
+ assert.throws(()=>engine(new HttpFullSnapshotDrive(),'production',RELEASE_PROFILE),{code:'data-class-not-released'});
+ assert.equal(engine(new HttpFullSnapshotDrive(),'synthetic',RELEASE_PROFILE).dataClass,'synthetic');
  const http=new HttpFullSnapshotDrive(),production=engine(http,'production');let synthetic;
  try{
   await production.start({initialize:true});await production.save(prospective(fixture()));await production.release();
