@@ -329,3 +329,23 @@ test('Verify never reclaims another device session and reports why it could not 
   }finally{Date.now=realNow;}
  }finally{try{if(other?.lifecycle)await other.release();}finally{other?.lifecycle?.coordinator.heartbeatStop?.();await h.close();}}
 });
+
+test('Verify refuses a stale marker that another device swapped in after resume, without takeover',async()=>{
+ const realNow=Date.now;let now=realNow();Date.now=()=>now;const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented-swapped',rationale:'Invented'});
+  h.revoke();await assert.rejects(h.session.save());
+  const coordinator=h.storage.lifecycle.coordinator;coordinator.heartbeatStop?.();now+=150000;
+  const marker=()=>[...h.http.files.values()].find(f=>f.metadata.appProperties?.financeTrackerSession);
+  const resume=coordinator.resume.bind(coordinator);
+  coordinator.resume=async()=>{try{return await resume();}catch(error){
+   // Race window: another device's marker, also already stale, replaces ours.
+   const file=marker(),record=JSON.parse(new TextDecoder().decode(file.bytes));
+   file.bytes=new TextEncoder().encode(JSON.stringify({...record,sessionId:'invented-other-device'}));
+   file.metadata.size=String(file.bytes.length);file.metadata.version=String(BigInt(file.metadata.version)+1n);throw error;}};
+  await h.page.get('backup-file').emit('change');await h.page.click('verify-save-outcome');
+  assert.equal(h.session.recoveryOutcome,'unverifiable');assert.equal(h.session.recoveryCause,'ownership-lost');
+  assert.equal(JSON.parse(new TextDecoder().decode(marker().bytes)).sessionId,'invented-other-device');
+  assert.equal(coordinator.canWrite,false);
+ }finally{await h.close();Date.now=realNow;}
+});

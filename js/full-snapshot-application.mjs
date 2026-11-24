@@ -40,9 +40,9 @@ export class FullSnapshotApplication {
   catch(error){this.invalidate();this.#status(error.code==='stale-session'?'stale-session':this.engine.recoveryRequired?'recovery-required':starting?'error':'reconnecting',error);throw error;}
   finally{this.#busy=false;}
  }
- async start({initialize=false,recoverStale=false,admission}={}){
+ async start({initialize=false,recoverStale=false,admission,expectedStaleSessionId}={}){
   return this.#operation(async()=>{
-   const generation=this.#generation,ledger=await this.engine.start({initialize,recoverStale,admission}),manifest=this.engine.verifiedManifest;
+   const generation=this.#generation,ledger=await this.engine.start({initialize,recoverStale,admission,expectedStaleSessionId}),manifest=this.engine.verifiedManifest;
    this.#assert(generation);this.engine.assertVerifiedBaseline(manifest);this.started=true;
    this.#status('ready');this.#assert(generation);this.engine.assertVerifiedBaseline(manifest);
    this.#transfer={generation,manifest:structuredClone(manifest),ledger:structuredClone(ledger)};
@@ -57,7 +57,7 @@ export class FullSnapshotApplication {
  async save(ledger){return this.#operation(async()=>{const result=await this.engine.save(ledger),m=this.engine.verifiedManifest;this.#status('ready');this.engine.assertVerifiedBaseline(m);return result;});}
  async readManifest(){const m=this.engine.verifiedManifest;if(!m)fail('verified-base-required');this.engine.assertVerifiedBaseline(m);return m;}
  async recover({admission}={}){return this.#operation(async()=>{const ledger=await this.engine.recover({admission});this.#status('ready');return ledger;});}
- async recoverStaleSession({confirm,admission}={}){if(confirm!==true)fail('stale-session');this.invalidate();return this.start({recoverStale:true,admission});}
+ async recoverStaleSession({confirm,admission,expectedStaleSessionId}={}){if(confirm!==true)fail('stale-session');this.invalidate();return this.start({recoverStale:true,admission,expectedStaleSessionId});}
  async handleOnline({admission}={}){
   this.invalidate();
   // Resume can fail before start() enters its state-reporting operation. Keep

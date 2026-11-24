@@ -256,10 +256,11 @@ class FullSnapshotStorage {
   await this.#close(manifest);
   return {manifest,ledger};
  }
- async start({initialize=false,recoverStale=false,admission}={}){
+ async start({initialize=false,recoverStale=false,admission,expectedStaleSessionId}={}){
   if(initialize&&(recoverStale||admission))fail('invalid-initialization');
+  if(expectedStaleSessionId!==undefined&&!recoverStale)fail('invalid-initialization');
   const priorSessionId=this.coordinator.session?.sessionId,hadUnresolved=this.#recoveryRequired;
-  if(recoverStale)await this.coordinator.recoverStale({confirm:true});else await this.coordinator.start();
+  if(recoverStale)await this.coordinator.recoverStale({confirm:true,...(expectedStaleSessionId===undefined?{}:{expectedSessionId:expectedStaleSessionId})});else await this.coordinator.start();
   const claimedSessionId=this.coordinator.session?.sessionId;
   this.#stopHeartbeat?.();this.#stopHeartbeat=this.coordinator.startHeartbeat({setIntervalImpl:this.setIntervalImpl,clearIntervalImpl:this.clearIntervalImpl,isOnline:()=>true,onError:()=>this.invalidate()});
   let checkingAdmission=false;

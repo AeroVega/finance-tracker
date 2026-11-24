@@ -448,10 +448,13 @@ export class DashboardSyntheticStorage {
    * the exact stale marker as Open does. Another session's marker refuses. */
   async reclaimOwnStaleSession(lifecycle) {
     if (!lifecycle || lifecycle !== this.lifecycle || lifecycle.folderId !== this.folderId) throw new AppError('reconnect-required');
+    // Bind the takeover to this page's own expired session identity.
+    const expectedStaleSessionId = lifecycle.coordinator?.session?.sessionId;
+    if (typeof expectedStaleSessionId !== 'string' || !expectedStaleSessionId) throw new AppError('reconnect-required');
     const preflight = new GoogleDriveTransactionAdapter({folderId: this.folderId, accessToken: () => this.token(), fetchImpl: (url, options) => this.driveFetch(url, options)});
     const {admission} = await inspectFullSnapshotFolder(preflight, {requireExisting: true, dataClass: this.dataClass});
     if (lifecycle !== this.lifecycle) throw new AppError('reconnect-required');
-    await lifecycle.recoverStaleSession({confirm: true, admission});
+    await lifecycle.recoverStaleSession({confirm: true, admission, expectedStaleSessionId});
     if (lifecycle !== this.lifecycle || lifecycle.state !== 'ready') throw new AppError('reconnect-required');
   }
 
