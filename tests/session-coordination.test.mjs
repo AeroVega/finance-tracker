@@ -541,3 +541,28 @@ test("a resume already checking ownership cannot reopen admission during release
   await release;
   assert.equal(adapter.record.state, "released");
 });
+
+test("stale recovery bound to an expected session refuses another session's stale marker without writing", async () => {
+  const now = { value: 10_000 };
+  // Another device replaced this page's marker; its own marker is now stale too.
+  const adapter = new MemorySessionAdapter(makeRecord(now.value, { sessionId: "other-device-session" }));
+  const session = coordinator(adapter, now);
+  const before = structuredClone(adapter.record);
+  await expectCode(session.recoverStale({ confirm: true, expectedSessionId: "old-session" }), "ownership-lost");
+  assert.deepEqual(adapter.record, before);
+  assert.equal(session.canWrite, false);
+  for (const invalid of ["", 7, null]) {
+    await expectCode(session.recoverStale({ confirm: true, expectedSessionId: invalid }), "ownership-lost");
+    assert.deepEqual(adapter.record, before);
+  }
+});
+
+test("stale recovery bound to the matching expected session reclaims only that marker", async () => {
+  const now = { value: 10_000 };
+  const adapter = new MemorySessionAdapter(makeRecord(now.value));
+  const session = coordinator(adapter, now);
+  const recovered = await session.recoverStale({ confirm: true, expectedSessionId: "old-session" });
+  assert.equal(recovered.sessionId, "new-session");
+  assert.equal(adapter.record.sessionId, "new-session");
+  assert.equal(session.canWrite, true);
+});

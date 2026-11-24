@@ -19,11 +19,21 @@ Deliver the minimum coherent replacement for the first-generation workbook, inte
 ### 2.0.0 — expanded capabilities
 Consider deeper investment analysis, advanced planning/projections, expanded automation, additional integrations, and other deferred capabilities through separate product decisions. These are opportunities, not automatic commitments.
 
+## Work in order of use
+
+- Prove the single-user path first: one designated Google account, one private database folder, one active device, explicit verified saves, and a manually rehearsed encrypted backup restore. Use [one acceptance checklist](OWNER_ACCEPTANCE.md) for the exact candidate. No account switching, simultaneous editing, automatic backups or cleanup are necessary for this path.
+- Make the common workflow easy to find before adding richer screens: open the tracker and see money in and out, find what needs review, and look at one monthly trend with gaps and estimates labeled. Reuse existing reports and sources. Judge the interface by whether those tasks are clear on the intended devices, not by the number of cards or controls.
+- Keep the legacy migration wizard separate from readiness engineering. Resume it only at the owner's direction. Its synthetic completion is not permission to process the private workbook or save real data.
+- Compare a representative invented workload against accepted open and save goals before proposing a storage redesign. Retain integrity checks and evidence; do not trade verification for a faster benchmark.
+
+This sequence does not silently remove features from the agreed v1.0 scope. If the agreed scope cannot be completed and accepted by January 1, choose a smaller milestone or explicitly agree which features to defer.
+
 ## Sequencing rules
 
 - Alpha and Beta are deployable development milestones, not semantic-version releases.
 - PR numbers do not prescribe merge order. Sequence by dependency, risk, reviewability, and readiness.
 - Use synthetic data for development and acceptance. A separate real-data smoke test is not required; this does not waive non-test production gates.
+- Original CSVs are parsed locally and never uploaded or persisted by the app; approved private persistence retains normalized records and required provenance only. See [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files).
 - Manual file imports remain permanent even if a sustainable authorized direct integration is later available.
 - Preserve the $0 recurring-cost constraint, privacy, correctness, and recoverability over schedule or visual polish.
 - January 1, 2027 is a target, not permission to weaken acceptance. Defer release if gates are unmet.

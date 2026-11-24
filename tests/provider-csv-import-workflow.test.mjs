@@ -109,21 +109,70 @@ test('SoFi and multi-account Fidelity use explicit account-scoped coverage and i
   assert.equal(JSON.stringify(fidelity.staged()).includes('INVENTED-SENSITIVE-B'),false);
 });
 
-test('mounted import proposal survives explicit verified save and independent reopen with confirmation evidence',async()=>{
-  const {webcrypto}=await import('node:crypto');
+test('verified CSV save, cold reopen, backup and restore retain provenance without retaining original bytes',async()=>{
+  const {webcrypto,createHash}=await import('node:crypto');
   const {FullSnapshotApplication}=await import('../js/full-snapshot-application.mjs');
   const {HttpFullSnapshotDrive}=await import('./helpers/http-full-snapshot-drive.mjs');
   const {CanonicalWorkspaceSession}=await import('../js/canonical-workspace-session.mjs');
-  const http=new HttpFullSnapshotDrive();
-  const make=()=>new FullSnapshotApplication({folderId:http.folderId,accessToken:()=> 'invented-test-token',fetchImpl:http.fetch,cryptoImpl:webcrypto,lifecycleTarget:null,isOnline:()=>true,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},visibilityDelayMs:0});
-  const storage={lifecycle:make(),createLedgerStore(){return this.lifecycle.createLedgerStore();}};
-  await storage.lifecycle.start({initialize:true});const store=storage.createLedgerStore();await store.load();await store.save(recipe.ledger);
+  const csv=header+'01/15/2026,"INVENTED WORKFLOW",7.50,,Posted\r\n';
+  const fingerprint=createHash('sha256').update(csv).digest('hex');
+  const assertNoOriginal=value=>{
+    const body=Buffer.from(value);
+    assert.equal(body.includes(csv),false,'no original CSV bytes');
+    assert.equal(body.includes(Buffer.from(csv).toString('base64')),false,'no base64 CSV payload');
+    assert.equal(body.includes(JSON.stringify(csv).slice(1,-1)),false,'no JSON-encoded original');
+  };
+  function drive(){
+    const http=new HttpFullSnapshotDrive(),uploads=[];
+    const fetchImpl=async (url,options)=>{
+      if (['POST','PATCH'].includes(options?.method)) uploads.push(await new Response(options.body).text());
+      return http.fetch(url,options);
+    };
+    const make=()=>new FullSnapshotApplication({folderId:http.folderId,accessToken:()=> 'invented-test-token',fetchImpl,cryptoImpl:webcrypto,lifecycleTarget:null,isOnline:()=>true,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},visibilityDelayMs:0});
+    const storage={lifecycle:null,
+      async connect(){this.lifecycle=make();await this.lifecycle.start({initialize:true});},
+      createLedgerStore(){return this.lifecycle.createLedgerStore();},
+      async reopenIndependent(){await this.lifecycle.release();this.lifecycle=make();await this.lifecycle.start();return this.lifecycle;}
+    };
+    return {http,uploads,storage};
+  }
+  function checkDrive({http,uploads}){
+    for (const payload of uploads) assertNoOriginal(payload);
+    const kinds=new Set();
+    for (const {metadata,bytes} of http.files.values()) {
+      if (!bytes) continue;
+      kinds.add(metadata.appProperties?.financeTrackerKind ?? metadata.name);
+      assertNoOriginal(bytes);
+    }
+    assert.ok(kinds.has('snapshot-object'),'the simulator persisted canonical snapshot bytes');
+    assert.deepEqual([...kinds].sort(),['commit-record','finance-tracker-active-session.json','finance-tracker-full-snapshot-manifest','snapshot-object']);
+  }
+  const source=drive(), {storage}=source;
+  await storage.connect();const store=storage.createLedgerStore();await store.load();await store.save(recipe.ledger);
   const session=new CanonicalWorkspaceSession({storage,online:()=>true});await session.loadVerified();
-  const h=setup(session.ledger), before=structuredClone(await store.load());
-  await h.load(valid);await h.map(recipe.accounts.checking);await h.coverage();await h.stage().emit('click');
+  const h=setup(session.ledger),before=structuredClone(await store.load());
+  await h.load(csv);await h.map(recipe.accounts.checking);await h.coverage();await h.stage().emit('click');
   session.stageCanonicalImport(h.staged());assert.deepEqual(await store.load(),before);
-  const expected=structuredClone(session.ledger);await session.save();await storage.lifecycle.release();
-  storage.lifecycle=make();await storage.lifecycle.start();const reopened=new CanonicalWorkspaceSession({storage,online:()=>true});await reopened.loadVerified();
-  assert.deepEqual(reopened.ledger,expected);assert.equal(reopened.ledger.imports.at(-1).declaredCoverage.confirmationEvidence.kind,'user-confirmed');
+  const expected=structuredClone(session.ledger);await session.save();
+  await storage.reopenIndependent();const reopened=new CanonicalWorkspaceSession({storage,online:()=>true});await reopened.loadVerified();
+  assert.deepEqual(reopened.ledger,expected);
+  const run=reopened.ledger.imports.at(-1);
+  assert.equal(run.fileFingerprint,fingerprint);
+  assert.equal(run.declaredCoverage.confirmationEvidence.kind,'user-confirmed');
+  assert.ok(reopened.ledger.activities.some(activity=>activity.sourceDescription==='INVENTED WORKFLOW'));
+  checkDrive(source);
+  for(const password of [undefined,'invented passphrase']){
+    const raw=await reopened.exportBackup({password});
+    assertNoOriginal(raw);
+    const target=drive(), restored=new CanonicalWorkspaceSession({storage:target.storage});
+    await restored.importBackup(raw,{password});
+    assert.equal(target.uploads.length,0,'archive preview is local');
+    assertNoOriginal(JSON.stringify(restored.ledger));
+    assert.deepEqual(restored.ledger,expected);
+    await restored.restoreBackupToNewCopy();
+    assert.deepEqual(restored.ledger,expected);
+    checkDrive(target);
+    await target.storage.lifecycle.release();
+  }
   await storage.lifecycle.release();
 });

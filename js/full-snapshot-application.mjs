@@ -1,25 +1,30 @@
-import {createFullSnapshotStorage,FULL_SNAPSHOT_MANIFEST_NAME} from './full-snapshot-storage.mjs';
+import {createFullSnapshotStorage,FULL_SNAPSHOT_MANIFEST_NAME,inspectManifest} from './full-snapshot-storage.mjs';
+import {releasedDataClass} from './release-profile.mjs';
 import {createDriveRequestMetrics} from './drive-request-metrics.mjs';
 import {fail} from './app-error.mjs';
 
 // New-format selection is explicit. Reject old folders before acquiring a marker.
-export async function inspectFullSnapshotFolder(adapter,{requireEmpty=false,requireExisting=false}={}){
+// The expected class is checked here, read-only, before any session marker.
+export async function inspectFullSnapshotFolder(adapter,{requireEmpty=false,requireExisting=false,dataClass='synthetic'}={}){
  const files=await adapter.listChildren();
  if(requireEmpty&&files.length)fail('new-empty-folder-required');
  const candidates=files.filter(file=>file.name===FULL_SNAPSHOT_MANIFEST_NAME||file.appProperties?.financeTrackerKind==='finance-tracker-full-snapshot-manifest');
  if(candidates.length>1)fail('ambiguous-manifest');
  if(!candidates.length&&files.length)fail('unsupported-canonical-layout');
  if(requireExisting&&!candidates.length)fail('existing-copy-required');
- return {manifestFileId:candidates[0]?.id??null};
+ return {manifestFileId:candidates[0]?.id??null,
+  admission:requireExisting?await inspectManifest(adapter,candidates[0].id,{dataClass}):undefined};
 }
 
 export class FullSnapshotApplication {
  #transfer=null;#generation=0;#busy=false;#onStatus;#online;#target;#offline;#onlineEvent;
- constructor({folderId,accessToken,fetchImpl=globalThis.fetch,onStatus=()=>{},isOnline=()=>globalThis.navigator?.onLine!==false,lifecycleTarget=globalThis, ...options}){
+ constructor({folderId,accessToken,fetchImpl=globalThis.fetch,onStatus=()=>{},isOnline=()=>globalThis.navigator?.onLine!==false,lifecycleTarget=globalThis,dataClass='synthetic',release,...options}){
+  // Release gate: a build constructs only the classes its reviewed profile lists.
+  this.dataClass=releasedDataClass(dataClass,release);
   this.folderId=folderId;this.fullSnapshot=true;this.state='disconnected';this.started=false;this.acceptingWrites=false;
   this.#onStatus=onStatus;this.#online=isOnline;this.#target=lifecycleTarget;
   this.requestMetrics=createDriveRequestMetrics();
-  this.engine=createFullSnapshotStorage({...options,folderId,accessToken,fetchImpl:this.requestMetrics.wrapFetch(fetchImpl)});
+  this.engine=createFullSnapshotStorage({...options,folderId,accessToken,dataClass:this.dataClass,release,fetchImpl:this.requestMetrics.wrapFetch(fetchImpl)});
   this.coordinator=this.engine.coordinator;this.transactionAdapter=this.engine.adapter;
   this.#offline=()=>{this.invalidate();this.coordinator.cancelPending?.();this.#status('offline');};
   this.#onlineEvent=()=>{this.invalidate();this.#status('reconnecting');};
@@ -35,9 +40,9 @@ export class FullSnapshotApplication {
   catch(error){this.invalidate();this.#status(error.code==='stale-session'?'stale-session':this.engine.recoveryRequired?'recovery-required':starting?'error':'reconnecting',error);throw error;}
   finally{this.#busy=false;}
  }
- async start({initialize=false,recoverStale=false}={}){
+ async start({initialize=false,recoverStale=false,admission,expectedStaleSessionId}={}){
   return this.#operation(async()=>{
-   const generation=this.#generation,ledger=await this.engine.start({initialize,recoverStale}),manifest=this.engine.verifiedManifest;
+   const generation=this.#generation,ledger=await this.engine.start({initialize,recoverStale,admission,expectedStaleSessionId}),manifest=this.engine.verifiedManifest;
    this.#assert(generation);this.engine.assertVerifiedBaseline(manifest);this.started=true;
    this.#status('ready');this.#assert(generation);this.engine.assertVerifiedBaseline(manifest);
    this.#transfer={generation,manifest:structuredClone(manifest),ledger:structuredClone(ledger)};
@@ -51,15 +56,15 @@ export class FullSnapshotApplication {
  }
  async save(ledger){return this.#operation(async()=>{const result=await this.engine.save(ledger),m=this.engine.verifiedManifest;this.#status('ready');this.engine.assertVerifiedBaseline(m);return result;});}
  async readManifest(){const m=this.engine.verifiedManifest;if(!m)fail('verified-base-required');this.engine.assertVerifiedBaseline(m);return m;}
- async recover(){return this.#operation(async()=>{const ledger=await this.engine.recover();this.#status('ready');return ledger;});}
- async recoverStaleSession({confirm}={}){if(confirm!==true)fail('stale-session');this.invalidate();return this.start({recoverStale:true});}
- async handleOnline(){
+ async recover({admission}={}){return this.#operation(async()=>{const ledger=await this.engine.recover({admission});this.#status('ready');return ledger;});}
+ async recoverStaleSession({confirm,admission,expectedStaleSessionId}={}){if(confirm!==true)fail('stale-session');this.invalidate();return this.start({recoverStale:true,admission,expectedStaleSessionId});}
+ async handleOnline({admission}={}){
   this.invalidate();
   // Resume can fail before start() enters its state-reporting operation. Keep
   // those failures observable without authorizing takeover or discarding drafts.
   try{await this.coordinator.resume();}
   catch(error){this.invalidate();this.#status(error.code==='stale-session'?'stale-session':this.engine.recoveryRequired?'recovery-required':'reconnecting',error);throw error;}
-  return this.start();
+  return this.start({admission});
  }
  async release(){
   this.acceptingWrites=false;this.#transfer=null;

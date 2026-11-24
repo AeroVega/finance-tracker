@@ -1,6 +1,6 @@
 # Original Source File Retention
 
-> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+> **Historical, superseded on November 23, 2026.** The app no longer permits upload or storage of originals, including in archives. Owners may keep originals locally; see [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files). The 540-day guidance below is evidence about an earlier policy, not current requirements, and does not authorize legacy cleanup. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
 
 
 **Current implementation status:** Synthetic acceptance path implemented; owner-reported live retention/deletion rehearsal passed on 2026-11-04.

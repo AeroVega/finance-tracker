@@ -4,7 +4,8 @@ import { canonicalizeJcs, sha256Hex } from './transaction-protocol.mjs';
 import { summarizeLedgerPeriods } from './canonical-import.mjs';
 import { isCalendarDate } from './import-reconciliation.mjs';
 
-export const HISTORICAL_LEDGER_VERSION = 2;
+import { HISTORICAL_LEDGER_VERSION } from './persistence-data-class.mjs';
+export { HISTORICAL_LEDGER_VERSION };
 export const HISTORICAL_COLLECTIONS = Object.freeze({
   historicalSummaryBatches: 'batchId',
   historicalReconciliations: 'reconciliationId'
@@ -245,7 +246,8 @@ function reserve(id, ids) {
   if (!uuid(id) || ids.has(id)) fail('invalid-historical-summary-ledger');
   ids.add(id);
 }
-export function validateHistoricalLedger(ledger, ids) {
+export function validateHistoricalLedger(ledger, ids, {allowMissingHistory=false}={}) {
+  if (allowMissingHistory && Object.keys(HISTORICAL_COLLECTIONS).every(key => !Object.hasOwn(ledger,key))) return;
   if (ledger.version === 1) {
     if (Object.keys(HISTORICAL_COLLECTIONS).some(key => Object.hasOwn(ledger, key))) fail('invalid-historical-summary-ledger');
     return;

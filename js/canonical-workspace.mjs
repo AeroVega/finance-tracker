@@ -6,7 +6,8 @@ import { createSyntheticFinancialPosition } from './synthetic-financial-position
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
 import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-workspace-model.mjs';
-import { getEffectiveActivities } from './canonical-import.mjs';
+import { getEffectiveActivities, createLedger } from './canonical-import.mjs';
+import { RELEASE_PROFILE } from './release-profile.mjs';
 import { exactSignedDecimal, isCalendarDate } from './import-reconciliation.mjs';
 import { createSyntheticFinancialYear } from './synthetic-financial-year.mjs';
 import { showDiagnostic, clearDiagnostic } from './app-diagnostics.mjs';
@@ -61,7 +62,11 @@ function scheduleSearch() {
   // Coalesce typing only; account/month changes and completed corrections stay immediate.
   searchTimer = setTimeout(() => { searchTimer = null; if (!busy) { page = 0; render(); } }, 120);
 }
+// The reviewed release profile decides which classes this build can construct.
+const productionReleased = RELEASE_PROFILE.dataClasses.includes('production');
+const isPrivate = () => storage.dataClass === 'production';
 const storage = new DashboardSyntheticStorage({
+  release: RELEASE_PROFILE,
   onStatus(status) {
     if (!status.code) clearDiagnostic($('connection-status'));
     // Candidate authorization/Picker work does not change the active session.
@@ -76,7 +81,7 @@ const storage = new DashboardSyntheticStorage({
       }
     }
     $('connection-status').textContent = status.state === 'ready'
-      ? 'Connected to a synthetic copy. Opening and saves verify its canonical records.'
+      ? (isPrivate() ? 'Connected to your private database. Opening and saves verify its canonical records.' : 'Connected to a synthetic copy. Opening and saves verify its canonical records.')
       : status.code ? showDiagnostic({code: status.code}, {surface: 'workspace', target: $('connection-status'), reportId: status.reportId, page: pages.current}) : `Storage: ${label(status.state)}. ${status.state === 'disconnected' ? 'No active session.' : 'Follow the available connection or recovery action.'}`;
     refresh();
   }
@@ -133,16 +138,19 @@ function refresh() {
   const needsRecovery = ['recovery-required', 'stale-session'].includes(lifecycle?.state);
   if (needsRecovery) $('recovery-tools').open = true;
   pages.setLoaded(Boolean(session.ledger));
-  const ready = session.ready(), editable = !busy && session.canEdit();
+  const ready = session.ready(), editable = !busy && session.canEdit(), privateClass = isPrivate();
+  $('data-class-choice').hidden = !productionReleased;
+  $('data-class').disabled = busy || !productionReleased || Boolean(lifecycle) || Boolean(session.ledger);
+  if ($('data-class').value !== storage.dataClass) $('data-class').value = storage.dataClass;
   for (const update of sourceReviewUpdates) update();
-  $('start-preview').disabled = busy || Boolean(lifecycle);
+  $('start-preview').disabled = busy || Boolean(lifecycle) || privateClass;
   $('welcome-panel').hidden = Boolean(session.ledger);
   $('overview-loaded').hidden = !session.ledger;
-  $('create-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(lifecycle) || session.backupPreview || session.unverified || (session.mode !== 'preview' && !freshYearLedger);
-  $('create-ledger').textContent = session.mode === 'preview' ? 'Save preview to a new folder' : 'Create new synthetic year';
+  $('create-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(lifecycle) || session.backupPreview || session.unverified || (session.mode !== 'preview' && !privateClass && !freshYearLedger);
+  $('create-ledger').textContent = privateClass ? 'Create new private database' : session.mode === 'preview' ? 'Save preview to a new folder' : 'Create new synthetic year';
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(session.restoreExpected && session.restoreFolderId);
-  $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : 'Open saved synthetic year';
-  $('preview-position').disabled = busy || Boolean(lifecycle);
+  $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : privateClass ? 'Open private database' : 'Open saved synthetic year';
+  $('preview-position').disabled = busy || Boolean(lifecycle) || privateClass;
   $('position-date').disabled = busy || !session.ledger;
   for (const id of positionInputs) $(id).disabled = !editable;
   for (const button of positionButtons) button.disabled = !editable;
@@ -154,7 +162,7 @@ function refresh() {
   $('stage-closure').disabled = !editable || !$('closure-anchor').value || !$('closure-source').value.trim();
   $('stage-balance').disabled = !editable || !$('balance-account').value || !$('balance-date').value || !$('balance-amount').value.trim() || !$('balance-source').value.trim();
   $('stage-reconciliation').disabled = !editable || !$('month-filter').value || !$('reconcile-opening').value || !$('reconcile-closing').value || !$('reconcile-source').value.trim();
-  $('preview-year').disabled = busy || Boolean(lifecycle);
+  $('preview-year').disabled = busy || Boolean(lifecycle) || privateClass;
   $('save-preview').disabled = busy || !configured || navigator.onLine === false || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.backupPreview || session.unverified;
   $('save-preview').textContent = session.mode === 'preview' ? 'Save this preview to a new folder' : 'Save this preview to a new folder';
   $('save-ledger').disabled = busy || !session.canSave();
@@ -168,7 +176,9 @@ function refresh() {
   $('export-backup').disabled = busy || !exportReady || session.dirty;
   $('backup-save-first').disabled = busy || !session.dirty || !session.canSave();
   $('backup-saved-only').disabled = busy || !exportReady || !session.dirty;
-  $('backup-encrypt').disabled = busy;
+  // Private-database backups are always encrypted in this release.
+  if (privateClass && !$('backup-encrypt').checked) $('backup-encrypt').checked = true;
+  $('backup-encrypt').disabled = busy || privateClass;
   $('backup-password').disabled = busy || !$('backup-encrypt').checked;
   $('backup-password-confirm').disabled = $('backup-password').disabled;
   $('backup-file').disabled = busy || Boolean(lifecycle);
@@ -209,7 +219,10 @@ function refresh() {
   $('draft-bar').dataset.state = session.unverified ? 'unverified' : busy ? 'busy' : 'dirty';
   $('draft-summary').textContent = busy ? 'Working. Keep this tab open.' : session.unverified ? 'Save unverified. Check Storage.' : needsRecovery ? 'Recovery needed. Open Storage.' : session.dirty ? `${session.stagedHistory.length} staged change${session.stagedHistory.length === 1 ? '' : 's'} · not saved` : session.ledger ? 'No staged changes' : 'No ledger loaded';
   $('data-mode').dataset.mode = session.mode;
-  $('data-mode').textContent = session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
+  $('data-mode').dataset.dataClass = storage.dataClass;
+  $('data-mode').textContent = privateClass
+    ? (session.mode === 'preview' ? 'Private · local preview' : session.ledger ? (session.needsReopen ? 'Private · read-only' : 'Private database') : 'Private database (not open)')
+    : session.mode === 'preview' ? 'Synthetic local preview' : session.ledger ? (session.needsReopen ? 'Synthetic · read-only' : 'Synthetic saved copy') : 'Synthetic workspace';
   explainActionAvailability();
   $('storage-format').textContent = session.mode === 'preview'
     ? 'Local preview, no saved format yet. Saving to a new folder will use full-snapshot v1. Old-format folders are unsupported.'
@@ -248,7 +261,7 @@ function explainActionAvailability() {
     'verify-save-outcome': 'Available when a selected session has an unresolved save outcome to check.',
     'retry-save': 'Verification must first prove this exact draft was not saved. Other outcomes cannot be retried.',
     'recover-ledger': 'Available only for an interrupted operation with retained write ownership.',
-    'recover-stale': 'Available only after a selected session is conclusively stale; confirm the prior session has stopped.'
+    'recover-stale': 'Open saved synthetic year handles expired heartbeats. Use this advanced fallback only if the selected session still needs recovery.'
   };
   const networkActions = new Set(['save-ledger','save-preview','reopen-ledger','release-ledger','export-backup','backup-save-first','backup-saved-only','restore-backup','verify-save-outcome','retry-save','recover-ledger','recover-stale']);
   for (const [id, reason] of Object.entries(reasons)) {
@@ -879,8 +892,19 @@ $('month-filter').addEventListener('change', () => {
   if (!changeReconciliationScope('month-filter', view?.scope.month || '')) return;
   updateStatementEditor();
 });
-action('create-ledger', 'Preparing and saving an invented year to a new empty synthetic folder. Keep this tab open.', async () => {
+action('create-ledger', 'Preparing a new copy in a new empty folder. Keep this tab open.', async () => {
   const navigationRevision = pages.revision;
+  if (isPrivate()) {
+    // A new private database starts empty. It is never seeded with invented data.
+    if (session.mode !== 'preview') {
+      if ((session.dirty || hasUnfinishedDetail() || hasUnfinishedEvidence()) && !window.confirm('Replace your local draft with a new empty private database? This discards unsaved changes in this tab before folder selection.')) return;
+      session.preview(createLedger({dataClass: 'production'}));
+    } else if (!confirmDiscardDetail()) return;
+    render({ reset: true });
+    await session.savePreviewToNewCopy(); render({ reset: true }); if (pages.revision === navigationRevision) pages.go('overview');
+    if (session.designationFailed) { announce(designationWarning('Private database created and independently verified')); return true; }
+    announce('Private database created in the new folder and independently verified. Add accounts and import supported CSV files, then save.', 'success'); return true;
+  }
   // Reuse an existing preview, including edits, rather than replacing its data.
   if (session.mode !== 'preview') {
     if ((session.dirty || hasUnfinishedDetail() || hasUnfinishedEvidence()) && !window.confirm('Replace your local draft with a new invented year? This discards unsaved corrections in this tab before folder selection. Existing saved folders are unchanged.')) return;
@@ -913,6 +937,9 @@ async function saveWorkspaceChanges() {
 action('save-ledger', 'Saving changes and independently verifying the saved records. Keep this tab open.', async () => {
   await saveWorkspaceChanges(); render(); announce('Changes saved and independently verified. You can keep browsing or close the storage session.', 'success'); return true;
 });
+function designationWarning(done) {
+  return done + ', but this browser could not record it as the designated private database folder. Any previous designation still applies, so Open will refuse this folder. Allow site storage; to designate this folder, clear this site’s data in the browser, then Open it again.';
+}
 function recoveryMessage() {
   return ({checking:'Checking what reached Drive. Your draft remains in this tab; keep it open.',saved:'Your draft was found saved and verified. No retry is needed.', 'not-saved':'The save was conclusively not published. Your draft is preserved. Retry only with the explicit confirmation below.',different:'Drive contains different saved records. Your draft is preserved. Do not retry blindly; review the saved copy first.',unverifiable:'The save outcome could not be verified. Your draft is preserved. Recheck when connected; do not retry blindly.'})[session.recoveryOutcome] || 'Save unverified. Your draft remains in this tab. Verify the save outcome before retrying.';
 }
@@ -921,11 +948,12 @@ async function downloadBackup({excludeStaged=false,saveFirst=false}={}) {
     const encrypted=$('backup-encrypt').checked, password=encrypted?$('backup-password').value:undefined;
     if (encrypted && !password) fail('backup-password-required');
     if (encrypted && password !== $('backup-password-confirm').value) fail('backup-password-mismatch');
+    if (isPrivate() && !encrypted) fail('backup-password-required');
     if (!encrypted && !window.confirm('Download an unencrypted backup? This file contains readable synthetic financial data. Keep it private.')) { announce('Backup cancelled. No file was downloaded.'); return; }
     if (saveFirst) await saveWorkspaceChanges();
     const bytes=await session.exportBackup({password,excludeStaged});
     const url=URL.createObjectURL(new Blob([bytes],{type:'application/json'}));
-    const link=node('a');link.href=url;link.download='finance-tracker-synthetic-backup.json';
+    const link=node('a');link.href=url;link.download=isPrivate()?'finance-tracker-private-backup.json':'finance-tracker-synthetic-backup.json';
     document.body.append(link);
     try {link.click();} finally {link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
     announce('Backup download requested. Check your downloads and keep the file safe.'+(excludeStaged?' Staged changes were excluded; your draft is unchanged.':''),'success');return true;
@@ -933,6 +961,14 @@ async function downloadBackup({excludeStaged=false,saveFirst=false}={}) {
 }
 $('backup-encrypt').addEventListener('change',()=>{if (!$('backup-encrypt').checked) {$('backup-password').value='';$('backup-password-confirm').value='';}refresh();});
 $('backup-file').addEventListener('change',()=>{refresh();});
+$('data-class').addEventListener('change',()=>{
+  // A UI choice of class, not authorization: Google OAuth, the private-folder
+  // proof and the manifest class still decide what can be opened.
+  try { if (session.ledger) fail('release-before-preview'); storage.setDataClass($('data-class').value); announce(isPrivate() ? 'Private database selected. Google account, folder privacy and the saved copy are verified when you connect.' : 'Synthetic test copies selected. Use invented data only.'); }
+  catch (error) { $('data-class').value = storage.dataClass; announce(showDiagnostic(error, {surface: 'workspace', target: $('action-status'), page: pages.current}), 'error'); }
+  refresh();
+});
+if (productionReleased) $('release-classes').textContent = 'This release can open a private database · Only the approved build, account and folder may hold real data';
 action('export-backup','Verifying the saved copy and preparing a local backup.',()=>downloadBackup());
 action('backup-saved-only','Verifying the saved copy. Staged changes will be excluded.',()=>downloadBackup({excludeStaged:true}));
 action('backup-save-first','Saving changes before preparing a verified backup. Keep this tab open.',()=>downloadBackup({saveFirst:true}));
@@ -949,10 +985,15 @@ action('stage-backup','Checking the local backup. No folder is selected or writt
 });
 action('restore-backup','Restoring the validated preview to a new empty synthetic folder and verifying it. Keep this tab open.',async()=>{
   if (!confirmDiscardDetail()) return;
-  await session.restoreBackupToNewCopy();render({reset:true});announce('Backup restored to a new synthetic copy and independently verified. The original folder was not changed.','success');return true;
+  await session.restoreBackupToNewCopy();render({reset:true});
+  if (session.designationFailed) { announce(designationWarning('Backup restored to a new copy and independently verified')); return true; }
+  announce('Backup restored to a new synthetic copy and independently verified. The original folder was not changed.','success');return true;
 });
 action('verify-save-outcome','Checking what reached Drive. Your draft stays in this tab.',async()=>{
-  await session.resolveUncertainSave();render();announce(recoveryMessage(),session.recoveryOutcome==='saved'?'success':'info');
+  await session.resolveUncertainSave();render();
+  // Surface why a recheck could not verify (report-safe code, kept in Recent problems).
+  if(session.recoveryOutcome==='unverifiable'&&session.recoveryCause)fail(session.recoveryCause);
+  announce(recoveryMessage(),session.recoveryOutcome==='saved'?'success':'info');
 });
 action('retry-save','Preparing an explicitly confirmed retry of the verified unsaved draft.',async()=>{
   if (!window.confirm('Drive verification found that this draft was not saved. Retry saving this exact draft now?')) {announce('Retry cancelled. Your draft is unchanged.');return;}

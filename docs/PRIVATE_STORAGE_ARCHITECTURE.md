@@ -1,5 +1,7 @@
 # Private Storage Architecture — Google Drive
 
+> Historical architecture record: the earlier 540-day originals policy was superseded on November 23, 2026. [ADR-010](ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files) now keeps original CSVs local and out of app-managed storage and archives.
+
 > Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
 
 

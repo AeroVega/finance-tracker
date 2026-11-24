@@ -1,4 +1,5 @@
-import { HISTORICAL_LEDGER_VERSION, validateHistoricalLedger } from './historical-monthly-summary.mjs';
+import {persistenceDataClass} from './persistence-data-class.mjs';
+import { validateHistoricalLedger } from './historical-monthly-summary.mjs';
 import { validatePositionEvents } from './financial-position-contract.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal, sameComposite } from './import-reconciliation.mjs';
@@ -34,17 +35,48 @@ function validCoverageEvidence(coverage, {accountId, fileFingerprint, rowsSeen})
   return true;
 }
 
+// The class header is fixed at creation and no transition can rewrite it.
+// Creating a production ledger is not permission to persist it.
 export function createLedger(options = {}) {
-  return { format:'finance-tracker-canonical-ledger', version:1, syntheticOnly:true, ledgerId:id(options), createdAt:stamp(options), accounts:[], imports:[], observations:[], activities:[], events:[], reviewDecisions:[] };
+  const header = options.dataClass === undefined || options.dataClass === 'synthetic'
+    ? { version:1, syntheticOnly:true }
+    : options.dataClass === 'production' ? { version:3, dataClass:'production' } : fail('invalid-canonical-ledger');
+  return { format:'finance-tracker-canonical-ledger', ...header, ledgerId:id(options), createdAt:stamp(options), accounts:[], imports:[], observations:[], activities:[], events:[], reviewDecisions:[] };
 }
 
+/** Synthetic-only gate, unchanged for every existing synthetic caller. */
 export function validateLedger(ledger) {
   validateAndProject(ledger);
   return true;
 }
 
-function validateAndProject(ledger) {
-  if (!ledger || ledger.format !== 'finance-tracker-canonical-ledger' || ![1,HISTORICAL_LEDGER_VERSION].includes(ledger.version) || ledger.syntheticOnly !== true || !uuid.test(ledger.ledgerId) || !Number.isFinite(Date.parse(ledger.createdAt))) fail('invalid-canonical-ledger');
+export function validateProductionLedger(ledger) {
+  validateAndProject(ledger, 'production');
+  return true;
+}
+// Version 3 admits only known top-level fields; it starts without legacy extras.
+const PRODUCTION_FIELDS=new Set(['format','version','dataClass','ledgerId','createdAt',...Object.keys(collections),
+  'positionEvents','historicalSummaryBatches','historicalReconciliations']);
+
+/** The header's class, or a refusal. Not provenance or authorization. */
+export function ledgerDataClass(ledger) {
+  return persistenceDataClass('ledger', ledger) ?? fail('invalid-canonical-ledger');
+}
+
+/** Boundary check: a valid ledger that belongs to the expected class. */
+export function validateLedgerOfClass(ledger, dataClass) {
+  if (dataClass === 'production') return validateProductionLedger(ledger);
+  if (dataClass === 'synthetic') return validateLedger(ledger);
+  return fail('invalid-canonical-ledger');
+}
+
+// Domain transitions preserve whichever class the input declares. Session,
+// storage, import and backup boundaries decide which class is acceptable.
+export function validateKnownLedger(ledger) { return validateLedgerOfClass(ledger, ledgerDataClass(ledger)); }
+
+function validateAndProject(ledger, expectedClass='synthetic') {
+  if (expectedClass === 'production' && (!ledger || Object.keys(ledger).some(key=>!PRODUCTION_FIELDS.has(key)))) fail('invalid-canonical-ledger');
+  if (persistenceDataClass('ledger', ledger) !== expectedClass || !uuid.test(ledger.ledgerId) || !Number.isFinite(Date.parse(ledger.createdAt))) fail('invalid-canonical-ledger');
   const ids = new Set([ledger.ledgerId]);
   // These indexes belong to this validation only. Every record and reference is
   // still checked below, in the same order, before the ledger can be used.
@@ -77,6 +109,7 @@ function validateAndProject(ledger) {
     if (!validCoverageEvidence(run.declaredCoverage, run)) fail('invalid-import');
     if(!Array.isArray(run.retryAttempts) || run.retryAttempts.some(attempt=>!uuid.test(attempt.attemptId)||!Number.isFinite(Date.parse(attempt.startedAt))||!Number.isFinite(Date.parse(attempt.completedAt))||!['processed','needs-review'].includes(attempt.priorStatus)||!['processed','needs-review'].includes(attempt.status)||!attempt.priorCounts||!attempt.counts)) fail('invalid-retry-audit');
     for(const attempt of run.retryAttempts) {if(ids.has(attempt.attemptId)) fail('duplicate-attempt-id');ids.add(attempt.attemptId);}
+    // Persist provenance and parsed ledger records, never the original CSV or a locator to it.
     if(run.sourceFileRetentionStatus!=='not-retained'||run.privateSourceFileRef!==null||run.sourceFileRetainedAt!==null||run.sourceFileRetentionExpiresAt!==null||run.sourceFileDeletedAt!==null||run.coverageReconciled!==false) fail('unsupported-synthetic-retention-or-completeness');
     const c=run.counts;
     if (!c || Object.keys(zeroCounts()).some(k=>!Number.isSafeInteger(c[k]) || c[k]<0) || c.created+c.matched+c.review+c.rejected+c.ignored!==c.rowsRecognized) fail('invalid-import-counts');
@@ -151,7 +184,7 @@ function validateAndProject(ledger) {
     ids.add(event.eventId);
     commands.set(event.commandId,event);
   }
-  validateHistoricalLedger(ledger,ids);
+  validateHistoricalLedger(ledger,ids,{allowMissingHistory:expectedClass==='production'});
   inspectJson(ledger);
   return {replay,ids,commands,byId};
 }
@@ -241,11 +274,11 @@ function inspectJson(value) {
 }
 
 export function registerAccount(ledger, account, options = {}) {
-  validateLedger(ledger);
+  validateKnownLedger(ledger);
   const next=clone(ledger), accountId=account.accountId ?? id(options);
   if(next.accounts.some(a=>a.accountId===accountId)) fail('account-already-exists');
   next.accounts.push({accountId,institutionId:account.institutionId,displayName:account.displayName ?? account.name,currency:account.currency,accountType:account.accountType ?? 'other',createdAt:stamp(options),archivedAt:null});
-  validateLedger(next); return next;
+  validateKnownLedger(next); return next;
 }
 
 function canonicalRow(record, account) {
@@ -302,9 +335,12 @@ function refreshRun(ledger, run) {
   run.latestActivityDate=latest;
 }
 
-export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageByAccount,syntheticOnly}, options = {}) {
-  validateLedger(ledger);
-  if(syntheticOnly!==true) fail('synthetic-only-required');
+export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageByAccount,syntheticOnly,dataClass}, options = {}) {
+  validateKnownLedger(ledger);
+  // The caller must name the class it expects; it must match the ledger header.
+  const expected = dataClass ?? (syntheticOnly === true ? 'synthetic' : null);
+  if(expected===null) fail('synthetic-only-required');
+  if(ledgerDataClass(ledger)!==expected) fail('data-class-mismatch');
   if(!parsed || !Array.isArray(parsed.records) || !Array.isArray(parsed.sourceAccountKeys) || typeof parsed.fileFingerprint!=='string' || !parsed.fileFingerprint) fail('invalid-parsed-import');
   const next=clone(ledger), runIds=[], summary={...zeroCounts(),noOp:0};
   const keys=[...new Set([...parsed.sourceAccountKeys,...parsed.records.map(r=>r.sourceAccountKey),...(parsed.records.length===0?Object.keys(accountMappings??{}):[])])];
@@ -364,11 +400,11 @@ export function prepareCanonicalImport(ledger, {parsed,accountMappings,coverageB
     next.imports.push(run); refreshRun(next,run); runIds.push(runId);
     for(const k of Object.keys(zeroCounts())) summary[k]+=run.counts[k];
   }
-  validateLedger(next); return {ledger:next,runIds,summary};
+  validateKnownLedger(next); return {ledger:next,runIds,summary};
 }
 
 export function applyReviewDecision(ledger, {observationId,action,activityId=null,rationale=null,currency=null}, options={}) {
-  validateLedger(ledger);
+  validateKnownLedger(ledger);
   const next=clone(ledger), o=next.observations.find(o=>o.observationId===observationId);
   if(!o || !['keep-separate','match','reject'].includes(action)) fail('invalid-review');
   if(!['review','rejected'].includes(o.disposition) || o.resolved) fail('observation-already-resolved');
@@ -400,7 +436,7 @@ export function applyReviewDecision(ledger, {observationId,action,activityId=nul
   o.activityId=activityId; o.resolved=true;
   next.reviewDecisions.push({reviewDecisionId:id(options),observationId,activityId,action,priorDisposition,rationale,currency,existingEventIds:next.events.map(e=>e.eventId),reviewer:'user',createdAt:time});
   for(const run of next.imports.filter(r=>r.observationIds.includes(observationId))) refreshRun(next,run);
-  validateLedger(next); return next;
+  validateKnownLedger(next); return next;
 }
 
 function activeActivityIds(ledger) {
@@ -449,7 +485,7 @@ function retainedCompositeEvidence(ledger,active) {
 }
 
 export function reverseReviewDecision(ledger,{reviewDecisionId,rationale=null},options={}) {
-  validateLedger(ledger);
+  validateKnownLedger(ledger);
   const next=clone(ledger), decision=next.reviewDecisions.find(d=>d.reviewDecisionId===reviewDecisionId);
   if(!decision || decision.action==='reverse') fail('invalid-review-reversal');
   const observation=next.observations.find(o=>o.observationId===decision.observationId);
@@ -461,7 +497,7 @@ export function reverseReviewDecision(ledger,{reviewDecisionId,rationale=null},o
   observation.activityId=null;observation.disposition='review';observation.reasonCode=decision.currency!==null&&observation.candidate.errorCode==='missing-currency'?'missing-currency':'review-decision-reversed';observation.resolved=false;
   next.reviewDecisions.push({reviewDecisionId:id(options),observationId:observation.observationId,activityId:null,action:'reverse',supersedesDecisionId:reviewDecisionId,priorDisposition,rationale,currency:null,existingEventIds:next.events.map(e=>e.eventId),reviewer:'user',createdAt:stamp(options)});
   for(const run of next.imports.filter(r=>r.observationIds.includes(observation.observationId))) refreshRun(next,run);
-  validateLedger(next);return next;
+  validateKnownLedger(next);return next;
 }
 
 function categoryRuleKey(activity) {
@@ -596,7 +632,7 @@ function effective(ledger,activity) {
   return clone(projectActivities(ledger).get(activity.activityId));
 }
 export function getEffectiveActivities(ledger) {
-  const {replay}=validateAndProject(ledger),activeIds=activeActivityIds(ledger);
+  const {replay}=validateAndProject(ledger,ledgerDataClass(ledger)),activeIds=activeActivityIds(ledger);
   return ledger.activities.map(activity=>({...clone(replay.get(activity.activityId)),active:activeIds.has(activity.activityId)}));
 }
 
@@ -615,7 +651,7 @@ export function applyFinancialEvent(ledger, command, options={}) {
 // Preserve the same order, IDs, prior values and intermediate financial checks
 // as separate commands, but validate and clone the unchanged graph only once.
 export function applyFinancialEvents(ledger, commands, options={}) {
-  const context=validateAndProject(ledger);
+  const context=validateAndProject(ledger,ledgerDataClass(ledger));
   if(!Array.isArray(commands)) fail('invalid-financial-commands');
   const next=clone(ledger);
   context.activeIds=activeActivityIds(ledger);
@@ -631,7 +667,7 @@ export function applyFinancialEvents(ledger, commands, options={}) {
     context.refunds.check(event);
     inspectJson(event);
   }
-  validateLedger(next);
+  validateKnownLedger(next);
   return next;
 }
 
@@ -728,7 +764,7 @@ export function summarizeLedgerPeriods(ledger,scopes) {
 }
 
 function createReportContext(ledger) {
-  const {replay,byId}=validateAndProject(ledger);
+  const {replay,byId}=validateAndProject(ledger,ledgerDataClass(ledger));
   return {ledger,replay,accounts:byId.accounts,
     active:activeActivities(ledger),
     unresolved:ledger.observations.filter(o=>!o.resolved&&['review','rejected'].includes(o.disposition))};
@@ -802,7 +838,7 @@ export function createLedgerSessionOwner() {
       const openedGeneration=++generation;
       let ledger=freezeSessionValue(JSON.parse(json)),context,closed=false,busy=false,revision=0;
       const rebuild=()=>{
-        const rebuilt=validateAndProject(ledger);
+        const rebuilt=validateAndProject(ledger,ledgerDataClass(ledger));
         rebuilt.activeIds=activeActivityIds(ledger);
         rebuilt.refunds=createRefundChecks(ledger,rebuilt.replay);
         context=rebuilt;
@@ -820,8 +856,8 @@ export function createLedgerSessionOwner() {
         // Collections and every nested record are frozen, including events.
         // No replay/index Map or mutable projection crosses this boundary.
         snapshot() {guard();return ledger;},
-        validatedSnapshot() {guard();validateLedger(ledger);return ledger;},
-        exportJson() {guard();validateLedger(ledger);return JSON.stringify(ledger);},
+        validatedSnapshot() {guard();validateKnownLedger(ledger);return ledger;},
+        exportJson() {guard();validateKnownLedger(ledger);return JSON.stringify(ledger);},
         effectiveActivity(activityId) {
           guard();if(typeof activityId!=='string') fail('session-activity-id-required');
           return {...clone(context.replay.get(activityId)),active:context.activeIds.has(activityId)};
