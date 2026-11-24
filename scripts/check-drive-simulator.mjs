@@ -5,20 +5,23 @@ import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {resolve,extname,sep} from 'node:path';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {fakeGoogleFolderProof} from '../tests/helpers/fake-google-folder-proof.mjs';
 import {ScenarioFullSnapshotDrive} from '../tests/helpers/scenario-full-snapshot-drive.mjs';
 const require = createRequire(import.meta.url);
 const playwright = require('playwright');
 const engine = process.argv[2] || 'chromium';
 assert.ok(['chromium','webkit'].includes(engine));
-const root = resolve(new URL('..',import.meta.url).pathname);
+// fileURLToPath keeps this portable (a URL pathname is /C:/... on Windows).
+const root = resolve(fileURLToPath(new URL('..',import.meta.url)));
 const types = {'.mjs':'text/javascript','.js':'text/javascript','.html':'text/html','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.png':'image/png'};
 const server = createServer(async(req,res)=>{
  try {
   const path=resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://local.invalid').pathname));
   if(path!==root&&!path.startsWith(root+sep)){res.writeHead(403);res.end();return;}
   const file=path===root?resolve(root,'index.html'):path;
-  res.writeHead(200,{'Content-Type':types[extname(file)]||'application/octet-stream'});res.end(await readFile(file));
+  const body=await readFile(file); // Read first: a missing file must still be able to answer 404.
+  res.writeHead(200,{'Content-Type':types[extname(file)]||'application/octet-stream'});res.end(body);
  }catch{res.writeHead(404);res.end();}
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
