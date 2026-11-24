@@ -4,3 +4,6 @@
 
 # Preserved historical evidence keeps its original bytes.
 docs/evidence/pr38-save-latency.csv -text
+
+# Raster assets are stored as binary image data.
+*.png -text

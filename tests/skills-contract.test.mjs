@@ -58,10 +58,11 @@ function gitRecordedLinks() {
   try { symlinks = execFileSync('git', ['config', '--get', 'core.symlinks'], { cwd: root, encoding: 'utf8' }).trim(); }
   catch { return null; } // Unset means Git creates real symlinks.
   if (symlinks !== 'false') return null;
-  const listing = execFileSync('git', ['ls-files', '-s', '--', '.agents/skills'], { cwd: root, encoding: 'utf8' });
-  return new Map(listing.trim().split('\n').map(line => {
-    const [meta, file] = line.split('\t');
-    return [file, meta.split(' ')[0]];
+  const listing = execFileSync('git', ['ls-files', '-s', '-z', '--', '.agents/skills'], { cwd: root });
+  return new Map(listing.toString('utf8').split('\0').filter(Boolean).map(entry => {
+    const tab = entry.indexOf('\t');
+    const metadata = entry.slice(0, tab), file = entry.slice(tab + 1);
+    return [file, metadata.split(' ')[0]];
   }));
 }
 
@@ -78,6 +79,8 @@ test('Codex discovery links resolve to the new canonical skill folders without c
     } else {
       assert.ok(recorded, `${name} must be a symlink`);
       assert.equal(recorded.get(`.agents/skills/${name}`), '120000', `${name} must be recorded as a symlink`);
+      const indexedTarget = execFileSync('git', ['show', `:.agents/skills/${name}`], { cwd: root });
+      assert.deepEqual(indexedTarget, Buffer.from(target, 'utf8'), `${name} index blob must contain exactly its symlink target`);
       assert.ok(lstatSync(link).isFile(), `${name} must not be a copied folder`);
       assert.equal(readFileSync(link, 'utf8'), target);
       assert.ok(existsSync(path.join(skillsRoot, name, 'SKILL.md')));
