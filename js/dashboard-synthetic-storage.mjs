@@ -286,7 +286,8 @@ export class DashboardSyntheticStorage {
         accessToken: candidateToken
       });
       if (requireEmpty) await requireEmptySyntheticFolder(preflightAdapter);
-      await inspectFullSnapshotFolder(preflightAdapter,{requireEmpty,requireExisting});
+      const {admission}=await inspectFullSnapshotFolder(preflightAdapter,{requireEmpty,requireExisting});
+      candidateToken(); // Do not release an old session for a candidate that expired during the last read.
       if (this.lifecycle && this.lifecycle.folderId !== folder.id) {
         if (this.lifecycle.coordinator?.canWrite) {
           const released = await this.lifecycle.release({ reason: "synthetic-folder-change" });
@@ -307,21 +308,21 @@ export class DashboardSyntheticStorage {
       }
       try {
         if (this.lifecycle.coordinator?.canWrite && this.lifecycle.state === "recovery-required") {
-          await this.lifecycle.recover();
+          await this.lifecycle.recover({admission});
         } else if (this.lifecycle.coordinator?.session && this.lifecycle.started) {
-          await this.lifecycle.handleOnline();
+          await this.lifecycle.handleOnline({admission});
           if (this.lifecycle.state !== "ready") {
             throw Object.assign(new Error("The existing storage session could not be revalidated. Writes remain disabled."), { code: "ownership-unknown" });
           }
         } else {
-          await this.lifecycle.start({initialize:requireEmpty});
+          await this.lifecycle.start({initialize:requireEmpty,admission});
         }
       } catch (error) {
         // Only an explicit Open/Reconnect can reclaim. The coordinator rereads
         // the exact stale marker immediately before takeover; all other
         // failures (including a fresh or uncertain competing marker) refuse.
         if (!requireExisting || requireEmpty || error?.code !== 'stale-session') throw error;
-        await this.lifecycle.recoverStaleSession({ confirm: true });
+        await this.lifecycle.recoverStaleSession({ confirm: true, admission });
       }
       const snapshot = await this.readSnapshot();
       this.onSnapshot(snapshot);
@@ -358,13 +359,24 @@ export class DashboardSyntheticStorage {
   async reopenIndependent() {
     const previous=this.lifecycle,folderId=this.folderId;
     if(!previous||previous.folderId!==folderId||this.busy)throw new AppError('reconnect-required');
-    const result=await previous.release();
-    if(result?.released!==true||this.lifecycle!==previous||this.folderId!==folderId)throw new AppError('release-unconfirmed');
-    const fresh=new FullSnapshotApplication({folderId,accessToken:()=>this.token(),onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
-    this.lifecycle=fresh;
-    await fresh.start();
-    if(this.lifecycle!==fresh||this.folderId!==folderId)throw new AppError('reconnect-required');
-    return fresh;
+    this.busy=true;
+    try{
+      // The cold verification is a new claim, not a continuation of the old
+      // ownership proof. Recheck privacy and read the exact manifest first.
+      await provePrivateGoogleFolder({folderId,accountId:this.accountId,
+        token:this.token(),expiresAt:this.tokenExpiresAt});
+      const preflight=new GoogleDriveTransactionAdapter({folderId,accessToken:()=>this.token()});
+      const {admission}=await inspectFullSnapshotFolder(preflight,{requireExisting:true});
+      if(this.lifecycle!==previous||this.folderId!==folderId)throw new AppError('reconnect-required');
+      this.token();
+      const result=await previous.release();
+      if(result?.released!==true||this.lifecycle!==previous||this.folderId!==folderId)throw new AppError('release-unconfirmed');
+      const fresh=new FullSnapshotApplication({folderId,accessToken:()=>this.token(),onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
+      this.lifecycle=fresh;
+      await fresh.start({admission});
+      if(this.lifecycle!==fresh||this.folderId!==folderId)throw new AppError('reconnect-required');
+      return fresh;
+    }finally{this.busy=false;}
   }
 
   async readSnapshot() {

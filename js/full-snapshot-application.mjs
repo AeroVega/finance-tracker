@@ -1,4 +1,4 @@
-import {createFullSnapshotStorage,FULL_SNAPSHOT_MANIFEST_NAME} from './full-snapshot-storage.mjs';
+import {createFullSnapshotStorage,FULL_SNAPSHOT_MANIFEST_NAME,inspectSyntheticManifest} from './full-snapshot-storage.mjs';
 import {createDriveRequestMetrics} from './drive-request-metrics.mjs';
 import {fail} from './app-error.mjs';
 
@@ -10,7 +10,8 @@ export async function inspectFullSnapshotFolder(adapter,{requireEmpty=false,requ
  if(candidates.length>1)fail('ambiguous-manifest');
  if(!candidates.length&&files.length)fail('unsupported-canonical-layout');
  if(requireExisting&&!candidates.length)fail('existing-copy-required');
- return {manifestFileId:candidates[0]?.id??null};
+ return {manifestFileId:candidates[0]?.id??null,
+  admission:requireExisting?await inspectSyntheticManifest(adapter,candidates[0].id):undefined};
 }
 
 export class FullSnapshotApplication {
@@ -35,9 +36,9 @@ export class FullSnapshotApplication {
   catch(error){this.invalidate();this.#status(error.code==='stale-session'?'stale-session':this.engine.recoveryRequired?'recovery-required':starting?'error':'reconnecting',error);throw error;}
   finally{this.#busy=false;}
  }
- async start({initialize=false,recoverStale=false}={}){
+ async start({initialize=false,recoverStale=false,admission}={}){
   return this.#operation(async()=>{
-   const generation=this.#generation,ledger=await this.engine.start({initialize,recoverStale}),manifest=this.engine.verifiedManifest;
+   const generation=this.#generation,ledger=await this.engine.start({initialize,recoverStale,admission}),manifest=this.engine.verifiedManifest;
    this.#assert(generation);this.engine.assertVerifiedBaseline(manifest);this.started=true;
    this.#status('ready');this.#assert(generation);this.engine.assertVerifiedBaseline(manifest);
    this.#transfer={generation,manifest:structuredClone(manifest),ledger:structuredClone(ledger)};
@@ -51,15 +52,15 @@ export class FullSnapshotApplication {
  }
  async save(ledger){return this.#operation(async()=>{const result=await this.engine.save(ledger),m=this.engine.verifiedManifest;this.#status('ready');this.engine.assertVerifiedBaseline(m);return result;});}
  async readManifest(){const m=this.engine.verifiedManifest;if(!m)fail('verified-base-required');this.engine.assertVerifiedBaseline(m);return m;}
- async recover(){return this.#operation(async()=>{const ledger=await this.engine.recover();this.#status('ready');return ledger;});}
- async recoverStaleSession({confirm}={}){if(confirm!==true)fail('stale-session');this.invalidate();return this.start({recoverStale:true});}
- async handleOnline(){
+ async recover({admission}={}){return this.#operation(async()=>{const ledger=await this.engine.recover({admission});this.#status('ready');return ledger;});}
+ async recoverStaleSession({confirm,admission}={}){if(confirm!==true)fail('stale-session');this.invalidate();return this.start({recoverStale:true,admission});}
+ async handleOnline({admission}={}){
   this.invalidate();
   // Resume can fail before start() enters its state-reporting operation. Keep
   // those failures observable without authorizing takeover or discarding drafts.
   try{await this.coordinator.resume();}
   catch(error){this.invalidate();this.#status(error.code==='stale-session'?'stale-session':this.engine.recoveryRequired?'recovery-required':'reconnecting',error);throw error;}
-  return this.start();
+  return this.start({admission});
  }
  async release(){
   this.acceptingWrites=false;this.#transfer=null;

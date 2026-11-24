@@ -226,6 +226,9 @@ Run the [owner acceptance and release checklist](OWNER_ACCEPTANCE.md) against th
 
 ## 8. Owner approval gate — not yet requested
 
+The [persistence data-class boundary](PERSISTENCE_DATA_CLASS.md) documents the
+inactive production-header checkpoint and the remaining integration work.
+
 **No approval to activate real financial data is requested or implied by this review.** The release gates above are not yet all demonstrated. The reviewed deployment remains synthetic-only, and no real financial figures, real Drive folder or production Google account should be entered or selected.
 
 Once the outstanding controls are verified, activation must require a separate, explicit owner decision identifying all of:

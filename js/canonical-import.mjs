@@ -1,4 +1,5 @@
-import { HISTORICAL_LEDGER_VERSION, validateHistoricalLedger } from './historical-monthly-summary.mjs';
+import {persistenceDataClass} from './persistence-data-class.mjs';
+import { validateHistoricalLedger } from './historical-monthly-summary.mjs';
 import { validatePositionEvents } from './financial-position-contract.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal, sameComposite } from './import-reconciliation.mjs';
@@ -43,8 +44,18 @@ export function validateLedger(ledger) {
   return true;
 }
 
-function validateAndProject(ledger) {
-  if (!ledger || ledger.format !== 'finance-tracker-canonical-ledger' || ![1,HISTORICAL_LEDGER_VERSION].includes(ledger.version) || ledger.syntheticOnly !== true || !uuid.test(ledger.ledgerId) || !Number.isFinite(Date.parse(ledger.createdAt))) fail('invalid-canonical-ledger');
+// Detached format validation only. This does not admit a ledger to the browser
+// workspace; all active import, reporting and mutation entry points stay synthetic.
+export function validateProspectiveProductionLedger(ledger) {
+  const fields=new Set(['format','version','dataClass','ledgerId','createdAt',...Object.keys(collections),
+    'positionEvents','historicalSummaryBatches','historicalReconciliations']);
+  if(!ledger||Object.keys(ledger).some(key=>!fields.has(key)))fail('invalid-canonical-ledger');
+  validateAndProject(ledger, 'reserved-production');
+  return true;
+}
+
+function validateAndProject(ledger, expectedClass='synthetic') {
+  if (persistenceDataClass('ledger', ledger) !== expectedClass || !uuid.test(ledger.ledgerId) || !Number.isFinite(Date.parse(ledger.createdAt))) fail('invalid-canonical-ledger');
   const ids = new Set([ledger.ledgerId]);
   // These indexes belong to this validation only. Every record and reference is
   // still checked below, in the same order, before the ledger can be used.
@@ -152,7 +163,7 @@ function validateAndProject(ledger) {
     ids.add(event.eventId);
     commands.set(event.commandId,event);
   }
-  validateHistoricalLedger(ledger,ids);
+  validateHistoricalLedger(ledger,ids,{allowMissingHistory:expectedClass==='reserved-production'});
   inspectJson(ledger);
   return {replay,ids,commands,byId};
 }

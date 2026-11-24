@@ -177,7 +177,7 @@ test('explicit Open reclaims a conclusively stale session and verifies its publi
   assert.deepEqual(await other.createLedgerStore().load(),pending);
   assert.equal(manifest().pending,null);assert.equal(manifest().revision,revision);
  }finally{
-  try { await other?.release(); } finally { other?.lifecycle?.coordinator.heartbeatStop?.();await h.close();Date.now=realNow; }
+  try { if(other?.lifecycle)await other.release(); } finally { other?.lifecycle?.coordinator.heartbeatStop?.();await h.close();Date.now=realNow; }
  }
 });
 
@@ -197,6 +197,41 @@ test('reclaim opens the saved ledger without publishing an abandoned unsaved dra
   assert.deepEqual(await other.createLedgerStore().load(),saved);
   assert.equal(h.http.requests.slice(requestStart).some(row=>row.category==='update'&&row.kind==='finance-tracker-full-snapshot-manifest'),false);
  }finally{
-  try { await other?.release(); } finally { other?.lifecycle?.coordinator.heartbeatStop?.();await h.close();Date.now=realNow; }
+  try { if(other?.lifecycle)await other.release(); } finally { other?.lifecycle?.coordinator.heartbeatStop?.();await h.close();Date.now=realNow; }
  }
+});
+
+test('reconnect rejects an unadmitted manifest before touching Drive or replacing its staged draft',async()=>{
+ const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented',rationale:'Keep this draft'});
+  const draft=structuredClone(h.session.ledger),old=h.storage.lifecycle,requests=h.http.requests.length;
+  const file=[...h.http.files.values()].find(f=>f.metadata.name===FULL_SNAPSHOT_MANIFEST_NAME);
+  const {syntheticOnly,...header}=JSON.parse(new TextDecoder().decode(file.bytes));
+  file.bytes=new TextEncoder().encode(JSON.stringify({...header,version:2,dataClass:'production'}));
+  file.metadata.size=String(file.bytes.length);
+  file.metadata.version=String(BigInt(file.metadata.version)+1n);
+  await assert.rejects(h.session.open(),{code:'invalid-shape'});
+  assert.equal(h.storage.lifecycle,old);
+  assert.deepEqual(h.session.ledger,draft);
+  assert.equal(h.session.dirty,true);
+  assert.equal(h.http.requests.slice(requests).some(row=>row.method!=='GET'),false);
+ }finally{await h.close();}
+});
+
+test('independent restore refuses newly shared destination before release or new claim, keeping backup preview',async()=>{
+ const {encodeFullSnapshotBackup}=await import('../js/full-snapshot-backup.mjs');const {replayFixture}=await import('./helpers/ledger-replay-fixtures.mjs');
+ const h=await setup();try{
+  const source=replayFixture(1).ledger;
+  await h.session.importBackup(await encodeFullSnapshotBackup(source));
+  let admitted,before;
+  const reopen=h.storage.reopenIndependent.bind(h.storage);
+  h.storage.reopenIndependent=()=>{admitted=h.storage.lifecycle;before=h.http.mutations;h.setShared(true);return reopen();};
+  await assert.rejects(h.session.restoreBackupToNewCopy(),{code:'private-folder-proof-failed'});
+  assert.equal(h.storage.lifecycle,admitted);assert.equal(h.http.mutations,before);
+  assert.deepEqual(h.session.backupSource,source);
+  assert.equal(h.session.backupPreview,true);
+  assert.equal(h.session.unverified,true);
+  assert.equal(h.storage.busy,false);
+ }finally{h.setShared(false);await h.close();}
 });
