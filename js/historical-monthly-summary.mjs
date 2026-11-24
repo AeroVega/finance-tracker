@@ -1,5 +1,5 @@
 import { fail } from './app-error.mjs';
-import { validateHistoricalMonthlySummaries } from './historical-monthly-summary-validation.mjs';
+import { validateHistoricalMonthlySummaries, manualNetWorthEstimates } from './historical-monthly-summary-validation.mjs';
 import { canonicalizeJcs, sha256Hex } from './transaction-protocol.mjs';
 import { summarizeLedgerPeriods } from './canonical-import.mjs';
 import { isCalendarDate } from './import-reconciliation.mjs';
@@ -69,8 +69,8 @@ function acceptedByMonth(ledger) {
   for (const batch of ledger?.historicalSummaryBatches ?? []) {
     for (const entry of batch.entries) {
       const prior = current.get(entry.record.month);
-      if (entry.action === 'accept' && (!prior || !same(prior.record, entry.record))) {
-        current.set(entry.record.month, {batchId: batch.batchId, recordIndex: entry.recordIndex, record: entry.record});
+      if (entry.action === 'accept' && (!prior || prior.batchVersion !== batch.version || !same(prior.record, entry.record))) {
+        current.set(entry.record.month, {batchId: batch.batchId, recordIndex: entry.recordIndex, record: entry.record, batchVersion: batch.version});
       }
     }
   }
@@ -80,7 +80,8 @@ function acceptedByMonth(ledger) {
 function preview(ledger, input) {
   if (!keys(input, ['format','version','expectedMonthRange','records']) ||
     (input.format !== undefined && input.format !== INPUT_FORMAT) ||
-    (input.version !== undefined && input.version !== 1) || !list(input.records) ||
+    (input.version !== undefined && ![1,2].includes(input.version)) ||
+    (input.version === 2 && input.format !== INPUT_FORMAT) || !list(input.records) ||
     !validRange(input.expectedMonthRange)) fail('invalid-historical-summary-input');
   const result = validateHistoricalMonthlySummaries(input);
   const current = acceptedByMonth(ledger);
@@ -143,10 +144,10 @@ export function prepareHistoricalSummaries(ledger, {input, decisions}, options =
   if (entries.every(entry => entry.action === 'exclude' ||
     (result.rows[entry.recordIndex].current && same(result.rows[entry.recordIndex].current.record, entry.record))) &&
     (ledger.historicalSummaryBatches ?? []).some(batch =>
-      same(batch.expectedMonthRange, result.expectedMonthRange) && same(batch.entries, entries))) return ledger;
+      batch.version === (input.version ?? 1) && same(batch.expectedMonthRange, result.expectedMonthRange) && same(batch.entries, entries))) return ledger;
   const batch = {
     batchId: options.id ?? globalThis.crypto.randomUUID(),
-    version: 1,
+    version: input.version ?? 1,
     recordedAt: options.now ?? new Date().toISOString(),
     expectedMonthRange: result.expectedMonthRange,
     entries
@@ -216,7 +217,9 @@ export async function prepareHistoricalReconciliation(ledger, {month: label, rea
 
 /** Review rows expose one effective cash-flow source and an independent snapshot. */
 export async function getHistoricalMonthlySummaryView(ledger) {
-  const sources = [...acceptedByMonth(ledger)].sort(([a], [b]) => a.localeCompare(b));
+  const accepted = acceptedByMonth(ledger);
+  const estimates = manualNetWorthEstimates(accepted);
+  const sources = [...accepted].sort(([a], [b]) => a.localeCompare(b));
   if (!sources.length) return [];
   const latest = new Map((ledger.historicalReconciliations ?? []).map(entry => [entry.month, entry]));
   const reviewRows = sources.map(([label, source]) => ({label,source,scope:reportScope(ledger, source.record)}));
@@ -232,9 +235,10 @@ export async function getHistoricalMonthlySummaryView(ledger) {
       review.contextSha256 !== contextSha256 || !scope || !same(review.scope, scope) ||
       !same(review.reviewedRunIds, coveredRuns(ledger, scope))) reasons.push('reconciliation-evidence-stale');
     const effective = reasons.length === 0;
-    return {month:label,...source,source:effective?'transactions':'workbook',reasons,
+    return {month:label,...source,source:effective?'transactions':source.batchVersion === 2?'manual':'workbook',reasons,
       report:effective?{income:report.income,spending:report.spending,cash:report.cash,currency:scope.currency}:null,
-      netWorthSnapshot:source.record.summary.netWorthSnapshot};
+      netWorthSnapshot:source.record.summary.netWorthSnapshot,
+      ...(estimates.has(label) ? {netWorthEstimate:estimates.get(label)} : {})};
   });
 }
 
@@ -253,7 +257,7 @@ export function validateHistoricalLedger(ledger, ids, {allowMissingHistory=false
   const byBatch = new Map();
   for (const batch of batches) {
     if (!exact(batch, ['batchId','version','recordedAt','expectedMonthRange','entries']) ||
-      batch.version !== 1 || !stamp(batch.recordedAt) || !validRange(batch.expectedMonthRange) ||
+      ![1,2].includes(batch.version) || !stamp(batch.recordedAt) || !validRange(batch.expectedMonthRange) ||
       !list(batch.entries) || !batch.entries.length) fail('invalid-historical-summary-ledger');
     reserve(batch.batchId, ids);
     const byIndex = new Map(), acceptedMonths = new Set();
@@ -270,7 +274,7 @@ export function validateHistoricalLedger(ledger, ids, {allowMissingHistory=false
       priorIndex = entry.recordIndex;
     }
     const findings = validateHistoricalMonthlySummaries({expectedMonthRange:batch.expectedMonthRange,
-      records:batch.entries.map(entry => entry.record)}).findings;
+      version:batch.version, records:batch.entries.map(entry => entry.record)}).findings;
     if (!acceptedMonths.size || findings.some(f => !['duplicate-month-summary','overlapping-month-summaries','missing-month-summary'].includes(f.code))) fail('invalid-historical-summary-ledger');
     byBatch.set(batch.batchId, byIndex);
   }

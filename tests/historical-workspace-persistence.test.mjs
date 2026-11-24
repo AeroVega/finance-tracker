@@ -253,3 +253,56 @@ test('pending data blocks completeness, and cancellation before digest settles l
   assert.equal(session.ledger,base);
   assert.deepEqual(session.ledger.historicalReconciliations,[]);
 });
+
+test('manual closing anchor and exact cash-flow estimates survive save, reopen and backups without filling gaps', async () => {
+  const row=(month,income,expense,netWorthSnapshot,sourceId='invented-manual-source',currency='USD')=>({
+    month,summary:{incomeTotal:money(income,currency),expenseTotal:money(expense,currency),
+      ...(netWorthSnapshot === undefined ? {} : {netWorthSnapshot})},
+    provenance:{workbook:'Manual monthly entry',worksheet:month,mapping:'manual-monthly-entry-v1',sourceId}
+  });
+  const rows=[row('2023-01','1234','0',money('9007199254740993.19')),
+    row('2023-02','0.12','0.30',null),row('2023-03','0.1','0.2'),row('2023-05','50','0')];
+  const bundle={...input(rows,'2023-01','2023-05'),version:2};
+  const old=previewHistoricalMonthlySummaries(null,{...bundle,version:1});
+  assert.equal(old.rows[1].eligible,false);
+  for (const bad of [
+    row('2023-01','0','0'),
+    row('2023-02','0','0',money('0')),
+    {...rows[1],provenance:{...rows[1].provenance,mapping:'Other source'}}
+  ]) assert.equal(previewHistoricalMonthlySummaries(null,{...bundle,records:[bad]}).rows[0].eligible,false);
+  const check=async ledger=>{
+    const view=await getHistoricalMonthlySummaryView(ledger);
+    assert.deepEqual(view[0].netWorthSnapshot,money('9007199254740993.19'));
+    assert.equal(view[0].netWorthEstimate,undefined);
+    assert.equal(view[1].netWorthSnapshot,null);
+    assert.deepEqual(view[1].netWorthEstimate,money('9007199254740993.01'));
+    assert.deepEqual(view[2].netWorthEstimate,money('9007199254740992.91'));
+    assert.equal(view[3].netWorthEstimate,undefined);
+    assert.equal(view[1].source,'manual');
+    assert.equal(ledger.historicalSummaryBatches[0].version,2);
+  };
+  const h=setup();
+  try {
+    h.session.preview(createLedger());
+    await h.session.savePreviewToNewCopy();
+    stage(h.session,bundle,rows.map((_,i)=>accept(i)));
+    await h.session.save();
+    await h.session.release();
+    await h.session.open();
+    await check(h.session.ledger);
+    for (const password of [undefined,'invented-only-password']) {
+      const copy=setup();
+      try {
+        await copy.session.importBackup(await h.session.exportBackup({password}),{password});
+        await copy.session.restoreBackupToNewCopy();
+        await check(copy.session.ledger);
+      } finally { if(copy.storage.lifecycle) await copy.session.release(); }
+    }
+    for (const replacement of [row('2023-03','1','0',undefined,'different-source'),
+      row('2023-03','1','0',undefined,'invented-manual-source','EUR')]) {
+      stage(h.session,{...bundle,records:[replacement]});
+      assert.equal((await getHistoricalMonthlySummaryView(h.session.ledger))[2].netWorthEstimate,undefined);
+      h.session.undoLastStagedChange();
+    }
+  } finally { if(h.storage.lifecycle) await h.session.release(); }
+});

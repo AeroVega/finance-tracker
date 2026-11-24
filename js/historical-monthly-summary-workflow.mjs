@@ -2,7 +2,7 @@ import {fail} from './app-error.mjs';
 import {getHistoricalMonthlySummaryView,previewHistoricalMonthlySummaries} from './historical-monthly-summary.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 
-const MAX_INPUT_BYTES = 1024 * 1024;
+import {HISTORICAL_INPUT_MAX_BYTES} from './historical-monthly-summary-validation.mjs';
 const PAGE_SIZE = 12;
 const readable = value => typeof value === 'string' ? value : 'Unavailable';
 const money = value => value && typeof value.amount === 'string' && typeof value.currency === 'string'
@@ -203,7 +203,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     const isCurrent = () => version === readRevision && base === getLedger() && picked === selected && isActive();
     reading = true; setStageHelp();
     try {
-      if (!Number.isSafeInteger(picked.size) || picked.size <= 0 || picked.size > MAX_INPUT_BYTES) {
+      if (!Number.isSafeInteger(picked.size) || picked.size <= 0 || picked.size > HISTORICAL_INPUT_MAX_BYTES) {
         previewStatus.textContent = 'Choose a nonempty JSON file no larger than 1 MiB.';
         return;
       }
@@ -245,7 +245,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     const row = viewRows.find(item => item.month === historyMonth.value);
     history.replaceChildren();
     if (!row) { setStageHelp(); return; }
-    const source = row.source === 'transactions' ? 'Reconciled transaction detail' : 'Historical workbook summary';
+    const source = row.source === 'transactions' ? 'Reconciled transaction detail' : row.batchVersion === 2 ? 'Manually entered monthly summary' : 'Historical workbook summary';
     history.append(el('p','Income and expense source: ' + source));
     if (row.report) {
       const {income,spending,currency} = row.report;
@@ -255,7 +255,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     }
     const scope = row.record.scope;
     const accountNames = scope?.kind === 'accounts' ? scope.accountIds.map(id => ledger.accounts.find(account => account.accountId === id)?.displayName ?? 'Unknown account') : [];
-    history.append(el('p','Net-worth snapshot (workbook): ' + money(row.netWorthSnapshot)),
+    history.append(el('p',row.netWorthEstimate ? 'Estimated net worth from cash flow: ' + money(row.netWorthEstimate) + ' (excludes market-value changes)' : (row.batchVersion === 2 ? 'Observed net-worth snapshot (manual): ' : 'Net-worth snapshot (workbook): ') + money(row.netWorthSnapshot)),
       el('p','Workbook coverage: ' + (accountNames.length ? accountNames.join(', ') : scope?.kind === 'aggregate' ? 'Aggregate source' : 'Unknown scope')),
       el('p','Workbook cash-flow currency: ' + readable(row.record.summary.incomeTotal.currency)));
     if (row.reasons?.length) {

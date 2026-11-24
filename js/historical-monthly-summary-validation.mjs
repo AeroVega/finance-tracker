@@ -2,6 +2,8 @@ import { fail } from './app-error.mjs';
 
 const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const MONEY_RE = /^-?(?:0|[1-9]\d{0,29})(?:\.\d{1,18})?$/;
+export const HISTORICAL_INPUT_MAX_BYTES = 1024 * 1024;
+export const MANUAL_HISTORY_MAPPING = 'manual-monthly-entry-v1';
 const REQUIRED_TOTALS = ['incomeTotal', 'expenseTotal', 'netWorthSnapshot'];
 const BREAKDOWN_FIELDS = [
   ['incomeSources', 'incomeTotal'],
@@ -141,7 +143,7 @@ function validateBreakdown(record, month, field, totalField, findings, recordInd
  * @returns {{readOnly: true, status: string, expectedMonthRange: object,
  *   records: object[], findings: object[], coverage: object}}
  */
-export function validateHistoricalMonthlySummaries({ records, expectedMonthRange } = {}) {
+export function validateHistoricalMonthlySummaries({ records, expectedMonthRange, version = 1 } = {}) {
   if (!Array.isArray(records)) fail('records-must-be-an-array');
   const start = monthIndex(expectedMonthRange?.start);
   const end = monthIndex(expectedMonthRange?.end);
@@ -172,12 +174,24 @@ export function validateHistoricalMonthlySummaries({ records, expectedMonthRange
       findings.push(finding('invalid-summary', { recordIndex: index, month: month ?? null }));
     }
     const summaryValues = summary && typeof summary === 'object' ? summary : {};
+    const manual = version === 2;
+    if (manual && (record?.provenance?.mapping !== MANUAL_HISTORY_MAPPING ||
+        typeof record?.provenance?.sourceId !== 'string' || !record.provenance.sourceId.trim() ||
+        (typeof month === 'string' && month < '2023-01') ||
+        (month !== '2023-01' && summaryValues.netWorthSnapshot != null))) {
+      findings.push(finding('invalid-historical-record-shape', { recordIndex: index, month }));
+    }
     for (const field of REQUIRED_TOTALS) {
+      if (manual && month !== '2023-01' && field === 'netWorthSnapshot') continue;
       if (summaryValues[field] === undefined || summaryValues[field] === null) {
         findings.push(finding('missing-summary-value', { recordIndex: index, month: month ?? null, field }));
       } else if (!parseMoney(summaryValues[field])) {
         findings.push(finding('invalid-summary-value', { recordIndex: index, month: month ?? null, field }));
       }
+    }
+    if (manual && (summaryValues.incomeTotal?.currency !== summaryValues.expenseTotal?.currency ||
+        (month === '2023-01' && summaryValues.incomeTotal?.currency !== summaryValues.netWorthSnapshot?.currency))) {
+      findings.push(finding('invalid-summary-value', { recordIndex: index, month, field: 'currency' }));
     }
     if (summaryValues.netCashFlow !== undefined && summaryValues.netCashFlow !== null &&
         !parseMoney(summaryValues.netCashFlow)) {
@@ -254,4 +268,29 @@ export function validateHistoricalMonthlySummaries({ records, expectedMonthRange
       missingMonths,
     },
   };
+}
+
+// Read-time only. Never write these estimates back as financial snapshots.
+export function manualNetWorthEstimates(sources) {
+  const estimates = new Map();
+  const anchor = sources.get('2023-01');
+  if (anchor?.batchVersion !== 2) return estimates;
+  const provenance = anchor.record.provenance;
+  let value = parseMoney(anchor.record.summary.netWorthSnapshot);
+  if (!value) return estimates;
+  for (let i = monthIndex('2023-02'); ; i++) {
+    const label = monthLabel(i);
+    const source = sources.get(label);
+    if (source?.batchVersion !== 2 ||
+        source.record.provenance.sourceId !== provenance.sourceId) break;
+    const {incomeTotal, expenseTotal} = source.record.summary;
+    const income = parseMoney(incomeTotal), expense = parseMoney(expenseTotal);
+    if (!income || !expense || income.currency !== value.currency || expense.currency !== value.currency) break;
+    value = addExact([value, income, {...expense, coefficient:-expense.coefficient}]);
+    const negative = value.coefficient < 0n;
+    const digits = (negative ? -value.coefficient : value.coefficient).toString().padStart(value.scale + 1, '0');
+    const amount = (negative ? '-' : '') + (value.scale ? digits.slice(0, -value.scale)+'.'+digits.slice(-value.scale) : digits);
+    estimates.set(label, {amount, currency:value.currency});
+  }
+  return estimates;
 }

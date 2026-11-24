@@ -60,13 +60,19 @@ Duplicate classification compares summary and breakdown content, not provenance.
 
 Net-worth snapshots are preserved as their own point-in-time measure. Their change is not cash flow. The module does not derive cash flow, infer transaction coverage, or claim transaction completeness from monthly summary presence.
 
+## Manual monthly input
+
+A file using the same format marker and explicit input version 2 is reserved for normalized manual input. Each record must specify the exact mapping marker `manual-monthly-entry-v1` and a stable, nonempty provenance `sourceId`. January 2023 requires the actual closing net-worth snapshot; later manual months must omit it or set it to null. Income and expenses remain required. This does not alter v1 or unmarked workbook-file requirements.
+
+Manual reviews persist as historical batch v2 inside the existing logical ledger. Older builds that only understand historical batch v1 reject those ledgers and backups. The physical storage format and backup envelope do not change. The Historical months view may show a separate exact-decimal estimate, not an actual snapshot: January's closing anchor plus each subsequent accepted month's manual income minus expenses. The estimate stops at the first gap or source/currency change. It never substitutes transaction totals or accounts for market-value changes.
+
 ## Review, save, and portability
 
 Preview never writes storage. The app shows all input rows, gaps and findings. Malformed and out-of-range rows are visible but not admitted. For each eligible row select **Accept** or **Exclude** and give a reason. Only one record per month may be accepted in each batch. Accepting a different record for a previously accepted month replaces the effective workbook summary without erasing the old record. Accepted and valid excluded rows and their reasons remain inspectable. An exact replay with the same range, decisions and current accepted records is a no-op. Malformed source inputs are not copied into the ledger; keep the local input file if the rejection must be revisited.
 
 **Stage reviewed summaries** creates only an in-memory change and preserves earlier staged edits. **Save changes** is separate and uses the verified snapshot protocol. Prior to saving, ordinary Undo/Revert can discard staged changes; after saving, later choices append evidence rather than rewriting it. Release clears in-memory history with the rest of the workspace after storage release succeeds. Outstanding save/restore verification follows the existing recovery rules.
 
-The first accepted batch extends the *logical* canonical ledger from version 1 to version 2. Older ledgers and backups with no history are still v1 and remain readable; they are not rewritten merely by opening or saving without history. The v2 ledger contains append-only `historicalSummaryBatches` and `historicalReconciliations`, with separate v1 record schemas. Unsupported ledger versions fail closed; an older app without this change will not open a newly saved v2 ledger. The full-snapshot v1 physical protocol and the portable backup envelopes are unchanged. Their normal hash/readback paths cover the entire logical ledger including historical records and their decision evidence. Plain and encrypted backups preserve the history. A restored copy starts a new physical lineage as before.
+The first accepted batch extends the *logical* canonical ledger from version 1 to version 2. Older ledgers and backups with no history are still v1 and remain readable; they are not rewritten merely by opening or saving without history. The v2 ledger contains append-only `historicalSummaryBatches` and `historicalReconciliations`, with separately versioned record schemas. Unsupported ledger versions fail closed; an older app without this change will not open a newly saved v2 ledger. The full-snapshot v1 physical protocol and the portable backup envelopes are unchanged. Their normal hash/readback paths cover the entire logical ledger including historical records and their decision evidence. Plain and encrypted backups preserve the history. A restored copy starts a new physical lineage as before.
 
 ## Overlap policy
 
