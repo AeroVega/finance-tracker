@@ -189,8 +189,24 @@ export class DashboardSyntheticStorage {
     return this.dataClass;
   }
 
+  /** Drive transport for the stored token. A 401 means Google no longer
+   * accepts that token (for example, access was revoked). Forget it so the
+   * next explicit action asks for sign-in again instead of reusing a dead
+   * token until its nominal expiry. Never renews; only an older token's late
+   * 401 cannot clear a newer one. 403 is not treated as revocation: Drive
+   * also uses it for quota and permission refusals. */
+  async driveFetch(url, options) {
+    const response = await globalThis.fetch(url, options);
+    if (response?.status === 401) {
+      let sent = null;
+      try { sent = new Headers(options?.headers).get('Authorization'); } catch { /* unreadable headers: keep the token */ }
+      if (this.accessToken && sent === 'Bearer ' + this.accessToken) { this.accessToken = ''; this.tokenExpiresAt = 0; }
+    }
+    return response;
+  }
+
   #lifecycle(folderId) {
-    return new FullSnapshotApplication({folderId,accessToken:()=>this.token(),dataClass:this.dataClass,release:this.releaseProfile,
+    return new FullSnapshotApplication({folderId,accessToken:()=>this.token(),fetchImpl:(url,options)=>this.driveFetch(url,options),dataClass:this.dataClass,release:this.releaseProfile,
       onStatus:status=>this.publish(status.state,"",status.code?"error":"info",status.code?{code:status.code}:null)});
   }
 
@@ -435,8 +451,8 @@ export class DashboardSyntheticStorage {
       // The cold verification is a new claim, not a continuation of the old
       // ownership proof. Recheck privacy and read the exact manifest first.
       await provePrivateGoogleFolder({folderId,accountId:this.accountId,
-        token:this.token(),expiresAt:this.tokenExpiresAt});
-      const preflight=new GoogleDriveTransactionAdapter({folderId,accessToken:()=>this.token()});
+        token:this.token(),expiresAt:this.tokenExpiresAt,fetchImpl:(url,options)=>this.driveFetch(url,options)});
+      const preflight=new GoogleDriveTransactionAdapter({folderId,accessToken:()=>this.token(),fetchImpl:(url,options)=>this.driveFetch(url,options)});
       const {admission}=await inspectFullSnapshotFolder(preflight,{requireExisting:true,dataClass:this.dataClass});
       if(this.lifecycle!==previous||this.folderId!==folderId)throw new AppError('reconnect-required');
       this.token();

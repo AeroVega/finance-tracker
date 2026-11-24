@@ -87,7 +87,8 @@ for (const [flag, writes] of [['fail', 0], ['loseResponse', 1]]) test(`${flag} r
   const proposal = structuredClone(h.session.ledger); h.calls[flag] = true;
   if(flag==='loseResponse'){await h.session.save();assert.equal(h.session.recoveryOutcome,'saved');assert.equal(h.session.dirty,false);assert.deepEqual(h.session.ledger,proposal);assert.equal(h.calls.writes,1);return;}
   await assert.rejects(h.session.save());
-  assert.equal(h.session.unverified, true); assert.equal(h.session.dirty, true);
+  // No attempt record means no write: proven not saved, and still no blind retry.
+  assert.equal(h.session.recoveryOutcome, 'not-saved'); assert.equal(h.session.unverified, false); assert.equal(h.session.dirty, true);
   assert.equal(h.session.canSave(), false); assert.deepEqual(h.session.ledger, proposal);
   await assert.rejects(h.session.save(), { code: 'verified-draft-required' }); assert.equal(h.calls.writes, writes);
   h.calls[flag] = false; await h.session.reopen(); assert.equal(h.session.unverified, false);

@@ -400,7 +400,7 @@ export class CanonicalWorkspaceSession {
     return this.operation(async () => {
       // A rejected or lost commit response is uncertain until verified reopen.
       this.needsReopen = true;
-      this.pendingSave={proposal:structuredClone(this.ledger),base:structuredClone(this.baselineLedger),lifecycle:this.storage.lifecycle,priorSequence:this.storage.lifecycle.engine.saveAttempt?.sequence,folderId:this.storage.lifecycle.folderId};
+      this.pendingSave={proposal:structuredClone(this.ledger),base:structuredClone(this.baselineLedger),baseManifest:structuredClone(this.store?.base??null),lifecycle:this.storage.lifecycle,priorSequence:this.storage.lifecycle.engine.saveAttempt?.sequence,folderId:this.storage.lifecycle.folderId};
       this.recoveryOutcome=null;
       try {
         const ledger = await this.store.save(this.ledger);
@@ -426,8 +426,12 @@ export class CanonicalWorkspaceSession {
     try {
       if(!attempt||!this.online()||lifecycle!==this.storage.lifecycle||lifecycle.folderId!==attempt.folderId||!lifecycle.coordinator?.canWrite)fail('reconnect-required');
       lifecycle.transactionAdapter.assertMutationsSettled();
-      const evidence=lifecycle.engine.saveAttempt;
-      if(!evidence||evidence.sequence===attempt.priorSequence)fail('verified-base-required');
+      // The engine records a new attempt before its first write. No new record
+      // means this save stopped before any write (for example, revoked access
+      // refused its first read); compare Drive with the draft's verified base.
+      const recorded=lifecycle.engine.saveAttempt,started=Boolean(recorded)&&recorded.sequence!==attempt.priorSequence;
+      if(!started&&!attempt.baseManifest)fail('verified-base-required');
+      const evidence=started?recorded:{base:attempt.baseManifest,candidate:null,authorityDispatched:false};
       await lifecycle.recover();
       if(!this.ready())fail('reconnect-required');
       const store=this.storage.createLedgerStore(),saved=await store.load({cold:true});

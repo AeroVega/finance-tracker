@@ -10,6 +10,7 @@ The implemented route is synthetic-only. Backup exports the last verified saved 
 | --- | --- | --- |
 | Exact attempted authority and complete logical candidate independently verify | Saved | Clear only the matching draft; do not repeat the save |
 | Original authority unchanged, no authority publication was dispatched, and local mutations settled | Not saved | Retain draft and offer explicit retry |
+| Save stopped before the engine recorded an attempt (for example, revoked access refused its first read), and Drive still holds the exact manifest and ledger the draft was based on | Not saved | Retain draft and offer explicit retry; the engine records an attempt before any write |
 | Authority request dispatched but result unknown, even if immediate read still shows old base | Unverifiable | Keep draft and block retry; a late remote write may still arrive |
 | Different valid authority or logical database found | Different | Keep draft and block retry; explicit reopen can discard only after confirmation |
 | Ownership, folder, transport, authentication or content validation cannot be established | Unverifiable | Keep draft and require reconnect/recovery |
