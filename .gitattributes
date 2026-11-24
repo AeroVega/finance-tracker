@@ -1,0 +1,6 @@
+# Check text out with LF on every platform. Tests, generated references and
+# deployment compare exact source text, and a Windows CRLF checkout breaks them.
+* text=auto eol=lf
+
+# Preserved historical evidence keeps its original bytes.
+docs/evidence/pr38-save-latency.csv -text

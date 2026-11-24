@@ -4,6 +4,7 @@ import {
   cpSync, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync,
   readlinkSync, realpathSync, rmSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,15 +50,38 @@ test('the root package replaces the old skills collection with all sixteen workf
   }
 });
 
+// Git for Windows defaults to core.symlinks=false and checks a symlink out as
+// a small file holding its target. The repository must still record a real
+// symlink: mode 120000 with exactly the expected target, never a copied folder.
+function gitRecordedLinks() {
+  let symlinks;
+  try { symlinks = execFileSync('git', ['config', '--get', 'core.symlinks'], { cwd: root, encoding: 'utf8' }).trim(); }
+  catch { return null; } // Unset means Git creates real symlinks.
+  if (symlinks !== 'false') return null;
+  const listing = execFileSync('git', ['ls-files', '-s', '--', '.agents/skills'], { cwd: root, encoding: 'utf8' });
+  return new Map(listing.trim().split('\n').map(line => {
+    const [meta, file] = line.split('\t');
+    return [file, meta.split(' ')[0]];
+  }));
+}
+
 test('Codex discovery links resolve to the new canonical skill folders without copies', () => {
   const discovery = path.join(root, '.agents', 'skills');
   assert.deepEqual(readdirSync(discovery).sort(), names);
+  const recorded = gitRecordedLinks();
   for (const name of names) {
-    const link = path.join(discovery, name);
-    assert.ok(lstatSync(link).isSymbolicLink(), `${name} must be a symlink`);
-    assert.equal(readlinkSync(link), `../../engineering-workflows/skills/${name}`);
-    assert.equal(realpathSync(link), realpathSync(path.join(skillsRoot, name)));
-    assert.equal(readFileSync(path.join(link, 'SKILL.md'), 'utf8'), readSkill(name));
+    const link = path.join(discovery, name), target = `../../engineering-workflows/skills/${name}`;
+    if (lstatSync(link).isSymbolicLink()) {
+      assert.equal(readlinkSync(link), target);
+      assert.equal(realpathSync(link), realpathSync(path.join(skillsRoot, name)));
+      assert.equal(readFileSync(path.join(link, 'SKILL.md'), 'utf8'), readSkill(name));
+    } else {
+      assert.ok(recorded, `${name} must be a symlink`);
+      assert.equal(recorded.get(`.agents/skills/${name}`), '120000', `${name} must be recorded as a symlink`);
+      assert.ok(lstatSync(link).isFile(), `${name} must not be a copied folder`);
+      assert.equal(readFileSync(link, 'utf8'), target);
+      assert.ok(existsSync(path.join(skillsRoot, name, 'SKILL.md')));
+    }
   }
 });
 

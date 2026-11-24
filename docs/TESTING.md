@@ -23,6 +23,15 @@ CI runs the complete retained suite once. The compatibility flag does not imply 
 
 Keep concurrency at one to avoid competing for heap across files. Report the exact commit, Node version, result and elapsed time. Test counts from before obsolete-format cleanup do not describe the new tree. Never remove a recovery or integrity scenario solely to reduce run time.
 
+## Windows checkouts
+
+`.gitattributes` checks text out with LF on every platform, so a default Git for
+Windows clone runs the same suite as CI. A checkout made before that file existed
+keeps its CRLF working files until they are rewritten. From a clean tree, run
+`git rm -r --cached -q . && git reset --hard` once. Git for Windows also defaults
+to `core.symlinks=false`; the skills test then checks the recorded symlink mode
+and target instead of a filesystem link.
+
 ## What to retain and what to remove
 
 Keep separate crash positions, corrupt bindings, authorization failures,
