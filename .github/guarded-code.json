@@ -4,7 +4,7 @@
     "google-boundary": {
       "name": "Google account, folder and OAuth",
       "paths": [
-        "js/dashboard-synthetic-storage.mjs", "js/release-profile.mjs", "js/google-config.js", "js/google-config-validation.mjs",
+        "js/dashboard-synthetic-storage.mjs", "js/release-profile.mjs", "tests/production-app-flow.test.mjs", "js/google-config.js", "js/google-config-validation.mjs",
         "js/google-startup-diagnostics.mjs", "js/google-private-folder-proof.mjs",
         "index.html", "js/app.js", "docs/PRIVACY_SESSION.md"
       ],
@@ -17,7 +17,7 @@
     "session-privacy": {
       "name": "Ownership, release and privacy",
       "paths": [
-        "index.html", "js/app.js", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs", "js/release-profile.mjs",
+        "index.html", "js/app.js", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs", "js/release-profile.mjs", "tests/production-app-flow.test.mjs",
         "js/dashboard-synthetic-storage.mjs", "js/session-coordination.mjs",
         "js/full-snapshot-application.mjs", "js/workspace-navigation.js", "js/workspace-pages.mjs",
         "js/workspace-chrome.mjs", "js/historical-monthly-summary-workflow.mjs",
@@ -49,7 +49,7 @@
         "js/drive-feasibility-spike.mjs", "js/success-metrics.mjs",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
         "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs",
-        "js/canonical-history.mjs", "js/canonical-import.mjs", "js/persistence-data-class.mjs", "js/release-profile.mjs", "js/byte-ownership.mjs",
+        "js/canonical-history.mjs", "js/canonical-import.mjs", "js/persistence-data-class.mjs", "js/release-profile.mjs", "tests/production-app-flow.test.mjs", "js/byte-ownership.mjs",
         "js/immutable-content-type.mjs", "js/utf8-length.mjs", "docs/APPLICATION_STORAGE_LIFECYCLE.md",
         "docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md", "docs/STORAGE_SCALING_AND_PRODUCTION_READINESS.md",
         "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md"
@@ -68,7 +68,7 @@
       "paths": [
         "index.html", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs",
         "js/full-snapshot-application.mjs", "js/full-snapshot-backup.mjs", "js/full-snapshot-storage.mjs",
-        "js/transaction-protocol.mjs", "js/canonical-history.mjs", "js/canonical-import.mjs", "js/persistence-data-class.mjs", "js/release-profile.mjs", "js/source-original-retention.mjs",
+        "js/transaction-protocol.mjs", "js/canonical-history.mjs", "js/canonical-import.mjs", "js/persistence-data-class.mjs", "js/release-profile.mjs", "tests/production-app-flow.test.mjs", "js/source-original-retention.mjs",
         "js/byte-ownership.mjs", "js/utf8-length.mjs", "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
         "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs"
