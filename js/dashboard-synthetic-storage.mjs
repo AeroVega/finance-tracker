@@ -443,6 +443,18 @@ export class DashboardSyntheticStorage {
     } finally { this.busy=false; }
   }
 
+  /** Explicit recheck only: this page's own session expired (for example its
+   * heartbeat stopped while access was revoked). Admit read-only, then reclaim
+   * the exact stale marker as Open does. Another session's marker refuses. */
+  async reclaimOwnStaleSession(lifecycle) {
+    if (!lifecycle || lifecycle !== this.lifecycle || lifecycle.folderId !== this.folderId) throw new AppError('reconnect-required');
+    const preflight = new GoogleDriveTransactionAdapter({folderId: this.folderId, accessToken: () => this.token(), fetchImpl: (url, options) => this.driveFetch(url, options)});
+    const {admission} = await inspectFullSnapshotFolder(preflight, {requireExisting: true, dataClass: this.dataClass});
+    if (lifecycle !== this.lifecycle) throw new AppError('reconnect-required');
+    await lifecycle.recoverStaleSession({confirm: true, admission});
+    if (lifecycle !== this.lifecycle || lifecycle.state !== 'ready') throw new AppError('reconnect-required');
+  }
+
   async reopenIndependent() {
     const previous=this.lifecycle,folderId=this.folderId;
     if(!previous||previous.folderId!==folderId||this.busy)throw new AppError('reconnect-required');

@@ -1,4 +1,5 @@
 import { fail as appFail } from './app-error.mjs';
+import { getEntry } from './error-registry.mjs';
 import { HISTORICAL_COLLECTIONS, prepareHistoricalReconciliation, prepareHistoricalSummaries } from './historical-monthly-summary.mjs';
 import { applyFinancialEvent, applyReviewDecision, reverseReviewDecision, registerAccount, validateLedgerOfClass, ledgerDataClass, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
 import { persistenceDataClass } from './persistence-data-class.mjs';
@@ -50,7 +51,7 @@ export class CanonicalWorkspaceSession {
     this.baselineLedger = null;
     this.stagedHistory = [];
     this.backupPreview=false;this.backupSource=null;this.restoreExpected=null;this.restoreFolderId=null;this.pendingSave=null;this.recoveryOutcome=null;
-    this.designationFailed=false;
+    this.designationFailed=false;this.recoveryCause=null;
   }
 
   invalidate() { if (this.mode === 'saved') this.needsReopen = true; }
@@ -443,14 +444,29 @@ export class CanonicalWorkspaceSession {
         if(evidence.authorityDispatched){this.recoveryOutcome='unverifiable';}
         else {this.store=store;this.mode='saved';this.baselineLedger=structuredClone(saved);this.dirty=true;this.unverified=false;this.needsReopen=false;this.recoveryOutcome='not-saved';}
       }else {this.recoveryOutcome='different';}
-    } catch {this.recoveryOutcome='unverifiable';}
+    } catch(error) {this.#noteRecoveryCause(error);this.recoveryOutcome='unverifiable';}
     return {outcome:this.recoveryOutcome};
   }
+  // Keep the reason an explicit recheck could not verify, as a registered
+  // report-safe code only, so the user and diagnostics can see why.
+  #noteRecoveryCause(error){const code=error?.code;this.recoveryCause=typeof code==='string'&&getEntry(code)?code:'unexpected-error';}
   async resolveUncertainSave(){return this.operation(async()=>{
-    const lifecycle=this.storage.lifecycle;
+    const lifecycle=this.storage.lifecycle;this.recoveryCause=null;
     if(((this.pendingSave&&lifecycle===this.pendingSave.lifecycle)||(this.restoreExpected&&lifecycle?.folderId===this.restoreFolderId))&&this.online()){
-      try{lifecycle.transactionAdapter.assertMutationsSettled();await this.storage.refreshRecoveryAuthorization?.();if(lifecycle!==this.storage.lifecycle)fail('reconnect-required');if(!lifecycle.coordinator.canWrite)await lifecycle.coordinator.resume();}
-      catch{this.unverified=true;this.needsReopen=true;this.recoveryOutcome='unverifiable';return {outcome:'unverifiable'};}
+      try{lifecycle.transactionAdapter.assertMutationsSettled();await this.storage.refreshRecoveryAuthorization?.();if(lifecycle!==this.storage.lifecycle)fail('reconnect-required');
+        if(!lifecycle.coordinator.canWrite){
+          try{await lifecycle.coordinator.resume();}
+          catch(error){
+            // Only this page's own expired marker reports stale-session; a
+            // live or different session reports ownership-lost and stays
+            // blocked. Reclaim exactly as Open does after heartbeat expiry;
+            // the draft is not published and retry still needs confirmation.
+            if(error?.code!=='stale-session'||typeof this.storage.reclaimOwnStaleSession!=='function')throw error;
+            await this.storage.reclaimOwnStaleSession(lifecycle);
+            if(lifecycle!==this.storage.lifecycle||!lifecycle.coordinator.canWrite)fail('reconnect-required');
+          }
+        }}
+      catch(error){this.#noteRecoveryCause(error);this.unverified=true;this.needsReopen=true;this.recoveryOutcome='unverifiable';return {outcome:'unverifiable'};}
     }
     if(this.restoreExpected&&!this.pendingSave){await this.#verifyRestoredCopy();this.recoveryOutcome='saved';return {outcome:'saved'};}const result=await this.#resolveAttempt();if(result.outcome==='saved'&&this.restoreExpected)await this.#verifyRestoredCopy();return result;});}
   async retryUncertainSave({confirm=false}={}){

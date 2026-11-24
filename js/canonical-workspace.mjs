@@ -990,7 +990,10 @@ action('restore-backup','Restoring the validated preview to a new empty syntheti
   announce('Backup restored to a new synthetic copy and independently verified. The original folder was not changed.','success');return true;
 });
 action('verify-save-outcome','Checking what reached Drive. Your draft stays in this tab.',async()=>{
-  await session.resolveUncertainSave();render();announce(recoveryMessage(),session.recoveryOutcome==='saved'?'success':'info');
+  await session.resolveUncertainSave();render();
+  // Surface why a recheck could not verify (report-safe code, kept in Recent problems).
+  if(session.recoveryOutcome==='unverifiable'&&session.recoveryCause)fail(session.recoveryCause);
+  announce(recoveryMessage(),session.recoveryOutcome==='saved'?'success':'info');
 });
 action('retry-save','Preparing an explicitly confirmed retry of the verified unsaved draft.',async()=>{
   if (!window.confirm('Drive verification found that this draft was not saved. Retry saving this exact draft now?')) {announce('Retry cancelled. Your draft is unchanged.');return;}

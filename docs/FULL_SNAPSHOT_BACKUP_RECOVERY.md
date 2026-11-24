@@ -16,7 +16,7 @@ The implemented route is synthetic-only. Backup exports the last verified saved 
 | Ownership, folder, transport, authentication or content validation cannot be established | Unverifiable | Keep draft and require reconnect/recovery |
 | App reloaded with no in-memory attempt evidence | No attempt context | Verify stored data without claiming whether the lost draft was saved |
 
-Recovery is single-flight, does not race outstanding local mutations and may finalize an independently verified publication. It must never resubmit a candidate automatically. A completed transport promise does not prove a dispatched remote mutation cannot commit late. This remains a provider limitation: Drive update requests do not supply the atomic compare-and-swap guarantee needed to rule out every concurrent-writer race.
+An explicit recheck may reclaim only this page's own conclusively expired session marker (read-only admission first, exact stale marker reread before takeover); another session, live or stale, keeps the outcome unverifiable. An unverifiable recheck records its registered cause for diagnostics. Recovery is single-flight, does not race outstanding local mutations and may finalize an independently verified publication. It must never resubmit a candidate automatically. A completed transport promise does not prove a dispatched remote mutation cannot commit late. This remains a provider limitation: Drive update requests do not supply the atomic compare-and-swap guarantee needed to rule out every concurrent-writer race.
 
 ## Backup format and limitations
 

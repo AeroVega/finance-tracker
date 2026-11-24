@@ -289,3 +289,43 @@ test('access revoked mid-save before any write is proven not saved after explici
   assert.equal(h.session.recoveryOutcome,'saved');assert.deepEqual(await h.storage.createLedgerStore().load({cold:true}),draft);
  }finally{await h.close();}
 });
+
+test('revoked access with an expired lease: Verify re-signs in, reclaims its own session, proves not saved',async()=>{
+ const realNow=Date.now;let now=realNow();Date.now=()=>now;const h=await setup();try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented-expired-lease',rationale:'Invented'});
+  const draft=structuredClone(h.session.ledger),mutations=h.http.mutations,requests=h.tokenRequests;
+  h.revoke();await assert.rejects(h.session.save());
+  // The heartbeat cannot renew while access is revoked; the owner returns after the lease.
+  h.storage.lifecycle.coordinator.heartbeatStop?.();now+=150000;
+  const manifestWrites=()=>h.http.requests.filter(row=>row.method!=='GET'&&row.kind==='finance-tracker-full-snapshot-manifest').length,before=manifestWrites();
+  await h.page.get('backup-file').emit('change');assert.equal(h.page.get('verify-save-outcome').disabled,false);await h.page.click('verify-save-outcome');
+  assert.equal(h.tokenRequests,requests+1);assert.equal(h.session.recoveryOutcome,'not-saved',h.page.get('action-status').textContent);
+  assert.equal(manifestWrites(),before);assert.deepEqual(h.session.ledger,draft);assert.equal(h.http.mutations>mutations,true);
+  await h.session.retryUncertainSave({confirm:true});
+  assert.equal(h.session.recoveryOutcome,'saved');assert.deepEqual(await h.storage.createLedgerStore().load({cold:true}),draft);
+ }finally{await h.close();Date.now=realNow;}
+});
+
+test('Verify never reclaims another device session and reports why it could not verify',async()=>{
+ const h=await setup();let other;try{
+  await h.page.until(()=>!h.page.get('create-ledger').disabled);await h.page.click('create-ledger');
+  h.session.correct({activityId:h.session.ledger.activities[0].activityId,type:'category-correction',categoryId:'invented-other-device',rationale:'Invented'});
+  const draft=structuredClone(h.session.ledger);
+  h.revoke();await assert.rejects(h.session.save());
+  // Another device takes over after the old lease expires; its marker is live.
+  const realNow=Date.now;let now=realNow();Date.now=()=>now;
+  try{
+   h.storage.lifecycle.coordinator.heartbeatStop?.();now+=150000;
+   other=new DashboardSyntheticStorage();other.config=h.storage.config;await other.connect({requireExisting:true});
+   const manifest=[...h.http.files.values()].find(f=>f.metadata.name===FULL_SNAPSHOT_MANIFEST_NAME).bytes.slice();
+   await h.page.get('backup-file').emit('change');assert.equal(h.page.get('verify-save-outcome').disabled,false);await h.page.click('verify-save-outcome');
+   assert.equal(h.session.recoveryOutcome,'unverifiable');assert.equal(h.session.recoveryCause,'ownership-lost');
+   assert.match(h.page.get('action-status').textContent,/could not be verified/);
+   const {recentReports}=await import('../js/error-reporting.mjs');
+   assert.equal(recentReports().at(-1).code,'ownership-lost');
+   assert.deepEqual([...h.http.files.values()].find(f=>f.metadata.name===FULL_SNAPSHOT_MANIFEST_NAME).bytes,manifest);
+   assert.equal(other.lifecycle.acceptingWrites,true);assert.deepEqual(h.session.ledger,draft);
+  }finally{Date.now=realNow;}
+ }finally{try{if(other?.lifecycle)await other.release();}finally{other?.lifecycle?.coordinator.heartbeatStop?.();await h.close();}}
+});
