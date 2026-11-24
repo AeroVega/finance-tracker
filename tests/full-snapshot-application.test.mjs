@@ -1,3 +1,4 @@
+import {fakeGoogleFolderProof} from './helpers/fake-google-folder-proof.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
@@ -30,7 +31,7 @@ test('actual Dashboard picker route initializes only new full-snapshot format',a
  class Picker{addView(){return this;}setOAuthToken(){return this;}setDeveloperKey(){return this;}setAppId(){return this;}setOrigin(){return this;}setTitle(){return this;}setCallback(cb){this.cb=cb;return this;}build(){return this;}setVisible(){queueMicrotask(()=>this.cb({action:'picked',docs:[{id:http.folderId}]}));}}
  const accountPins=new Map();
  globalThis.window={localStorage:{getItem:key=>accountPins.get(key)??null,setItem:(key,value)=>accountPins.set(key,value)},location:{origin:'https://example.invalid'},confirm:()=>true,google:{accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>callback({access_token:'invented-test-token',expires_in:3600})})}},picker:{DocsView:View,ViewId:{FOLDERS:'folders'},PickerBuilder:Picker,Action:{PICKED:'picked',CANCEL:'cancel'}}}};
- globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):http.fetch(url,options);
+ globalThis.fetch=(url,options)=>String(url).includes('/about?')?Promise.resolve(new Response(JSON.stringify({user:{permissionId:'invented-owner',emailAddress:'invented@example.invalid',me:true}}))):String(url).endsWith('?fields=id,name,mimeType,trashed')?Promise.resolve(new Response(JSON.stringify({id:http.folderId,name:'invented synthetic',mimeType:'application/vnd.google-apps.folder',trashed:false}))):(fakeGoogleFolderProof(url,options,{folderId:http.folderId,token:'invented-test-token'}) ?? http.fetch(url,options));
  const storage=new DashboardSyntheticStorage({fullSnapshot:true,maintainOriginals:false});storage.config={clientId:'invented',apiKey:'invented',projectNumber:'1'};
  const session=new CanonicalWorkspaceSession({storage,online:()=>true});try{session.preview(replayFixture(1).ledger);await session.savePreviewToNewCopy();assert.equal(storage.lifecycle.fullSnapshot,true);assert.equal(session.store.base.format,'finance-tracker-full-snapshot-manifest');assert.equal(session.canEdit(),true);await session.reopen();assert.deepEqual(session.ledger,replayFixture(1).ledger);}finally{await storage.release().catch(()=>{});globalThis.window=previous.window;globalThis.fetch=previous.fetch;}
 });

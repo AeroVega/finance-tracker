@@ -256,6 +256,15 @@ export class SessionCoordinator {
       retireOwnership(this);this.ownership = "unknown";
       fail("not-stale", "The session is not conclusively stale. Recovery was refused.");
     }
+    // A caller reclaiming its own expired session names it; any other
+    // session's marker, even if stale, is refused. The re-read below must
+    // match this same record.
+    if (options.expectedSessionId !== undefined &&
+        (typeof options.expectedSessionId !== "string" || !options.expectedSessionId ||
+         current.record.sessionId !== options.expectedSessionId)) {
+      retireOwnership(this);this.ownership = "unknown";
+      fail("ownership-lost", "The stale session belongs to another tab or device. Recovery was refused.", "coordinator-record-changed");
+    }
 
     // Re-read immediately before the takeover. This narrows, but cannot remove,
     // the race because the Drive update path has no tested atomic precondition.

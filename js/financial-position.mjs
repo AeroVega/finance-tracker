@@ -1,4 +1,4 @@
-import {validateLedger,getEffectiveActivities} from './canonical-import.mjs';
+import {validateKnownLedger as validateLedger,getEffectiveActivities} from './canonical-import.mjs';
 import {isCalendarDate,exactSignedDecimal} from './import-reconciliation.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 import {LIABILITY_TYPES,INVESTMENT_TYPES,SUPPORTED_HOLDINGS,exactAmount,addExact,negateExact,equalExact,monthBounds,selectBalance,supportsBalanceAnchor} from './financial-position-contract.mjs';

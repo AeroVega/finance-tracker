@@ -23,7 +23,7 @@ The storage adapter must read the complete record and distinguish an absent reco
 
 1. Read and validate the current record.
 2. If active and within the heartbeat window, refuse acquisition.
-3. If stale, do not take over automatically. Require an explicit recovery action, re-read the exact record immediately before replacement, and verify the replacement by read-back.
+3. On explicit **Open saved synthetic year**, recover a conclusively stale session in the already verified selected folder. Re-read the exact marker immediately before replacement and verify the replacement by read-back. Audit unresolved publication and verify the saved database before enabling writes. Do not recover on page load, a timer, or retry of an unrelated write.
 4. If released or absent, write a new session record and read it back. Only an exact owner match establishes local ownership.
 5. Before every mutation, re-read the record and require an exact active `sessionId` match. Serialize mutations within the page.
 6. Offline status, read errors, malformed/ambiguous state, changed ownership, failed heartbeat, or failed read-back disables writes.
@@ -32,23 +32,23 @@ The re-read-before-write pattern narrows races but is not atomic. It must never 
 
 ## Heartbeats, crashes, and handoff
 
-The active page uses `SessionCoordinator.startHeartbeat()` to refresh `heartbeatAt` and `expiresAt` on a regular cadence (default: one third of the expiry window). A heartbeat first verifies the current owner, then writes and reads back the refreshed record. Going offline or encountering a failed/unverifiable heartbeat immediately disables writes and stops the timer. Browser background suspension may delay timers; every write still performs a fresh ownership read, so an expired lease blocks writes on resume. After a transient interruption, the same page may call `SessionCoordinator.resume()`; it regains ownership only if the exact prior session ID is still active. If the lease has expired, explicit stale-session recovery is required. If another ID owns the marker or the marker is ambiguous, writes remain disabled.
+The active page uses `SessionCoordinator.startHeartbeat()` to refresh `heartbeatAt` and `expiresAt` on a regular cadence (default: one third of the expiry window). A heartbeat first verifies the current owner, then writes and reads back the refreshed record. Going offline or encountering a failed/unverifiable heartbeat immediately disables writes and stops the timer. Browser background suspension may delay timers; every write still performs a fresh ownership read, so an expired lease blocks writes on resume. After a transient interruption, the same page may call `SessionCoordinator.resume()`; it regains ownership only if the exact prior session ID is still active. If the lease has expired, use **Open saved synthetic year** to recover; a suspended page must not silently resume writes. If another ID owns the marker or the marker is ambiguous, writes remain disabled.
 
-Orderly device handoff is:
+For a faster handoff, use **Release** before switching devices:
 1. Stop accepting new writes.
 2. Wait for in-flight serialized writes to finish.
 3. Write `state: released` and `releasedAt`.
 4. Read the record back and verify the same `sessionId` is released.
-5. Only then switch devices.
+5. After verified release, open on the next device without waiting for expiry.
 
-A browser crash cannot reliably execute release. Its record ages into the stale state after the heartbeat window. The next device must use explicit stale-session recovery; the old device must not be assumed dead solely because a heartbeat is late. A browser close/pagehide event is only a best-effort release opportunity, never proof of release.
+A browser crash cannot reliably execute release. Its record ages into the stale state after the heartbeat window. On the next device, wait until the heartbeat window has expired, then choose **Open saved synthetic year**. No release of the old device or separate recovery action is required after the marker is conclusively stale. A merely late heartbeat is not sufficient evidence; a live or unverifiable marker still blocks acquisition. A browser close/pagehide event is only a best-effort release opportunity, never proof of release.
 
 ## Failure behavior
 
 | Condition | Required behavior |
 | --- | --- |
 | Another fresh active session | Refuse acquisition and all writes from this page |
-| Stale heartbeat | Require explicit user-confirmed recovery; no automatic takeover |
+| Stale heartbeat | Recover on explicit Open only, after fresh verification of conclusive staleness; otherwise refuse |
 | Network interruption or Drive error | Ownership unknown; disable writes |
 | Malformed/future-dated/contradictory record | Fail closed; require manual resolution |
 | Ownership changes during a heartbeat/write check | Disable writes immediately |
@@ -81,7 +81,7 @@ The session test page clears the previously displayed marker classification whil
 
 Orderly release closes new admission while admitted writes retain their guards. Heartbeats continue during that drain. The optional `beforeRelease` callback runs after drain, before the final marker write; the application uses it to reject unresolved transaction state. This callback must inspect state only, not await another coordinator session operation on the same queue. A rejected callback retains the active marker and renewal. Final release verifies current ownership, stops renewal, writes the released marker, and verifies it by read-back. Late queued timer failures cannot replace the completed status or revive the session.
 
-This is still best-effort ownership. Background suspension can prevent renewal; stale or unverifiable sessions do not renew themselves automatically. Explicit stale-session recovery and all existing ownership guards remain required.
+This is still best-effort ownership. Background suspension can prevent renewal; stale or unverifiable sessions do not renew themselves automatically. Explicit Open and all existing ownership guards remain required.
 
 ## Delayed marker visibility and cancelled acquisition
 

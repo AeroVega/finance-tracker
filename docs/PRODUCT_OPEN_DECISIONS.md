@@ -209,9 +209,9 @@ Advanced investment performance analysis is outside the v1 minimum, and the init
 
 ## Existing policy, change only if requested
 
-The current policy is already usable: canonical financial history defaults to indefinite retention, while original imported files keep their separately approved 540-day lifecycle. This is not another v1 decision to solicit.
+Canonical financial history defaults to indefinite retention. Original source CSV files stay local and are never stored by the app. See [ADR-010][adr-retention].
 
-- [ ] **Q57.** If the owner wants the indefinite-retention preference to extend to original imported files too, should that separate policy change? That intention remains unconfirmed. No such change is approved or required to proceed under the present policies.
+- [x] **Q57.** Resolved November 23, 2026. The app never uploads or persists original CSV files; they do not enter the canonical-history retention policy.
 
 ## Settled decision record
 
@@ -323,7 +323,7 @@ The current policy is already usable: canonical financial history defaults to in
 
 ### Canonical history versus original imported files
 
-- [x] ~~Does indefinite canonical-history retention replace the 540-day original-source policy now?~~ No. The current policies apply to different data: canonical history defaults to indefinite retention with automatic cleanup off; original imports retain their approved 540-day lifecycle. See [Product §7.2][product-quality], [ADR-010][adr-retention], and [Roadmap dependencies][roadmap-dependencies].
+- [x] ~~Does indefinite canonical-history retention replace the 540-day original-source policy now?~~ Historical decision: these were separate retention domains. The 540-day source policy was independently superseded on November 23, 2026; see [ADR-010][adr-retention].
 
 ### Product vision versus PR #25 scope
 
@@ -393,7 +393,7 @@ Compatible additions may fit a minor release. No feature or date is committed me
 [database-integrity]: DATABASE_IDENTITY_AND_LIFECYCLE.md#39-gate-write-eligibility-on-integrity
 [database-offline]: DATABASE_IDENTITY_AND_LIFECYCLE.md#107-keep-local-browser-storage-non-authoritative
 [adr-device]: ARCHITECTURE_DECISIONS.md#adr-011--single-user-single-active-device-operation
-[adr-retention]: ARCHITECTURE_DECISIONS.md#adr-010--original-csv-retention-duration
+[adr-retention]: ARCHITECTURE_DECISIONS.md#adr-010-local-only-original-csv-files
 [ledger-account]: CANONICAL_LEDGER_CONTRACT.md#account
 [ledger-financial]: CANONICAL_LEDGER_CONTRACT.md#4-financial-meaning-and-reporting-boundaries
 [ledger-review]: CANONICAL_LEDGER_CONTRACT.md#review-decision
