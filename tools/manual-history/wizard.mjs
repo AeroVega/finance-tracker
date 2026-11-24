@@ -65,6 +65,7 @@ function initialize() {
   }
   function showReview() {
     const list = document.querySelector('#months');
+    document.querySelector('#review-count').textContent = `${months.size} of ${fields.end.value ? monthCount(fields.end.value) : '—'} months entered`;
     list.replaceChildren();
     findings.replaceChildren();
     output = undefined;
@@ -108,6 +109,7 @@ function initialize() {
     saveDraft.disabled = !output || dirty || editing !== null;
     download.disabled = saveDraft.disabled || output.trackerFile === null;
   }
+  function monthCount(end) { return (Number(end.slice(0,4))-2023)*12 + Number(end.slice(5,7)); }
   form.addEventListener('input', event => {
     if (event.target === fields.start || event.target === fields.end || event.target === fields.sourceId) { if (months.size) changed = true; showReview(); }
     else markDirty();

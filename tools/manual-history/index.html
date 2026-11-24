@@ -4,7 +4,7 @@
 <title>Manual monthly history</title><link rel="stylesheet" href="wizard.css"></head>
 <body><main><h1>Manual monthly history</h1>
 <p id="local-warning">Entry is disabled unless this page is served from localhost or 127.0.0.1.</p>
-<p>Transcribe invented monthly summaries. Nothing is saved until you download a file. Closing this page loses the draft.</p>
+<section class="guide"><h2>Before you start</h2><p>Run <code>python3 -m http.server 4173 --bind 127.0.0.1</code> from the project folder, then open <code>http://127.0.0.1:4173/tools/manual-history/</code>. This tool works locally and does not read your workbook; enter monthly figures by hand.</p><p>Nothing is saved until you download it. Download a <strong>private wizard draft</strong> to pause and resume later; use <strong>tracker import JSON</strong> only when ready for the tracker’s review. Keep both files private.</p><p>Review covers every month from January 2023 through your selected last month. Missing months and incomplete totals are flagged; estimates are not observed balances. Only enter an observed net-worth snapshot for January 2023.</p></section>
 <form id="entry">
 <fieldset disabled><legend>1. Expected coverage</legend>
 <label>First month <input name="start" type="month" value="2023-01" readonly required></label>
@@ -14,6 +14,7 @@
 <label>Month <input name="month" type="month" required></label>
 <label>Source workbook reference <input name="workbook" required maxlength="500"></label>
 <label>Source worksheet reference <input name="worksheet" required maxlength="500"></label>
+<p class="hint">Workbook and worksheet references carry forward from the previous month. Change them here when the source changes.</p>
 <label>Currency code <input name="currency" value="USD" required pattern="[A-Z]{3}"></label>
 <button type="button" id="copy-labels" disabled>Copy previous month’s category labels only</button>
 <p>Enter complete categorized totals for this month. Decimal amounts only (such as 10.25); no separators or currency signs.</p>
@@ -28,7 +29,7 @@
 <button id="save">Add month to review</button><button type="button" id="clear">Clear month form</button></fieldset>
 </form>
 <p id="status" role="status"></p>
-<section><h2>3. Review and export</h2><ul id="months"></ul><ul id="findings"></ul>
+<section><h2>3. Review and export</h2><p id="review-count" role="status"></p><ul id="findings"></ul><ul id="months" class="month-list"></ul>
 <button type="button" id="export" disabled>Download tracker import JSON</button>
 <button type="button" id="save-draft" disabled>Download private wizard draft</button>
 <fieldset disabled><legend>Resume from a private wizard draft</legend>
