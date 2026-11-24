@@ -21,7 +21,6 @@ import {replayFixture} from './helpers/ledger-replay-fixtures.mjs';
 // libraries, the deployment config and the release profile are substituted.
 // The test release profile stands in for a future approved release; the
 // shipped profile is asserted separately below.
-const LOCKED_RELEASE=Object.freeze({dataClasses:Object.freeze(['synthetic'])});
 const TEST_RELEASE=Object.freeze({dataClasses:Object.freeze(['synthetic','production'])});
 const TOKEN='invented-test-token',OWNER='invented-owner',PASSWORD='invented archive password';
 const RAW_HEADER='DATE,DESCRIPTION,AMOUNT,CHECK #,STATUS';
@@ -100,20 +99,19 @@ async function independentOpen(http,dataClass){
  const ledger=await store.start(),manifest=store.verifiedManifest;await store.release();return {ledger,manifest};
 }
 
-test('the shipped release profile is pinned and a synthetic-only profile cannot construct a private session',async()=>{
+test('the shipped release profile is synthetic-only and cannot construct a private session',async()=>{
  // Changing this assertion is part of a separately approved release decision.
- assert.deepEqual(RELEASE_PROFILE.dataClasses,['synthetic','production']);
+ assert.deepEqual(RELEASE_PROFILE.dataClasses,['synthetic']);
  assert.ok(Object.isFrozen(RELEASE_PROFILE)&&Object.isFrozen(RELEASE_PROFILE.dataClasses));
- assert.equal(new DashboardSyntheticStorage().dataClass,'synthetic');
- assert.throws(()=>releasedDataClass('production',LOCKED_RELEASE),{code:'data-class-not-released'});
- assert.throws(()=>new DashboardSyntheticStorage({dataClass:'production',release:LOCKED_RELEASE}),{code:'data-class-not-released'});
- assert.throws(()=>new FullSnapshotApplication({folderId:'invented-folder',accessToken:()=>TOKEN,dataClass:'production',release:LOCKED_RELEASE}),{code:'data-class-not-released'});
- assert.throws(()=>new DashboardSyntheticStorage({release:LOCKED_RELEASE}).setDataClass('production'),{code:'data-class-not-released'});
+ assert.throws(()=>releasedDataClass('production'),{code:'data-class-not-released'});
+ assert.throws(()=>new DashboardSyntheticStorage({dataClass:'production'}),{code:'data-class-not-released'});
+ assert.throws(()=>new FullSnapshotApplication({folderId:'invented-folder',accessToken:()=>TOKEN,dataClass:'production'}),{code:'data-class-not-released'});
+ assert.throws(()=>new DashboardSyntheticStorage().setDataClass('production'),{code:'data-class-not-released'});
  assert.throws(()=>releasedDataClass('production',{dataClasses:['synthetic','reserved-production']}),{code:'data-class-not-released'});
 });
 
 test('locked default UI hides the class choice and keeps the synthetic route',async()=>{
- const h=await setup({release:LOCKED_RELEASE});try{
+ const h=await setup({release:RELEASE_PROFILE});try{
   assert.equal(h.page.get('data-class-choice').hidden,true);assert.equal(h.page.get('data-class').disabled,true);
   assert.equal(h.storage.dataClass,'synthetic');assert.equal(h.page.get('open-ledger').textContent,'Open saved synthetic year');
   assert.doesNotMatch(h.page.get('release-classes').textContent,/private database/i);
@@ -124,8 +122,7 @@ test('locked default UI hides the class choice and keeps the synthetic route',as
 });
 
 test('private database: create, CSV import, explicit save, release, independent reopen, keeping originals local',async()=>{
- const h=await setup({release:RELEASE_PROFILE});const a=h.folder('a','invented private ledger');try{
-  assert.equal(h.storage.dataClass,'synthetic');
+ const h=await setup();const a=h.folder('a','invented private ledger');try{
   assert.equal(h.page.get('data-class-choice').hidden,false);
   await choosePrivate(h);assert.equal(h.page.get('create-ledger').textContent,'Create new private database');
   assert.equal(h.page.get('preview-year').disabled,true);assert.equal(h.page.get('start-preview').disabled,true);

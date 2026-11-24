@@ -13,7 +13,6 @@ const prospective=({syntheticOnly,...ledger})=>({...ledger,version:3,dataClass:'
 // The production engine is the same native engine with class-bound headers.
 // Engine construction is not the release gate; see the application tests.
 // A test-only release profile stands in for a future approved release.
-const LOCKED_RELEASE=Object.freeze({dataClasses:Object.freeze(['synthetic'])});
 const TEST_RELEASE=Object.freeze({dataClasses:Object.freeze(['synthetic','production'])});
 const engine=(http,dataClass,release=TEST_RELEASE)=>createFullSnapshotStorage({folderId:http.folderId,accessToken:()=> 'invented-test-token',
  fetchImpl:http.fetch,cryptoImpl:webcrypto,visibilityDelayMs:0,setIntervalImpl:()=>1,clearIntervalImpl:()=>{},dataClass,release});
@@ -98,8 +97,8 @@ test('native invented v2 archive round-trip restores to fresh lineage and the sy
 test('engine applies the release gate, refuses an unknown class, and a synthetic engine refuses a production folder before any write',async()=>{
  assert.throws(()=>engine(new HttpFullSnapshotDrive(),'reserved-production'),{code:'data-class-not-released'});
  assert.throws(()=>engine(new HttpFullSnapshotDrive(),'unknown'),{code:'data-class-not-released'});
- // A locked profile refuses a production engine at the engine boundary too.
- assert.throws(()=>engine(new HttpFullSnapshotDrive(),'production',LOCKED_RELEASE),{code:'data-class-not-released'});
+ // The shipped profile refuses a production engine at the engine boundary too.
+ assert.throws(()=>engine(new HttpFullSnapshotDrive(),'production',RELEASE_PROFILE),{code:'data-class-not-released'});
  assert.equal(engine(new HttpFullSnapshotDrive(),'synthetic',RELEASE_PROFILE).dataClass,'synthetic');
  const http=new HttpFullSnapshotDrive(),production=engine(http,'production');let synthetic;
  try{

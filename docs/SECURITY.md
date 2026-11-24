@@ -1,6 +1,6 @@
 # Security and Privacy Requirements
 
-**Status:** Required production controls. Production financial-data persistence remains **NO-GO**.
+**Status:** Required production controls. See the [owner GO record](CURRENT_STATE.md#owner-decision-go-for-real-financial-data) for the approved deployment baseline and current runtime availability.
 **Review record:** [Security, privacy, OAuth, cost and recovery review](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md), reviewed against main revision `16a5ff6134a414d4cc5ede1e2ed4c3af551740f4` on 2026-11-22.
 **Last reconciled:** 2026-11-22
 

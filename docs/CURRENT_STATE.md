@@ -1,11 +1,19 @@
 # Current project state
 
-**Checked:** 2026-11-23
+**Checked:** 2026-11-24
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
-**Main baseline:** `16a5ff6134a414d4cc5ede1e2ed4c3af551740f4` ([PR 55](https://github.com/AeroVega/finance-tracker/pull/55) merged)
-**Active work:** [PR 57](https://github.com/AeroVega/finance-tracker/pull/57) is the real-data readiness workstream. Its candidate wires a private-database data class through the app behind a [release gate](PERSISTENCE_DATA_CLASS.md) that is **off** in this source: the deployed build stays synthetic-only. Keep testing synthetic. Legacy Excel migration is separate; [PR 56](https://github.com/AeroVega/finance-tracker/pull/56) closed without merging and its converter is not the migration plan.
 
-This is the concise current direction and permission boundary. The 2026-11-22 [security, privacy, OAuth, cost and recovery review](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md) records the latest production NO-GO analysis. [Project status](PROJECT_STATUS.md) retains dated historical evidence; the focused [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
+## Owner decision: GO for real financial data
+
+On 2026-11-24, the owner confirmed that the [PR 57 acceptance checks](https://github.com/AeroVega/finance-tracker/pull/57) were complete and approved real financial data use as of the deployed commit produced by merging [PR 61](https://github.com/AeroVega/finance-tracker/pull/61) to `main`.
+
+The approved SHA is the full merge-result commit reported by GitHub for PR 61 and matched to the deployed Pages source stamp. It is not the draft branch head or an earlier acceptance-test build. Verify that match before relying on the approval, and retain the deployment run as evidence. The record does not name its own SHA because it is assigned when the PR lands.
+
+From that baseline, treat real financial data as a supported-use requirement for every subsequent merge to `main`. Preserve account and folder isolation, verified saves and recovery, encrypted private backups, and the existing required checks and owner review. Changes that affect those safeguards need evidence appropriate to their scope. Development, CI, diagnostics, and public artifacts still use invented data only; private account and folder details stay private.
+
+This is an authorization record, not a runtime change. The checked-in [release profile](../js/release-profile.mjs) still allows only synthetic mode, so merging this record alone does not make Private database mode available. Do not enter real records into the synthetic workspace or infer support for the separate historical migration workflow.
+
+The [security, privacy, OAuth, cost and recovery review](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md) retains its dated findings and pre-approval status. [Project status](PROJECT_STATUS.md) retains historical evidence; the [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
 
 ## Chosen storage and application route
 
@@ -13,12 +21,12 @@ The owner selected **full-snapshot v1** as the continuing format after live synt
 
 Create new synthetic year and Save preview to a new folder require a fresh empty synthetic folder. Open saved synthetic year only opens a supported existing full-snapshot copy. Old per-record, grouped, fragmented and partitioned layouts are unsupported, not converted, overwritten or deleted. Remove obsolete format implementations and their exclusive regression/benchmark paths rather than maintaining multiple application storage formats. Preserve shared financial validation, transport, diagnostics, ownership, integrity and recovery safeguards.
 
-The format remains synthetic-only and **not Alpha-complete**. The supported Wells Fargo, SoFi and Fidelity CSV application workflow is merged. The owner confirmed the Wells Fargo import, save and reopen path on the PR head; that is not evidence for all providers/devices. Post-merge Node and Pages workflows succeeded; this is not an independent live-browser check. The [historical-summary workflow](HISTORICAL_MONTHLY_SUMMARY.md) merged in [PR 54](https://github.com/AeroVega/finance-tracker/pull/54) and is present on the served synthetic build; that does not establish exact-build live Drive acceptance. Recovery and portable backup/restore remain implemented in the selected full-snapshot route; do not infer live acceptance beyond the evidence recorded in the relevant PRs. See the [backup/recovery contract](FULL_SNAPSHOT_BACKUP_RECOVERY.md). Snapshot size is capped at 8 MiB, envelope/manifest at 16 KiB, and history at 10,000 commits. Full-history cost grows with retained snapshots. These limits are not bounded whole-database memory or Safari capacity claims. There is no compare-and-swap guarantee or production authorization.
+The shipped release profile remains synthetic-only. The supported Wells Fargo, SoFi and Fidelity CSV application workflow is merged. The owner confirmed the Wells Fargo import, save and reopen path on the PR head; that is not evidence for all providers/devices. Post-merge Node and Pages workflows succeeded; this is not an independent live-browser check. The [historical-summary workflow](HISTORICAL_MONTHLY_SUMMARY.md) merged in [PR 54](https://github.com/AeroVega/finance-tracker/pull/54) and is present on the served synthetic build; that does not establish exact-build live Drive acceptance. Recovery and portable backup/restore remain implemented in the selected full-snapshot route; do not infer live acceptance beyond the evidence recorded in the relevant PRs. See the [backup/recovery contract](FULL_SNAPSHOT_BACKUP_RECOVERY.md). Snapshot size is capped at 8 MiB, envelope/manifest at 16 KiB, and history at 10,000 commits. Full-history cost grows with retained snapshots. These limits are not bounded whole-database memory or Safari capacity claims. There is no compare-and-swap guarantee.
 
 ## Acceptance and verification
 
 - **User-confirmed:** on `86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d`, synthetic open took 11 seconds and save took 25 seconds, with persistence confirmed. The owner declared the open/save performance goal accomplished. The last reported seed time was 42 seconds; seed performance is a separate concern and does not reopen the accepted open/save gate. This is acceptance of the reported workflow, not a broad claim about every device, history size or network.
-- **User-confirmed (PR 57, 2026-11-24):** live synthetic acceptance on `58f7a52` and revocation/reconnect on `f387592` passed; no billing account is linked (the project cannot be charged); the owner accepted best-effort single-device coordination and the uncertain-last-write procedure, set a 3-month encrypted backup cadence, and set a capacity review trigger (100 MB of saved history or Open over 60 seconds on iPhone). The release decision and activation remain open. See the [owner gate record](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md#owner-gate-record-2026-11-24).
+- **User-confirmed (PR 57, 2026-11-24):** live synthetic acceptance on `58f7a52` and revocation/reconnect on `f387592` passed; no billing account is linked (the project cannot be charged); the owner accepted best-effort single-device coordination and the uncertain-last-write procedure, set a 3-month encrypted backup cadence, and set a capacity review trigger (100 MB of saved history or Open over 60 seconds on iPhone). See the [owner gate record](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md#owner-gate-record-2026-11-24).
 - **Verified before cleanup:** local extended suite 2,339/2,339 passed; exact-head [Node CI 44013565187](https://github.com/AeroVega/finance-tracker/actions/runs/44013565187) passed both required jobs. The four concurrency regressions preserve failure draining, invalidation, binding checks and serial version settling.
 - **Simulated, not live:** one controlled latency-injected comparison measured save 27.80 → 25.97 seconds and seed 36.02 → 34.94 seconds. See [simulator scope and assumptions](DRIVE_SIMULATOR.md). Actual Google sign-in/Picker and physical Safari behavior are not fully emulated.
 - **Verified cleanup candidate:** retained extended suite 858/858 passed, zero failures/skips/cancellations. Shared adapter, canonical JSON/hash and listing primitives were independently checked against the accepted build. Current-format, workspace and financial tests were preserved or ported; obsolete-format-only tests and writers were removed. Request counts remain unchanged in the simulator. Exact-head remote CI subsequently passed for the cleanup PR47.
@@ -27,9 +35,7 @@ The format remains synthetic-only and **not Alpha-complete**. The supported Well
 
 ## Authorization and data boundaries
 
-The owner directed readiness fixes and verification to PR 57. This authorizes code, synthetic tests and updates to that draft, not merge, deployment, production configuration changes or real-data access. Backup is the last verified saved logical database, optionally password-encrypted. Restore is fresh-empty-folder-only with independent verification. Drafts remain in memory only; safe recovery is automatic, retry explicit.
-
-Use invented fixtures only. Do not access real transaction records, the private workbook, owner Drive financial data or production credentials. Do not access, delete or modify existing Drive folders as part of code cleanup. Production financial-data persistence is **NO-GO** until separate security/privacy/OAuth/cost/recovery review and explicit owner activation approval.
+[PR 57](https://github.com/AeroVega/finance-tracker/pull/57) delivered readiness changes and the acceptance evidence above. Use invented fixtures for development and verification. Do not give agents or test jobs real transaction records, the private workbook, owner Drive financial data, or production credentials. Do not access, delete, or modify existing Drive folders as part of code cleanup.
 
 Preserve the $0 recurring-cost constraint, permanent manual file imports, no stored bank passwords and no unauthorized scraping. Green tests, owner synthetic acceptance, a merge and deployment are distinct facts.
 
@@ -37,7 +43,7 @@ Preserve the $0 recurring-cost constraint, permanent manual file imports, no sto
 
 The performance objective for the reported synthetic save/open is accepted. Recovery and portable backup/restore are implemented in the selected full-snapshot route; preserve their existing contracts and do not reopen unchanged acceptance gates without a demonstrated defect.
 
-Close the [remaining readiness gates](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md#residual-risks-before-any-activation) in PR 57: candidate-specific synthetic acceptance of the exact served build and the owner's exact-SHA diff review. **Guarded code checks** is a required check on `main` since 2026-11-23. As a single-owner project, independent human approval is not required (owner decision, 2026-11-23). A production-capable release is a separate owner decision for one exact commit; see the [release gate](PERSISTENCE_DATA_CLASS.md#release-gate-what-static-code-can-and-cannot-enforce). Do not infer readiness from merging the PR. Treat legacy Excel migration as separate work and do not reuse PR 56 as its design. Seed performance remains separate. Further performance work should address a demonstrated workload or regression without weakening verification.
+Preserve the real-data baseline and existing safeguards. **Guarded code checks** is required on `main`; the owner reviews the exact-SHA diff. Legacy Excel migration remains a separate workflow. Revisit performance only for a demonstrated workload or regression, without weakening verification.
 
 ## Reading map
 
