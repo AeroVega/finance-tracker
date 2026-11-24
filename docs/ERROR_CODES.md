@@ -15,7 +15,7 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 - Trusted app file/line/column plus a stamped commit locate source. Function names are omitted. Unminified static modules need no source maps; if bundling/minification is ever adopted, retain source maps before relying on those frames.
 - The literal-code audit reports computed/forwarded calls separately. Zero unknown literal codes is not proof that every dynamic path was exercised.
 
-## Registered codes (681)
+## Registered codes (685)
 
 ### backup / integrity
 
@@ -214,13 +214,14 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 
 ### lifecycle / integrity
 
-`base-conflict` · `catalog-required` · `invalid-config` · `invalid-path` · `manifest-unavailable`
-`object-integrity-failure` · `object-metadata-mismatch` · `object-not-found` · `paged-required`
-`recovery-required` · `synthetic-folder-required` · `verification-scope-closed`
+`base-conflict` · `catalog-required` · `data-class-mismatch` · `invalid-config` · `invalid-path`
+`manifest-unavailable` · `object-integrity-failure` · `object-metadata-mismatch` · `object-not-found`
+`paged-required` · `private-folder-proof-failed` · `recovery-required` · `synthetic-folder-required`
+`verification-scope-closed`
 
 ### lifecycle / state
 
-`storage-not-ready`
+`data-class-not-released` · `designated-folder-mismatch` · `storage-not-ready`
 
 ### paged / defect
 

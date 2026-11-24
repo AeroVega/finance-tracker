@@ -242,7 +242,7 @@ Neither is the next fix supported by these measurements.
   sequential device handoff. Existing crash-injection tests are strong evidence
   for their tested path, not automatic acceptance of a future production path.
 - **Retention/backup choices:** verify the original-file deletion-receipt limit
-  and 540-day source retention/restore rules. Define routine backup cadence,
+  and the local-only source-file boundary for backup and restore. Define routine backup cadence,
   tolerable loss and rotation after OAuth verification, as already decided.
 - **Owner decision:** review residual risks and evidence, then record explicit
   production activation authorization separately from publication/merge/deploy.

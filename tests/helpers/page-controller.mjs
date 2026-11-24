@@ -1,5 +1,7 @@
 import {FULL_SNAPSHOT_BACKUP_LIMITS} from '../../js/full-snapshot-backup.mjs';
 import {fail} from '../../js/app-error.mjs';
+import {RELEASE_PROFILE} from '../../js/release-profile.mjs';
+import {createLedger} from '../../js/canonical-import.mjs';
 import { successfulActionSummary } from '../../js/success-metrics.mjs';
 import { showDiagnostic, clearDiagnostic, diagnosticMessage } from '../../js/app-diagnostics.mjs';
 import { leaveBreadcrumb, registerContextProvider, recentReports } from '../../js/error-reporting.mjs';
@@ -63,7 +65,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   } } };
   const document = { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body'),
     addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); } };
-  imports = {FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, mountHistoricalMonthlySummaryWorkflow, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
+  imports = {RELEASE_PROFILE,createLedger,FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, mountHistoricalMonthlySummaryWorkflow, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
   const executable = script.replace(/^import \{([^}]+)\} from '[^']+';$/gm, (_, names) => {
     for (const name of names.split(',').map(name => name.trim())) assert.ok(name in imports, `Missing import ${name}`);
     return '';

@@ -77,7 +77,7 @@ Open **IAM & Admin → Settings** in the same project and copy the numeric **Pro
 
 ## 7. Configure the deployed synthetic tools
 
-The current tools use public configuration stamped by `.github/workflows/deploy-pages.yml`, rather than fields in the retired probe UI. The owner configures `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_PICKER_API_KEY` as repository or `github-pages` environment variables or secrets. The workflow supplies the reviewed public project number. Confirm it belongs to the same project before deploying. Never place a client secret or token in these values.
+The current tools use public configuration stamped by `.github/workflows/deploy-pages.yml`, rather than fields in the retired probe UI. The owner configures `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_PICKER_API_KEY` as repository variables or secrets. The workflow's `build` job reads them and has no environment, so values stored only on the `github-pages` environment are not visible to it. The workflow supplies the reviewed public project number. Confirm it belongs to the same project before deploying. Never place a client secret or token in these values.
 
 After a separately authorized deployment, open the [main workspace](../index.html#storage), verify its full source SHA, then use **Storage → Create new synthetic year** and select a new empty synthetic folder. The workspace signs in with Google, uses Picker, saves invented data and verifies it. Stage one correction, save, and independently reopen. Supported file ingestion and backup/restore are not yet available on this route. Follow the [owner acceptance guide](OWNER_ACCEPTANCE.md).
 

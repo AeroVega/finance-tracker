@@ -295,9 +295,13 @@ for (const committed of [false, true]) test(`${committed ? 'lost commit response
   await h.click('save-ledger');
   assert.equal(h.state.writes, committed ? 1 : 0);
   if(committed){assert.equal(h.modelSession.recoveryOutcome,'saved');assert.equal(h.modelSession.unverified,false);assert.deepEqual(h.modelSession.ledger,proposed);assert.equal(h.get('save-ledger').disabled,true);assert.equal(h.state.recovers,1);return;}
-  assert.equal(h.get('save-state').dataset.state, 'unverified');
+  // The save failed before any attempt or write and Drive still holds the base:
+  // proven not saved. Blind save and edits stay blocked; only confirmed retry is offered.
+  assert.equal(h.modelSession.recoveryOutcome, 'not-saved');
+  assert.equal(h.get('save-state').dataset.state, 'dirty');
   assert.equal(h.get('action-status').dataset.kind, 'error');
-  assert.match(h.get('save-state').textContent, /outcome could not be verified/);
+  assert.match(h.get('save-state').textContent, /conclusively not published/);
+  assert.equal(h.get('retry-save').disabled, false);
   assert.equal(h.get('save-ledger').disabled, true);
   assert.equal(h.get('stage-correction').disabled, true);
   assert.deepEqual(h.modelSession.ledger, proposed);

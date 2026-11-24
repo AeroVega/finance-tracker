@@ -1,6 +1,6 @@
 import { previewProviderCsv } from './provider-csv-preview.mjs';
 import { parseRecognizedProviderCsv } from './provider-csv.mjs';
-import { prepareCanonicalImport } from './canonical-import.mjs';
+import { prepareCanonicalImport, ledgerDataClass } from './canonical-import.mjs';
 import { isCalendarDate } from './import-reconciliation.mjs';
 import { fail } from './app-error.mjs';
 import { mountImportCoverageSelector } from '../components/import-coverage-selector.mjs';
@@ -278,7 +278,8 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
       coverageByAccount[accountId] = { start, end, provenance: 'user-confirmed', confirmationEvidence: structuredClone(coverage.provenance) };
     }
     if (!Object.keys(accountMappings).length) fail('explicit-account-mapping-required');
-    const result = prepareCanonicalImport(ledger, { parsed, accountMappings, coverageByAccount, syntheticOnly: true });
+    // The session's staging boundary enforces its class; the proposal keeps the ledger's class.
+    const result = prepareCanonicalImport(ledger, { parsed, accountMappings, coverageByAccount, dataClass: ledgerDataClass(ledger) });
     if (result.ledger === ledger || !result.runIds.length) fail('invalid-parsed-import');
     return result;
   }

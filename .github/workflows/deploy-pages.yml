@@ -6,21 +6,23 @@ on:
       - main
   workflow_dispatch:
 
+# Least privilege per job: only the deploy job can publish or mint an OIDC token.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  # Build and deploy are separate jobs so the deploy job starts only after the
+  # artifact upload has completed and is listed for the run. In one job, the
+  # deploy step could query the artifact list before it showed the upload.
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
     steps:
       - name: Check out selected branch
         uses: actions/checkout@v7
@@ -67,7 +69,7 @@ jobs:
           }).filter(([, value]) => !value).map(([name]) => name);
           if (missing.length) {
             console.error("Missing required GitHub Actions variable/secret(s): " + missing.join(", "));
-            console.error("Configure them for the github-pages environment or repository before deploying.");
+            console.error("Configure them as repository variables or secrets before deploying. The build job has no environment, so github-pages environment values are not visible to it.");
             process.exit(1);
           }
           writeFileSync(
@@ -113,6 +115,16 @@ jobs:
         with:
           path: .
 
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5

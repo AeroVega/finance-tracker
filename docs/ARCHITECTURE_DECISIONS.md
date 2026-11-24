@@ -46,7 +46,7 @@ The accepted single-user/single-active-device model remains. Drive's tested stal
 - Use an authorized OAuth flow; never ask for or store the user's Google password.
 - Request the narrowest practical Drive permission. Evaluate `drive.file` and a dedicated app-created/user-selected folder; verify its actual behavior before committing to a scope.
 - Do not put OAuth client secrets, access tokens, refresh tokens, or financial data in the public repository or static frontend source.
-- Parse selected CSVs locally in the browser. Retain each original CSV in private Drive storage for **540 days (18 months)** from successful retention, then delete it and verify deletion. Store normalized records and necessary import provenance in Drive after the user authorizes the action. Do not send financial records or source files to unrelated services.
+- Parse selected CSVs locally in the browser. The app must never upload or persist original CSV files, including in backups or restores. Preserve normalized records and necessary import provenance only, after explicit save to approved private storage. The owner may keep the original files locally.
 - Treat browser storage as a cache, not the canonical store. The app is single-user and single-active-device: never support simultaneous use on two devices; refuse writes when another active session is detected. Device changes require an orderly handoff.
 - Plan for expiring access tokens, explicit reauthorization, offline/error states, and provider/API revocation.
 - Drive file APIs are not a transactional database. The tested browser-origin Drive v3 `files.update` path accepted a deliberately stale `If-Match` value (owner-confirmed 2026-10-31), so do not rely on it for compare-and-swap or stale-writer exclusion. Use a single-active-device operating model, app-level session detection, serialized writes, immutable object creation, verified commit ordering, and deterministic interruption recovery. Session detection is best-effort coordination, not a server-enforced lock; the owner must not use multiple devices simultaneously.
@@ -83,11 +83,13 @@ The identity/lifecycle baseline is settled. Do not reopen it because an old task
 5. Current OAuth/configuration, quota/billing and $0-cost evidence; routine backup policy after OAuth verification.
 6. Live synthetic acceptance of changed paths, recovery/restore, sequential device handoff and explicit residual-risk/production approval.
 
-The synthetic session, transaction, retention and backup implementations already exist. Their tests and historical evidence remain in their subject guides. The 540-day original-file policy is settled; production activation and deletion-receipt risk review remain open. [Next steps](NEXT_STEPS.md) supplies completion checks and dependencies.
+Historical synthetic rehearsal evidence does not establish current production readiness. Verify the active route against [ADR-010](#adr-010-local-only-original-csv-files) and the [next steps](NEXT_STEPS.md).
 
-## ADR-010 — Original CSV retention duration
+## ADR-010 Local-only original CSV files
 
-**Status: Accepted; reaffirmed 2026-10-31.** Retain each original CSV import in approved private Drive storage for 540 days (18 months) from the time it is successfully retained. After that period, delete the source file and verify deletion. Eligibility for deletion is not proof that deletion succeeded; deletion failures must remain visible and retryable. Backup copies must preserve the original retention timestamp and must not restart the retention clock or reintroduce an expired original. This decision supersedes the earlier 2026-10-21 preference not to retain original CSV files in Drive. The policy duration is settled; implementation, backup behavior, and deletion verification remain release gates.
+**Current decision, owner-confirmed 2026-11-23:** Parse selected CSVs locally in the browser. The app must never upload or persist original CSV files, including in backups or restores. Preserve normalized records and necessary import provenance only, after explicit save to approved private storage. The owner may keep the original files locally.
+
+**Superseded decision:** The October 31 policy required 540 days of private Drive retention followed by confirmed deletion, with expiry preserved through backups. That decision superseded the earlier October 21 preference, but is no longer a release requirement. Older experiments and rehearsal evidence remain historical; this change does not authorize accessing or deleting legacy objects.
 
 ## Delivery sequence and schedule
 
