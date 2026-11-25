@@ -1874,3 +1874,57 @@ test('verified release clears facet labels, counts, chips and filters that could
   assert.equal(h.get('active-filters').hidden, true);
   assert.equal(h.state.writes, 0);
 });
+
+test('inline notes follow the change until edited, and the rule checkbox is an explicit opt-in', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  await h.choose('review-only', true);
+  await findText(records(h)[0], node => node.className === 'decide-button').click();
+  const panel = h.get('quick-review');
+  const note = findText(panel, node => node.tagName === 'LABEL' && node.textContent === 'Note for the history').children[0];
+  const ruleField = findText(panel, node => /quick-rule/.test(node.className || ''));
+  const rule = ruleField.children[0];
+  assert.equal(note.value, 'Reviewed in Activity: classified as spending (was unclassified).');
+  assert.equal(ruleField.hidden, true, 'no rule choice until the category changes');
+  h.get('quick-category').value = 'fees-and-interest'; await h.get('quick-category').emit('change');
+  assert.equal(note.value, 'Reviewed in Activity: classified as spending (was unclassified); category set to Fees and interest (was no category).');
+  assert.equal(ruleField.hidden, false);
+  assert.equal(rule.checked, false, 'rules are opt-in');
+  rule.checked = true; await rule.emit('change');
+  assert.match(note.value, /Also applied to later imports with the same description\.$/);
+  h.get('quick-type').value = 'transfer'; await h.get('quick-type').emit('change');
+  assert.match(note.value, /^Reviewed in Activity: classified as transfer \(was unclassified\); category set to Fees and interest/);
+  await findText(panel, node => node.textContent === 'Stage decision').click();
+  const fee = getEffectiveActivities(h.modelSession.ledger).find(activity => activity.sourceDescription === 'INVENTED BROKERAGE FEE' && activity.effectiveDate === '2025-12-26');
+  assert.deepEqual([fee.activityKind, fee.categoryId], ['transfer', 'fees-and-interest']);
+  const events = h.modelSession.ledger.events.filter(event => event.activityId === fee.activityId);
+  assert.equal(events.at(-1).prospectiveRule.enabled, true);
+  assert.ok(events.every(event => event.evidence.rationale === note.value));
+  // An edited note is the owner's own words and is never overwritten.
+  await findText(records(h).find(item => findText(item, node => node.className === 'decide-button')), node => node.className === 'decide-button').click();
+  const second = findText(h.get('quick-review'), node => node.tagName === 'LABEL' && node.textContent === 'Note for the history').children[0];
+  second.value = 'Invented owner reason'; await second.emit('input');
+  h.get('quick-category').value = 'groceries'; await h.get('quick-category').emit('change');
+  assert.equal(second.value, 'Invented owner reason');
+});
+
+test('the full correction form suggests a note from the change and defaults to no rule', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  await h.detail('GROCER 1');
+  assert.equal(h.get('category-rule-field').hidden, true);
+  await h.choose('correction-type', 'category-correction');
+  assert.equal(h.get('category-rule-field').hidden, false);
+  assert.equal(h.get('category-rule').checked, false);
+  assert.equal(h.get('correction-rationale').value, '', 'no change, no note');
+  assert.equal(h.get('stage-correction').disabled, true);
+  h.get('category').value = 'dining'; await h.get('category').emit('input');
+  assert.equal(h.get('correction-rationale').value, 'Changed category from Groceries to Dining.');
+  assert.equal(h.get('stage-correction').disabled, false);
+  await h.click('stage-correction');
+  const event = h.modelSession.ledger.events.at(-1);
+  assert.equal(event.evidence.rationale, 'Changed category from Groceries to Dining.');
+  assert.deepEqual([event.prospectiveRule.requested, event.prospectiveRule.enabled], [false, false]);
+  assert.match(text(h.get('detail-history')), /This transaction only\. No rule for later imports\./);
+  await h.choose('correction-type', 'bank-correction');
+  h.get('amount').value = '-12.00'; await h.get('amount').emit('input');
+  assert.match(h.get('correction-rationale').value, /^Corrected amount from -\$[\d,]+\.\d{2} to -\$12\.00\.$/);
+});

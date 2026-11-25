@@ -214,8 +214,11 @@ function validateHistoryEvent(e,a,byId,replay=null,activeIds=null) {
     if(e.proposedValues.currency!==a.currency || e.priorValues.currency!==a.currency || !e.evidence) fail('invalid-bank-correction');
   } else if(e.eventType==='category-correction') {
     if(typeof e.categoryId!=='string'||!e.categoryId||e.priorCategoryId!==a.categoryId) fail('invalid-category-correction');
-    const rule=e.prospectiveRule;
-    if(!rule || rule.version!==1 || rule.enabled!==Boolean(categoryRuleKey(a).normalizedDescription.trim()) || canonicalizeJcs(rule.key)!==canonicalizeJcs(categoryRuleKey(a)) || !Array.isArray(rule.existingActivityIds) || new Set(rule.existingActivityIds).size!==rule.existingActivityIds.length || !rule.existingActivityIds.includes(a.activityId) || rule.existingActivityIds.some(value=>!byId.activities.has(value))) fail('invalid-prospective-category-rule');
+    const rule=e.prospectiveRule, describable=Boolean(categoryRuleKey(a).normalizedDescription.trim());
+    // Version 1 rules were always requested. Version 2 records the owner's
+    // explicit choice; a declined rule is kept for audit but never applies.
+    const enabled=rule?.version===1 ? describable : rule?.version===2 && typeof rule.requested==='boolean' ? rule.requested && describable : null;
+    if(!rule || enabled===null || rule.enabled!==enabled || canonicalizeJcs(rule.key)!==canonicalizeJcs(categoryRuleKey(a)) || !Array.isArray(rule.existingActivityIds) || new Set(rule.existingActivityIds).size!==rule.existingActivityIds.length || !rule.existingActivityIds.includes(a.activityId) || rule.existingActivityIds.some(value=>!byId.activities.has(value))) fail('invalid-prospective-category-rule');
   } else if(e.eventType==='classification') {
     if(e.priorActivityKind!==a.activityKind||e.priorCategoryId!==a.categoryId) fail('classification-history-mismatch');
     if(!['income','spending','transfer','refund','unclassified'].includes(e.activityKind) || (e.categoryId!==null&&typeof e.categoryId!=='string')) fail('invalid-classification');
@@ -515,8 +518,9 @@ function categoryRuleMatches(key, activity) {
     same(key.sourceAction,activity.sourceAction);
 }
 
-function prospectiveCategoryRule(ledger, activity) {
-  const key=clone(categoryRuleKey(activity)), enabled=Boolean(key.normalizedDescription.trim());
+function prospectiveCategoryRule(ledger, activity, requested) {
+  const key=clone(categoryRuleKey(activity)), describable=Boolean(key.normalizedDescription.trim());
+  const enabled=requested===undefined ? describable : requested && describable;
   // The immutable account, currency and source fields keep unrelated activities
   // outside this rule forever. Retain only earlier exact-key peers, including
   // inactive history, so later imports can inherit without recategorizing peers.
@@ -524,7 +528,8 @@ function prospectiveCategoryRule(ledger, activity) {
   const existingActivityIds=enabled
     ? ledger.activities.filter(prior=>categoryRuleMatches(key,prior)).map(prior=>prior.activityId)
     : [activity.activityId];
-  return {version:1,enabled,key,existingActivityIds};
+  // A command without createRule keeps the original always-on version 1 rule.
+  return requested===undefined ? {version:1,enabled,key,existingActivityIds} : {version:2,requested,enabled,key,existingActivityIds};
 }
 
 // State is local to one operation and is never stored on the ledger. A refund
@@ -715,7 +720,7 @@ function buildFinancialEvent(next,command,options,{replay,commands,activeIds,ref
   const a=replay.get(activityId);
   if(!activeIds.has(activityId)) fail('inactive-financial-target');
   const event={eventId:id(options),commandId,commandSignature:signature,eventType:type,activityId,recordedAt:stamp(options),evidence:clone(command.evidence??null),appendOnly:true};
-  if(type==='category-correction') {if(typeof command.categoryId!=='string'||!command.categoryId) fail('category-required');event.categoryId=command.categoryId;event.priorCategoryId=a.categoryId;event.prospectiveRule=prospectiveCategoryRule(next,a);}
+  if(type==='category-correction') {if(typeof command.categoryId!=='string'||!command.categoryId) fail('category-required');event.categoryId=command.categoryId;event.priorCategoryId=a.categoryId;if(command.createRule!==undefined&&typeof command.createRule!=='boolean') fail('invalid-prospective-category-rule');event.prospectiveRule=prospectiveCategoryRule(next,a,command.createRule);}
   else if(type==='bank-correction') {if(!command.evidence) fail('correction-evidence-required');event.priorValues={amountMinor:a.amountMinor,amountDecimal:a.amountDecimal,currency:a.currency};event.proposedValues=parseMoney(command.amountText,a.currency);}
   else if(type==='posting-status-correction') {
     event.priorValues=postingValues(a);

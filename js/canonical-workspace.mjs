@@ -88,7 +88,35 @@ function resetActivityFilters() {
 }
 const homeButtons = new Map();
 const detailEditorFields = ['classification', 'category', 'amount', 'posting-status', 'posting-date', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale'];
-let detailEditorBaseline = null;
+let detailEditorBaseline = null, detailActivity = null, detailNoteEdited = false;
+// Template audit notes: plain keyword substitution from the change itself, never generated text.
+const typeName = kind => (TYPE_LABELS[kind] ?? label(kind)).toLowerCase();
+const categoryName = id => id ? categoryLabel(id) : 'no category';
+const RULE_NOTE = ' Also applied to later imports with the same description.';
+function detailNote() {
+  const a = detailActivity;
+  if (!a) return '';
+  const type = $('correction-type').value;
+  if (type === 'classification') {
+    const next = $('classification').value;
+    return next === a.activityKind ? '' : `Changed classification from ${typeName(a.activityKind)} to ${typeName(next)}.`;
+  }
+  if (type === 'category-correction') {
+    const next = $('category').value.trim();
+    return !next || next === a.categoryId ? '' : `Changed category from ${categoryName(a.categoryId)} to ${categoryLabel(next)}.` + ($('category-rule').checked ? RULE_NOTE : '');
+  }
+  if (type === 'bank-correction') {
+    const next = $('amount').value.trim();
+    return !/^-?\d+(\.\d+)?$/.test(next) || next === a.amountText ? '' : `Corrected amount from ${money(a.amountText, a.currency)} to ${money(next, a.currency)}.`;
+  }
+  const status = $('posting-status').value, date = $('posting-date').value;
+  if (status === a.lifecycleStatus && (status !== 'posted' || date === (a.postedDate || ''))) return '';
+  return status === 'posted' ? `Confirmed as posted${isCalendarDate(date) ? ' on ' + date : ''}.` : `Confirmed posting status as ${status}.`;
+}
+function suggestDetailNote() {
+  if (!detailNoteEdited) $('correction-rationale').value = detailNote();
+  refresh();
+}
 const detailEditorValues = () => detailEditorFields.map(id => $(id).value);
 const hasUnfinishedDetail = () => selectedActivity !== null && detailEditorBaseline !== null &&
   detailEditorValues().some((value, index) => value !== detailEditorBaseline[index]);
@@ -248,7 +276,7 @@ function refresh() {
   $('transactions').setAttribute('aria-busy', String(busy));
   for (const id of ['account-filter', 'month-filter', 'transaction-search', 'review-only', 'pending-only', 'activity-sort', 'open-filters', 'type-facet-toggle', 'category-facet-toggle', 'show-more', 'clear-activity-filters', 'clear-sheet-filters']) $(id).disabled = busy || !session.ledger;
   for (const input of facetInputs()) input.disabled = busy || !session.ledger;
-  for (const id of ['correction-type', 'classification', 'category', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
+  for (const id of ['correction-type', 'classification', 'category', 'category-rule', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
   const postingCorrection = $('correction-type').value === 'posting-status-correction';
   $('posting-date').disabled = !editable || !postingCorrection || $('posting-status').value !== 'posted';
   $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim() ||
@@ -385,7 +413,7 @@ function clearLoadedWorkspace() {
   homeTrend.clear();
   cancelSearch();
   view = null; viewLedger = null; viewReader = null; homeView = null; positionRender = null;
-  renderedPositionDate = null; selectedActivity = null; detailEditorBaseline = null;
+  renderedPositionDate = null; selectedActivity = null; detailEditorBaseline = null; detailActivity = null;
   page = 0; composingSearch = false;
   reviewButtons.clear(); homeButtons.clear(); editorAccounts.clear();
   sourceReviewUpdates.length = 0; sourceReviewPage = 0; sourceReviewScope = null;
@@ -415,7 +443,7 @@ function render({ reset = false } = {}) {
     $('statement-full-month').checked = false; componentRows.length = 0; holdingRows.length = 0;
     $('component-rows').replaceChildren(); $('holdings-rows').replaceChildren();
     for (const id of ['holdings-source','holdings-date','reconcile-source','balance-source','balance-date','balance-amount','closure-source','new-account-name']) $(id).value = '';
-    page = 0; selectedActivity = null; detailEditorBaseline = null; $('transaction-search').value = ''; resetActivityFilters(); $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; pages.clearDetail(); }
+    page = 0; selectedActivity = null; detailEditorBaseline = null; detailActivity = null; $('transaction-search').value = ''; resetActivityFilters(); $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; pages.clearDetail(); }
   if (viewLedger !== session.ledger) {
     const reader = createWorkspaceViewReader(session.ledger, {monthlyIndex:session.store?.monthIndex});
     viewReader = reader; viewLedger = session.ledger; homeView = null;
@@ -763,7 +791,7 @@ function quickReviewRow(row) {
   const types = quickTypes(row);
   const draft = quickDrafts.get(row.activityId) ?? {
     type: types.includes(row.activityKind) ? row.activityKind : types[0],
-    category: row.categoryId ?? '', newCategory: '', note: 'Reviewed in Activity'};
+    category: row.categoryId ?? '', newCategory: '', note: '', noteEdited: false, rule: false};
   quickDrafts.set(row.activityId, draft);
   const tr = node('tr', undefined, 'quick-review'); tr.setAttribute('role', 'row');
   const td = node('td'); td.setAttribute('colspan', '5'); td.setAttribute('role', 'cell');
@@ -786,9 +814,11 @@ function quickReviewRow(row) {
   categoryField.append(category);
   const newField = node('label', 'New category name'); const newCategory = node('input'); newCategory.type = 'text'; newCategory.maxLength = 200;
   newCategory.setAttribute('autocomplete', 'off'); newCategory.value = draft.newCategory; newField.append(newCategory);
-  const noteField = node('label', 'Note for the history'); const note = node('input'); note.type = 'text'; note.maxLength = 300;
+  const noteField = node('label', 'Note for the history', 'quick-note'); const note = node('textarea'); note.rows = 3; note.maxLength = 300;
   note.setAttribute('autocomplete', 'off'); note.value = draft.note; noteField.append(note);
-  fields.append(typeLabel, categoryField, newField, noteField);
+  const ruleField = node('label', undefined, 'checkbox-field quick-rule'); const rule = node('input'); rule.type = 'checkbox'; rule.checked = draft.rule;
+  ruleField.append(rule, node('span', 'Also use this category for later imports with the same description from this account'));
+  fields.append(typeLabel, categoryField, newField, noteField, ruleField);
   const help = node('p', '', 'field-help quick-help'); help.id = 'quick-help';
   const actions = node('div', undefined, 'quick-actions');
   const stage = node('button', 'Stage decision', 'primary-button'); stage.type = 'button'; stage.setAttribute('aria-describedby', 'quick-help');
@@ -796,20 +826,34 @@ function quickReviewRow(row) {
   const full = node('button', 'Open full view', 'link-button'); full.type = 'button';
   actions.append(stage, cancel, full);
   const chosenCategory = () => category.value === '__new' ? categoryIdFromText(newCategory.value) : category.value;
+  const suggested = () => {
+    const parts = [];
+    if (type.value !== row.activityKind) parts.push(`classified as ${typeName(type.value)} (was ${typeName(row.activityKind)})`);
+    const next = chosenCategory();
+    if (next && next !== row.categoryId) parts.push(`category set to ${categoryLabel(next)} (was ${categoryName(row.categoryId)})`);
+    if (!parts.length) return '';
+    return `Reviewed in Activity: ${parts.join('; ')}.` + (rule.checked && next && next !== row.categoryId ? RULE_NOTE : '');
+  };
   const update = () => {
-    Object.assign(draft, {type:type.value, category:category.value, newCategory:newCategory.value, note:note.value});
+    const categoryChanges = Boolean(chosenCategory()) && chosenCategory() !== row.categoryId;
+    ruleField.hidden = !categoryChanges;
+    if (!categoryChanges) rule.checked = false;
+    if (!draft.noteEdited) note.value = suggested();
+    Object.assign(draft, {type:type.value, category:category.value, newCategory:newCategory.value, note:note.value, rule:rule.checked});
     newField.hidden = category.value !== '__new';
     const needsCategory = type.value === 'refund' && !row.originalActivityId && !chosenCategory();
     const blocked = busy ? 'Wait for the current action to finish.' : !session.canEdit() ? 'Reopen an editable session before staging a decision.'
       : needsCategory ? 'A refund without a linked purchase needs a category.' : category.value === '__new' && !chosenCategory() ? 'Enter a category name.'
+      : !suggested() ? 'Choose a different type or category to stage a decision.'
       : !note.value.trim() ? 'Add a short note for the history.' : '';
     stage.disabled = Boolean(blocked);
-    for (const control of [type, category, newCategory, note, cancel, full]) control.disabled = busy;
+    for (const control of [type, category, newCategory, note, rule, cancel, full]) control.disabled = busy;
     const after = elsewhere.length ? ` Still needs the full view: ${elsewhere.map(reviewReason).join(', ').toLowerCase()}.` : '';
-    help.textContent = blocked || ('Staging does not save. A new category is remembered for later imports from this account.' + after);
+    help.textContent = blocked || ('Staging does not save. The note is filled in from your change; edit it to add your own reason.' + after);
   };
   quickControls.push(update);
-  for (const control of [type, category, newCategory, note]) { control.addEventListener('input', update); control.addEventListener('change', update); }
+  note.addEventListener('input', () => { draft.noteEdited = true; });
+  for (const control of [type, category, newCategory, note, rule]) { control.addEventListener('input', update); control.addEventListener('change', update); }
   cancel.addEventListener('click', () => { quickDrafts.delete(row.activityId); toggleQuickReview(row.activityId); });
   full.addEventListener('click', () => { quickOpen = null; inspectActivity(row.activityId); });
   stage.addEventListener('click', () => {
@@ -818,7 +862,7 @@ function quickReviewRow(row) {
     const ids = view.rows.filter(item => item.reviewReasons.some(reason => INLINE_REASONS.has(reason))).map(item => item.activityId);
     const next = ids[ids.indexOf(row.activityId) + 1] ?? null;
     return run('Staging the decision locally.', () => {
-      session.quickClassify({activityId:row.activityId, activityKind:type.value, categoryId:categoryId === (row.categoryId ?? null) ? null : categoryId, rationale:note.value});
+      session.quickClassify({activityId:row.activityId, activityKind:type.value, categoryId:categoryId === (row.categoryId ?? null) ? null : categoryId, rationale:note.value, createRule:rule.checked});
       quickDrafts.delete(row.activityId); quickOpen = null;
       quickFocus = next ?? 'filter-count';
       render();
@@ -898,6 +942,8 @@ function renderActiveFilters() {
     item.append(button); $('active-filter-chips').append(item);
   });
   $('active-filters').hidden = chips.length === 0;
+  // Wide screens already show status chips inline; avoid an orphaned Clear all row.
+  $('active-filters').dataset.statusOnly = String(chips.length > 0 && chips.every(([, kind]) => kind === 'status'));
 }
 function closeFacetPanels() {
   for (const id of ['type-facet-toggle', 'category-facet-toggle']) $(id).setAttribute('aria-expanded', 'false');
@@ -1084,7 +1130,11 @@ function showDetail(activityId, {navigate = true} = {}) {
     const entry = node('article', undefined, 'history-item');
     entry.append(node('strong', label(event.eventType)), node('p', `Recorded ${recordedLabel(event.recordedAt)}`, 'review-meta'));
     if (event.eventType === 'classification') entry.append(node('p', `${label(event.priorActivityKind)} → ${label(event.activityKind)}`));
-    if (event.eventType === 'category-correction') entry.append(node('p', `${event.priorCategoryId || 'No category'} → ${event.categoryId}`));
+    if (event.eventType === 'category-correction') {
+      entry.append(node('p', `${event.priorCategoryId || 'No category'} → ${event.categoryId}`));
+      const rule = event.prospectiveRule;
+      entry.append(node('p', rule?.enabled ? 'Applies to later imports with the same description.' : rule?.version === 2 && rule.requested ? 'Rule requested, but this description is empty, so it applies to this transaction only.' : rule?.version === 2 ? 'This transaction only. No rule for later imports.' : 'This transaction only.', 'field-help'));
+    }
     if (event.eventType === 'posting-status-correction') entry.append(node('p',
       `${label(event.priorValues.lifecycleStatus)} (${event.priorValues.postedDate || 'no posting date'}) → ${label(event.proposedValues.lifecycleStatus)} (${event.proposedValues.postedDate || 'no posting date'})`));
     if (event.eventType === 'transfer-link') {
@@ -1105,7 +1155,8 @@ function showDetail(activityId, {navigate = true} = {}) {
   $('posting-status').value = ['posted', 'pending', 'unknown'].includes(activity.lifecycleStatus) ? activity.lifecycleStatus : 'unknown';
   $('posting-date').value = activity.postedDate || '';
   if (activity.lifecycleStatus === 'unknown') $('correction-type').value = 'posting-status-correction';
-  $('correction-rationale').value = '';
+  $('correction-rationale').value = ''; $('category-rule').checked = false;
+  detailActivity = activity; detailNoteEdited = false;
   detailEditorBaseline = detailEditorValues();
   correctionFields();
 refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
@@ -1114,12 +1165,13 @@ function correctionFields() {
   const type = $('correction-type').value;
   $('classification-field').hidden = type !== 'classification';
   $('category-field').hidden = type !== 'category-correction';
+  $('category-rule-field').hidden = type !== 'category-correction';
   $('amount-field').hidden = type !== 'bank-correction';
   $('posting-status-field').hidden = type !== 'posting-status-correction';
   const postingDate = type === 'posting-status-correction' && $('posting-status').value === 'posted';
   $('posting-date-field').hidden = !postingDate;
   $('posting-date').required = postingDate;
-  refresh();
+  suggestDetailNote();
 }
 async function previewPosition(destination) {
   if (!confirmReplace()) return;
@@ -1357,7 +1409,8 @@ action('revert-all-changes', 'Reverting all staged changes to the last verified 
 });
 action('stage-correction', 'Checking your correction locally.', async () => {
   session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value,
-    lifecycleStatus: $('posting-status').value, postedDate: $('posting-status').value === 'posted' ? $('posting-date').value : null, rationale: $('correction-rationale').value });
+    lifecycleStatus: $('posting-status').value, postedDate: $('posting-status').value === 'posted' ? $('posting-date').value : null, rationale: $('correction-rationale').value,
+    createRule: $('category-rule').checked });
   render(); showDetail(selectedActivity);
   announce(session.mode === 'preview' ? 'Correction added to this local preview only. Source evidence is unchanged.' : 'Correction staged locally. Source evidence is unchanged. Choose Save changes to persist it.', 'success');
 });
@@ -1368,12 +1421,15 @@ $('close-detail').addEventListener('click', () => {
   if (pages.current === 'transactions') (reviewButtons.get(selectedActivity) || $('transaction-search')).focus();
   else if (pages.current === 'overview') (homeButtons.get(selectedActivity) || $('page-title')).focus();
   else $('page-title').focus();
-  selectedActivity = null; detailEditorBaseline = null; refresh();
+  selectedActivity = null; detailEditorBaseline = null; detailActivity = null; refresh();
 });
 $('correction-type').addEventListener('change', correctionFields);
 $('posting-status').addEventListener('change', correctionFields);
 $('posting-date').addEventListener('input', refresh);
-$('correction-rationale').addEventListener('input', refresh);
+$('correction-rationale').addEventListener('input', () => { detailNoteEdited = true; refresh(); });
+for (const id of ['classification', 'category', 'amount', 'posting-date', 'category-rule']) {
+  $(id).addEventListener('input', suggestDetailNote); $(id).addEventListener('change', suggestDetailNote);
+}
 $('transfer-counterparty').addEventListener('change', refresh);
 $('transfer-link-rationale').addEventListener('input', refresh);
 for (const id of ['account-filter', 'month-filter', 'review-only', 'pending-only', 'activity-sort']) $(id).addEventListener('change', () => { if (!busy) { page = 0; listLimit = PAGE_ROWS; render(); } });

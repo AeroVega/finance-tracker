@@ -147,7 +147,8 @@ test('quick classify stages type and category as one undoable step with a catego
   const added = session.ledger.events.slice(events);
   assert.deepEqual(added.map(event => event.eventType), ['classification', 'category-correction']);
   assert.ok(added.every(event => event.evidence.rationale === 'Reviewed in Activity'));
-  assert.ok(added[1].prospectiveRule, 'category choices are remembered as a deterministic rule');
+  assert.deepEqual([added[1].prospectiveRule.version, added[1].prospectiveRule.requested, added[1].prospectiveRule.enabled], [2, false, false],
+    'a category becomes a rule for later imports only when the owner opts in');
   assert.equal(session.dirty, true);
   session.undoLastStagedChange();
   assert.equal(session.ledger.events.length, events, 'one undo removes both events');
@@ -167,4 +168,16 @@ test('quick classify keeps an existing category on a type-only change and reject
   assert.throws(() => session.quickClassify({activityId:rent.activityId, activityKind:'transfer', categoryId:' ', rationale:'x'}), /category-required/);
   const unchanged = session.ledger;
   assert.equal(session.quickClassify({activityId:rent.activityId, activityKind:'transfer', rationale:'No change'}), unchanged);
+});
+
+test('opting in makes the staged category a rule for later imports; correct() defaults to no rule', () => {
+  const session = previewSession();
+  const fee = byDescription(session.ledger, 'INVENTED BROKERAGE FEE');
+  session.quickClassify({activityId:fee.activityId, activityKind:'spending', categoryId:'fees-and-interest', rationale:'Opted in', createRule:true});
+  const rule = session.ledger.events.at(-1).prospectiveRule;
+  assert.deepEqual([rule.version, rule.requested, rule.enabled], [2, true, true]);
+  const rent = byDescription(session.ledger, 'INVENTED RENT');
+  session.correct({activityId:rent.activityId, type:'category-correction', categoryId:'housing-costs', rationale:'Invented note'});
+  const declined = session.ledger.events.at(-1).prospectiveRule;
+  assert.deepEqual([declined.version, declined.requested, declined.enabled], [2, false, false]);
 });

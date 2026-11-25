@@ -43,7 +43,7 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - **Portable encrypted backup and restore** and recovery are implemented in the selected route. Do not infer live acceptance beyond the evidence in the relevant PRs.
 - **Post-merge** Node and Pages workflows succeeded. That is not an independent live-browser check.
 - **Redesigned shell and Home** merged in [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md). Further UX slices are in [Next steps](NEXT_STEPS.md).
-- **Activity discovery** (type and category filters, sorting, month grouping, inline review decisions) is in progress in [PR 64](https://github.com/AeroVega/finance-tracker/pull/64). It is presentation and staging only; reporting rules are unchanged.
+- **Activity discovery** (type and category filters, sorting, month grouping, inline review decisions) is in progress in [PR 64](https://github.com/AeroVega/finance-tracker/pull/64). Reporting rules are unchanged. Following the owner's 2026-11-25 decision, category rules for later imports are opt-in and audit notes are suggested from templates; see [Product § 4.6](PRODUCT_DEFINITION.md#46-categories).
 
 ## Acceptance and verification
 
@@ -52,6 +52,7 @@ The table is dated evidence behind the 2026-11-24 GO, not a list of open gates.
 | Claim | Evidence | Scope |
 | --- | --- | --- |
 | **User-confirmed** open and save speed | On `86d1f2b`: synthetic open 11 s, save 25 s, persistence confirmed. Last reported seed time was 42 s, a separate concern. | The reported workflow only. Not every device, history size or network. |
+| **User-confirmed** PR 64 device check (2026-11-25) | The owner deployed `fa25e1d` and, in iPhone Safari, corrected flagged transactions, staged and saved them, and set and cleared filters. The two-tab check passed: a second tab was refused the same Drive folder while the first tab's heartbeat held the claim. The release check also passed. | That build only. Later PR 64 changes (opt-in rules, template notes) were not part of this check. |
 | **User-confirmed** PR 57 acceptance (2026-11-24) | Live synthetic acceptance on `58f7a52`; revocation and reconnect on `f387592`. No billing account is linked, so the project cannot be charged. The owner accepted best-effort single-device coordination and the uncertain-last-write procedure, set a 3-month encrypted backup cadence, and set a capacity review trigger (100 MB of saved history, or Open over 60 s on iPhone). | See the [owner gate record](SECURITY_AND_COST_REVIEW.md#owner-gate-record-2026-11-24). |
 | **Verified** pre-cleanup tree | Local extended suite 2,339/2,339. [Node CI 44013565187](https://github.com/AeroVega/finance-tracker/actions/runs/44013565187) passed both required jobs. | That tree, not later changes. |
 | **Verified** cleanup | Retained suite 858/858 with no failures or skips. PR 46 merged, then PR 47 removed obsolete formats. Exact-head Node CI 44019112471 passed. Merged `main` `ae10e45` has tree `5c97803`. | Cleanup only. New feature tests and CI are separate gates. |
