@@ -49,7 +49,7 @@
 
       <p id="action-status" class="action-status" role="status" aria-live="polite" aria-atomic="true"></p>
 
-      <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-review" href="#review">Review</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a></nav>
+      <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a></nav>
       <nav id="position-navigation" class="page-switcher" aria-label="Account views" hidden><a id="sub-position" href="#position">Balances</a><a id="sub-holdings" href="#holdings">Holdings</a></nav>
 
       <details class="scope-panel" id="workspace-scope"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span id="scope-period-title">All accounts · Full saved period</span><span id="scope-position-title" hidden>All accounts · Dated balances</span><span class="scope-edit">Change</span></summary><div class="scope-controls" aria-describedby="scope-help">
@@ -109,7 +109,7 @@
               <h2 id="attention-heading">Needs attention</h2>
               <p class="attention-line"><span id="attention-count" class="attention-count">Unavailable</span><span id="overview-review-title">Open a ledger to see what needs review.</span></p>
               <div class="link-list">
-                <a href="#review"><span>Review imported rows</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+                <a href="#review"><span>Review what needs a decision</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
                 <a href="#reconciliation"><span>Check month coverage</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
                 <a href="#position"><span>Accounts and balances</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
               </div>
@@ -128,7 +128,7 @@
         <section class="provider-import-panel" aria-label="CSV import">
           <div id="provider-import-workflow"></div>
         </section>
-        <p class="page-note">Importing never creates accounts or saves by itself. After staging, check <a href="#review">Review</a> for flagged rows, then choose Save.</p>
+        <p class="page-note">Importing never creates accounts or saves by itself. After staging, check <a href="#review">Needs review</a> in Activity for flagged rows, then choose Save.</p>
       </section>
 
       <section class="workspace-page" id="transactions" hidden aria-labelledby="transactions-heading">
@@ -136,21 +136,42 @@
         <a id="resume-detail" class="resume-detail" href="#activity-detail" hidden><span>Continue with the selected transaction</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
         <div class="activity-toolbar">
           <label class="search-field" for="transaction-search"><span class="visually-hidden">Search transactions</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><input id="transaction-search" type="search" placeholder="Search descriptions" autocomplete="off" aria-describedby="search-help" disabled></label>
-          <label class="filter-chip" for="review-only"><input id="review-only" type="checkbox" disabled><span>Needs review</span></label>
-          <button id="clear-activity-filters" class="text-button" type="button" hidden>Clear search and filter</button>
+          <button id="open-filters" class="secondary-button filters-button" type="button" aria-haspopup="dialog" aria-controls="filter-sheet" disabled><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h10m4 0h2M4 17h4m4 0h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>Filters</span><span id="filter-badge" class="count-badge" hidden></span></button>
           <a href="#import" class="secondary-button toolbar-import"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>Import</a>
         </div>
-        <p id="search-help" class="visually-hidden">Search and the review filter change rows only. Home totals keep the selected account and period.</p>
-        <p id="filter-count" class="filter-count" role="status" aria-live="polite" aria-atomic="true">No transactions loaded.</p>
+        <div id="facet-home" class="facet-home">
+          <div id="activity-facets" class="facets" role="group" aria-label="Filter and sort activity">
+            <div class="facet">
+              <button id="type-facet-toggle" class="facet-toggle" type="button" aria-expanded="false" aria-controls="type-facet-panel" disabled><span>Type</span><span id="type-facet-summary" class="facet-summary"></span><svg class="icon facet-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              <fieldset id="type-facet-panel" class="facet-panel"><legend>Type</legend><div id="type-options" class="facet-options"></div></fieldset>
+            </div>
+            <div class="facet">
+              <button id="category-facet-toggle" class="facet-toggle" type="button" aria-expanded="false" aria-controls="category-facet-panel" disabled><span>Category</span><span id="category-facet-summary" class="facet-summary"></span><svg class="icon facet-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+              <fieldset id="category-facet-panel" class="facet-panel"><legend>Category</legend><div id="category-options" class="facet-options"></div></fieldset>
+            </div>
+            <fieldset class="facet-status"><legend class="visually-hidden">Status</legend>
+              <label class="filter-chip" for="review-only"><input id="review-only" type="checkbox" disabled><span>Needs review</span><span id="review-facet-count" class="chip-count"></span></label>
+              <label id="pending-chip" class="filter-chip" for="pending-only" hidden><input id="pending-only" type="checkbox" disabled><span>Pending</span><span id="pending-facet-count" class="chip-count"></span></label>
+            </fieldset>
+            <label class="sort-field" for="activity-sort"><span>Sort</span><select id="activity-sort" disabled><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="largest-out">Largest money out</option><option value="largest-in">Largest money in</option></select></label>
+          </div>
+        </div>
+        <dialog id="filter-sheet" class="filter-sheet" aria-labelledby="filter-sheet-title">
+          <div class="sheet-head"><h2 id="filter-sheet-title">Filter and sort</h2><button id="close-filter-sheet" class="text-button" type="button">Close</button></div>
+          <div id="filter-sheet-body" class="sheet-body"></div>
+          <div class="sheet-foot"><button id="clear-sheet-filters" class="text-button" type="button">Clear all</button><button id="apply-filter-sheet" class="primary-button" type="button">Show results</button></div>
+        </dialog>
+        <div id="active-filters" class="active-filters" hidden><ul id="active-filter-chips" class="active-filter-chips" aria-label="Active filters"></ul><button id="clear-activity-filters" class="text-button" type="button" hidden>Clear all</button></div>
+        <p id="search-help" class="visually-hidden">Search, type, category and status filters change rows only. Home totals keep the selected account and period. Month totals in this list count matching posted rows only.</p>
+        <p id="filter-count" class="filter-count" role="status" aria-live="polite" aria-atomic="true">Open a ledger to list its transactions.</p>
+        <section id="review-section" class="review-section" aria-labelledby="review-section-heading" hidden>
+          <h3 id="review-section-heading">Imported rows waiting for a decision</h3>
+          <p id="review-summary" class="block-meta">Open a ledger to see records that need a decision.</p>
+          <div id="review-queue" class="review-queue"><p class="quiet-placeholder">Unclassified activity and other unresolved records will appear here.</p></div>
+        </section>
         <div id="empty-state" class="empty-state">Open your data or import a CSV to see transactions here.</div>
-        <div class="table-wrap" id="transaction-table-wrap" tabindex="0" aria-label="Transactions in the selected scope" hidden><table role="table"><caption class="visually-hidden">Transactions in the selected account and period. Amounts keep their exact decimal values.</caption><thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Description</th><th role="columnheader" scope="col">Type and category</th><th role="columnheader" scope="col" class="amount-heading">Amount</th><th role="columnheader" scope="col"><span class="visually-hidden">Open</span></th></tr></thead><tbody role="rowgroup" id="transaction-rows"></tbody></table></div>
-        <div class="ledger-pagination"><p id="page-status" role="status" aria-live="polite" aria-atomic="true">No transactions to display</p><div><button id="previous-page" class="secondary-button" type="button" disabled>Previous</button><button id="next-page" class="secondary-button" type="button" disabled>Next</button></div></div>
-      </section>
-
-      <section class="workspace-page" id="review" hidden aria-labelledby="review-heading">
-        <h2 id="review-heading" class="visually-hidden">Needs review</h2>
-        <p id="review-summary" class="lede">Open a ledger to see records that need a decision.</p>
-        <div id="review-queue" class="review-queue"><p class="quiet-placeholder">Unclassified activity and other unresolved records will appear here.</p></div>
+        <div class="table-wrap" id="transaction-table-wrap" tabindex="0" aria-label="Transactions in the selected scope" hidden><table role="table"><caption class="visually-hidden">Transactions in the selected account and period, grouped by month when sorted by date. Amounts keep their exact decimal values.</caption><thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Description</th><th role="columnheader" scope="col">Type and category</th><th role="columnheader" scope="col" class="amount-heading">Amount</th><th role="columnheader" scope="col"><span class="visually-hidden">Open</span></th></tr></thead><tbody role="rowgroup" id="transaction-rows"></tbody></table></div>
+        <div class="ledger-more"><p id="page-status" role="status" aria-live="polite" aria-atomic="true">No transactions to display</p><button id="show-more" class="secondary-button" type="button" hidden>Show more</button></div>
       </section>
 
       <section class="workspace-page" id="reconciliation" aria-labelledby="reconciliation-heading" hidden>
@@ -186,11 +207,12 @@
             <div><h3 id="correction-heading">Correct this transaction</h3><p id="correction-help">The source stays unchanged. Explain the change, stage it, then save when ready.</p></div>
             <label for="correction-type">What needs changing?<select id="correction-type"><option value="classification">Classification</option><option value="category-correction">Category</option><option value="bank-correction">Amount</option><option value="posting-status-correction">Posting status</option></select></label>
             <label id="classification-field" for="classification">Classification<select id="classification"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="unclassified">Unclassified</option></select><span class="field-help">Card payments are transfers.</span></label>
-            <label id="category-field" for="category" hidden>Category<input id="category" type="text" autocomplete="off" placeholder="e.g. groceries" maxlength="200"><span class="field-help">Also remembered for later matching imports in the same account and currency. Linked refunds follow the purchase category unless separately categorized.</span></label>
-            <label id="amount-field" for="amount" hidden>Corrected amount<input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. -42.35" aria-describedby="amount-help"><span id="amount-help" class="field-help">An exact decimal, with a minus sign for money out. No currency symbol or thousands separator.</span></label>
+            <label id="category-field" for="category" hidden>Category<input id="category" type="text" autocomplete="off" placeholder="e.g. groceries" maxlength="200"><span class="field-help">Applies to this transaction. Linked refunds follow the purchase category unless separately categorized.</span></label>
+            <label id="category-rule-field" class="checkbox-field" for="category-rule" hidden><input id="category-rule" type="checkbox"><span>Also use this category for later imports with the same description from this account</span></label>
+            <label id="amount-field" for="amount" hidden>Corrected amount<input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. -42.35" aria-describedby="amount-help"><span id="amount-help" class="field-help">An exact decimal, with a minus sign for money out and without a currency symbol or thousands separator.</span></label>
             <label id="posting-status-field" for="posting-status" hidden>Confirmed posting status<select id="posting-status" aria-describedby="posting-status-help"><option value="unknown">Unknown</option><option value="pending">Pending</option><option value="posted">Posted</option></select><span id="posting-status-help" class="field-help">Confirm from evidence, not just to clear the review list. Posted activities can enter totals; pending and unknown activities stay excluded.</span></label>
             <label id="posting-date-field" for="posting-date" hidden>Confirmed posting date<input id="posting-date" type="date" aria-describedby="posting-date-help"><span id="posting-date-help" class="field-help">Required for Posted. Original source dates stay unchanged. Refunds use this posting date.</span></label>
-            <label for="correction-rationale">Why are you changing it?<textarea id="correction-rationale" rows="3" placeholder="A short explanation for the audit history" required></textarea></label>
+            <label for="correction-rationale">Why are you changing it?<textarea id="correction-rationale" rows="3" placeholder="A short explanation for the audit history" aria-describedby="rationale-help" required></textarea><span id="rationale-help" class="field-help">Filled in from your change. Edit it to add your own reason.</span></label>
             <button id="stage-correction" class="primary-button" type="button" disabled>Stage correction</button>
             <p class="field-help correction-note">Staging does not save. Your draft stays in this tab until you choose Save.</p>
           </form>
@@ -338,7 +360,7 @@
 
         <details class="disclosure more-section" id="sample-data"><summary>Sample data</summary>
           <div class="disclosure-body">
-            <p class="field-help">Load invented records locally. No Google connection. Changes stay in this tab until you explicitly save them to a new folder.</p>
+            <p class="field-help">Load invented records locally, without connecting to Google. Changes stay in this tab until you explicitly save them to a new folder.</p>
             <div class="entry-actions"><button id="preview-year" class="secondary-button" type="button">Load an invented year</button><button id="preview-position" class="secondary-button" type="button">Load invented balances and reconciliation</button></div>
           </div>
         </details>
@@ -351,7 +373,7 @@
         <div class="action-option" id="save-ledger-option"><button id="save-ledger" class="primary-button" type="button" disabled aria-describedby="save-ledger-help">Save changes</button><p id="save-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div>
         <div class="action-option" id="draft-storage-option"><button id="draft-storage-link" class="primary-button" type="button" disabled aria-describedby="draft-storage-link-help">Save preview…</button><p id="draft-storage-link-help" class="action-help">Unavailable until the workspace is ready.</p></div>
       </div>
-      <noscript><p class="status-message" role="alert">JavaScript is required to open a ledger. No connection or save has started.</p></noscript>
+      <noscript><p class="status-message" role="alert">JavaScript is required to open a ledger, and nothing has connected or saved yet.</p></noscript>
     </main>
   </div>
 </body>

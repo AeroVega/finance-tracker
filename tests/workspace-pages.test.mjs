@@ -5,13 +5,13 @@ import {createWorkspacePages} from '../js/workspace-pages.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const primary = ['overview', 'transactions', 'position', 'storage'];
-const routes = [...primary, 'import', 'review', 'holdings', 'reconciliation', 'activity-detail'];
-const activityViews = ['transactions', 'review', 'reconciliation'];
+const routes = [...primary, 'import', 'holdings', 'reconciliation', 'activity-detail'];
+const activityViews = ['transactions', 'reconciliation'];
 
 // A deliberately small DOM/history substitute: real HTML IDs and initial hidden
 // states, native hash navigation events, and pushState's lack of events. This
 // exercises routing, not browser layout, Safari focus, or controller rendering.
-function fixture(hash = '') {
+function fixture(hash = '', {onAlias} = {}) {
   const nodes = new Map();
   const documentListeners = new Map();
   const document = {title:'', activeElement:null, getElementById:id => nodes.get(id) || null,
@@ -56,7 +56,7 @@ function fixture(hash = '') {
     window.history.pushState(null, '', value);
     dispatch('hashchange');
   }
-  const router = createWorkspacePages({document, window});
+  const router = createWorkspacePages({document, window, onAlias});
   function clickLink(id, options = {}) {
     const event = {button:0, target:{closest:() => nodes.get(id)}, defaultPrevented:false,
       preventDefault() { this.defaultPrevented = true; }, ...options};
@@ -87,7 +87,7 @@ test('ordinary route links preserve scroll, active-tab clicks return to the head
   }
 });
 
-const groups = {review:'transactions', reconciliation:'transactions', holdings:'position', import:'overview', 'activity-detail':'transactions'};
+const groups = {reconciliation:'transactions', holdings:'position', import:'overview', 'activity-detail':'transactions'};
 function assertPage(f, page, group = groups[page] ?? page) {
   assert.equal(f.router.current, page);
   assert.equal(f.window.location.hash, '#' + page);
@@ -102,7 +102,7 @@ function assertPage(f, page, group = groups[page] ?? page) {
 for (const [page, group, title, mode] of [
   ['overview','overview','Home','period'], ['transactions','transactions','Activity','period'],
   ['position','position','Accounts','date'], ['holdings','position','Holdings','date'],
-  ['review','transactions','Review','period'], ['reconciliation','transactions','Reconcile','period'],
+  ['reconciliation','transactions','Reconcile','period'],
   ['import','overview','Import',null], ['storage','storage','More',null]
 ]) {
   test(`deep link and navigation: ${page}`, () => {
@@ -131,7 +131,7 @@ test('empty, malformed, unknown and unavailable detail hashes have safe canonica
     assertPage(f, hash === '#activity-detail' ? 'transactions' : 'overview');
     assert.equal(f.window.history.length, 1);
   }
-  const f = fixture('#review');
+  const f = fixture('#reconciliation');
   f.router.go('not-a-page');
   assertPage(f, 'overview');
   f.followHash('#activity-detail');
@@ -201,7 +201,7 @@ test('navigation preserves mounted editor identity, unsaved values, and conditio
 });
 
 test('detail opens in the activity group, resumes across pages, and closes to its origin', () => {
-  for (const origin of ['overview', 'transactions', 'review']) {
+  for (const origin of ['overview', 'transactions']) {
     const f = fixture('#' + origin);
     f.router.openDetail();
     assertPage(f, 'activity-detail', 'transactions');
@@ -220,10 +220,10 @@ test('detail opens in the activity group, resumes across pages, and closes to it
 });
 
 test('non-navigating detail refresh preserves the current page, focus, scroll and history', () => {
-  const f = fixture('#review');
+  const f = fixture('#reconciliation');
   f.window.scrollY = 456;
   f.router.openDetail({navigate:false});
-  assertPage(f, 'review');
+  assertPage(f, 'reconciliation');
   assert.equal(f.window.scrollY, 456);
   assert.equal(f.document.activeElement, null);
   assert.equal(f.window.history.length, 1);
@@ -233,7 +233,7 @@ test('non-navigating detail refresh preserves the current page, focus, scroll an
 });
 
 test('clearDetail invalidates resume and replaces an open detail route without navigating other pages', () => {
-  const f = fixture('#review');
+  const f = fixture('#reconciliation');
   f.router.openDetail();
   const length = f.window.history.length;
   f.router.clearDetail();
@@ -263,4 +263,20 @@ test('loaded state updates scope and empty notice without changing route or stea
   assert.equal(f.get('workspace-scope').hidden, true);
   assert.equal(f.get('no-ledger-notice').hidden, false);
   assert.equal(f.get('page-title').focusCalls.length, focusCount);
+});
+
+test('retired #review links open Activity with the review filter and keep one history entry', () => {
+  const calls = [];
+  const f = fixture('#review', {onAlias:name => calls.push(name)});
+  assertPage(f, 'transactions');
+  assert.deepEqual(calls, ['review']);
+  assert.equal(f.window.history.length, 1);
+  f.router.go('storage');
+  f.router.go('review');
+  assertPage(f, 'transactions');
+  assert.deepEqual(calls, ['review', 'review']);
+  f.followHash('#review');
+  assertPage(f, 'transactions');
+  assert.equal(calls.length, 3);
+  assert.doesNotMatch(html, /id="sub-review"/, 'the retired Review tab is gone');
 });

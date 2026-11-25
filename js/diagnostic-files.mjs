@@ -18,6 +18,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/canonical-workspace-model.mjs",
   "js/canonical-workspace-session.mjs",
   "js/canonical-workspace.mjs",
+  "js/category-catalog.mjs",
   "js/dashboard-synthetic-storage.mjs",
   "js/diagnostic-context.mjs",
   "js/diagnostic-files.mjs",

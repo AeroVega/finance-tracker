@@ -140,7 +140,11 @@ Provide a standard built-in category set and allow users to manage their categor
 
 The detailed category identity, hierarchy, correction, and compaction rules are governed by the canonical ledger/PR25 acceptance decisions. Do not replace them with a simpler retroactive-recategorization model.
 
-When the user manually corrects a transaction's category, the correction automatically becomes or updates a reusable deterministic categorization rule by default; no separate confirmation or promotion step is required. The corrected transaction reflects the user's selection, and future transactions matching the resulting rule are categorized consistently. Derive the rule from the explicit correction without inferring a broader pattern than the correction supports. Rules must remain inspectable and maintainable, and corrections must preserve the canonical ledger's audit history and historical meaning. Detailed matching keys, rule representation, precedence, conflict resolution, and rule lifecycle remain engineering design matters.
+**Owner-confirmed 2026-11-25, superseding the 2026-11-05 default below:** a category correction becomes a rule for later imports only when the user explicitly opts in at the time of the correction. The opt-in is an unchecked checkbox, so the default corrects only the chosen transaction. The ledger records the user's choice either way. Rules created before this decision keep their meaning.
+
+*Superseded 2026-11-25:* When the user manually corrects a transaction's category, the correction automatically becomes or updates a reusable deterministic categorization rule by default; no separate confirmation or promotion step is required.
+
+When a rule is requested, the corrected transaction reflects the user's selection, and future transactions matching the resulting rule are categorized consistently. Derive the rule from the explicit correction without inferring a broader pattern than the correction supports. Rules must remain inspectable and maintainable, and corrections must preserve the canonical ledger's audit history and historical meaning. Detailed matching keys, rule representation, precedence, conflict resolution, and rule lifecycle remain engineering design matters.
 
 ### 4.7 Multi-currency
 

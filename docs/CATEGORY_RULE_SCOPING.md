@@ -6,6 +6,8 @@ A category correction changes its target and creates a prospective exact-match r
 
 **Implemented:** each new rule stores only existing activity IDs that match its account, institution, currency, normalized description and source action. Matching inactive activities are included. Other activities cannot enter this scope later because their matching fields are immutable in this engine. Bank corrections preserve currency; lifecycle changes affect dates/status; classifications and refunds do not rewrite source matching fields.
 
+**Opt-in (2026-11-25):** a version 2 rule records the owner's explicit choice in `requested`. A declined rule (`requested: false`) is disabled and its inventory contains only the correction target. An opted-in version 2 rule follows the scoping above. Validation requires `enabled` to equal `requested` and a non-empty description, so a stored choice cannot be flipped. Version 1 rules are unchanged. A build that predates version 2 rejects ledgers containing one, so open saved copies only with this build or later.
+
 A blank normalized description, or blank source-description fallback, disables the future rule. Its inventory contains only the correction target required by the existing version-1 validation contract.
 
 Existing version-1 rules containing all activity IDs remain valid, and their original bytes are not rewritten. The rule format, membership validation, canonical storage checks, size cap, transaction protocol and recovery checks are unchanged. Category projection checks the key before searching membership. Ordinary key fields compare directly; accepted structured JSON values retain the previous canonical-JSON equality behavior.

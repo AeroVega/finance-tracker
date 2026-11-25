@@ -1,7 +1,7 @@
 import { fail as appFail } from './app-error.mjs';
 import { getEntry } from './error-registry.mjs';
 import { HISTORICAL_COLLECTIONS, prepareHistoricalReconciliation, prepareHistoricalSummaries } from './historical-monthly-summary.mjs';
-import { applyFinancialEvent, applyReviewDecision, reverseReviewDecision, registerAccount, validateLedgerOfClass, ledgerDataClass, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
+import { applyFinancialEvent, applyFinancialEvents, applyReviewDecision, reverseReviewDecision, registerAccount, validateLedgerOfClass, ledgerDataClass, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
 import { persistenceDataClass } from './persistence-data-class.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
@@ -150,16 +150,44 @@ export class CanonicalWorkspaceSession {
     this.savedEventCount = ledger.events.length;
   }
 
-  correct({ activityId, type, activityKind, categoryId, amountText, lifecycleStatus, postedDate, rationale }) {
+  correct({ activityId, type, activityKind, categoryId, amountText, lifecycleStatus, postedDate, rationale, createRule = false }) {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
     if (!['classification', 'category-correction', 'bank-correction', 'posting-status-correction'].includes(type)) fail('unsupported-workspace-correction');
     const command = { activityId, type, commandId: crypto.randomUUID(), evidence: { rationale: rationale.trim() } };
     if (type === 'classification') command.activityKind = activityKind;
-    if (type === 'category-correction') command.categoryId = typeof categoryId === 'string' ? categoryId.trim() : categoryId;
+    // A category correction becomes a rule for later imports only when the owner opts in.
+    if (type === 'category-correction') { command.categoryId = typeof categoryId === 'string' ? categoryId.trim() : categoryId; command.createRule = createRule === true; }
     if (type === 'bank-correction') command.amountText = typeof amountText === 'string' ? amountText.trim() : amountText;
     if (type === 'posting-status-correction') { command.lifecycleStatus = lifecycleStatus; command.postedDate = postedDate; }
     const next = applyFinancialEvent(this.ledger, command);
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return this.ledger;
+  }
+
+  /** Inline review: one staged step that sets the type and, when it changes,
+   * the category. Both commands apply atomically, so a rejected category never
+   * leaves a half-applied classification. The category is an ordinary category
+   * correction; it becomes a rule for later imports only when createRule is true. */
+  quickClassify({ activityId, activityKind, categoryId = null, rationale, createRule = false }) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
+    if (!['income', 'spending', 'transfer', 'refund'].includes(activityKind)) fail('unsupported-classification');
+    if (categoryId !== null && (typeof categoryId !== 'string' || !categoryId.trim())) fail('category-required');
+    const current = getEffectiveActivities(this.ledger).find(activity => activity.activityId === activityId && activity.active);
+    if (!current) fail('unknown-activity');
+    const evidence = { rationale: rationale.trim() };
+    const commands = [];
+    // A classification event records its own category; carry the current one so
+    // a type change alone never clears an existing category.
+    if (current.activityKind !== activityKind) commands.push({ activityId, type: 'classification', activityKind, categoryId: current.categoryId ?? null, commandId: crypto.randomUUID(), evidence });
+    if (categoryId !== null && categoryId.trim() !== current.categoryId) {
+      commands.push({ activityId, type: 'category-correction', categoryId: categoryId.trim(), createRule: createRule === true, commandId: crypto.randomUUID(), evidence: { ...evidence } });
+    }
+    if (!commands.length) return this.ledger;
+    const next = applyFinancialEvents(this.ledger, commands);
     this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();
