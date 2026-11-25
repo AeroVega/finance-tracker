@@ -16,6 +16,7 @@ import {registerAccount, prepareCanonicalImport, applyReviewDecision, getEffecti
 import {exactSignedDecimal, isCalendarDate} from '../js/import-reconciliation.mjs';
 import {replayFixture, replayInput, replayRow} from './helpers/ledger-replay-fixtures.mjs';
 import {pageController, deferred} from './helpers/page-controller.mjs';
+const records = page => page.get('transaction-rows').children.filter(row => row.className === 'transaction-record');
 
 const recipe = await createSyntheticFinancialYear();
 const text = element => [element.textContent, ...element.children.map(text)].join(' ');
@@ -109,7 +110,7 @@ async function workspacePage({ledger = recipe.ledger} = {}) {
       await page.navigate('#transactions');
       await page.choose('month-filter', '2025-01');
       page.get('transaction-search').value = description; await page.get('transaction-search').emit('input'); await flushSearch();
-      const row = page.get('transaction-rows').children[0]; assert.ok(row, 'Expected an activity row');
+      const row = records(page)[0]; assert.ok(row, 'Expected an activity row');
       await row.children.at(-1).children[0].click();
     },
     async stageAmount(value = '-150.00') {
@@ -133,7 +134,8 @@ test('main workspace load and local preview cannot connect, persist or silently 
   assert.match(h.summary(), /\$73,739\.50/);
   assert.match(h.summary(), /\$30,381\.00/);
   assert.equal(h.get('transaction-count').textContent, '253');
-  assert.equal(h.get('transaction-rows').children.length, 25);
+  assert.equal(records(h).length, 50);
+  assert.equal(h.get('page-status').textContent, 'Showing 50 of 253');
   assert.match(h.get('save-state').textContent, /Local preview only/);
   assert.deepEqual(h.state.connects, []);
   assert.equal(h.state.snapshotReads, 0);
@@ -150,14 +152,14 @@ test('account and month change totals while search, review and pagination change
   const h = await workspacePage(); await h.click('preview-year');
   const annual = h.summary();
   await h.search('utility');
-  assert.equal(h.get('transaction-rows').children.length, 12);
+  assert.equal(records(h).length, 12);
   assert.equal(h.summary(), annual);
   await h.search(''); await h.choose('review-only', true);
   assert.match(h.get('filter-count').textContent, /48 matching activities of 253/);
   assert.equal(h.summary(), annual);
-  await h.click('next-page');
-  assert.equal(h.get('page-status').textContent, 'Page 2 of 2');
-  assert.equal(h.get('transaction-rows').children.length, 23);
+  assert.equal(records(h).length, 48);
+  assert.equal(h.get('show-more').hidden, true);
+  assert.equal(h.get('page-status').textContent, 'Showing 48 of 48');
   assert.equal(h.summary(), annual);
   await h.choose('review-only', false); await h.choose('month-filter', '2025-01');
   assert.match(h.summary(), /\$2,471\.25/);
@@ -173,7 +175,7 @@ test('account and month change totals while search, review and pagination change
   await h.search('no-results');
   assert.equal(h.get('empty-state').hidden, false);
   assert.equal(h.get('transaction-table-wrap').hidden, true);
-  assert.equal(h.get('page-status').textContent, 'Page 1 of 1');
+  assert.equal(h.get('page-status').textContent, 'No transactions to display');
   assert.equal(h.state.writes, 0);
 });
 
@@ -371,7 +373,7 @@ test('invalid classification preserves the current graph and reports no staged c
   assert.equal(h.state.writes, 0);
   await h.click('close-detail');
   assert.equal(h.get('activity-detail').hidden, true);
-  assert.equal(h.observed.focused, h.get('transaction-rows').children[0].children.at(-1).children[0]);
+  assert.equal(h.observed.focused, records(h)[0].children.at(-1).children[0]);
 });
 
 test('a positive spending correction stays visible in review with its financial exclusion explained', async () => {
@@ -379,7 +381,7 @@ test('a positive spending correction stays visible in review with its financial 
   assert.equal(h.get('detail-amount').textContent, '$160.00');
   assert.match(h.get('detail-description').textContent, /Needs review:/);
   await h.choose('review-only', true);
-  assert.equal(h.get('transaction-rows').children.length, 1);
+  assert.equal(records(h).length, 1);
   assert.match(text(h.get('transaction-rows')), /Needs review:/);
   assert.match(h.summary(), /\$2,311\.25/);
   assert.equal(h.modelSession.dirty, true);
@@ -393,7 +395,7 @@ test('cancelled reopening explicitly announces cancellation without suggesting o
   h.get('transaction-search').value = 'nothing matches'; await h.get('transaction-search').emit('input');
   await h.click('reopen-ledger');
   assert.equal(h.timeouts.size, 0);
-  assert.equal(h.get('transaction-rows').children.length, 0);
+  assert.equal(records(h).length, 0);
   assert.match(h.get('action-status').textContent, /cancelled/i);
   assert.doesNotMatch(h.get('action-status').textContent, /Reopening and verifying/);
   assert.equal(h.modelSession.dirty, true);
@@ -433,15 +435,15 @@ test('typing coalesces into one search and respects composition without changing
   assert.equal([...h.timeouts.values()][0], 120);
   assert.equal(h.get('transaction-rows').children, rows);
   await h.flushSearch();
-  assert.equal(h.get('transaction-rows').children.length, 12);
+  assert.equal(records(h).length, 12);
   assert.equal(h.summary(), summary);
   await h.get('transaction-search').emit('compositionstart');
   h.get('transaction-search').value = 'unmatched invented'; await h.get('transaction-search').emit('input');
   assert.equal(h.timeouts.size, 0);
-  assert.equal(h.get('transaction-rows').children.length, 12);
+  assert.equal(records(h).length, 12);
   await h.get('transaction-search').emit('compositionend');
   assert.equal(h.timeouts.size, 1); await h.flushSearch();
-  assert.equal(h.get('transaction-rows').children.length, 0);
+  assert.equal(records(h).length, 0);
   assert.equal(h.summary(), summary);
 });
 
@@ -450,19 +452,19 @@ test('account and period selections consume the latest pending search without a 
   h.get('transaction-search').value = 'utility'; await h.get('transaction-search').emit('input');
   await h.choose('month-filter', '2025-01');
   assert.equal(h.timeouts.size, 0);
-  assert.equal(h.get('transaction-rows').children.length, 1);
+  assert.equal(records(h).length, 1);
   assert.match(h.summary(), /\$2,471\.25/);
   await h.flushSearch();
-  assert.equal(h.get('transaction-rows').children.length, 1);
+  assert.equal(records(h).length, 1);
   await h.choose('account-filter', recipe.accounts.investment);
-  assert.equal(h.get('transaction-rows').children.length, 0);
+  assert.equal(records(h).length, 0);
   assert.equal((h.summary().match(/Unavailable/g) || []).length, 3);
 });
 
 test('filter changes preserve staged draft and a failed reopen preserves the last visible financial view', async () => {
   const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
   const proposal = structuredClone(h.modelSession.ledger);
-  await h.search(''); await h.choose('month-filter', ''); await h.click('next-page');
+  await h.search(''); await h.choose('month-filter', ''); await h.click('show-more');
   await h.choose('account-filter', recipe.accounts.card); await h.search('purchase');
   assert.deepEqual(h.modelSession.ledger, proposal);
   assert.equal(h.modelSession.dirty, true);
@@ -481,7 +483,7 @@ test('filter changes preserve staged draft and a failed reopen preserves the las
 
 test('pending operations disable review controls and ignore queued repeated actions', async () => {
   const h = await workspacePage(); await h.click('open-ledger'); await h.stageAmount();
-  const inspect = h.get('transaction-rows').children[0].children.at(-1).children[0];
+  const inspect = records(h)[0].children.at(-1).children[0];
   const selected = h.get('detail-title').textContent;
   h.state.saveGate = deferred(); const pending = h.click('save-ledger');
   await h.until(() => h.modelSession.busy);
@@ -520,7 +522,7 @@ test('recovery keeps the draft and duplicate clicks cannot repeat recovery befor
 test('closing detail returns keyboard focus to its review button, or search if that row was filtered out', async () => {
   const h = await workspacePage(); await h.click('preview-year'); await h.detail();
   assert.equal(h.observed.focused, h.get('detail-title'));
-  const review = h.get('transaction-rows').children[0].children.at(-1).children[0];
+  const review = records(h)[0].children.at(-1).children[0];
   assert.equal(review.attributes['aria-controls'], 'activity-detail');
   await h.click('close-detail'); assert.equal(h.observed.focused, review);
   await h.detail(); await h.search('no results'); await h.click('close-detail');
@@ -939,7 +941,7 @@ test('focused pages preserve pending transaction editor text and selection acros
   assert.equal(h.get('transactions').hidden, true);
   assert.equal(h.get('activity-detail').hidden, false);
   const ledger = h.modelSession.ledger;
-  for (const hash of ['#position','#holdings','#review','#reconciliation','#storage','#overview','#transactions']) {
+  for (const hash of ['#position','#holdings','#reconciliation','#storage','#overview','#transactions']) {
     await h.navigate(hash);
     assert.equal(h.get(hash.slice(1)).hidden, false);
     assert.equal(h.get('activity-detail').hidden, true);
@@ -998,7 +1000,7 @@ test('page navigation after automatically recovered save preserves verified ledg
   assert.deepEqual(h.modelSession.ledger,draft);assert.equal(h.state.writes,writes);assert.equal(h.get('save-ledger').disabled,true);assert.equal(h.get('draft-bar').hidden,true);
 });
 
-test('review drilldown opens Activity and first-run preview opens Home without storage calls', async () => {
+test('retired review links open the Needs review list and first-run preview opens Home without storage calls', async () => {
   const h = await workspacePage();
   assert.equal(h.get('workspace-scope').hidden,true);
   assert.equal(h.get('welcome-panel').hidden,false);
@@ -1006,12 +1008,14 @@ test('review drilldown opens Activity and first-run preview opens Home without s
   assert.equal(h.location.hash,'#overview');
   assert.equal(h.get('welcome-panel').hidden,true);
   assert.equal(h.get('workspace-scope').hidden,false);
-  await h.click('preview-year'); await h.navigate('#review');
-  const action = h.get('review-queue').children.find(child => child.tagName === 'BUTTON');
-  await action.click();
+  await h.click('preview-year'); await h.navigate('#review'); await new Promise(setImmediate);
   assert.equal(h.location.hash,'#transactions');
+  assert.equal(h.get('transactions').hidden,false);
   assert.equal(h.get('review-only').checked,true);
-  assert.equal(h.observed.focused,h.get('transaction-search'));
+  assert.match(h.get('filter-count').textContent,/48 matching activities of 253/);
+  assert.equal(records(h).every(row => row.attributes['data-review'] === 'true'),true);
+  // Only activity decisions are waiting, so the source-row section stays out of the way.
+  assert.equal(h.get('review-section').hidden,true);
   assert.equal(h.state.writes,0); assert.equal(h.state.connects.length,0);
 });
 
@@ -1036,8 +1040,8 @@ test('a completed ledger open respects navigation chosen while verification was 
   await h.until(() => h.state.snapshotReads === 1);
   await h.navigate('#review');
   h.state.openGate.resolve(); await opening;
-  assert.equal(h.location.hash, '#review');
-  assert.equal(h.get('review').hidden, false);
+  assert.equal(h.location.hash, '#transactions');
+  assert.equal(h.get('transactions').hidden, false);
   assert.equal(h.modelSession.mode, 'saved');
   assert.equal(h.state.writes, 0);
 });
@@ -1142,7 +1146,7 @@ test('Home recent activity ignores Activity search, review filter and pagination
   await h.navigate('#transactions');
   await h.search('a deliberately unmatched invented phrase');
   await h.choose('review-only', true);
-  assert.equal(h.get('transaction-rows').children.length, 0);
+  assert.equal(records(h).length, 0);
   assert.equal(text(recent), original);
   assert.equal(h.get('attention-count').textContent, count);
   await h.navigate('#overview');
@@ -1173,7 +1177,7 @@ test('Home recent records follow account and month scope and preserve exact disp
 
 test('transaction rows open from their text while selection and bubbled button clicks remain safe', async () => {
   const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
-  const row = h.get('transaction-rows').children[0], button = row.children.at(-1).children[0];
+  const row = records(h)[0], button = row.children.at(-1).children[0];
   h.window.getSelection = () => ({toString: () => 'Selected source description'});
   await row.emit('click', {target:row.children[1]});
   assert.equal(h.location.hash, '#transactions');
@@ -1274,7 +1278,7 @@ test('adversarial: unstaged editor text participates in replacement and unload g
 test('Home reads stay cached during Activity filtering and invalidate with scope or ledger changes', async () => {
   const h = await workspacePage(); await h.click('preview-year');
   const initial = h.state.homeReads;
-  await h.search('INVENTED'); await h.click('next-page');
+  await h.search('INVENTED'); await h.click('show-more');
   await h.choose('review-only', true); await h.search('UTILITY');
   assert.equal(h.state.homeReads, initial);
   await h.choose('month-filter', '2025-01');
@@ -1746,4 +1750,110 @@ test('redesigned shell keeps one connect panel, one save action per mode, and a 
   assert.equal(h.get('review-only').checked, false);
   assert.equal(h.get('clear-activity-filters').hidden, true);
   assert.equal(h.state.writes, 0);
+});
+
+const findText = (root, predicate) => {
+  if (predicate(root)) return root;
+  for (const child of root.children || []) { const found = findText(child, predicate); if (found) return found; }
+  return null;
+};
+
+test('type and category facets, status chips and sort change rows only and clear back to the full list', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const annual = h.summary();
+  const typeOption = id => h.get('type-options').children.find(option => option.children[0].value === id).children[0];
+  const spending = typeOption('spending'); spending.checked = true; await spending.emit('change');
+  assert.match(h.get('filter-count').textContent, /^108 matching activities of 253/);
+  assert.equal(records(h).every(row => row.attributes['data-kind'] === 'spending'), true);
+  assert.equal(h.get('type-facet-summary').textContent, 'Spending');
+  assert.equal(h.summary(), annual, 'filters never change the period totals');
+  const groceries = h.get('category-options').children.find(option => option.children[0].value === 'groceries').children[0];
+  groceries.checked = true; await groceries.emit('change');
+  assert.match(h.get('filter-count').textContent, /^24 matching/);
+  assert.equal(h.get('active-filters').hidden, false);
+  assert.deepEqual(h.get('active-filter-chips').children.map(item => text(item).trim()), ['Spending', 'Groceries']);
+  // Month headers say they total the matching rows only while filters are active.
+  const header = h.get('transaction-rows').children[0];
+  assert.equal(header.className, 'month-group');
+  assert.match(text(header), /December 2025.*2 activities.*Shown.*\$194\.75/);
+  await h.get('active-filter-chips').children[0].children[0].click();
+  assert.match(h.get('filter-count').textContent, /^24 matching/, 'removing the type chip keeps the category filter');
+  await h.choose('activity-sort', 'largest-out');
+  assert.equal(h.get('transaction-rows').children.some(row => row.className === 'month-group'), false, 'amount order is one ranked list');
+  await h.click('clear-activity-filters');
+  assert.match(h.get('filter-count').textContent, /^253 matching/);
+  assert.equal(h.get('activity-sort').value, 'newest');
+  assert.equal(h.get('active-filters').hidden, true);
+  assert.equal(h.summary(), annual);
+  assert.equal(h.state.writes, 0);
+});
+
+test('month headers total posted rows with the report rule and Show more continues the list', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const header = h.get('transaction-rows').children[0];
+  assert.match(text(header), /December 2025.*21 activities.*In.*\$7,613\.00.*Out.*\$2,826\.75.*4 not counted/);
+  assert.doesNotMatch(text(header), /Shown/, 'an unfiltered header is the month total for this scope');
+  assert.equal(records(h).length, 50);
+  assert.equal(h.get('show-more').hidden, false);
+  assert.equal(h.get('show-more').textContent, 'Show 50 more');
+  await h.click('show-more');
+  assert.equal(records(h).length, 100);
+  assert.equal(h.get('page-status').textContent, 'Showing 100 of 253');
+  assert.equal(h.observed.focused, records(h)[50].children.at(-1).children[0], 'focus continues at the first new row');
+  while (!h.get('show-more').hidden) await h.click('show-more');
+  assert.equal(records(h).length, 253);
+  assert.equal(h.get('show-more').hidden, true);
+  const months = h.get('transaction-rows').children.filter(row => row.className === 'month-group');
+  assert.equal(months.length, 12, 'each month heads its rows once');
+  const transfers = h.get('type-options').children.find(option => option.children[0].value === 'transfer').children[0];
+  transfers.checked = true; await transfers.emit('change');
+  assert.match(text(h.get('transaction-rows').children[0]), /No income or spending/, 'transfers never read as $0.00 in or out');
+  assert.doesNotMatch(text(h.get('transaction-rows').children[0]), /\$0\.00/);
+});
+
+test('inline decision stages type and category without leaving the list, then moves to the next flagged row', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  await h.choose('review-only', true);
+  const first = records(h)[0];
+  const decide = findText(first, node => node.className === 'decide-button');
+  assert.ok(decide, 'flagged rows offer an inline decision');
+  assert.equal(decide.textContent, 'Decide');
+  await decide.click();
+  assert.equal(h.location.hash, '#transactions');
+  assert.equal(h.observed.focused, h.get('quick-type'));
+  assert.deepEqual(h.get('quick-type').children.map(option => option.value), ['spending', 'transfer'], 'money out offers only compatible types');
+  assert.match(h.get('quick-help').textContent, /Still needs the full view: posting status unknown/);
+  h.get('quick-category').value = '__new'; await h.get('quick-category').emit('change');
+  const stage = findText(h.get('quick-review'), node => node.textContent === 'Stage decision');
+  assert.equal(stage.disabled, true, 'a new category needs a name');
+  const input = findText(h.get('quick-review'), node => node.tagName === 'INPUT' && node.type === 'text');
+  input.value = 'Brokerage costs'; await input.emit('input');
+  assert.equal(stage.disabled, false);
+  const second = records(h)[1];
+  await stage.click();
+  const fee = getEffectiveActivities(h.modelSession.ledger).find(activity => activity.sourceDescription === 'INVENTED BROKERAGE FEE' && activity.effectiveDate === '2025-12-26');
+  assert.equal(fee.activityKind, 'spending');
+  assert.equal(fee.categoryId, 'brokerage-costs');
+  assert.equal(h.modelSession.dirty, true);
+  assert.equal(h.state.writes, 0, 'staging never saves');
+  assert.match(h.get('action-status').textContent, /Decision staged locally/);
+  const secondDescription = text(second.children[1]);
+  const nextRow = records(h).find(item => text(item.children[1]) === secondDescription);
+  assert.equal(h.observed.focused, findText(nextRow, node => node.className === 'decide-button'));
+  // Posting status is still unknown, so the row stays in Needs review without an inline action.
+  const row = records(h).find(item => /INVENTED BROKERAGE FEE/.test(text(item)));
+  assert.match(text(row), /Posting status unknown/);
+  assert.equal(findText(row, node => node.className === 'decide-button'), null);
+});
+
+test('Cancel closes an inline decision and discards its draft', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  await h.choose('review-only', true);
+  await findText(records(h)[0], node => node.className === 'decide-button').click();
+  h.get('quick-category').value = 'groceries'; await h.get('quick-category').emit('change');
+  await findText(h.get('quick-review'), node => node.textContent === 'Cancel').click();
+  assert.equal(h.get('transaction-rows').children.some(row => row.className === 'quick-review'), false);
+  await findText(records(h)[0], node => node.className === 'decide-button').click();
+  assert.equal(h.get('quick-category').value, '', 'a cancelled draft is not restored');
+  assert.equal(h.modelSession.dirty, false);
 });

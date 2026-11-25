@@ -40,7 +40,8 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - **Historical monthly summaries** ([PR 54](https://github.com/AeroVega/finance-tracker/pull/54), [workflow](HISTORICAL_MONTHLY_SUMMARY.md)) are present on the served synthetic build. The one-time migration wizard ([PR 58](https://github.com/AeroVega/finance-tracker/pull/58)) is separate. Neither establishes exact-build live Drive acceptance.
 - **Portable encrypted backup and restore** and recovery are implemented in the selected route. Do not infer live acceptance beyond the evidence in the relevant PRs.
 - **Post-merge** Node and Pages workflows succeeded. That is not an independent live-browser check.
-- **Redesigned shell and Home** is in progress on the UX branch [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md).
+- **Redesigned shell and Home** merged in [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md). Owner acceptance on physical devices is open.
+- **Activity discovery** (type and category filters, sorting, month grouping, inline review decisions) is in progress on `t3/activity-filters-review`. It is presentation and staging only; reporting rules are unchanged.
 
 ## Acceptance and verification
 

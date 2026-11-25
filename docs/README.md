@@ -57,7 +57,8 @@ When documents disagree, resolve it at the source instead of adding another summ
 
 | Document | Owns |
 | --- | --- |
-| [Design](DESIGN.md) | Current navigation, tokens and components |
+| [Design](DESIGN.md) | Current navigation, tokens, components and the Activity surface |
+| [Product summary](PRODUCT.md) | Short product record for design tooling; links to the authorities above |
 | [Canonical main workspace](CANONICAL_MAIN_WORKSPACE.md) | Ledger workflow, corrections and workspace checks |
 | [Mobile UI design](MOBILE_UI_DESIGN.md), [mobile workspace pages](MOBILE_WORKSPACE_PAGES.md), [Apple web app](APPLE_WEB_APP.md) | Mounted-page architecture and device behavior. Visual decisions are superseded by Design. |
 | [Visualization and investigation design](VISUALIZATION_AND_INVESTIGATION_DESIGN.md) | Owner-confirmed direction for future charts, not an implementation contract |

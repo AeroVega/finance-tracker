@@ -1,5 +1,5 @@
 import {createCanonicalMonthIndex,isCanonicalMonthIndexFor} from './canonical-month-index.mjs';
-import {getEffectiveActivities, summarizeLedgerPeriods} from './canonical-import.mjs';
+import {getEffectiveActivities, summarizeLedgerPeriods, reportActivityContribution} from './canonical-import.mjs';
 import {exactSignedDecimal, isCalendarDate} from './import-reconciliation.mjs';
 import {buildFinancialPosition, buildAccountMonthCoverage} from './financial-position.mjs';
 
@@ -8,6 +8,29 @@ const fail = message => { throw new TypeError(message); };
 const reportingDate = activity => activity.activityKind === 'refund' ? activity.postedDate : activity.effectiveDate;
 const pendingSource = observation => !observation.resolved && ['review', 'rejected'].includes(observation.disposition);
 const newest = values => values.filter(Boolean).sort().at(-1) ?? null;
+const investmentKinds = new Set(['trade', 'dividend', 'interest', 'fee', 'contribution', 'distribution', 'valuation-change']);
+/** Display families for the Activity type filter. Ledger kinds stay unchanged;
+ * investment kinds share one family so they never read as ordinary spending. */
+export const ACTIVITY_TYPE_GROUPS = Object.freeze(['spending', 'income', 'transfer', 'refund', 'investment', 'other', 'unclassified']);
+export const ACTIVITY_SORTS = Object.freeze(['newest', 'oldest', 'largest-out', 'largest-in']);
+export function activityTypeGroup(kind) {
+  if (['spending', 'income', 'transfer', 'refund', 'unclassified'].includes(kind)) return kind;
+  return investmentKinds.has(kind) ? 'investment' : 'other';
+}
+const sortDate = row => row.reportingDate ?? row.effectiveDate ?? null;
+// Exact decimal arithmetic for display subtotals; amounts never pass through floats.
+function scaled(value) {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value);
+  return {n:BigInt(match[1] + match[2] + (match[3] ?? '')), s:(match[3] ?? '').length};
+}
+function addDecimal(a, b) {
+  const x = scaled(a), y = scaled(b), s = Math.max(x.s, y.s);
+  const n = x.n * 10n ** BigInt(s - x.s) + y.n * 10n ** BigInt(s - y.s);
+  const digits = (n < 0n ? -n : n).toString().padStart(s + 1, '0');
+  return (n < 0n ? '-' : '') + (s ? digits.slice(0, -s) + '.' + digits.slice(-s) : digits);
+}
+const negateDecimal = value => value.startsWith('-') ? value.slice(1) : '-' + value;
+const compareDecimal = (a, b) => { const d = scaled(addDecimal(a, negateDecimal(b))); return d.n < 0n ? -1 : d.n > 0n ? 1 : 0; };
 
 function monthBounds(month) {
   if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !isCalendarDate(`${month}-01`)) fail('invalid-workspace-month');
@@ -52,6 +75,7 @@ function rowFor(activity, accounts, observations, events, exclusions) {
   return {...effective, accountName:accounts.get(activity.accountId).displayName,
     amountText:exactSignedDecimal(activity),
     reportingDate:reportingDate(activity), needsReview:reviewReasons.length > 0, reviewReasons,
+    typeGroup:activityTypeGroup(activity.activityKind),
     observationCount:observations.get(activity.activityId) ?? 0, eventCount:events.get(activity.activityId) ?? 0};
 }
 
@@ -148,12 +172,17 @@ function buildWorkspaceScope(ledger, effective, {accountId, month}, index = null
     sourceReviews, qualifications};
 }
 
-function workspaceOptions({accountId = '', month = '', query = '', reviewOnly = false, page = 0, pageSize = 25} = {}) {
-  if (typeof accountId !== 'string' || typeof query !== 'string' || typeof reviewOnly !== 'boolean' ||
-      !Number.isSafeInteger(page) || page < 0 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500) fail('invalid-workspace-options');
+function workspaceOptions({accountId = '', month = '', query = '', reviewOnly = false, page = 0, pageSize = 25,
+  types = [], categories = [], pendingOnly = false, sort = 'newest', limit = null} = {}) {
+  if (typeof accountId !== 'string' || typeof query !== 'string' || typeof reviewOnly !== 'boolean' || typeof pendingOnly !== 'boolean' ||
+      !Number.isSafeInteger(page) || page < 0 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500 ||
+      !Array.isArray(types) || !types.every(type => ACTIVITY_TYPE_GROUPS.includes(type)) ||
+      !Array.isArray(categories) || !categories.every(category => typeof category === 'string') ||
+      !ACTIVITY_SORTS.includes(sort) || (limit !== null && (!Number.isSafeInteger(limit) || limit < 1))) fail('invalid-workspace-options');
   if (month !== '') monthBounds(month);
-  return {accountId, month, query, reviewOnly, page, pageSize};
+  return {accountId, month, query, reviewOnly, page, pageSize, types:[...new Set(types)].sort(), categories:[...new Set(categories)].sort(), pendingOnly, sort, limit};
 }
+const filterKey = ({query, reviewOnly, pendingOnly, types, categories, sort}) => JSON.stringify([query, reviewOnly, pendingOnly, types, categories, sort]);
 
 const searchableText = row => [row.sourceDescription, row.normalizedDescription, row.accountName, row.categoryId,
   row.activityKind, row.lifecycleStatus, row.sourceAction, row.securitySymbol, row.currency,
@@ -205,16 +234,18 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
   };
   return Object.freeze({view(options) {
     const selection = workspaceOptions(options);
-    const {accountId, month, query, reviewOnly} = selection;
+    const {accountId, month} = selection;
     if (!cached || cached.scope.accountId !== accountId || cached.scope.month !== month) {
       cached = buildWorkspaceScope(snapshot, null, {accountId, month}, index, prepareScope(accountId));
       searchTexts = cached.rows.map(searchableText);
       filtered = null;
     }
-    if (!filtered || filtered.query !== query || filtered.reviewOnly !== reviewOnly) {
-      filtered = {query, reviewOnly, rows:filterWorkspaceRows(cached, searchTexts, selection)};
+    const key = filterKey(selection);
+    if (!filtered || filtered.key !== key) {
+      const rows = filterWorkspaceRows(cached, searchTexts, selection);
+      filtered = {key, rows, groups:groupWorkspaceRows(cached, rows, selection), facets:facetWorkspaceRows(cached, searchTexts, selection)};
     }
-    return selectWorkspaceRows(cached, filtered.rows, selection);
+    return selectWorkspaceRows(cached, filtered, selection);
   }, monthlySummaries() { return index.monthlySummaries(); }, monthlyReport({month, currency, accountId = ''}) {
     const {start,end} = monthBounds(month);
     const {report,availability} = index.report({start,end,currency,accountIds:accountScope(accountId)}, {includeExcluded:false});
@@ -237,17 +268,99 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
   }});
 }
 
-function filterWorkspaceRows(scope, searchTexts, {query, reviewOnly}) {
-  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (!reviewOnly && !terms.length) return scope.rows;
-  return scope.rows.filter((row, i) => (!reviewOnly || row.needsReview) && terms.every(term => searchTexts[i].includes(term)));
+const searchTerms = query => query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+const categoryKey = row => row.categoryId ?? '';
+
+function filterWorkspaceRows(scope, searchTexts, {query, reviewOnly, pendingOnly, types, categories, sort}) {
+  const terms = searchTerms(query), typeSet = new Set(types), categorySet = new Set(categories);
+  let rows = scope.rows;
+  if (reviewOnly || pendingOnly || terms.length || typeSet.size || categorySet.size) {
+    rows = rows.filter((row, i) => (!reviewOnly || row.needsReview) && (!pendingOnly || row.lifecycleStatus === 'pending') &&
+      (!typeSet.size || typeSet.has(row.typeGroup)) && (!categorySet.size || categorySet.has(categoryKey(row))) &&
+      terms.every(term => searchTexts[i].includes(term)));
+  }
+  return sortWorkspaceRows(rows, sort);
 }
 
-function selectWorkspaceRows(scope, filtered, {page:requestedPage, pageSize}) {
+/** Scope rows arrive newest first. Other orders are stable and never round amounts. */
+function sortWorkspaceRows(rows, sort) {
+  if (sort === 'newest') return rows;
+  const sorted = [...rows];
+  if (sort === 'oldest') {
+    sorted.sort((a, b) => (sortDate(a) ?? '9999').localeCompare(sortDate(b) ?? '9999') || a.activityId.localeCompare(b.activityId));
+    return sorted;
+  }
+  // Largest out ranks money out by size; largest in ranks money in. Rows moving
+  // the other way follow, and unknown amounts stay last instead of reading as zero.
+  const outFirst = sort === 'largest-out';
+  const rank = row => {
+    if (row.amountText === null) return 2;
+    const sign = compareDecimal(row.amountText, '0');
+    return (outFirst ? sign < 0 : sign > 0) ? 0 : 1;
+  };
+  sorted.sort((a, b) => rank(a) - rank(b) ||
+    (a.amountText !== null && b.amountText !== null ? (outFirst ? 1 : -1) * compareDecimal(a.amountText, b.amountText) : 0) ||
+    (sortDate(b) ?? '').localeCompare(sortDate(a) ?? '') || a.activityId.localeCompare(b.activityId));
+  return sorted;
+}
+
+/** Month sections for date orders. Totals use the shared report rule, so a
+ * header never counts pending, unclassified or conflicting activity. They total
+ * the matching rows only: a filtered header is a subtotal, not a month total. */
+function groupWorkspaceRows(scope, rows, {sort}) {
+  if (!['newest', 'oldest'].includes(sort)) return [];
+  const accounts = new Map(scope.accounts.map(account => [account.accountId, account]));
+  const groups = [];
+  let current = null;
+  for (const row of rows) {
+    const month = sortDate(row)?.slice(0, 7) ?? null;
+    if (!current || current.month !== month) {
+      current = {month, count:0, notCounted:0, totals:new Map()};
+      groups.push(current);
+    }
+    current.count++;
+    const contribution = row.reportingDate === null ? {reason:'missing-refund-posted-date'}
+      : reportActivityContribution(row, accounts.get(row.accountId), row.currency);
+    if (contribution.reason) { current.notCounted++; continue; }
+    const total = current.totals.get(row.currency) ?? {currency:row.currency, income:'0', spending:'0', contributing:0};
+    total.income = addDecimal(total.income, contribution.income);
+    total.spending = addDecimal(total.spending, contribution.spending);
+    total.contributing++;
+    current.totals.set(row.currency, total);
+  }
+  return groups.map(group => ({month:group.month, count:group.count, notCounted:group.notCounted,
+    totals:[...group.totals.values()].sort((a, b) => a.currency.localeCompare(b.currency))}));
+}
+
+/** Counts for filter choices within the account, period and search. Facets do
+ * not narrow each other, so a selected choice never vanishes from its list. */
+function facetWorkspaceRows(scope, searchTexts, {query}) {
+  const terms = searchTerms(query);
+  const types = new Map(), categories = new Map();
+  let review = 0, pending = 0, total = 0;
+  scope.rows.forEach((row, i) => {
+    if (!terms.every(term => searchTexts[i].includes(term))) return;
+    total++;
+    types.set(row.typeGroup, (types.get(row.typeGroup) ?? 0) + 1);
+    categories.set(categoryKey(row), (categories.get(categoryKey(row)) ?? 0) + 1);
+    if (row.needsReview) review++;
+    if (row.lifecycleStatus === 'pending') pending++;
+  });
+  return {total, review, pending,
+    types:ACTIVITY_TYPE_GROUPS.filter(type => types.has(type)).map(type => ({id:type, count:types.get(type)})),
+    categories:[...categories].map(([id, count]) => ({id, count}))
+      .sort((a, b) => Number(a.id === '') - Number(b.id === '') || a.id.localeCompare(b.id))};
+}
+
+function selectWorkspaceRows(scope, {rows:filtered, groups, facets}, {page:requestedPage, pageSize, limit}) {
+  if (limit !== null) {
+    return structuredClone({...scope, rows:filtered.slice(0, limit), filteredCount:filtered.length, page:0, pages:1, pageSize,
+      limit, hasMore:filtered.length > limit, groups, facets});
+  }
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const page = Math.min(requestedPage, pages - 1);
   return structuredClone({...scope, rows:filtered.slice(page * pageSize, (page + 1) * pageSize),
-    filteredCount:filtered.length, page, pages, pageSize});
+    filteredCount:filtered.length, page, pages, pageSize, limit, hasMore:page + 1 < pages, groups, facets});
 }
 
 /** Safe one-shot read for callers that do not retain a snapshot reader. */
@@ -255,7 +368,8 @@ export function createWorkspaceView(ledger, options) {
   const effective = getEffectiveActivities(ledger);
   const selection = workspaceOptions(options);
   const scope = buildWorkspaceScope(ledger, effective, selection);
-  return selectWorkspaceRows(scope, filterWorkspaceRows(scope, scope.rows.map(searchableText), selection), selection);
+  const searchTexts = scope.rows.map(searchableText), rows = filterWorkspaceRows(scope, searchTexts, selection);
+  return selectWorkspaceRows(scope, {rows, groups:groupWorkspaceRows(scope, rows, selection), facets:facetWorkspaceRows(scope, searchTexts, selection)}, selection);
 }
 
 /** Fetch provenance only when an activity detail is opened. */
