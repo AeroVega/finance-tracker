@@ -69,7 +69,8 @@ When documents disagree, resolve it at the source instead of adding another summ
 | Document | Owns |
 | --- | --- |
 | [Testing](TESTING.md) | Automated checks and commands |
-| [Owner acceptance](OWNER_ACCEPTANCE.md) | Manual acceptance and release checklist |
+| [Guarded code](GUARDED_CODE.md) | Required checks and owner-merge rule for safeguard-affecting changes |
+| [Owner acceptance (archived)](archive/OWNER_ACCEPTANCE_2026-11-24.md) | Historical pre-GO checklist, superseded 2026-11-24 |
 | [Synthetic data](SYNTHETIC_DATA.md) | The invented-year recipe |
 | [Application diagnostics](APP_DIAGNOSTICS.md), [error codes](ERROR_CODES.md) | Privacy-safe reports and registered codes (the code list is generated) |
 | [Guarded code](GUARDED_CODE.md) | Which paths need extra verification |
