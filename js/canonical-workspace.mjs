@@ -405,7 +405,7 @@ function render({ reset = false } = {}) {
   const summaries = view.summary.length ? view.summary : [{ currency: 'USD', income: null, spending: null, cash: null }];
   for (const summary of summaries) {
     const available = view.summaryAvailability?.[summary.currency];
-    for (const [key, heading, note] of [['income', 'Known income', 'Posted and classified records only'], ['spending', 'Known spending', 'Refunds count in their posting period'], ['cash', 'Known cash movement', 'Checking and savings only. Not a balance.']]) {
+    for (const [key, heading, note] of [['income', 'Known income', 'Posted and classified records only'], ['spending', 'Known spending', 'Refunds count in their posting period'], ['cash', 'Known cash movement', 'Checking and savings only, not a balance.']]) {
       const card = node('article', undefined, 'metric-card');
       const value = available && available[key + 'Available'] === false ? null : summary[key];
       card.append(node('p', `${heading} · ${summary.currency}`, 'metric-label'), node('p', money(value, summary.currency), 'metric-value'), node('p', note, 'metric-note'));

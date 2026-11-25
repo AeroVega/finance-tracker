@@ -62,7 +62,7 @@ export function homeMonthlyTrend(history, view, reader) {
   const [currency] = currencies;
   const months = recentMonths(view.months[0]);
   if (!currency || !months.length) return {currency:null, context:'No dated monthly evidence for this account selection. Missing values are not zero.', rows:[]};
-  return {currency, context:`${currency} · ${selected?.displayName ?? "All accounts"}. Known transactions only, possibly partial. Gaps are not zero.`,
+  return {currency, context:`${currency} · ${selected?.displayName ?? "All accounts"}. Known transactions only, possibly partial; an empty month means no data, not zero.`,
     rows:months.map(month => {
       const values = reader.monthlyReport({month,currency,accountId});
       return {...values, month, source:values.income === null && values.spending === null
@@ -110,7 +110,7 @@ export function mountHomeMonthlyTrend({context, months, readout, node, money, mo
     if (!row) return;
     const values = node('p', undefined, 'trend-readout-values');
     values.append(node('strong', monthLabel(row.month)));
-    if (empty(row)) values.append(node('span', 'No data. Missing is not zero.'));
+    if (empty(row)) values.append(node('span', 'No data for this month, which is not the same as zero.'));
     else for (const [key, title] of [['income','In'],['spending','Out']]) {
       const item = node('span', undefined, 'trend-readout-item');
       item.append(node('span', title, `trend-key trend-key-${key}`), node('span', money(row[key], trend.currency), 'amount'));

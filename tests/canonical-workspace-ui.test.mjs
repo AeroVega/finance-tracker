@@ -1726,7 +1726,7 @@ test('redesigned shell keeps one connect panel, one save action per mode, and a 
   const months = h.get('home-trend-months').children;
   assert.equal(months.length, 6);
   assert.ok(months.every(item => /^\d{4}-\d{2}$/.test(item.children[0].dataset.month)));
-  assert.match(h.get('home-trend-context').textContent, /USD · All accounts\. Known transactions only, possibly partial\. Gaps are not zero\./);
+  assert.match(h.get('home-trend-context').textContent, /USD · All accounts\. Known transactions only, possibly partial; an empty month means no data, not zero\./);
   const gap = months.find(item => item.children[0].dataset.source === 'no-data');
   assert.ok(gap, 'months without transactions are labelled, never drawn as zero');
   assert.match(gap.children[0].attributes['aria-label'], /no data/);

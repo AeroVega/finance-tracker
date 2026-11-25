@@ -8,7 +8,7 @@ const pages = {
   reconciliation: {title:'Reconcile', description:'Check a month against its opening and closing balances.', group:'transactions', period:true},
   'activity-detail': {title:'Transaction', description:'Inspect the evidence before making a change.', group:'transactions'},
   position: {title:'Accounts', description:'Dated balances. Missing values stay unknown.', group:'position', date:true},
-  holdings: {title:'Holdings', description:'Investment holdings from dated statements. No live prices.', group:'position', date:true},
+  holdings: {title:'Holdings', description:'Investment holdings from dated statements, without live prices.', group:'position', date:true},
   storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'}
 };
 const primary = ['overview', 'transactions', 'position', 'storage'];
