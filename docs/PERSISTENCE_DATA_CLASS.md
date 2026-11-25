@@ -1,10 +1,11 @@
 # Persistence data class and release gate
 
-**Status (PR 57 candidate, 2026-11-23):** implemented and tested with invented
-data in Node simulation only. The shipped [release profile](../js/release-profile.mjs)
-is **synthetic-only**, so the ordinary deployed build cannot construct a
-private-database session. Real-data use remains **NO-GO**; see
-[current state](CURRENT_STATE.md) and the [owner checklist](OWNER_ACCEPTANCE.md).
+**Status (2026-11-24):** implemented and tested with invented
+data in Node simulation. The shipped [release profile](../js/release-profile.mjs)
+lists `synthetic` and `production`; the owner's GO for real financial data takes
+effect on merge of PR 61 (see [current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data)).
+The UI defaults to synthetic and offers the private-database class. See the
+[owner checklist](OWNER_ACCEPTANCE.md).
 
 ## Two classes, one per session
 
@@ -106,14 +107,13 @@ A static page cannot verify an owner's approval, and anyone who can publish a
 modified page can change its code. The control is therefore the **release
 decision**, recorded outside the page:
 
-1. The candidate that adds `production` is a separate, reviewed commit that
-   changes only the release profile (and the assertion that pins it), on top of
-   an already-reviewed tree.
-2. The owner's approval names the full commit SHA, the Pages origin and path,
-   the deployment workflow run, the verified served build stamp, the
-   designated account (confirmed privately, not in the repository) and the
-   dedicated folder workflow. The served `js/release-profile.mjs` and build
-   stamp must be compared byte-for-byte with that commit.
+1. Listing `production` is a reviewed change to the release profile (and the
+   assertion that pins it). As of 2026-11-24 the owner recorded that decision
+   in [current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data)
+   as taking effect on merge of PR 61, without naming a SHA.
+2. After each deployment, verify that the served `js/release-profile.mjs` and
+   build stamp match the merged commit and the Pages workflow run. The
+   designated account and dedicated folder stay private, not in the repository.
 3. Deployment from that commit requires the required checks on `main`
    (including **Guarded code checks**, enforced since 2026-11-23) and the
    owner's review of the exact-SHA diff. This single-owner project does not
