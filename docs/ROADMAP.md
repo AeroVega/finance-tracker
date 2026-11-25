@@ -21,7 +21,7 @@ Consider deeper investment analysis, advanced planning/projections, expanded aut
 
 ## Work in order of use
 
-- Prove the single-user path first: one designated Google account, one private database folder, one active device, explicit verified saves, and a manually rehearsed encrypted backup restore. Use [one acceptance checklist](OWNER_ACCEPTANCE.md) for the exact candidate. No account switching, simultaneous editing, automatic backups or cleanup are necessary for this path.
+- Prove the single-user path first: one designated Google account, one private database folder, one active device, explicit verified saves, and a manually rehearsed encrypted backup restore. The 2026-11-24 owner GO covers this path; see [current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data). No account switching, simultaneous editing, automatic backups or cleanup are necessary for this path.
 - Make the common workflow easy to find before adding richer screens: open the tracker and see money in and out, find what needs review, and look at one monthly trend with gaps and estimates labeled. Reuse existing reports and sources. Judge the interface by whether those tasks are clear on the intended devices, not by the number of cards or controls.
 - Keep the legacy migration wizard separate from readiness engineering. Resume it only at the owner's direction. Its synthetic completion is not permission to process the private workbook or save real data.
 - Compare a representative invented workload against accepted open and save goals before proposing a storage redesign. Retain integrity checks and evidence; do not trade verification for a faster benchmark.
