@@ -12,6 +12,13 @@ Read [the skills index](engineering-workflows/README.md) when a task needs a def
 - Inspect the full diff and report changes, tests, deployment state, limitations, and unresolved risks.
 - Current authorization and phase boundaries are in [CURRENT_STATE.md](docs/CURRENT_STATE.md). Recheck it before acting; historical PR descriptions do not grant current permission.
 
+## Standing owner authorization
+This section is the authoritative statement of the owner's standing decisions. It lives in a guarded file on purpose: changing it is guarded-code work that only the owner merges. [CURRENT_STATE.md](docs/CURRENT_STATE.md) records the dated history and links here.
+- **Real financial data: GO (2026-11-24).** The owner's GO is standing. It is not re-granted per commit or SHA, and no per-build acceptance checklist applies; the pre-GO checklist is archived at [OWNER_ACCEPTANCE_2026-11-24.md](docs/archive/OWNER_ACCEPTANCE_2026-11-24.md). `main` is kept stable by the required CI checks.
+- **Merging:** PRs that touch no guarded code merge on passing required checks, with no owner step. Guarded-code PRs are merged only by the owner after an agent-assisted review (see [GUARDED_CODE.md](docs/GUARDED_CODE.md)).
+- **Data and access:** real data never enters the repository, CI or logs; agents never touch the owner's real Drive folder or accounts; Synthetic stays the default for development.
+- **Safeguards:** the 3-month encrypted backup cadence and the capacity-review triggers recorded in [CURRENT_STATE.md](docs/CURRENT_STATE.md) stay in force.
+
 ## Public-repository privacy
 This repository is public. Never commit real transaction CSVs, statements, account exports, holdings, balances, financial summaries, account identifiers, passwords, tokens, private keys, database credentials, cookies, or production environment files. Treat logs, screenshots, workflow output, issues, pull requests, branches, and Git history as potentially public.
 

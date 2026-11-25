@@ -9,14 +9,12 @@ This is the one place for mutable project status and the permission boundary. Ot
 
 On 2026-11-24 the owner confirmed that the [PR 57 acceptance checks](https://github.com/AeroVega/finance-tracker/pull/57) were complete and declared the project **GO for real financial data**. [PR 61](https://github.com/AeroVega/finance-tracker/pull/61) has merged to `main`; its merge was the owner's authorization act. This record names no commit SHA.
 
-**This GO is standing.** It is not re-granted per commit, and no per-SHA acceptance checklist applies. The pre-GO checklist is archived as [OWNER_ACCEPTANCE_2026-11-24.md](archive/OWNER_ACCEPTANCE_2026-11-24.md). `main` is kept stable by the required CI checks, including **Guarded code checks**.
+**This GO is standing.** The authoritative statement of it, the merge rules and the standing rules is [Standing owner authorization in AGENTS.md](../AGENTS.md#standing-owner-authorization), a guarded file, so this frequently edited page cannot change them. The pre-GO checklist is archived as [OWNER_ACCEPTANCE_2026-11-24.md](archive/OWNER_ACCEPTANCE_2026-11-24.md).
 
 What this means for every later merge to `main`:
 
 - Real financial data is a supported-use requirement. Preserve account and folder isolation, verified saves and recovery, encrypted private backups, and the existing required checks and owner review.
-- A change that affects those safeguards (guarded code) needs evidence suited to its scope and is merged only by the owner, after an agent-assisted review. Agents may babysit such a PR until they declare it ready but never click merge.
-- A change that touches no guarded code merges on passing required checks alone, under the owner's standing authorization. See the [merge policy](GUARDED_CODE.md).
-- Standing rules: real data never enters the repository, CI or logs; agents never touch the owner's real Drive folder or accounts; Synthetic stays the default for development; the 3-month encrypted backup cadence and the capacity triggers below stay in force.
+- A change that affects those safeguards (guarded code) needs evidence suited to its scope and is merged only by the owner, after an agent-assisted review. See the [merge policy](GUARDED_CODE.md).
 - Development, CI, diagnostics and public artifacts still use invented data only. Private account and folder details stay private.
 
 The merge listed `production` in the checked-in [release profile](../js/release-profile.mjs), so Private database mode is available in the served build under the [release gate](PERSISTENCE_DATA_CLASS.md#release-gate-what-static-code-can-and-cannot-enforce). Synthetic remains the default.
