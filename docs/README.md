@@ -44,7 +44,8 @@ The following preserve rationale and earlier invariants; they do not describe a 
 
 ## Interface, diagnostics, and quality
 
-- [Mobile UI design](MOBILE_UI_DESIGN.md), [mobile workspace pages](MOBILE_WORKSPACE_PAGES.md), and [Apple web app](APPLE_WEB_APP.md) — interface design and device-specific behavior.
+- [Interface design](DESIGN.md) — current navigation, workspace status, tokens and components.
+- [Mobile UI design](MOBILE_UI_DESIGN.md), [mobile workspace pages](MOBILE_WORKSPACE_PAGES.md), and [Apple web app](APPLE_WEB_APP.md) — earlier interface rationale and device-specific behavior.
 - [Application diagnostics](APP_DIAGNOSTICS.md) and [error codes](ERROR_CODES.md) — privacy-safe error reporting and registered codes.
 - [Testing](TESTING.md) and [owner acceptance](OWNER_ACCEPTANCE.md) — automated checks and manual acceptance boundaries.
 - [Save request measurements](ACTIVE_SAVE_REQUESTS.md) and [application testing feedback](APP_TESTING_FEEDBACK.md) — historical optimization rationale and user-facing follow-up.

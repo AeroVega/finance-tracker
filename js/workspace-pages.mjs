@@ -1,15 +1,18 @@
 /* Page navigation keeps the ledger and every editor mounted. It never reads or
    writes financial storage. Hashes contain page names only, never record IDs. */
 const pages = {
-  overview: {title:'Home', description:'Your known cash flow, with the evidence in reach.', group:'overview', period:true},
-  transactions: {title:'Activity', description:'Follow a transaction from its source to its correction history.', group:'transactions', period:true},
-  position: {title:'Accounts', description:'Dated balances. Clear evidence. Missing values stay unknown.', group:'position', date:true},
-  holdings: {title:'Holdings', description:'What your investment statements actually support.', group:'position', date:true},
-  review: {title:'Review', description:'Give uncertain records a deliberate second look.', group:'review', period:true},
-  reconciliation: {title:'Reconciliation', description:'Check a month against its opening and closing evidence.', group:'review', period:true},
-  storage: {title:'Storage', description:'Your saved copy, local draft and recovery controls.', group:'storage'},
-  'activity-detail': {title:'Transaction detail', description:'Inspect the evidence before making a change.', group:'transactions'}
+  overview: {title:'Home', description:'Money in and out, and what needs your attention.', group:'overview', period:true},
+  import: {title:'Import', description:'Add a Wells Fargo, SoFi or Fidelity CSV. The file is read on this device.', group:'overview'},
+  transactions: {title:'Activity', description:'Find, filter and inspect transactions.', group:'transactions', period:true},
+  review: {title:'Review', description:'Imported rows waiting for your decision.', group:'transactions', period:true},
+  reconciliation: {title:'Reconcile', description:'Check a month against its opening and closing balances.', group:'transactions', period:true},
+  'activity-detail': {title:'Transaction', description:'Inspect the evidence before making a change.', group:'transactions'},
+  position: {title:'Accounts', description:'Dated balances. Missing values stay unknown.', group:'position', date:true},
+  holdings: {title:'Holdings', description:'Investment holdings from dated statements. No live prices.', group:'position', date:true},
+  storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'}
 };
+const primary = ['overview', 'transactions', 'position', 'storage'];
+const secondary = {position:['position', 'holdings'], transactions:['transactions', 'review', 'reconciliation']};
 export function createWorkspacePages({document, window, onNavigate = () => {}}) {
   const $ = id => document.getElementById(id);
   const scrollPositions = new Map();
@@ -31,12 +34,12 @@ export function createWorkspacePages({document, window, onNavigate = () => {}}) 
     try { onNavigate(target); } catch { /* Observational only; navigation must not depend on diagnostics. */ }
     const info = pages[target];
     for (const key of Object.keys(pages)) $(key).hidden = key !== target;
-    for (const key of ['overview','transactions','position','review','storage']) {
+    for (const key of primary) {
       const link = $('nav-' + key);
       if (info.group === key) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     }
-    for (const key of ['position','holdings','review','reconciliation']) {
+    for (const key of [...secondary.position, ...secondary.transactions]) {
       const link = $('sub-' + key);
       if (target === key) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
@@ -45,7 +48,7 @@ export function createWorkspacePages({document, window, onNavigate = () => {}}) 
     $('page-description').textContent = info.description;
     document.title = info.title + ' · Finance Tracker';
     $('position-navigation').hidden = info.group !== 'position';
-    $('review-navigation').hidden = info.group !== 'review';
+    $('activity-navigation').hidden = !secondary.transactions.includes(target);
     syncScope();
     $('month-scope').hidden = !info.period;
     $('position-date-scope').hidden = !info.date;
@@ -53,7 +56,7 @@ export function createWorkspacePages({document, window, onNavigate = () => {}}) 
     $('scope-position-title').hidden = !info.date;
     $('scope-help').textContent = info.date
       ? 'Account and date apply to balances and holdings. The activity period is separate.'
-      : 'Account and period apply across Overview, Activity and Review. Search changes activity rows only.';
+      : 'Account and period apply to Home, Activity, Review and Reconcile. Search changes rows only.';
     if (focus) $('page-title').focus({preventScroll:true});
     window.scrollTo?.({top:scrollPositions.get(target) || 0, behavior:'instant'});
   }

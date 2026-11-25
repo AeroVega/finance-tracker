@@ -71,12 +71,13 @@ try {
    throw Error('Unmodeled external request blocked: '+url.origin);
   });
   page.on('dialog',dialog=>dialog.accept());
-  await page.goto(base);await page.click('#nav-storage');await page.click('#create-ledger');
+  // The connect panel is on Home until a ledger is open, then in More.
+  await page.goto(base);await page.click('#nav-overview');await page.click('#create-ledger');
   if(scenario==='seed-reopen'){
    await page.waitForFunction(()=>document.querySelector('#data-mode').dataset.mode==='saved',{},{timeout:20000});
    await page.click('#nav-storage');await page.click('#release-ledger');
    await page.waitForFunction(()=>!document.querySelector('#open-ledger').disabled);
-   await page.click('#open-ledger');
+   await page.click('#nav-overview');await page.click('#open-ledger');
    await page.waitForFunction(()=>document.querySelector('#data-mode').dataset.mode==='saved',{},{timeout:20000});
    assert.ok(http.events.length>0);await page.click('#nav-storage');await page.click('#release-ledger');
   }else{

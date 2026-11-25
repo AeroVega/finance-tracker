@@ -44,12 +44,11 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
   assert((await page.locator('#scope-period-title').innerText()).includes('Invented checking'));
   await page.locator('#workspace-scope > summary').press('Enter');
   await page.click('#nav-position');
-  await page.locator('.manage-accounts > summary').click();
-  await page.getByText('Add or correct a dated synthetic balance', {exact:true}).click();
+  await page.getByText('Add or correct a dated balance', {exact:true}).click();
   await page.fill('#balance-source', 'Invented unfinished balance evidence');
   await page.click('#nav-overview'); await page.click('#nav-position');
   assert.equal(await page.inputValue('#balance-source'), 'Invented unfinished balance evidence');
-  for (const name of ['overview','transactions','position','review','storage']) {
+  for (const name of ['overview','transactions','position','storage']) {
    await page.click('#nav-'+name);
    await page.waitForFunction(n=>!document.getElementById(n).hidden,name);
    await page.waitForTimeout(80);
@@ -87,7 +86,7 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
   await page.click('#nav-storage');
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
   await page.waitForTimeout(100);
-  const last=await page.locator('footer a').boundingBox();
+  const last=await page.locator('.more-footer p').last().boundingBox();
   const draft=await page.locator('#draft-bar').boundingBox();
   assert(last.y+last.height<draft.y,`footer hidden ${width}/${large}`);
   if (process.env.FINANCE_UI_SCREENSHOTS) await page.screenshot({path:`${process.env.FINANCE_UI_SCREENSHOTS}/finance-${width}${large?'-large':''}.png`});
@@ -109,7 +108,7 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
  const p=await browser.newPage();
  await p.route('https://**/*',r=>r.abort());
  await p.goto(base); await p.click('#nav-storage');
- await p.locator('.preview-choices > summary').click(); await p.click('#preview-year');
+ await p.locator('#sample-data > summary').click(); await p.click('#preview-year');
  await p.waitForFunction(()=>document.querySelector('#data-mode').dataset.mode==='preview');
  await p.locator('#workspace-scope > summary').click();
  await p.selectOption('#account-filter', {label:'Invented investment'});
