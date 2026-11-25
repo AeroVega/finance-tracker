@@ -4,8 +4,9 @@ import {readFileSync} from 'node:fs';
 import {createWorkspacePages} from '../js/workspace-pages.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const primary = ['overview', 'transactions', 'position', 'review', 'storage'];
-const routes = [...primary, 'holdings', 'reconciliation', 'activity-detail'];
+const primary = ['overview', 'transactions', 'position', 'storage'];
+const routes = [...primary, 'import', 'review', 'holdings', 'reconciliation', 'activity-detail'];
+const activityViews = ['transactions', 'review', 'reconciliation'];
 
 // A deliberately small DOM/history substitute: real HTML IDs and initial hidden
 // states, native hash navigation events, and pushState's lack of events. This
@@ -86,22 +87,23 @@ test('ordinary route links preserve scroll, active-tab clicks return to the head
   }
 });
 
-function assertPage(f, page, group = page) {
+const groups = {review:'transactions', reconciliation:'transactions', holdings:'position', import:'overview', 'activity-detail':'transactions'};
+function assertPage(f, page, group = groups[page] ?? page) {
   assert.equal(f.router.current, page);
   assert.equal(f.window.location.hash, '#' + page);
   assert.deepEqual(routes.filter(id => !f.get(id).hidden), [page]);
   assert.deepEqual(primary.filter(id => f.get('nav-' + id).getAttribute('aria-current') === 'page'), [group]);
-  const secondary = ['position', 'holdings', 'review', 'reconciliation'];
+  const secondary = ['position', 'holdings', ...activityViews];
   assert.deepEqual(secondary.filter(id => f.get('sub-' + id).getAttribute('aria-current') === 'page'), secondary.includes(page) ? [page] : []);
   assert.equal(f.get('position-navigation').hidden, group !== 'position');
-  assert.equal(f.get('review-navigation').hidden, group !== 'review');
+  assert.equal(f.get('activity-navigation').hidden, !activityViews.includes(page));
 }
 
 for (const [page, group, title, mode] of [
   ['overview','overview','Home','period'], ['transactions','transactions','Activity','period'],
   ['position','position','Accounts','date'], ['holdings','position','Holdings','date'],
-  ['review','review','Review','period'], ['reconciliation','review','Reconciliation','period'],
-  ['storage','storage','Storage',null]
+  ['review','transactions','Review','period'], ['reconciliation','transactions','Reconcile','period'],
+  ['import','overview','Import',null], ['storage','storage','More',null]
 ]) {
   test(`deep link and navigation: ${page}`, () => {
     const f = fixture('#' + page);
@@ -145,7 +147,7 @@ test('native hash links and pushState routes both survive Back and Forward witho
   for (const [page, group] of [['storage','storage'], ['holdings','position'], ['overview','overview']]) {
     f.window.history.back(); assertPage(f, page, group);
   }
-  for (const [page, group] of [['holdings','position'], ['storage','storage'], ['reconciliation','review']]) {
+  for (const [page, group] of [['holdings','position'], ['storage','storage'], ['reconciliation','transactions']]) {
     f.window.history.forward(); assertPage(f, page, group);
   }
   assert.equal(f.window.history.length, 4);
@@ -257,7 +259,7 @@ test('loaded state updates scope and empty notice without changing route or stea
   assert.equal(f.get('workspace-scope').hidden, false);
   const focusCount = f.get('page-title').focusCalls.length;
   f.router.setLoaded(false);
-  assertPage(f, 'reconciliation', 'review');
+  assertPage(f, 'reconciliation', 'transactions');
   assert.equal(f.get('workspace-scope').hidden, true);
   assert.equal(f.get('no-ledger-notice').hidden, false);
   assert.equal(f.get('page-title').focusCalls.length, focusCount);

@@ -38,6 +38,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/historical-monthly-summary-validation.mjs",
   "js/historical-monthly-summary-workflow.mjs",
   "js/historical-monthly-summary.mjs",
+  "js/home-monthly-trend.mjs",
   "js/immutable-content-type.mjs",
   "js/import-reconciliation.mjs",
   "js/provider-csv-preview.mjs",

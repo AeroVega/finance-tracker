@@ -6,7 +6,7 @@ This guide describes the three values needed by the synthetic tools: a web OAuth
 
 Use a Google account that owns or can access the private Drive folder. Keep this project for the Finance Tracker prototype. Do not put the folder ID, credentials, access tokens, or financial records in this public repository.
 
-**Current entry point:** use the [main workspace](../index.html#storage) after a separately authorized deployment. Confirm Settings → Pages, the latest Actions deployment, and the full source commit before testing. The site is one shared deployment. Its web origin is `https://aerovega.github.io`. The original manually configured probe UI was retired in the [prototype cleanup](PROTOTYPE_CLEANUP.md); its historical result below remains unchanged.
+**Current entry point:** use the [main workspace](../index.html#storage) after a separately authorized deployment. Confirm Settings → Pages, the latest Actions deployment, and the full source commit before testing. The site is one shared deployment. Its web origin is `https://aerovega.github.io`. The original manually configured probe UI was retired in the [prototype cleanup](archive/PROBES_AND_PR_REPORTS.md); its historical result below remains unchanged.
 
 ## 1. Create a Cloud project
 
@@ -79,7 +79,7 @@ Open **IAM & Admin → Settings** in the same project and copy the numeric **Pro
 
 The current tools use public configuration stamped by `.github/workflows/deploy-pages.yml`, rather than fields in the retired probe UI. The owner configures `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_PICKER_API_KEY` as repository variables or secrets. The workflow's `build` job reads them and has no environment, so values stored only on the `github-pages` environment are not visible to it. The workflow supplies the reviewed public project number. Confirm it belongs to the same project before deploying. Never place a client secret or token in these values.
 
-After a separately authorized deployment, open the [main workspace](../index.html#storage), verify its full source SHA, then use **Storage → Create new synthetic year** and select a new empty synthetic folder. The workspace signs in with Google, uses Picker, saves invented data and verifies it. Stage one correction, save, and independently reopen. Supported file ingestion and backup/restore are not yet available on this route. Follow the [owner acceptance guide](OWNER_ACCEPTANCE.md).
+After a separately authorized deployment, open the [main workspace](../index.html#storage), verify its full source SHA, then use **Create new synthetic year** (Home, or More once a ledger is open) and select a new empty synthetic folder. The workspace signs in with Google, uses Picker, saves invented data and verifies it. Stage one correction, save, and independently reopen. Supported file ingestion and backup/restore are not yet available on this route. Follow the [owner acceptance guide](OWNER_ACCEPTANCE.md).
 
 Do not remove files from an earlier test to make a folder look empty. Preserve failed or uncertain copies and choose a new folder when the guide requires one. See [configuration review and remaining owner checks](GOOGLE_DRIVE_CONFIGURATION.md).
 

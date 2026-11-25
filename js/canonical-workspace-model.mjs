@@ -215,7 +215,12 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
       filtered = {query, reviewOnly, rows:filterWorkspaceRows(cached, searchTexts, selection)};
     }
     return selectWorkspaceRows(cached, filtered.rows, selection);
-  }, monthlySummaries() { return index.monthlySummaries(); }, position({asOf, accountId = ''} = {}) {
+  }, monthlySummaries() { return index.monthlySummaries(); }, monthlyReport({month, currency, accountId = ''}) {
+    const {start,end} = monthBounds(month);
+    const {report,availability} = index.report({start,end,currency,accountIds:accountScope(accountId)}, {includeExcluded:false});
+    return {income:availability.incomeAvailable ? report.income : null,
+      spending:availability.spendingAvailable ? report.spending : null};
+  }, position({asOf, accountId = ''} = {}) {
     const accountIds = accountScope(accountId);
     if (!isCalendarDate(asOf)) fail('invalid-position-as-of');
     if (!positionCache || positionCache.asOf !== asOf || positionCache.accountId !== accountId) {

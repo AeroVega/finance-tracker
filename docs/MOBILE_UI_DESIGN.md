@@ -1,11 +1,13 @@
 # Mobile and tablet workspace design
 
+> **Superseded presentation:** the [interface design](DESIGN.md) replaces this document's visual and navigation decisions (four tabs, one save bar, Import as its own page). The mounted-page architecture and safeguards described here still apply.
+
 The owner requested a design rethink within [PR38](https://github.com/AeroVega/finance-tracker/pull/38),
 after its Apple web app foundation. This changes presentation and navigation
 interactions. The canonical financial model, storage contracts, explicit save,
 uncertain-outcome blocking and synthetic-only limits remain in force.
 
-The subsequent [adversarial review](PR38_ADVERSARIAL_REVIEW.md) retains this
+The subsequent [adversarial review](archive/PROBES_AND_PR_REPORTS.md) retains this
 design and repairs unfinished-editor transitions, posting-status clarity,
 route scrolling and short-window editing space. The results below describe
 the initial redesign; [project status](PROJECT_STATUS.md) has current checks.

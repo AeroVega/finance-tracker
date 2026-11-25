@@ -1,6 +1,6 @@
 # Financial position and reconciled coverage
 
-**Status:** Synthetic-only implementation under the owner's November 10, 2026 approval of the financial-position plan. Production persistence remains **NO-GO**. Merge, deployment, live Drive tests and real-data activation require separate authorization.
+**Status:** Synthetic-only implementation under the owner's November 10, 2026 approval of the financial-position plan. Real-data authorization is recorded only in [Current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data). Merge, deployment and live Drive tests require separate authorization.
 
 ## Scope and sources
 
@@ -80,7 +80,7 @@ Changed JavaScript modules passed `node --check`; `git diff --check` and changed
 
 Owner acceptance should cover:
 
-1. Choose **Explore a synthetic preview** from Overview, or **Storage → Explore invented data locally → Try balances & reconciliation**, without Google access. Select January 31, 2025 and inspect dates, sources, amounts and January coverage.
+1. Choose **Explore a synthetic preview** from Overview, or **More → Sample data → Load invented balances and reconciliation**, without Google access. Select January 31, 2025 and inspect dates, sources, amounts and January coverage.
 2. Move the as-of date before the first balance and beyond the freshness threshold. Confirm missing and stale labels. Change account scope without letting transaction search change totals.
 3. Stage conflicting same-date balance evidence. Confirm the conflict withholds the affected amount until an explicit reasoned selection. Inspect all original evidence after resolution.
 4. Add an invented mortgage or auto-loan account and stage a dated balance. Enter a complete or partial holdings set, then correct and resolve same-date conflicting holdings. Stage statement components using separate evidence references and an explicit full-month declaration. Confirm a discrepancy or unresolved source still prevents completeness. Undo these changes and revert a mixed activity/position draft. No operation should write before explicit save.

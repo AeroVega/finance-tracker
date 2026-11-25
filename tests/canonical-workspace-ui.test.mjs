@@ -986,7 +986,7 @@ test('staged changes persist across pages and explicit save remains available wi
   for (const page of ['#storage','#holdings','#reconciliation','#overview']) await h.navigate(page);
   assert.deepEqual(h.modelSession.ledger, proposed); assert.equal(h.state.writes, 0);
   await h.click('save-ledger');
-  assert.equal(h.state.writes, 1); assert.equal(h.get('draft-bar').hidden, false);
+  assert.equal(h.state.writes, 1); assert.equal(h.get('draft-bar').hidden, true, 'a clean verified save leaves nothing to save');
   assert.equal(h.location.hash, '#overview');
   assert.deepEqual(await h.storedLedger(), proposed);
 });
@@ -995,7 +995,7 @@ test('page navigation after automatically recovered save preserves verified ledg
   const h=await workspacePage();await h.click('open-ledger');await h.stageAmount();const draft=structuredClone(h.modelSession.ledger);
   h.state.loseResponse=true;await h.click('save-ledger');assert.equal(h.modelSession.recoveryOutcome,'saved');assert.equal(h.modelSession.unverified,false);
   const writes=h.state.writes;await h.navigate('#position');await h.navigate('#storage');
-  assert.deepEqual(h.modelSession.ledger,draft);assert.equal(h.state.writes,writes);assert.equal(h.get('save-ledger').disabled,true);assert.equal(h.get('draft-bar').hidden,false);
+  assert.deepEqual(h.modelSession.ledger,draft);assert.equal(h.state.writes,writes);assert.equal(h.get('save-ledger').disabled,true);assert.equal(h.get('draft-bar').hidden,true);
 });
 
 test('review drilldown opens Activity and first-run preview opens Home without storage calls', async () => {
@@ -1166,7 +1166,7 @@ test('Home recent records follow account and month scope and preserve exact disp
     assert.ok(text(button).includes(account.textContent));
     assert.match(text(button), /\$[\d,]+\.\d{2}/);
   }
-  assert.match(h.get('overview-review-title').textContent, /records|unresolved/);
+  assert.match(h.get('overview-review-title').textContent, /needs? a decision|Nothing to review/);
   assert.equal(h.state.writes, 0);
 });
 
@@ -1712,4 +1712,38 @@ test('a file read pending during an equivalent verified save refreshes against t
   await h.click('historical-summary-stage');
   assert.equal(h.modelSession.ledger.historicalSummaryBatches.length,2);
   assert.equal(h.state.writes,1);
+});
+
+test('redesigned shell keeps one connect panel, one save action per mode, and a trend that drills into Activity', async () => {
+  const h = await workspacePage();
+  assert.equal(h.get('draft-bar').hidden, true, 'nothing to save before a ledger opens');
+  await h.click('start-preview');
+  assert.ok(h.get('more-connect').children.includes(h.get('ledger-entry')), 'open ledger: Open and Reconnect stay reachable in More');
+  assert.equal(h.get('create-ledger').hidden, true, 'a loaded preview offers one save-to-new-folder action');
+  assert.equal(h.get('save-ledger-option').hidden, true);
+  assert.equal(h.get('draft-storage-option').hidden, false);
+  assert.equal(h.get('draft-bar').hidden, true, 'an unchanged preview has nothing to save');
+  const months = h.get('home-trend-months').children;
+  assert.equal(months.length, 6);
+  assert.ok(months.every(item => /^\d{4}-\d{2}$/.test(item.children[0].dataset.month)));
+  assert.match(h.get('home-trend-context').textContent, /USD · All accounts\. Known transactions only, possibly partial; an empty month means no data, not zero\./);
+  const gap = months.find(item => item.children[0].dataset.source === 'no-data');
+  assert.ok(gap, 'months without transactions are labelled, never drawn as zero');
+  assert.match(gap.children[0].attributes['aria-label'], /no data/);
+  const december = months.find(item => item.children[0].dataset.month === '2024-12').children[0];
+  await december.click();
+  assert.equal(december.attributes['aria-pressed'], 'true');
+  const note = h.get('home-trend-readout').children[1];
+  assert.match(text(h.get('home-trend-readout')), /December 2024/);
+  await note.children.find(child => child.tagName === 'BUTTON').click();
+  assert.equal(h.location.hash, '#transactions');
+  assert.equal(h.get('month-filter').value, '2024-12');
+  assert.equal(h.get('clear-activity-filters').hidden, true);
+  await h.search('INVENTED');
+  assert.equal(h.get('clear-activity-filters').hidden, false);
+  await h.click('clear-activity-filters');
+  assert.equal(h.get('transaction-search').value, '');
+  assert.equal(h.get('review-only').checked, false);
+  assert.equal(h.get('clear-activity-filters').hidden, true);
+  assert.equal(h.state.writes, 0);
 });

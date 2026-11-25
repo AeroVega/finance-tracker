@@ -1,14 +1,25 @@
-# Historical project reports
+# Archive
 
-These reports preserve what specific PRs implemented, tested and observed at the time. They are project memory, not current implementation instructions or a live status feed.
+Superseded reports kept for decision history. Nothing here is a current instruction. For current status read [Current state](../CURRENT_STATE.md). For behavior read the focused contracts in the [documentation map](../README.md).
 
-| Report | Historical purpose |
+## Digests
+
+| Digest | Covers |
 | --- | --- |
-| [PR29 visual overhaul](PR29_VISUAL_OVERHAUL.md) | Original shared visual-system and prototype workflow changes. |
-| [PR30 performance integration](PR30_PERFORMANCE_INTEGRATION.md) | Combined performance, storage and regression evidence from PR30. |
-| [PR30 regression tests](PR30_REGRESSION_TESTS.md) | Controller coverage and independent financial-report oracle added in the PR30 follow-up. |
-| [PR36 adversarial review](PR36_ADVERSARIAL_REVIEW.md) | Financial-position/reconciliation defects found and corrected during adversarial review. |
-| [November 8 next-steps handoff](NEXT_STEPS_2026-11-08.md) | Superseded planning snapshot; retain for decision history only. |
-| [Modern UI exploration](MODERN_UI_EXPLORATION.md) | Retired design/architecture experiment; not the active application stack. |
+| [Retired storage designs](RETIRED_STORAGE_DESIGNS.md) | Per-record, grouped, fragmented and paged layouts; locator catalogs; the root protocol; legacy backup streams. Which decisions survive. |
+| [Performance experiments](PERFORMANCE_EXPERIMENTS.md) | Open and save optimizations tried before full-snapshot v1: what worked and what was rejected. |
+| [Probes and PR reports](PROBES_AND_PR_REPORTS.md) | Drive feasibility probes and the PR27–PR38 planning and review reports. |
 
-For current status use [Project Status](../PROJECT_STATUS.md), for current work use [Next Steps](../NEXT_STEPS.md), and for technical behavior use the focused contracts linked from the [documentation index](../README.md).
+Original files removed in the November 2026 cleanup are recoverable at commit `a089861` with `git show a089861:docs/<FILE>.md`.
+
+## Full reports
+
+| Report | Purpose |
+| --- | --- |
+| [PR29 visual overhaul](PR29_VISUAL_OVERHAUL.md) | Original shared visual system and prototype workflow. |
+| [PR30 performance integration](PR30_PERFORMANCE_INTEGRATION.md) | Combined performance, storage and regression evidence. |
+| [PR30 regression tests](PR30_REGRESSION_TESTS.md) | Controller coverage and the independent report oracle. |
+| [PR36 adversarial review](PR36_ADVERSARIAL_REVIEW.md) | Financial-position and reconciliation defects found and fixed. |
+| [November 8 next-steps handoff](NEXT_STEPS_2026-11-08.md) | Superseded planning snapshot. |
+| [Modern UI exploration](MODERN_UI_EXPLORATION.md) | Retired design experiment. |
+| [Diagnostics v1](APP_DIAGNOSTICS_V1.md) | The diagnostic format before the shared registry. |

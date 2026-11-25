@@ -34,11 +34,11 @@ Focused regression coverage includes:
 
 An immutable activity-creation sequence and one applicability boundary per rule could remove that remaining growth. That needs an explicit versioned contract across imports, retained inactive activities, backup/restore and existing events. Transaction dates, wall-clock timestamps and freely mutable array positions are not equivalent boundaries. No such migration is part of this change.
 
-At the time of this scoped-rule change, the event engine replayed earlier prefixes during validation and scanned events per activity. The later [chronological replay](LEDGER_REPLAY_CPU.md), [import indexes](IMPORT_RECONCILIATION_CPU.md) and [owned sessions](LEDGER_SESSION.md) address those separate CPU costs. [Retained history verification](DRIVE_HISTORY_VERIFICATION.md) still has explicit growth and memory limits.
+At the time of this scoped-rule change, the event engine replayed earlier prefixes during validation and scanned events per activity. The later [chronological replay](CPU_PERFORMANCE.md), [import indexes](CPU_PERFORMANCE.md) and [owned sessions](archive/RETIRED_STORAGE_DESIGNS.md) address those separate CPU costs. [Retained history verification](archive/RETIRED_STORAGE_DESIGNS.md) still has explicit growth and memory limits.
 
-All work remains synthetic-only. Production persistence is NO-GO. Live Google/device acceptance, merging and deployment are separate actions.
+This work used invented data only. Live Google/device acceptance, merging and deployment are separate actions.
 
 
 ## Explicit fragmented storage option
 
-**Implemented, synthetic-only:** fresh copies may now opt into [version-3 fragmented canonical storage](FRAGMENTED_CANONICAL_STORAGE.md). It preserves exact logical records while splitting oversized inventories and the logical index into bounded physical objects. The version-2 limits described above remain unchanged for existing copies. No implicit migration occurs. See the linked format, limits and verification record before choosing it.
+**Implemented, synthetic-only:** fresh copies may now opt into [version-3 fragmented canonical storage](archive/RETIRED_STORAGE_DESIGNS.md). It preserves exact logical records while splitting oversized inventories and the logical index into bounded physical objects. The version-2 limits described above remain unchanged for existing copies. No implicit migration occurs. See the linked format, limits and verification record before choosing it.

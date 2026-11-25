@@ -4,7 +4,7 @@
 **Reviewed main revision:** `16a5ff6134a414d4cc5ede1e2ed4c3af551740f4`
 **Review branch:** `review/security-privacy-oauth-cost-recovery-2026-11-22`
 **Reviewed app path:** `index.html` → `js/canonical-workspace.mjs` → `DashboardSyntheticStorage` / `CanonicalWorkspaceSession` → full-snapshot v1
-**Decision:** **NO-GO for real financial data.** Synthetic-only code review and documentation updates do not constitute production activation approval.
+**Decision at review time:** **NO-GO for real financial data.** The owner later recorded **GO** (2026-11-24); see the [owner gate record](#owner-gate-record-2026-11-24) and [Current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data). The findings below are dated and unchanged. Synthetic-only code review and documentation updates do not constitute production activation approval.
 
 This is an evidence record and release-gate checklist, not a certification, penetration test, legal opinion, live Google configuration audit, or authorization to use a real account, folder or figures.
 

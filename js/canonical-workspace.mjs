@@ -15,12 +15,13 @@ import { leaveBreadcrumb, registerContextProvider, recentReports } from './error
 import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
 import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs';
 import { mountHistoricalMonthlySummaryWorkflow } from './historical-monthly-summary-workflow.mjs';
+import { mountHomeMonthlyTrend } from './home-monthly-trend.mjs';
 
 const $ = id => document.getElementById(id);
 let providerImportWorkflow = null, historicalSummaryWorkflow = null;
 let sourceReviewPage = 0, sourceReviewScope = null;
 const sourceReviewUpdates = [];
-const pages = createWorkspacePages({document, window, onNavigate: page => { leaveBreadcrumb({e:'page.view', page}); if (page !== 'storage') providerImportWorkflow?.reset(); historicalSummaryWorkflow?.refresh(); }});
+const pages = createWorkspacePages({document, window, onNavigate: page => { leaveBreadcrumb({e:'page.view', page}); if ($('action-status').dataset.kind !== 'error') $('action-status').textContent = ''; if (page !== 'import') providerImportWorkflow?.reset(); historicalSummaryWorkflow?.refresh(); }});
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
   if (text !== undefined) result.textContent = text;
@@ -36,7 +37,31 @@ function money(value, currency) {
   return `${negative ? '-' : ''}${currency === 'USD' ? '$' : currency + ' '}${BigInt(whole).toLocaleString('en-US')}.${fraction.padEnd(2, '0')}`;
 }
 const monthLabel = month => new Date(month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+// Audit instants are shown in UTC so a midnight record never appears on the prior day.
+const recordedLabel = value => { const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value || 'at an unknown time') : date.toLocaleString('en-US', {dateStyle:'medium', timeStyle:'short', timeZone:'UTC'}) + ' UTC'; };
+const shortMonth = month => new Date(month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+// Drawn chevron for row actions; the button keeps its own accessible name.
+function chevron() {
+  const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS?.(ns, 'svg');
+  if (!svg) return node('span', '');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('class', 'icon');
+  const path = document.createElementNS(ns, 'path'); path.setAttribute('d', 'm9 6 6 6-6 6'); svg.append(path);
+  return svg;
+}
 let freshYearLedger = null;
+const homeTrend = mountHomeMonthlyTrend({context:$('home-trend-context'), months:$('home-trend-months'), readout:$('home-trend-readout'), node, money, monthLabel, shortMonth,
+  onOpenMonth: month => {
+    if (busy || !session.ledger || !Array.from($('month-filter').children).some(option => option.value === month)) return;
+    $('month-filter').value = month; page = 0; render(); pages.go('transactions');
+  }});
+// The connect panel lives on Home until something is open, then in More, so
+// Open and Reconnect never disappear while a ledger is loaded.
+let entrySlot = 'home-connect';
+function placeLedgerEntry() {
+  const slot = session.ledger ? 'more-connect' : 'home-connect';
+  if (slot === entrySlot) return;
+  entrySlot = slot; $(slot).append($('ledger-entry'));
+}
 let busy = false, configured = false, page = 0, selectedActivity = null, view = null, operationStarted = null;
 let viewLedger = null, viewReader = null, homeView = null, searchTimer = null, composingSearch = false;
 const reviewButtons = new Map();
@@ -144,10 +169,15 @@ function refresh() {
   if ($('data-class').value !== storage.dataClass) $('data-class').value = storage.dataClass;
   for (const update of sourceReviewUpdates) update();
   $('start-preview').disabled = busy || Boolean(lifecycle) || privateClass;
+  placeLedgerEntry();
+  // An action error already reported at the top is not repeated in the connect panel.
+  $('connection-status-wrap').hidden = $('action-status').dataset.kind === 'error' && $('action-status').textContent === $('connection-status').textContent;
   $('welcome-panel').hidden = Boolean(session.ledger);
   $('overview-loaded').hidden = !session.ledger;
   $('create-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(lifecycle) || session.backupPreview || session.unverified || (session.mode !== 'preview' && !privateClass && !freshYearLedger);
   $('create-ledger').textContent = privateClass ? 'Create new private database' : session.mode === 'preview' ? 'Save preview to a new folder' : 'Create new synthetic year';
+  // In a loaded synthetic preview this would duplicate Save this preview to a new folder.
+  $('create-ledger').hidden = session.mode === 'preview' && !privateClass && Boolean(session.ledger);
   $('open-ledger').disabled = busy || !configured || navigator.onLine === false || Boolean(session.restoreExpected && session.restoreFolderId);
   $('open-ledger').textContent = lifecycle ? 'Reconnect saved copy' : privateClass ? 'Open private database' : 'Open saved synthetic year';
   $('preview-position').disabled = busy || Boolean(lifecycle) || privateClass;
@@ -215,9 +245,18 @@ function refresh() {
   else text = session.ledger ? 'All changes saved and verified.' : 'No ledger loaded. Open your saved year or try a local preview.';
   if ($('save-state').textContent !== text) $('save-state').textContent = text;
   $('save-state').dataset.state = session.unverified ? 'unverified' : session.dirty ? 'dirty' : busy ? 'busy' : 'clean';
-  $('draft-bar').hidden = false;
-  $('draft-bar').dataset.state = session.unverified ? 'unverified' : busy ? 'busy' : 'dirty';
-  $('draft-summary').textContent = busy ? 'Working. Keep this tab open.' : session.unverified ? 'Save unverified. Check Storage.' : needsRecovery ? 'Recovery needed. Open Storage.' : session.dirty ? `${session.stagedHistory.length} staged change${session.stagedHistory.length === 1 ? '' : 's'} · not saved` : session.ledger ? 'No staged changes' : 'No ledger loaded';
+  // One save bar, shown only when there is something to save, wait for or recover.
+  const recovering = session.unverified || ['not-saved','different','unverifiable','checking'].includes(session.recoveryOutcome);
+  $('draft-bar').hidden = !(busy || recovering || needsRecovery || session.dirty || (session.ledger && session.needsReopen));
+  $('draft-bar').dataset.state = busy ? 'busy' : session.unverified ? 'unverified' : recovering || needsRecovery ? 'recovery' : session.dirty ? 'dirty' : 'readonly';
+  $('draft-summary').textContent = busy ? 'Working. Keep this tab open.' : session.unverified ? 'Save unverified. Check Recovery in More.' : needsRecovery || recovering ? 'Recovery needed. Open More.' : session.dirty ? `${session.stagedHistory.length} staged change${session.stagedHistory.length === 1 ? '' : 's'} · not saved` : session.ledger && session.needsReopen ? 'Read-only. Reconnect in More to edit.' : session.ledger ? 'No staged changes' : 'No ledger loaded';
+  // While an operation runs the bar reports progress only; there is nothing to press.
+  $('save-ledger-option').hidden = busy || recovering || needsRecovery || session.mode === 'preview' || !session.dirty;
+  // Hide only actions that cannot apply in this mode; blocked ones keep their reason.
+  $('save-preview-option').hidden = session.mode !== 'preview';
+  for (const id of ['undo-last-change', 'revert-all-changes']) $(id + '-option').hidden = !session.ledger;
+  for (const id of ['reopen-ledger', 'release-ledger']) $(id + '-option').hidden = !lifecycle;
+  $('draft-storage-option').hidden = busy || session.mode !== 'preview';
   $('data-mode').dataset.mode = session.mode;
   $('data-mode').dataset.dataClass = storage.dataClass;
   $('data-mode').textContent = privateClass
@@ -323,6 +362,7 @@ function addOptions(select, options, selected, first) {
 // verified closure. This is not a claim of browser/OS memory zeroization.
 function clearLoadedWorkspace() {
   historicalSummaryWorkflow?.reset();
+  homeTrend.clear();
   cancelSearch();
   view = null; viewLedger = null; viewReader = null; homeView = null; positionRender = null;
   renderedPositionDate = null; selectedActivity = null; detailEditorBaseline = null;
@@ -365,20 +405,21 @@ function render({ reset = false } = {}) {
   const summaries = view.summary.length ? view.summary : [{ currency: 'USD', income: null, spending: null, cash: null }];
   for (const summary of summaries) {
     const available = view.summaryAvailability?.[summary.currency];
-    for (const [key, heading, note] of [['income', 'Known income', 'Posted and classified records only'], ['spending', 'Known spending', 'Refunds count in their posting period'], ['cash', 'Known cash movement', 'Checking and savings only. Not a balance.']]) {
+    for (const [key, heading, note] of [['income', 'Known income', 'Posted and classified records only'], ['spending', 'Known spending', 'Refunds count in their posting period'], ['cash', 'Known cash movement', 'Checking and savings only, not a balance.']]) {
       const card = node('article', undefined, 'metric-card');
       const value = available && available[key + 'Available'] === false ? null : summary[key];
       card.append(node('p', `${heading} · ${summary.currency}`, 'metric-label'), node('p', money(value, summary.currency), 'metric-value'), node('p', note, 'metric-note'));
       $('summary-cards').append(card);
     }
   }
-  $('coverage-summary').textContent = `${view.coverage.importCount} import runs. Latest source activity: ${view.coverage.latestActivityDate || 'unavailable'}. Imported dates alone do not prove complete history. Inspect account-month reconciliation on the Review page.`;
+  $('coverage-summary').textContent = `${view.coverage.importCount} import runs. Latest activity: ${view.coverage.latestActivityDate || 'unavailable'}. Imported dates alone do not prove complete history.`;
   // Home uses account/month scope, independently of the Activity search,
   // review filter and page. Retain only the current Home scope so its read does
   // not evict the Activity reader's latest filtered result on every render.
   if (!homeView || homeView.scope.accountId !== view.scope.accountId || homeView.scope.month !== view.scope.month) {
     homeView = viewReader.view({accountId:view.scope.accountId, month:view.scope.month, pageSize:4});
   }
+  homeTrend.refresh(session.ledger, viewReader, homeView);
   const recent = homeView;
   homeButtons.clear(); $('recent-activities').replaceChildren();
   for (const row of recent.rows) {
@@ -394,8 +435,10 @@ function render({ reset = false } = {}) {
   if (!recent.rows.length) $('recent-activities').append(node('p', 'No activity in this account and period.', 'quiet-placeholder'));
   const reviewCount = view.review.activityCount + view.review.sourceCount;
   $('attention-count').textContent = String(reviewCount);
+  $('attention-count').dataset.state = reviewCount ? 'due' : 'clear';
   $('transaction-count').textContent = String(view.totalCount);
-  $('filter-count').textContent = `${view.filteredCount} matching activities of ${view.totalCount} in this account and period. Search and review filters do not change totals.`;
+  $('filter-count').textContent = `${view.filteredCount} matching activities of ${view.totalCount} in this account and period.`;
+  $('clear-activity-filters').hidden = !$('transaction-search').value && !$('review-only').checked;
   reviewButtons.clear();
   $('transaction-rows').replaceChildren();
   for (const row of view.rows) {
@@ -407,10 +450,10 @@ function render({ reset = false } = {}) {
     inlineDate.setAttribute('aria-hidden', 'true'); metadata.append(inlineDate);
     description.append(node('strong', row.sourceDescription), metadata);
     const classification = node('td');
-    classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', row.categoryId || 'No category', 'transaction-detail'));
+    classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', row.categoryId ? label(row.categoryId) : 'No category', 'transaction-detail'));
     if (postingLabel(row)) classification.append(node('span', postingLabel(row), 'posting-state'));
     if (row.needsReview) classification.append(node('small', 'Needs review: ' + row.reviewReasons.map(reviewReason).join(', '), 'transaction-detail review-reasons'));
-    const inspect = node('button', 'Inspect →', 'text-button transaction-open'); inspect.type = 'button'; inspect.setAttribute('aria-label', `Review ${row.sourceDescription} on ${row.reportingDate || 'unknown date'}`);
+    const inspect = node('button', undefined, 'text-button transaction-open'); inspect.type = 'button'; inspect.setAttribute('aria-label', `Open ${row.sourceDescription} on ${row.reportingDate || 'unknown date'}`); inspect.append(chevron());
     reviewButtons.set(row.activityId, inspect);
     inspect.setAttribute('aria-controls', 'activity-detail');
     inspect.addEventListener('click', () => inspectActivity(row.activityId));
@@ -429,12 +472,12 @@ function render({ reset = false } = {}) {
   if (!view.filteredCount) $('empty-state').textContent = 'No activities match this selection. Change the account, month or search to see other records.';
   $('transaction-table-wrap').hidden = !view.filteredCount;
   $('page-status').textContent = `Page ${view.page + 1} of ${view.pages}`;
-  $('overview-review-title').textContent = reviewCount ? `${reviewCount} records need a second look` : 'No unresolved records in this account and period. Coverage still needs separate reconciliation.';
+  $('overview-review-title').textContent = reviewCount ? `${reviewCount === 1 ? 'record needs' : 'records need'} a decision in this account and period.` : 'Nothing to review here. Coverage still needs separate reconciliation.';
   $('review-summary').textContent = `${view.review.activityCount} activities need review in this account and period. ${view.review.sourceCount} source observations await a decision. Unknown investment activity remains excluded from known totals.`;
   reviewQueueButton = null;
   $('review-queue').replaceChildren();
   if (view.review.activityCount) {
-    const reviewButton = node('button', `Show ${view.review.activityCount} activities needing review`);
+    const reviewButton = node('button', `Show ${view.review.activityCount} ${view.review.activityCount === 1 ? 'activity' : 'activities'} needing review`);
     reviewButton.type = 'button'; reviewQueueButton = reviewButton;
     reviewButton.addEventListener('click', () => {
       if (busy) return;
@@ -447,7 +490,7 @@ function render({ reset = false } = {}) {
   if (!reviewCount) {
     const empty = node('article', undefined, 'review-empty');
     const link = node('a', 'Check account-month coverage →', 'inline-action'); link.href = '#reconciliation';
-    empty.append(node('h3', 'No decisions waiting'), node('p', 'No unresolved records in this account and period. Check reconciliation to assess missing history.'), link);
+    empty.append(node('h3', 'No decisions waiting'), node('p', 'Nothing is unresolved in this account and period. Reconciliation shows whether history is missing.'), link);
     $('review-queue').append(empty);
   }
   renderPosition();
@@ -537,6 +580,7 @@ function renderPosition() {
   renderedPositionDate = $('position-date').value;
   const position = viewReader.position({asOf:$('position-date').value, accountId:view.scope.accountId});
   $('position-scope').textContent = `As of ${position.asOf} · ${view.scope.accountId ? 'Selected account only' : 'All ledger accounts'}. Activity month does not change this date. Currencies are never combined.`;
+  $('position-warning').dataset.state = position.complete ? 'complete' : 'incomplete';
   $('position-warning').textContent = `${position.complete ? 'All scoped position evidence meets completeness checks.' : 'Incomplete financial position. Known subtotals are not complete net worth.'} ${position.reasons.map(label).join('; ')} Freshness warning after 35 calendar days. Older balances are dated observations, not live balances.`;
   $('position-totals').replaceChildren();
   for (const subtotal of position.currencies) for (const [key, title] of [['knownAssets', 'Known assets'], ['knownLiabilities', 'Known liabilities'], ['knownNetWorth', 'Known net-worth subtotal']]) {
@@ -544,15 +588,15 @@ function renderPosition() {
     const scoped = position.accounts.filter(account => account.currency === subtotal.currency);
     const relevant = key === 'knownNetWorth' ? scoped : scoped.filter(account => account.role === (key === 'knownAssets' ? 'asset' : 'liability'));
     const value = relevant.length && !relevant.some(account => account.balance !== null) ? null : subtotal[key];
-    card.append(node('p', `${title} · ${subtotal.currency}`, 'metric-label'), node('p', money(value, subtotal.currency), 'metric-value'), node('p', subtotal.complete ? 'Complete for selected account scope and date.' : 'Partial evidence only. Missing values are not zero.', 'metric-note'));
+    card.append(node('p', `${title} · ${subtotal.currency}`, 'metric-label'), node('p', money(value, subtotal.currency), 'metric-value'), node('p', subtotal.complete ? '' : 'Partial evidence only. Missing values are not zero.', 'metric-note'));
     $('position-totals').append(card);
   }
   if (!position.currencies.length) $('position-totals').append(node('p', 'Position unavailable: no accounts in scope.'));
   $('position-accounts').replaceChildren(); $('holdings-accounts').replaceChildren(); positionButtons.length = 0;
   for (const account of position.accounts) {
     const card = node('article', undefined, 'review-item');
-    card.append(node('h3', account.displayName), node('p', money(account.balance, account.currency), 'account-balance'), node('p', `${label(account.role)} · ${label(account.accountType)} · ${label(account.status)}`, 'account-meta'), node('p', `Balance date: ${account.balanceDate || 'unavailable'} · Basis: ${account.basis || 'unavailable'}`), node('p', `${account.stale ? 'Stale evidence. ' : ''}${account.reasons.map(label).join('; ')}`));
-    card.append(evidenceDetails('Inspect balance evidence and selection history', () => (session.ledger.positionEvents || []).filter(event => event.accountId === account.accountId)));
+    card.append(node('h3', account.displayName, 'account-name'), node('p', money(account.balance, account.currency), 'account-balance'), node('p', `${label(account.role)} · ${label(account.accountType)} · ${label(account.status)}`, 'account-meta'), node('p', `Balance date: ${account.balanceDate || 'unavailable'} · Basis: ${account.basis || 'unavailable'}`, 'account-date'), node('p', `${account.stale ? 'Stale evidence. ' : ''}${account.reasons.map(label).join('; ')}`, 'account-note'));
+    card.append(evidenceDetails('Balance evidence and history', () => (session.ledger.positionEvents || []).filter(event => event.accountId === account.accountId)));
     if (account.status === 'conflict') {
       card.append(node('p', 'Conflicting balances are excluded. Inspect all candidates and record why one is supported.'));
       const rationale = node('input'); rationale.type = 'text'; rationale.setAttribute('aria-label', `Selection reason for ${account.displayName}`); rationale.maxLength = 300;
@@ -571,9 +615,9 @@ function renderPosition() {
       }
     }
     if (['brokerage', 'retirement'].includes(account.accountType)) {
-      const link = node('a', 'View dated holdings →', 'account-holdings-link'); link.href = '#holdings'; card.append(link);
+      const link = node('a', 'View holdings', 'account-holdings-link'); link.href = '#holdings'; card.append(link);
       const holdingCard = node('article', undefined, 'review-item');
-      holdingCard.append(node('h3', account.displayName), node('p', account.holdings ? `As of ${account.holdings.effectiveDate} · ${account.holdings.scope} · ${account.currency}` : 'No supported dated holdings evidence. Transaction rows are not holdings.'));
+      holdingCard.append(node('h3', account.displayName, 'account-name'), node('p', account.holdings ? `As of ${account.holdings.effectiveDate} · ${account.holdings.scope} · ${account.currency}` : 'No supported dated holdings evidence. Transaction rows are not holdings.', 'account-date'));
       if (account.holdings) {
         holdingCard.append(node('p', `${account.holdings.stale ? 'Stale evidence. ' : ''}${account.holdings.reasons.map(label).join('; ')}`), evidenceDetails('Inspect dated holdings and valuation', () => account.holdings));
       }
@@ -596,7 +640,7 @@ function renderPosition() {
     $('position-coverage-help').textContent = `${view.scope.month}: ${coverage.complete ? 'Reconciled complete for selected scope.' : 'Not reconciled complete for selected scope.'} Declared imports alone are insufficient.`;
     for (const item of coverage.accounts) {
       const card = node('article', undefined, 'review-item');
-      card.append(node('h4', session.ledger.accounts.find(account => account.accountId === item.accountId)?.displayName || item.accountId), node('p', `${label(item.state)} · Declared: ${item.declared ? 'yes' : 'no'} · Observed: ${item.observed ? 'yes' : 'no'}`), node('p', `Opening anchor: ${item.openingBalanceEventId || 'missing'} · Closing anchor: ${item.closingBalanceEventId || 'missing'} · Discrepancy: ${item.discrepancy ?? 'unavailable'}`), node('p', item.reasons.map(label).join('; ')), evidenceDetails('Inspect reconciliation evidence', () => item));
+      card.append(node('h4', session.ledger.accounts.find(account => account.accountId === item.accountId)?.displayName || item.accountId), node('p', `${label(item.state)} · Declared: ${item.declared ? 'yes' : 'no'} · Observed: ${item.observed ? 'yes' : 'no'}`), node('p', `Opening balance: ${item.openingBalanceEventId ? 'selected' : 'missing'} · Closing balance: ${item.closingBalanceEventId ? 'selected' : 'missing'} · Difference: ${item.discrepancy ?? 'unavailable'}`), node('p', item.reasons.map(label).join('; ')), evidenceDetails('Inspect reconciliation evidence', () => item));
       $('position-coverage').append(card);
     }
   } else $('position-coverage-help').textContent = 'Select an activity month above to inspect account-month coverage. Declared imports alone do not prove completeness.';
@@ -713,7 +757,7 @@ function showDetail(activityId, {navigate = true} = {}) {
   const activity = detail.activity;
   pages.openDetail({navigate});
   $('detail-title').textContent = activity.sourceDescription;
-  $('detail-description').textContent = `${detail.account.displayName} · ${activity.effectiveDate || 'Unknown date'} · ${label(activity.lifecycleStatus)} · ${label(activity.activityKind)} · ${activity.categoryId || 'No category'}${activity.reviewReasons?.length ? '. Needs review: ' + activity.reviewReasons.map(reviewReason).join(', ') : ''}`;
+  $('detail-description').textContent = `${detail.account.displayName} · ${activity.effectiveDate || 'Unknown date'} · ${label(activity.lifecycleStatus)} · ${label(activity.activityKind)} · ${activity.categoryId ? label(activity.categoryId) : 'No category'}${activity.reviewReasons?.length ? '. Needs review: ' + activity.reviewReasons.map(reviewReason).join(', ') : ''}`;
   $('detail-amount').textContent = money(activity.amountText, activity.currency);
   const transferPanel = $('transfer-link-panel');
   transferPanel.hidden = true;
@@ -755,7 +799,7 @@ function showDetail(activityId, {navigate = true} = {}) {
     source.append(node('strong', observation.candidate.sourceDescription || 'Source observation'),
       node('p', `Source row ${observation.rowOrdinal} · ${label(observation.disposition)} · ${observation.candidate.effectiveDate || 'Unknown date'}`, 'review-meta'));
     const run = detail.imports.find(item => item.importRunId === observation.importRunId);
-    if (run) source.append(node('p', `Declared coverage: ${run.declaredCoverage.start} to ${run.declaredCoverage.end}. ${label(run.status)}.`, 'review-meta'));
+    if (run) source.append(node('p', `Declared coverage: ${run.declaredCoverage.start} to ${run.declaredCoverage.end} · import ${label(run.status)}`, 'review-meta'));
     source.append(evidenceDetails('Inspect original source evidence', () => observation));
     $('detail-source').append(source);
   }
@@ -767,7 +811,7 @@ function showDetail(activityId, {navigate = true} = {}) {
   if (transferEvent && !historyEvents.some(event => event.eventId === transferEvent.eventId)) historyEvents.push(transferEvent);
   for (const event of historyEvents) {
     const entry = node('article', undefined, 'history-item');
-    entry.append(node('strong', label(event.eventType)), node('p', event.recordedAt, 'review-meta'));
+    entry.append(node('strong', label(event.eventType)), node('p', `Recorded ${recordedLabel(event.recordedAt)}`, 'review-meta'));
     if (event.eventType === 'classification') entry.append(node('p', `${label(event.priorActivityKind)} → ${label(event.activityKind)}`));
     if (event.eventType === 'category-correction') entry.append(node('p', `${event.priorCategoryId || 'No category'} → ${event.categoryId}`));
     if (event.eventType === 'posting-status-correction') entry.append(node('p',
@@ -1004,6 +1048,13 @@ action('reopen-ledger', 'Reopening and verifying saved records. No new financial
   await session.reopen(); render({ reset: true }); announce('Saved records reopened and verified.', 'success'); return true;
 });
 $('draft-storage-link').addEventListener('click', () => { if (!$('draft-storage-link').disabled) pages.go('storage'); });
+// In a recovery state the save bar leads straight to the recovery actions.
+$('draft-status-link').addEventListener('click', event => {
+  if (!['unverified', 'recovery'].includes($('draft-bar').dataset.state)) return;
+  event.preventDefault?.(); pages.go('storage'); $('recovery-tools').open = true;
+  $('recovery-tools').scrollIntoView?.({block:'start'});
+  if (!$('verify-save-outcome').disabled) $('verify-save-outcome').focus();
+});
 action('release-ledger', 'Closing and verifying the storage session.', async () => {
   if ((session.dirty || hasUnfinishedDetail() || hasUnfinishedEvidence()) && !window.confirm('Close the storage session without saving? After verified closure, loaded records and unsaved edits will be cleared from this tab. Saved Drive records are unchanged.')) { announce('Release cancelled. Your local draft and session are unchanged.'); return; }
   await session.release(); clearLoadedWorkspace(); announce('Storage session closed and verified. Loaded records, unsaved edits and this tab’s access token were cleared. This does not erase browser or device traces.', 'success');
@@ -1056,6 +1107,16 @@ $('transfer-counterparty').addEventListener('change', refresh);
 $('transfer-link-rationale').addEventListener('input', refresh);
 for (const id of ['account-filter', 'month-filter', 'review-only']) $(id).addEventListener('change', () => { if (!busy) { page = 0; render(); } });
 $('transaction-search').addEventListener('input', scheduleSearch);
+$('clear-activity-filters').addEventListener('click', () => {
+  if (busy || !session.ledger) return;
+  cancelSearch(); $('transaction-search').value = ''; $('review-only').checked = false; page = 0; render(); $('transaction-search').focus();
+});
+// Escape is the keyboard path back from a transaction, like the Back button.
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || event.defaultPrevented || pages.current !== 'activity-detail' || $('close-detail').disabled) return;
+  if (event.target?.closest?.('select')) return;
+  event.preventDefault(); $('close-detail').click();
+});
 $('transaction-search').addEventListener('compositionstart', () => { composingSearch = true; cancelSearch(); });
 $('transaction-search').addEventListener('compositionend', () => { composingSearch = false; scheduleSearch(); });
 $('previous-page').addEventListener('click', () => { if (!busy && page > 0) { page--; render(); } });

@@ -99,5 +99,5 @@ unminified modules; a future bundler would need retained source maps.
 See [project status](PROJECT_STATUS.md) for implementation/verification evidence,
 [testing](TESTING.md) for commands and [the v1 archive](archive/APP_DIAGNOSTICS_V1.md)
 for historical behavior. Rendered layout, physical Safari stack/clipboard/selection
-behavior and live Google integration require separate acceptance. Production
-financial-data persistence remains **NO-GO**.
+behavior and live Google integration require separate acceptance. Real-data authorization
+is recorded only in [Current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data).

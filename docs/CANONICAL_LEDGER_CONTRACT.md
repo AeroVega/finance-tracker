@@ -4,7 +4,7 @@
 **Version:** `finance-tracker-ledger-v1`  
 **Last updated:** 2026-11-06
 
-**PR28 implementation note:** The bounded synthetic application layer and its compatible coverage/event additions are documented in [PR28 canonical import contract](PR28_CANONICAL_IMPORT.md). The original pure reconciler remains a proposal calculator; application record creation, review, serialization, and verified persistence use that layer. Production authorization remains separate.
+**PR28 implementation note:** The bounded synthetic application layer and its compatible coverage/event additions are documented in [PR28 canonical import contract](CANONICAL_IMPORT.md). The original pure reconciler remains a proposal calculator; application record creation, review, serialization, and verified persistence use that layer. Production authorization remains separate.
 
 This is the source-independent contract that every file adapter must target. Provider parsers translate source-specific fields into this model; they do not define separate ledgers. All public fixtures use invented data.
 

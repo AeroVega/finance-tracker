@@ -1,7 +1,7 @@
 # Google Drive Configuration, Authorization, Quotas, and Cost
 
 **Review snapshot:** 2026-11-22
-**Scope:** Public-source and repository-source review. This is not verification of the actual Google Cloud Console project or production authorization. See [the security review record](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md).
+**Scope:** Public-source and repository-source review. This is not verification of the actual Google Cloud Console project or production authorization. See [the security review record](SECURITY_AND_COST_REVIEW.md).
 
 ## Actual application request
 

@@ -12,9 +12,9 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
   <link rel="icon" type="image/svg+xml" href="assets/icons/finance-tracker.svg">
-  <meta name="description" content="Explore a saved synthetic financial year, review canonical transactions and save deliberate corrections in Finance Tracker.">
-  <title>Your workspace · Finance Tracker</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta name="description" content="Finance Tracker: import bank CSV files on your device, review transactions and save deliberate, verified changes.">
+  <title>Finance Tracker</title>
+  <link rel="stylesheet" href="design-system.css">
   <link rel="stylesheet" href="canonical-workspace.css">
   <link rel="stylesheet" href="components/import-coverage-selector.css">
   <link rel="stylesheet" href="components/provider-csv-import-workflow.css">
@@ -31,143 +31,135 @@
     <aside class="sidebar" aria-label="Workspace navigation">
       <a class="brand" href="#overview" aria-label="Finance Tracker home">
         <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 17.5 9 12l3.2 3.2L20 6.5M14.5 6.5H20v5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span>Finance Tracker<small>SYNTHETIC WORKSPACE</small></span>
+        <span class="brand-name">Finance Tracker</span>
       </a>
-      <p class="nav-label">Workspace</p>
       <nav class="primary-nav" aria-label="Primary navigation">
-        <a id="nav-overview" href="#overview"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.5"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.5"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.5"/></svg><span class="nav-title">Home</span></a>
-        <a id="nav-transactions" href="#transactions"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8h16m-4-4 4 4-4 4M20 16H4m4-4-4 4 4 4"/></svg><span class="nav-title">Activity</span></a>
-        <a id="nav-position" href="#position"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16M6 17V9h4v8m4 0V4h4v13"/></svg><span class="nav-title">Accounts</span></a>
-        <a id="nav-review" href="#review"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 12 3.2 3.2L17 8.5"/><rect x="3.5" y="3.5" width="17" height="17" rx="5"/></svg><span class="nav-title">Review</span></a>
-        <a id="nav-storage" href="#storage"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5v9c0 2.2 16 2.2 16 0v-9M4 12c0 2.2 16 2.2 16 0"/><ellipse cx="12" cy="7.5" rx="8" ry="3"/></svg><span class="nav-title">Storage</span></a>
+        <a id="nav-overview" href="#overview"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg><span class="nav-title">Home</span></a>
+        <a id="nav-transactions" href="#transactions"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"/></svg><span class="nav-title">Activity</span></a>
+        <a id="nav-position" href="#position"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.5 9.5 12 4.5l8.5 5M6 10.5v6.5M10 10.5v6.5M14 10.5v6.5M18 10.5v6.5M3.5 19.5h17"/></svg><span class="nav-title">Accounts</span></a>
+        <a id="nav-storage" href="#storage"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01"/></svg><span class="nav-title">More</span></a>
       </nav>
-      <div class="sidebar-tools">
-        <p class="nav-label">Development</p>
-        <a href="#welcome-panel">Preview, then save to a new folder <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a>
-        <a aria-disabled="true" title="Legacy acceptance tooling is unavailable for full-snapshot copies">Acceptance tests <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a>
-        <a aria-disabled="true" title="Legacy storage tools cannot use full-snapshot folders">Legacy test tools (unavailable) <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a>
-      </div>
-      <div class="workspace-note"><span class="status-dot" aria-hidden="true"></span><strong>Synthetic data only</strong><p>Explore invented records. Production financial storage remains disabled.</p></div>
     </aside>
 
     <main class="app-shell" id="main-content" tabindex="-1">
       <header class="topbar">
-        <div><p class="eyebrow" id="page-eyebrow">YOUR WORKSPACE</p><h1 id="page-title" tabindex="-1">Home</h1><p class="intro" id="page-description">Your known cash flow, with the evidence in reach.</p></div>
+        <div class="topbar-title"><h1 id="page-title" tabindex="-1">Home</h1><p class="intro" id="page-description">Money in and out, and what needs your attention.</p></div>
         <a class="mode-pill" id="data-mode" href="#storage">Synthetic workspace</a>
       </header>
 
+      <p id="action-status" class="action-status" role="status" aria-live="polite" aria-atomic="true"></p>
 
-      <p id="action-status" class="status-message action-status" role="status" aria-live="polite" aria-atomic="true">Choose a saved synthetic year or try the local preview.</p>
+      <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-review" href="#review">Review</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a></nav>
+      <nav id="position-navigation" class="page-switcher" aria-label="Account views" hidden><a id="sub-position" href="#position">Balances</a><a id="sub-holdings" href="#holdings">Holdings</a></nav>
 
-        <details class="scope-panel" id="workspace-scope"><summary><span id="scope-period-title">All accounts · Full saved period</span><span id="scope-position-title" hidden>All accounts · Dated balances</span><span class="scope-edit">Filters <span aria-hidden="true">⌄</span></span></summary><div class="scope-controls" aria-describedby="scope-help">
+      <details class="scope-panel" id="workspace-scope"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span id="scope-period-title">All accounts · Full saved period</span><span id="scope-position-title" hidden>All accounts · Dated balances</span><span class="scope-edit">Change</span></summary><div class="scope-controls" aria-describedby="scope-help">
           <label for="account-filter">Account<select id="account-filter" disabled><option value="all">All accounts</option></select></label>
           <label id="month-scope" for="month-filter">Period<select id="month-filter" disabled><option value="all">Full year</option></select></label>
-          <label id="position-date-scope" hidden for="position-date">Position as of<input id="position-date" type="date" disabled></label>
-          <p id="scope-help">Account and period apply across Overview, Activity and Review. Search changes activity rows only.</p>
+          <label id="position-date-scope" hidden for="position-date">Balances as of<input id="position-date" type="date" disabled></label>
+          <p id="scope-help">Account and period apply to Home, Activity, Review and Reconcile. Search changes rows only.</p>
         </div></details>
 
-      <p id="no-ledger-notice" class="quiet-placeholder" hidden>No ledger is open. <a href="#storage">Open a saved year or explore a local preview</a>.</p>
+      <p id="no-ledger-notice" class="quiet-placeholder" hidden>Nothing is open yet. <a href="#overview">Open your data or try invented records on Home</a>.</p>
 
-      <nav id="position-navigation" class="page-switcher" aria-label="Position pages" hidden><a id="sub-position" href="#position">Balances</a><a id="sub-holdings" href="#holdings">Holdings</a></nav>
-      <nav id="review-navigation" class="page-switcher" aria-label="Review pages" hidden><a id="sub-review" href="#review">Decisions</a><a id="sub-reconciliation" href="#reconciliation">Reconciliation</a></nav>
-
-      <section id="overview" class="summary-section workspace-page" aria-labelledby="page-title">
-        <div id="welcome-panel" class="welcome-panel"><p class="eyebrow">WELCOME TO YOUR WORKSPACE</p><h2>See your money.<br>Know what needs attention.</h2><p>Cash flow, account balances and a place to review the details. Try it with invented data before opening a saved year.</p><div class="welcome-features"><span>Income &amp; spending</span><span>Dated balances</span><span>Source-backed review</span></div><div class="welcome-actions"><button id="start-preview" type="button" class="primary-button">Explore a synthetic preview <span aria-hidden="true">→</span></button><a href="#storage" class="secondary-button">Open a saved year</a></div></div>
-        <div id="overview-loaded" hidden>
-        <div class="section-heading"><div><p class="eyebrow">YOUR SELECTED PERIOD</p><h2 id="summary-heading">Cash flow at a glance</h2></div><p id="summary-scope">No ledger loaded</p></div>
-
-        <div id="summary-cards" class="metric-grid">
-          <article class="metric-card"><p class="metric-label">Known income <span class="metric-symbol positive" aria-hidden="true">+</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
-          <article class="metric-card"><p class="metric-label">Known spending <span class="metric-symbol" aria-hidden="true">−</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
-          <article class="metric-card metric-card-emphasis"><p class="metric-label">Known cash movement <span class="metric-symbol" aria-hidden="true">⇄</span></p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only. Not a balance.</p></article>
+      <section id="overview" class="workspace-page" aria-labelledby="page-title">
+        <div id="welcome-panel" class="welcome">
+          <div class="welcome-copy">
+            <h2>Your money, from your own files.</h2>
+            <p>Open your saved data to see money in and out, what needs review, and your balances. Bank files you import are read on this device.</p>
+          </div>
+          <div id="home-connect" class="connect-slot">
+            <section class="ledger-entry" id="ledger-entry" aria-labelledby="entry-heading">
+              <h3 id="entry-heading">Saved data</h3>
+              <div id="connection-status-wrap"><p id="connection-status" class="connection-status">No Drive folder connected. Invented-data preview works without Google authorization.</p></div>
+              <div id="data-class-choice" class="data-class-choice" hidden><label for="data-class">Data</label><select id="data-class" disabled aria-describedby="data-class-help"><option value="synthetic">Synthetic test copy (invented data)</option><option value="production">Private database</option></select><p id="data-class-help" class="field-help">Choose before connecting. To switch later, release the session and reload. Your Google account, the folder’s privacy and the saved copy are always verified.</p></div>
+              <div class="entry-actions"><button id="open-ledger" class="primary-button" type="button">Open saved synthetic year</button><button id="create-ledger" class="secondary-button" type="button">Create new synthetic year</button></div>
+              <p class="field-help">Open only opens an existing saved copy. Create needs a new, empty Google Drive folder.</p>
+            </section>
+          </div>
+          <p class="welcome-alt"><button id="start-preview" type="button" class="link-button">Try it with invented data</button> <span>It stays in this tab and saves nothing.</span></p>
         </div>
-        <div class="summary-context"><div><p>Known subtotals only. Transfers and card payments do not count as income or spending.</p><details class="summary-explainer"><summary>How these totals are calculated</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p></details></div><p id="coverage-summary">Coverage has not been loaded. Missing data is unavailable, not zero.</p></div>
-        <div class="home-grid">
-          <section class="home-card recent-card" aria-labelledby="recent-heading">
-            <div class="card-heading"><div><p class="eyebrow">IN YOUR SELECTED PERIOD</p><h2 id="recent-heading">Recent activity</h2></div><a href="#transactions" class="inline-action">View all <span aria-hidden="true">→</span></a></div>
-            <p class="card-hint">Latest source records, including items excluded from totals.</p>
-            <div id="recent-activities" class="recent-activities"></div>
-          </section>
-          <section class="home-card attention-card" aria-labelledby="attention-heading">
-            <p class="eyebrow">NEXT UP</p><h2 id="attention-heading">Review status</h2>
-            <p id="attention-count" class="attention-count">Unavailable</p>
-            <p id="overview-review-title">Open a ledger to see what needs review.</p>
-            <a href="#review" class="secondary-button">Open review <span aria-hidden="true">→</span></a>
-            <a href="#position" class="account-shortcut"><span class="destination-icon" aria-hidden="true">◎</span><span><strong>Accounts &amp; balances</strong><small>See what your dated evidence supports</small></span><span aria-hidden="true">→</span></a>
-          </section>
-        </div></div>
+
+        <div id="overview-loaded" class="home" hidden>
+          <div class="home-main">
+            <section class="home-block home-summary" aria-labelledby="summary-heading">
+              <div class="block-head"><h2 id="summary-heading">Money in and out</h2><p id="summary-scope" class="block-meta">No ledger loaded</p></div>
+              <div id="summary-cards" class="figures">
+                <article class="metric-card"><p class="metric-label">Known income</p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
+                <article class="metric-card"><p class="metric-label">Known spending</p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
+                <article class="metric-card"><p class="metric-label">Known cash movement</p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only, not a balance.</p></article>
+              </div>
+              <details class="explainer"><summary>How these totals work</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p><p>Missing data is shown as unavailable, never as zero.</p></details>
+            </section>
+
+            <section class="home-block home-trend" aria-labelledby="home-trend-title">
+              <div class="block-head"><h2 id="home-trend-title">Last six months</h2><ul class="legend" aria-label="Legend"><li><span class="trend-key trend-key-income" aria-hidden="true"></span>In</li><li><span class="trend-key trend-key-spending" aria-hidden="true"></span>Out</li></ul></div>
+              <p id="home-trend-context" class="block-meta">Open a ledger to see recent months.</p>
+              <ol id="home-trend-months" class="trend" aria-label="Monthly money in and out. Select a month for exact amounts."></ol>
+              <div id="home-trend-readout" class="trend-readout" aria-live="polite"></div>
+            </section>
+
+            <section class="home-block home-recent" aria-labelledby="recent-heading">
+              <div class="block-head"><h2 id="recent-heading">Recent activity</h2><a href="#transactions" class="inline-action">See all<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></div>
+              <div id="recent-activities" class="recent-activities"></div>
+            </section>
+          </div>
+
+          <div class="home-side">
+            <section class="home-block home-attention" aria-labelledby="attention-heading">
+              <h2 id="attention-heading">Needs attention</h2>
+              <p class="attention-line"><span id="attention-count" class="attention-count">Unavailable</span><span id="overview-review-title">Open a ledger to see what needs review.</span></p>
+              <div class="link-list">
+                <a href="#review"><span>Review imported rows</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+                <a href="#reconciliation"><span>Check month coverage</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+                <a href="#position"><span>Accounts and balances</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+              </div>
+            </section>
+
+            <section class="home-block home-import" aria-labelledby="home-import-heading">
+              <h2 id="home-import-heading">Bring in new activity</h2>
+              <p id="coverage-summary" class="block-meta">Coverage has not been loaded. Missing data is unavailable, not zero.</p>
+              <a href="#import" class="primary-button"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>Import a CSV</a>
+            </section>
+          </div>
+        </div>
       </section>
 
-      <section class="panel position-panel workspace-page" id="position" hidden aria-labelledby="position-heading">
-        <div class="panel-heading"><h2 id="position-heading">Financial position</h2><span class="tag">Dated evidence · synthetic only</span></div>
-        <p id="position-scope">Choose a ledger. The position date is independent of the activity month.</p>
-        <p id="position-warning" role="status" aria-live="polite">Missing balances are unavailable, not zero.</p>
-        <div id="position-totals" class="metric-grid"></div>
-        <div class="section-heading account-section-heading"><h2>Your accounts</h2><a href="#holdings" class="inline-action">Holdings <span aria-hidden="true">→</span></a></div>
-        <div id="position-accounts" class="position-accounts"></div>
-        <details class="manage-accounts"><summary>Add or update account evidence</summary>
-        <p class="panel-copy">Make a deliberate change. Entries stay in your draft until you save.</p>
-        <details><summary>Add a synthetic account</summary>
-          <form id="account-form" class="position-form">
-            <p>Invented account names only. Do not enter account numbers or real financial information. This stages an account without connecting to an institution.</p>
-            <label for="new-account-name">Invented display name<input id="new-account-name" type="text" maxlength="200" disabled></label>
-            <label for="new-account-institution">Institution<select id="new-account-institution" disabled><option value="wells-fargo">Wells Fargo</option><option value="sofi">SoFi</option><option value="fidelity">Fidelity</option></select></label>
-            <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Brokerage</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
-            <label for="new-account-currency">Three-letter currency<input id="new-account-currency" type="text" maxlength="3" placeholder="USD" disabled></label>
-            <button id="stage-account" type="button" class="secondary-button" disabled>Stage synthetic account</button>
-            <p id="account-form-status" class="status-message" tabindex="-1"></p>
-          </form>
-        </details>
-        <details><summary>Add or correct a dated synthetic balance</summary>
-          <form id="position-form" class="position-form" aria-describedby="position-help">
-            <p id="position-help">Invented data only. Enter the signed asset balance or a nonnegative amount owed for a liability. Each entry appends evidence; a correction on the same date creates a conflict until you select the supported source below. Staging does not save.</p>
-            <label for="balance-account">Account<select id="balance-account" disabled></select></label>
-            <label for="balance-date">Effective date<input id="balance-date" type="date" disabled></label>
-            <label for="balance-amount">Exact balance<input type="text" id="balance-amount" inputmode="decimal" placeholder="100.00" disabled></label>
-            <label for="balance-basis">Basis<select id="balance-basis" disabled><option value="manual">Manual</option><option value="statement">Statement</option></select></label>
-            <label for="balance-source">Evidence reference / correction reason<input type="text" id="balance-source" maxlength="300" disabled></label>
-            <button id="stage-balance" type="button" class="secondary-button" disabled>Stage dated balance</button>
-            <p id="position-form-status" class="status-message" tabindex="-1"></p>
-          </form>
-        </details>
-        <details><summary>Record an account closure</summary>
-          <form id="closure-form" class="position-form">
-            <p>Closure requires a selected zero balance on the closure date. It preserves the account and all its history. Later contradictory evidence prevents a complete closure claim.</p>
-            <label for="closure-anchor">Zero-balance evidence<select id="closure-anchor" disabled></select></label>
-            <label for="closure-source">Closure evidence reference<input type="text" id="closure-source" maxlength="300" disabled></label>
-            <button id="stage-closure" type="button" class="secondary-button" disabled>Stage account closure</button>
-            <p id="closure-form-status" class="status-message" tabindex="-1"></p>
-          </form>
-        </details>
-
-        </details>
+      <section id="import" class="workspace-page" aria-labelledby="page-title" hidden>
+        <section class="provider-import-panel" aria-label="CSV import">
+          <div id="provider-import-workflow"></div>
+        </section>
+        <p class="page-note">Importing never creates accounts or saves by itself. After staging, check <a href="#review">Review</a> for flagged rows, then choose Save.</p>
       </section>
 
-      <section class="panel position-panel workspace-page" id="holdings" aria-labelledby="holdings-heading" hidden>
-        <div class="panel-heading"><h2 id="holdings-heading">Dated holdings</h2><span class="tag">Statement evidence only</span></div>
-        <p class="panel-copy">Quantities and values come from dated evidence. No live prices. Account balances count once in financial position.</p>
-        <details class="editor-disclosure"><summary>Enter dated synthetic holdings</summary>
-          <form id="holdings-form" class="position-form">
-            <p>Copy invented statement evidence only. Quantities and values remain exact decimals. Holdings do not replace account balances or fetch prices. Same-date conflicting statements require a deliberate selection.</p>
-            <label for="holdings-account">Investment account<select id="holdings-account" disabled></select></label>
-            <label for="holdings-date">Holdings effective date<input id="holdings-date" type="date" disabled></label>
-            <label for="holdings-scope">Statement scope<select id="holdings-scope" disabled><option value="partial">Partial holdings</option><option value="complete">Complete holdings</option></select></label>
-            <label for="holdings-source">Statement evidence reference<input id="holdings-source" type="text" maxlength="300" disabled></label>
-            <div id="holdings-rows" class="position-editor-rows"></div>
-            <button id="add-holding" type="button" class="secondary-button" disabled>Add holding row</button>
-            <button id="stage-holdings" type="button" class="secondary-button" disabled>Stage dated holdings</button>
-            <p id="holdings-form-status" class="status-message" tabindex="-1"></p>
-          </form>
-        </details>
-        <div id="holdings-accounts" class="position-accounts"><p class="quiet-placeholder">Open a ledger to inspect investment holdings.</p></div>
+      <section class="workspace-page" id="transactions" hidden aria-labelledby="transactions-heading">
+        <h2 id="transactions-heading" class="visually-hidden">Transactions <span id="transaction-count">0</span></h2>
+        <a id="resume-detail" class="resume-detail" href="#activity-detail" hidden><span>Continue with the selected transaction</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+        <div class="activity-toolbar">
+          <label class="search-field" for="transaction-search"><span class="visually-hidden">Search transactions</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><input id="transaction-search" type="search" placeholder="Search descriptions" autocomplete="off" aria-describedby="search-help" disabled></label>
+          <label class="filter-chip" for="review-only"><input id="review-only" type="checkbox" disabled><span>Needs review</span></label>
+          <button id="clear-activity-filters" class="text-button" type="button" hidden>Clear search and filter</button>
+          <a href="#import" class="secondary-button toolbar-import"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>Import</a>
+        </div>
+        <p id="search-help" class="visually-hidden">Search and the review filter change rows only. Home totals keep the selected account and period.</p>
+        <p id="filter-count" class="filter-count" role="status" aria-live="polite" aria-atomic="true">No transactions loaded.</p>
+        <div id="empty-state" class="empty-state">Open your data or import a CSV to see transactions here.</div>
+        <div class="table-wrap" id="transaction-table-wrap" tabindex="0" aria-label="Transactions in the selected scope" hidden><table role="table"><caption class="visually-hidden">Transactions in the selected account and period. Amounts keep their exact decimal values.</caption><thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Description</th><th role="columnheader" scope="col">Type and category</th><th role="columnheader" scope="col" class="amount-heading">Amount</th><th role="columnheader" scope="col"><span class="visually-hidden">Open</span></th></tr></thead><tbody role="rowgroup" id="transaction-rows"></tbody></table></div>
+        <div class="ledger-pagination"><p id="page-status" role="status" aria-live="polite" aria-atomic="true">No transactions to display</p><div><button id="previous-page" class="secondary-button" type="button" disabled>Previous</button><button id="next-page" class="secondary-button" type="button" disabled>Next</button></div></div>
       </section>
 
-      <section class="panel position-panel workspace-page" id="reconciliation" aria-label="Account-month reconciliation" hidden>
-        <h2>Account-month reconciliation</h2>
-        <p id="position-coverage-help">Select an activity month above to inspect coverage. Declared imports alone do not prove completeness.</p>
-        <details><summary>Record reconciliation evidence</summary>
+      <section class="workspace-page" id="review" hidden aria-labelledby="review-heading">
+        <h2 id="review-heading" class="visually-hidden">Needs review</h2>
+        <p id="review-summary" class="lede">Open a ledger to see records that need a decision.</p>
+        <div id="review-queue" class="review-queue"><p class="quiet-placeholder">Unclassified activity and other unresolved records will appear here.</p></div>
+      </section>
+
+      <section class="workspace-page" id="reconciliation" aria-labelledby="reconciliation-heading" hidden>
+        <h2 id="reconciliation-heading" class="visually-hidden">Account-month reconciliation</h2>
+        <p id="position-coverage-help" class="lede">Choose a month in the period filter to check coverage. Declared imports alone do not prove completeness.</p>
+        <div id="position-coverage" class="item-list"></div>
+        <details class="disclosure"><summary>Record reconciliation evidence</summary>
           <form id="reconciliation-form" class="position-form">
-            <p>Checking, savings and credit cards use posted cash movement. Investments and loans use statement components: enter every change that explains closing balance minus opening balance, including signs. A debt reduction is negative. A complete statement declaration is evidence, not automatic reconciliation. Select the account and balance anchors for the activity month selected above. Evidence is checked against activity and unresolved records; recording a review never silently marks a month complete.</p>
+            <p>Checking, savings and credit cards use posted cash movement. Investments and loans use statement components: enter every change that explains closing balance minus opening balance, including signs. A debt reduction is negative. A complete statement declaration is evidence, not automatic reconciliation. Recording a review never silently marks a month complete.</p>
             <label for="reconcile-account">Account<select id="reconcile-account" disabled></select></label>
             <p id="reconcile-anchor-help">Select an account and activity month to choose balance evidence.</p>
             <label for="reconcile-opening">Opening balance evidence<select id="reconcile-opening" aria-describedby="reconcile-anchor-help" disabled></select></label>
@@ -184,74 +176,181 @@
             <p id="reconciliation-form-status" class="status-message" tabindex="-1"></p>
           </form>
         </details>
-
-        <div id="position-coverage"></div>
       </section>
 
-      <section class="panel transactions-panel workspace-page" id="transactions" hidden aria-labelledby="transactions-heading">
-        <div class="panel-heading"><div><p class="eyebrow">YOUR TRANSACTION HISTORY</p><h2 id="transactions-heading">Transactions <span id="transaction-count" class="count-pill">0</span></h2></div><span class="tag">Canonical ledger</span></div>
-        <a id="resume-detail" class="resume-detail" href="#activity-detail" hidden>Continue inspecting your selected transaction <span aria-hidden="true">→</span></a>
-        <div class="transaction-filters"><label class="search-field" for="transaction-search">Find a transaction<input id="transaction-search" type="search" placeholder="Search activity" autocomplete="off" aria-describedby="search-help" disabled></label><label class="checkbox-field" for="review-only"><input id="review-only" type="checkbox" disabled><span>Needs review</span></label></div>
-        <div class="filter-meta"><p id="search-help">Search and review filters change rows only. Overview totals keep the selected account and period.</p><p id="filter-count" role="status" aria-live="polite" aria-atomic="true">No transactions loaded.</p></div>
-        <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 3.5h8A2.5 2.5 0 0 1 18.5 6v14l-3.3-2-3.2 2-3.2-2-3.3 2V6A2.5 2.5 0 0 1 8 3.5ZM9 8h6m-6 4h6"/></svg></div><h3>Your year, transaction by transaction</h3><p>Open a saved ledger or try the local preview. Select any transaction to inspect its source and correction history.</p><a href="#storage">Choose a ledger <span aria-hidden="true">↑</span></a></div>
-        <div class="table-wrap" id="transaction-table-wrap" tabindex="0" aria-label="Transactions in the selected scope" hidden><p class="table-scroll-hint">Scroll sideways for exact amounts and review controls <span aria-hidden="true">↔</span></p><table role="table"><caption class="visually-hidden">Canonical transactions in the selected account and period. Amounts preserve their exact decimal values. Search filters rows only.</caption><thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Date</th><th role="columnheader" scope="col">Description / account</th><th role="columnheader" scope="col">Classification / category</th><th role="columnheader" scope="col" class="amount-heading">Exact amount</th><th role="columnheader" scope="col"><span class="visually-hidden">Review transaction</span></th></tr></thead><tbody role="rowgroup" id="transaction-rows"></tbody></table></div>
-        <div class="ledger-pagination"><p id="page-status" role="status" aria-live="polite" aria-atomic="true">No transactions to display</p><div><button id="previous-page" class="secondary-button" type="button" disabled><span aria-hidden="true">←</span> Previous</button><button id="next-page" class="secondary-button" type="button" disabled>Next <span aria-hidden="true">→</span></button></div></div>
-      </section>
-
-      <section id="activity-detail" class="panel activity-detail workspace-page" aria-labelledby="detail-title" hidden>
-        <div class="panel-heading"><div><p class="eyebrow">TRANSACTION DETAIL</p><h2 id="detail-title" tabindex="-1">Inspect transaction</h2></div><button id="close-detail" class="text-button" type="button"><span aria-hidden="true">←</span> Back</button></div>
-        <div class="detail-overview"><p id="detail-description"></p><p id="detail-amount" class="detail-amount"></p></div>
+      <section id="activity-detail" class="workspace-page activity-detail" aria-labelledby="detail-title" hidden>
+        <button id="close-detail" class="back-button" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>Back</button>
+        <div class="detail-overview"><h2 id="detail-title" tabindex="-1">Inspect transaction</h2><p id="detail-amount" class="detail-amount"></p><p id="detail-description"></p></div>
         <div class="detail-grid">
-
           <form id="correction-form" class="correction-form" aria-labelledby="correction-heading" aria-describedby="correction-help">
-            <div><p class="eyebrow">MAKE A DELIBERATE CHANGE</p><h3 id="correction-heading">Correct this transaction</h3><p id="correction-help">Keep the source. Explain the change. Stage it here, then save your draft when ready.</p></div>
+            <div><h3 id="correction-heading">Correct this transaction</h3><p id="correction-help">The source stays unchanged. Explain the change, stage it, then save when ready.</p></div>
             <label for="correction-type">What needs changing?<select id="correction-type"><option value="classification">Classification</option><option value="category-correction">Category</option><option value="bank-correction">Amount</option><option value="posting-status-correction">Posting status</option></select></label>
-            <label id="classification-field" for="classification">Classification<select id="classification"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="unclassified">Unclassified</option></select><span class="field-help">Card payments are transfers. Refund linking stays in the advanced workbench.</span></label>
-            <label id="category-field" for="category" hidden>Category<input id="category" type="text" autocomplete="off" placeholder="e.g. groceries" maxlength="200"><span class="field-help">Also remembers this category for later matching imports in the same account and currency. Linked refunds follow the purchase category unless separately categorized.</span></label>
-            <label id="amount-field" for="amount" hidden>Corrected amount<input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. -42.35" aria-describedby="amount-help"><span id="amount-help" class="field-help">Use an exact decimal with a minus sign for money out. Do not include a currency symbol or thousands separator.</span></label>
-            <label id="posting-status-field" for="posting-status" hidden>Confirmed posting status<select id="posting-status" aria-describedby="posting-status-help"><option value="unknown">Unknown</option><option value="pending">Pending</option><option value="posted">Posted</option></select><span id="posting-status-help" class="field-help">Confirm from evidence, not just to clear the review list. Posted activities can enter totals; pending and unknown activities stay excluded. Other review reasons must be resolved separately.</span></label>
-            <label id="posting-date-field" for="posting-date" hidden>Confirmed posting date<input id="posting-date" type="date" aria-describedby="posting-date-help"><span id="posting-date-help" class="field-help">Required for Posted. Original source dates stay unchanged. Ordinary activity stays in its transaction month; refunds use this posting date.</span></label>
-            <label for="correction-rationale">Why are you changing it?<textarea id="correction-rationale" rows="3" placeholder="Add a short explanation for the audit history" required></textarea></label>
-            <button id="stage-correction" class="primary-button" type="button" disabled>Stage correction <span aria-hidden="true">→</span></button>
-            <p class="field-help correction-note">Staging does not save to Drive. Local-preview changes stay in this tab.</p>
+            <label id="classification-field" for="classification">Classification<select id="classification"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="unclassified">Unclassified</option></select><span class="field-help">Card payments are transfers.</span></label>
+            <label id="category-field" for="category" hidden>Category<input id="category" type="text" autocomplete="off" placeholder="e.g. groceries" maxlength="200"><span class="field-help">Also remembered for later matching imports in the same account and currency. Linked refunds follow the purchase category unless separately categorized.</span></label>
+            <label id="amount-field" for="amount" hidden>Corrected amount<input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. -42.35" aria-describedby="amount-help"><span id="amount-help" class="field-help">An exact decimal, with a minus sign for money out. No currency symbol or thousands separator.</span></label>
+            <label id="posting-status-field" for="posting-status" hidden>Confirmed posting status<select id="posting-status" aria-describedby="posting-status-help"><option value="unknown">Unknown</option><option value="pending">Pending</option><option value="posted">Posted</option></select><span id="posting-status-help" class="field-help">Confirm from evidence, not just to clear the review list. Posted activities can enter totals; pending and unknown activities stay excluded.</span></label>
+            <label id="posting-date-field" for="posting-date" hidden>Confirmed posting date<input id="posting-date" type="date" aria-describedby="posting-date-help"><span id="posting-date-help" class="field-help">Required for Posted. Original source dates stay unchanged. Refunds use this posting date.</span></label>
+            <label for="correction-rationale">Why are you changing it?<textarea id="correction-rationale" rows="3" placeholder="A short explanation for the audit history" required></textarea></label>
+            <button id="stage-correction" class="primary-button" type="button" disabled>Stage correction</button>
+            <p class="field-help correction-note">Staging does not save. Your draft stays in this tab until you choose Save.</p>
           </form>
           <div class="detail-evidence"><section aria-labelledby="source-heading"><h3 id="source-heading">Original source</h3><div id="detail-source" class="detail-source"></div></section><section aria-labelledby="history-heading"><h3 id="history-heading">Correction history</h3><div id="detail-history" class="detail-history"></div></section><section id="transfer-link-panel" aria-labelledby="transfer-link-heading" hidden><h3 id="transfer-link-heading">Transfer path</h3><p id="transfer-link-status" class="field-help">Link the outgoing and incoming sides of the same transfer.</p><label for="transfer-counterparty">Matching incoming activity<select id="transfer-counterparty"></select></label><label for="transfer-link-rationale">Why are these the same transfer?<input id="transfer-link-rationale" type="text" maxlength="300" placeholder="e.g. Matching bank transfer reference"></label><button id="link-transfer" class="secondary-button" type="button" disabled>Link transfer activities</button></section></div>
         </div>
       </section>
 
-      <section class="panel review-panel workspace-page" id="review" hidden aria-labelledby="review-heading">
-        <div class="panel-heading"><div><p class="eyebrow">A SECOND LOOK</p><h2 id="review-heading">Needs review</h2></div><span class="tag violet">Keep uncertainty visible</span></div>
-        <p id="review-summary" class="panel-copy">Open a ledger to see records that need a decision.</p>
-        <div id="review-queue" class="review-queue"><p class="quiet-placeholder">Unclassified activity and other unresolved records will appear here.</p></div>
+      <section class="workspace-page position-panel" id="position" hidden aria-labelledby="position-heading">
+        <h2 id="position-heading" class="visually-hidden">Balances</h2>
+        <p id="position-scope" class="block-meta">Choose a ledger. The balance date is independent of the activity period.</p>
+        <div id="position-totals" class="figures"></div>
+        <p id="position-warning" class="notice" role="status" aria-live="polite">Missing balances are unavailable, not zero.</p>
+        <div id="position-accounts" class="account-list"></div>
+        <section class="editors" aria-labelledby="editors-heading">
+          <h2 id="editors-heading">Add or correct</h2>
+          <p class="field-help">Entries stay in your draft until you save. Invented account names only in synthetic copies.</p>
+          <details class="disclosure manage-accounts"><summary>Add an account</summary>
+            <form id="account-form" class="position-form">
+              <p>Do not enter account numbers. This adds an account without connecting to an institution.</p>
+              <label for="new-account-name">Display name<input id="new-account-name" type="text" maxlength="200" disabled></label>
+              <label for="new-account-institution">Institution<select id="new-account-institution" disabled><option value="wells-fargo">Wells Fargo</option><option value="sofi">SoFi</option><option value="fidelity">Fidelity</option></select></label>
+              <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Brokerage</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
+              <label for="new-account-currency">Three-letter currency<input id="new-account-currency" type="text" maxlength="3" placeholder="USD" disabled></label>
+              <button id="stage-account" type="button" class="secondary-button" disabled>Stage account</button>
+              <p id="account-form-status" class="status-message" tabindex="-1"></p>
+            </form>
+          </details>
+          <details class="disclosure"><summary>Add or correct a dated balance</summary>
+            <form id="position-form" class="position-form" aria-describedby="position-help">
+              <p id="position-help">Enter the signed asset balance, or a nonnegative amount owed for a liability. Each entry adds evidence; a correction on the same date creates a conflict until you choose the supported source. Staging does not save.</p>
+              <label for="balance-account">Account<select id="balance-account" disabled></select></label>
+              <label for="balance-date">Effective date<input id="balance-date" type="date" disabled></label>
+              <label for="balance-amount">Exact balance<input type="text" id="balance-amount" inputmode="decimal" placeholder="100.00" disabled></label>
+              <label for="balance-basis">Basis<select id="balance-basis" disabled><option value="manual">Manual</option><option value="statement">Statement</option></select></label>
+              <label for="balance-source">Evidence reference or correction reason<input type="text" id="balance-source" maxlength="300" disabled></label>
+              <button id="stage-balance" type="button" class="secondary-button" disabled>Stage dated balance</button>
+              <p id="position-form-status" class="status-message" tabindex="-1"></p>
+            </form>
+          </details>
+          <details class="disclosure"><summary>Record an account closure</summary>
+            <form id="closure-form" class="position-form">
+              <p>A closure needs a selected zero balance on the closure date. The account and its history are kept. Later contradictory evidence prevents a complete closure claim.</p>
+              <label for="closure-anchor">Zero-balance evidence<select id="closure-anchor" disabled></select></label>
+              <label for="closure-source">Closure evidence reference<input type="text" id="closure-source" maxlength="300" disabled></label>
+              <button id="stage-closure" type="button" class="secondary-button" disabled>Stage account closure</button>
+              <p id="closure-form-status" class="status-message" tabindex="-1"></p>
+            </form>
+          </details>
+        </section>
       </section>
 
-      <section class="panel storage-panel workspace-page" id="storage" hidden aria-labelledby="storage-heading">
-        <div class="panel-heading"><div><p class="eyebrow">YOUR WORKING COPY</p><h2 id="storage-heading">Storage &amp; recovery</h2></div><span class="tag">Synthetic only</span></div>
-      <section class="session-panel provider-import-panel" aria-labelledby="provider-import-heading">
-        <h3 id="provider-import-heading">Bring in transaction history</h3>
-        <p class="field-help">Supported CSV exports are parsed locally and staged into the open canonical ledger. This does not create accounts, upload the file, or save changes automatically.</p>
-        <div id="provider-import-workflow"></div>
-      </section>
-      <section class="session-panel historical-summary-panel" aria-labelledby="historical-summary-heading">
-        <h3 id="historical-summary-heading">Historical monthly summaries</h3>
-        <div id="historical-summary-workflow"></div>
-      </section>
-      <section class="ledger-entry" aria-labelledby="entry-heading">
-        <div class="entry-copy"><span class="entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5zM3 10h18"/></svg></span><div><p class="eyebrow">CONNECT A SYNTHETIC LEDGER</p><h2 id="entry-heading">Create or open a synthetic year</h2><p>Create a new invented year in an empty synthetic Drive folder, or open a copy you already saved.</p></div></div>
-        <div id="data-class-choice" class="data-class-choice" hidden><label for="data-class">Storage</label><select id="data-class" disabled aria-describedby="data-class-help"><option value="synthetic">Synthetic test copy (invented data)</option><option value="production">Private database</option></select><p id="data-class-help" class="field-help">Choose before connecting. To switch, release the session and reload this page. Your Google account, the folder’s privacy and the saved copy are always verified.</p></div><div class="entry-actions"><button id="create-ledger" class="primary-button" type="button">Create new synthetic year</button><button id="open-ledger" class="secondary-button" type="button">Open saved synthetic year <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></button></div><details class="preview-choices"><summary>Explore invented data locally</summary><p>No Google connection. Preview changes stay in this tab until you explicitly save.</p><div class="entry-actions"><button id="preview-year" class="secondary-button" type="button">Try a local preview</button><button id="preview-position" class="secondary-button" type="button">Try balances &amp; reconciliation</button></div></details>
-        <div class="entry-footnote"><p>Create new synthetic year prepares invented records and saves them to a new empty synthetic Drive folder. Open saved synthetic year only opens an existing copy.</p><a href="#welcome-panel">Create a local preview above, then save to a new folder <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></div>
-      </section>
-        <p id="connection-status" class="connection-status">No Drive folder connected. Local preview is available without Google authorization.</p>
-        <details class="advanced-tools"><summary>Storage format in this build</summary><div class="advanced-content"><p id="storage-format" class="panel-copy">No saved copy loaded. New synthetic copies use full-snapshot v1.</p><p class="field-help">This build stores one complete canonical ledger snapshot and a small commit envelope for each save. Use a fresh empty synthetic folder. Old-format folders are unsupported and are never silently converted.</p><p class="field-help">Snapshots are limited to 8 MiB. Opening and recovery verify retained history; ordinary saves verify current data and the new transition, so corruption limited to historical snapshots may be discovered later. This is not bounded-memory loading. Keep this tab open during writes and use recovery after an interrupted save.</p></div></details>
-        <p class="panel-copy">Open an existing saved synthetic year here. Changes are saved only when you choose <strong>Save changes</strong>. Keep this tab open until a save is verified. After closing a tab, open the same folder when its heartbeat has expired. Release the session for a faster handoff.</p>
-        <section class="session-panel" aria-labelledby="session-heading"><h3 id="session-heading">Save &amp; session</h3><p id="save-state" aria-live="polite">No ledger open</p><p class="field-help">Changes are never saved automatically. Switching pages keeps your draft in this tab.</p><div class="storage-actions"><div class="action-option"><button id="save-preview" class="secondary-button" type="button" disabled aria-describedby="save-preview-help">Save this preview to a new folder</button><p id="save-preview-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="undo-last-change" class="text-button" type="button" disabled aria-describedby="undo-last-change-help">Undo last staged change</button><p id="undo-last-change-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="revert-all-changes" class="text-button" type="button" disabled aria-describedby="revert-all-changes-help">Revert all staged changes</button><p id="revert-all-changes-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="reopen-ledger" class="text-button" type="button" disabled aria-describedby="reopen-ledger-help">Reopen saved</button><p id="reopen-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="release-ledger" class="secondary-button" type="button" disabled aria-describedby="release-ledger-help">Release session</button><p id="release-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div></div></section>
-        <section class="session-panel" aria-labelledby="backup-heading"><h3 id="backup-heading">Portable backup &amp; restore</h3><p class="field-help">Download the last verified saved logical database, not old physical revisions. No file is uploaded by these backup controls. Keep backups somewhere safe.</p><p id="backup-draft-warning" class="field-help" hidden>Staged changes are not in the saved copy. Choose to save first, or explicitly exclude them from this backup. Your draft stays in this tab.</p><label><input id="backup-encrypt" type="checkbox"> Encrypt backup with a password</label><label for="backup-password">Backup password</label><input id="backup-password" type="password" autocomplete="new-password" spellcheck="false" disabled aria-describedby="backup-password-help"><label for="backup-password-confirm">Confirm backup password</label><input id="backup-password-confirm" type="password" autocomplete="new-password" spellcheck="false" disabled aria-describedby="backup-password-help"><p id="backup-password-help" class="field-help">Without encryption, the file contains readable synthetic financial data. With encryption, a lost password cannot be recovered. Passwords are not saved; enter one for each export.</p><div class="storage-actions"><div class="action-option"><button id="export-backup" class="secondary-button" type="button" disabled aria-describedby="export-backup-help">Download verified backup</button><p id="export-backup-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="backup-save-first" class="secondary-button" type="button" disabled aria-describedby="backup-save-first-help">Save changes, then download</button><p id="backup-save-first-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="backup-saved-only" class="text-button" type="button" disabled aria-describedby="backup-saved-only-help">Back up saved copy only</button><p id="backup-saved-only-help" class="action-help">Unavailable until the workspace is ready.</p></div></div><label for="backup-file">Restore from a local backup file</label><input id="backup-file" type="file" accept="application/json,.json" aria-describedby="restore-help"><label for="restore-password">Restore password (encrypted backups only)</label><input id="restore-password" type="password" autocomplete="off" spellcheck="false"><p id="restore-help" class="field-help">Release any active storage session first. The file is size-checked and validated locally before folder selection. Staging a backup replaces only this tab’s preview. Restoring creates a new copy in a new empty synthetic folder and verifies it; it never overwrites an existing folder.</p><div class="storage-actions"><div class="action-option"><button id="stage-backup" class="secondary-button" type="button" disabled aria-describedby="stage-backup-help">Validate and stage backup preview</button><p id="stage-backup-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="restore-backup" class="secondary-button" type="button" disabled aria-describedby="restore-backup-help">Restore backup to new empty folder</button><p id="restore-backup-help" class="action-help">Unavailable until the workspace is ready.</p></div></div></section>
-        <details id="recovery-tools" class="advanced-tools"><summary>Recovery and advanced tools<span id="recent-problems-count"></span></summary><div class="advanced-content"><p>Open saved synthetic year can recover a conclusively expired heartbeat. These advanced recovery actions stay visible and are available only when needed.</p><div class="storage-actions"><div class="action-option"><button id="verify-save-outcome" class="secondary-button" type="button" disabled aria-describedby="verify-save-outcome-help">Verify save outcome</button><p id="verify-save-outcome-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="retry-save" class="secondary-button" type="button" disabled aria-describedby="retry-save-help">Retry verified unsaved draft</button><p id="retry-save-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="recover-ledger" class="secondary-button" type="button" disabled aria-describedby="recover-ledger-help">Recover interrupted operation</button><p id="recover-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="recover-stale" class="secondary-button" type="button" disabled aria-describedby="recover-stale-help">Confirm stopped session and recover</button><p id="recover-stale-help" class="action-help">Unavailable until the workspace is ready.</p></div></div><section class="diagnostic-history" aria-labelledby="recent-problems-heading"><h4>Last successful storage action</h4><p class="field-help">Counts and timing only, kept in this tab until cleared or reloaded. Request totals cover the existing storage lifecycle only, excluding folder picker and connection preflight. Totals are unavailable if the connection was created or replaced during the action. Manifest PATCH attempts exclude session heartbeats. Purpose counts include retries and listing pages, not unique objects. Header durations overlap and exclude body reading; their sum is not action time. HTTP 404 counts do not imply expected absences. No data is sent automatically.</p><pre id="success-metrics">No successful action recorded in this tab.</pre><button id="clear-success-metrics" type="button" class="text-button">Clear timing summary</button><h4 id="recent-problems-heading">Recent problems</h4><p class="field-help">Reports stay in this tab only. Nothing is sent automatically.</p><ol id="recent-problems"></ol><button id="diagnostic-self-test" type="button" class="text-button">Test error reporting (developer)</button><p id="diagnostic-test-status" role="status"></p></section><nav class="advanced-links" aria-label="Advanced synthetic tools"><a aria-disabled="true" title="Import workbench is not yet supported for full-snapshot copies"><span>Import workbench<small>Unavailable for full-snapshot copies</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a href="prototype/local-preview.html"><span>Local CSV preview<small>Separate raw-file diagnostic, not this ledger</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a><a aria-disabled="true" title="Legacy acceptance tooling is unavailable for full-snapshot copies"><span>Acceptance tests<small>Legacy checks; unavailable for full-snapshot copies</small></span><svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></nav><p class="field-help">Use one device or tab at a time. Release for an immediate handoff, or close the tab and wait for its heartbeat to expire before opening the same folder. Session coordination is best-effort.</p></div></details>
-      <footer><p id="release-classes">Synthetic workspace · Production financial storage disabled</p><p>Source commit <code id="build-sha">development (not deployed)</code></p><a aria-disabled="true" title="Legacy storage tools cannot use full-snapshot folders">Legacy test tools (unavailable) <svg class="link-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></a></footer>
+      <section class="workspace-page position-panel" id="holdings" aria-labelledby="holdings-heading" hidden>
+        <h2 id="holdings-heading" class="visually-hidden">Dated holdings</h2>
+        <div id="holdings-accounts" class="account-list"><p class="quiet-placeholder">Open a ledger to see investment holdings.</p></div>
+        <details class="disclosure editor-disclosure"><summary>Enter dated holdings</summary>
+          <form id="holdings-form" class="position-form">
+            <p>Copy statement evidence only. Quantities and values stay exact decimals. Holdings do not replace account balances or fetch prices. Same-date conflicting statements need a deliberate selection.</p>
+            <label for="holdings-account">Investment account<select id="holdings-account" disabled></select></label>
+            <label for="holdings-date">Holdings effective date<input id="holdings-date" type="date" disabled></label>
+            <label for="holdings-scope">Statement scope<select id="holdings-scope" disabled><option value="partial">Partial holdings</option><option value="complete">Complete holdings</option></select></label>
+            <label for="holdings-source">Statement evidence reference<input id="holdings-source" type="text" maxlength="300" disabled></label>
+            <div id="holdings-rows" class="position-editor-rows"></div>
+            <button id="add-holding" type="button" class="secondary-button" disabled>Add holding row</button>
+            <button id="stage-holdings" type="button" class="secondary-button" disabled>Stage dated holdings</button>
+            <p id="holdings-form-status" class="status-message" tabindex="-1"></p>
+          </form>
+        </details>
       </section>
 
+      <section class="workspace-page more" id="storage" hidden aria-labelledby="page-title">
+        <section class="more-section" aria-labelledby="session-heading">
+          <h2 id="session-heading">This workspace</h2>
+          <p id="save-state" class="save-state" aria-live="polite">No ledger open</p>
+          <p class="field-help">Nothing saves automatically. Keep this tab open until a save is verified; switching pages keeps your draft.</p>
+          <div class="action-list">
+            <div class="action-option" id="save-preview-option"><button id="save-preview" class="primary-button" type="button" disabled aria-describedby="save-preview-help">Save this preview to a new folder</button><p id="save-preview-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+            <div class="action-option" id="undo-last-change-option"><button id="undo-last-change" class="secondary-button" type="button" disabled aria-describedby="undo-last-change-help">Undo last staged change</button><p id="undo-last-change-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+            <div class="action-option" id="revert-all-changes-option"><button id="revert-all-changes" class="secondary-button" type="button" disabled aria-describedby="revert-all-changes-help">Revert all staged changes</button><p id="revert-all-changes-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+            <div class="action-option" id="reopen-ledger-option"><button id="reopen-ledger" class="secondary-button" type="button" disabled aria-describedby="reopen-ledger-help">Reopen saved</button><p id="reopen-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+            <div class="action-option" id="release-ledger-option"><button id="release-ledger" class="secondary-button" type="button" disabled aria-describedby="release-ledger-help">Release session</button><p id="release-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+          </div>
+          <div id="more-connect" class="connect-slot"></div>
+        </section>
 
-      <div id="draft-bar" class="draft-bar" aria-label="Draft and connection status"><a class="draft-indicator" href="#storage"><span class="save-status-mark" aria-hidden="true"></span><span id="draft-summary" aria-live="polite">Changes stay in this tab</span></a><span id="operation-timing" aria-live="off"></span><div class="action-option"><button id="save-ledger" class="primary-button" type="button" disabled aria-describedby="save-ledger-help">Save changes <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><p id="save-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div><div class="action-option"><button id="draft-storage-link" class="primary-button" type="button" disabled aria-describedby="draft-storage-link-help">Save preview</button><p id="draft-storage-link-help" class="action-help">Unavailable until the workspace is ready.</p></div></div>
+        <nav class="more-links" aria-label="Data">
+          <a href="#import"><span>Import a CSV<small>Wells Fargo, SoFi or Fidelity export</small></span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+        </nav>
+
+        <details class="disclosure more-section historical-summary-panel"><summary>Historical monthly summaries</summary>
+          <div id="historical-summary-workflow"></div>
+        </details>
+
+        <details class="disclosure more-section" id="backup-tools"><summary>Backup and restore</summary>
+          <div class="disclosure-body backup-panel">
+            <p class="field-help">Download the last verified saved copy, not old revisions. Backup controls never upload a file. Keep backups somewhere safe.</p>
+            <p id="backup-draft-warning" class="notice" hidden>Staged changes are not in the saved copy. Save first, or explicitly leave them out of this backup. Your draft stays in this tab.</p>
+            <label class="checkbox-field" for="backup-encrypt"><input id="backup-encrypt" type="checkbox"><span>Encrypt backup with a password</span></label>
+            <label for="backup-password">Backup password<input id="backup-password" type="password" autocomplete="new-password" spellcheck="false" disabled aria-describedby="backup-password-help"></label>
+            <label for="backup-password-confirm">Confirm backup password<input id="backup-password-confirm" type="password" autocomplete="new-password" spellcheck="false" disabled aria-describedby="backup-password-help"></label>
+            <p id="backup-password-help" class="field-help">Without encryption, the file contains readable financial data. A lost password cannot be recovered. Passwords are not saved; enter one for each export.</p>
+            <div class="action-list">
+              <div class="action-option"><button id="export-backup" class="secondary-button" type="button" disabled aria-describedby="export-backup-help">Download verified backup</button><p id="export-backup-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+              <div class="action-option"><button id="backup-save-first" class="secondary-button" type="button" disabled aria-describedby="backup-save-first-help">Save changes, then download</button><p id="backup-save-first-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+              <div class="action-option"><button id="backup-saved-only" class="secondary-button" type="button" disabled aria-describedby="backup-saved-only-help">Back up saved copy only</button><p id="backup-saved-only-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+            </div>
+            <h3>Restore</h3>
+            <label for="backup-file">Local backup file<input id="backup-file" type="file" accept="application/json,.json" aria-describedby="restore-help"></label>
+            <label for="restore-password">Restore password (encrypted backups only)<input id="restore-password" type="password" autocomplete="off" spellcheck="false"></label>
+            <p id="restore-help" class="field-help">Release any active session first. The file is checked on this device before you choose a folder. Staging replaces only this tab’s preview. Restoring creates a new copy in a new empty folder and verifies it; it never overwrites an existing folder.</p>
+            <div class="action-list">
+              <div class="action-option"><button id="stage-backup" class="secondary-button" type="button" disabled aria-describedby="stage-backup-help">Validate and stage backup preview</button><p id="stage-backup-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+              <div class="action-option"><button id="restore-backup" class="secondary-button" type="button" disabled aria-describedby="restore-backup-help">Restore backup to new empty folder</button><p id="restore-backup-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+            </div>
+          </div>
+        </details>
+
+        <details id="recovery-tools" class="disclosure more-section"><summary>Recovery and diagnostics<span id="recent-problems-count"></span></summary>
+          <div class="disclosure-body">
+            <p class="field-help">Open saved data can recover a conclusively expired session. Use these only when a save or session needs recovery.</p>
+            <div class="action-list">
+              <div class="action-option"><button id="verify-save-outcome" class="secondary-button" type="button" disabled aria-describedby="verify-save-outcome-help">Verify save outcome</button><p id="verify-save-outcome-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+              <div class="action-option"><button id="retry-save" class="secondary-button" type="button" disabled aria-describedby="retry-save-help">Retry verified unsaved draft</button><p id="retry-save-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+              <div class="action-option"><button id="recover-ledger" class="secondary-button" type="button" disabled aria-describedby="recover-ledger-help">Recover interrupted operation</button><p id="recover-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+              <div class="action-option"><button id="recover-stale" class="secondary-button" type="button" disabled aria-describedby="recover-stale-help">Confirm stopped session and recover</button><p id="recover-stale-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+            </div>
+            <p class="field-help">Use one device or tab at a time. Release for an immediate handoff, or close the tab and wait for its heartbeat to expire before opening the same folder. Session coordination is best-effort.</p>
+            <h3>Storage format</h3>
+            <p id="storage-format" class="field-help">No saved copy loaded. New copies use full-snapshot v1.</p>
+            <p class="field-help">This build stores one complete canonical ledger snapshot and a small commit envelope for each save. Use a fresh empty folder. Old-format folders are unsupported and are never silently converted.</p>
+            <p class="field-help">Snapshots are limited to 8 MiB. Opening and recovery verify retained history; ordinary saves verify current data and the new transition, so corruption limited to historical snapshots may be discovered later. This is not bounded-memory loading. Keep this tab open during writes and use recovery after an interrupted save.</p>
+            <section class="diagnostic-history" aria-labelledby="recent-problems-heading">
+              <h3 id="recent-problems-heading">Recent problems</h3>
+              <p class="field-help">Reports stay in this tab only. Nothing is sent automatically.</p>
+              <ol id="recent-problems"></ol>
+              <button id="diagnostic-self-test" type="button" class="text-button">Test error reporting</button>
+              <p id="diagnostic-test-status" role="status"></p>
+              <h3>Last successful storage action</h3>
+              <p class="field-help">Counts and timing only, kept in this tab until cleared or reloaded. Request totals cover the storage lifecycle only, excluding the folder picker and connection preflight. Totals are unavailable if the connection was created or replaced during the action. Manifest PATCH attempts exclude session heartbeats. Purpose counts include retries and listing pages, not unique objects. Header durations overlap and exclude body reading; their sum is not action time. HTTP 404 counts do not imply expected absences.</p>
+              <pre id="success-metrics">No successful action recorded in this tab.</pre>
+              <button id="clear-success-metrics" type="button" class="text-button">Clear timing summary</button>
+            </section>
+            <a class="row-link" href="prototype/local-preview.html"><span>Local CSV preview<small>Separate raw-file diagnostic, not this ledger</small></span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+          </div>
+        </details>
+
+        <details class="disclosure more-section" id="sample-data"><summary>Sample data</summary>
+          <div class="disclosure-body">
+            <p class="field-help">Load invented records locally. No Google connection. Changes stay in this tab until you explicitly save them to a new folder.</p>
+            <div class="entry-actions"><button id="preview-year" class="secondary-button" type="button">Load an invented year</button><button id="preview-position" class="secondary-button" type="button">Load invented balances and reconciliation</button></div>
+          </div>
+        </details>
+
+        <footer class="more-footer"><p id="release-classes">Synthetic workspace · Production financial storage disabled</p><p>Source commit <code id="build-sha">development (not deployed)</code></p></footer>
+      </section>
+
+      <div id="draft-bar" class="draft-bar" role="region" aria-label="Save status">
+        <a class="draft-indicator" id="draft-status-link" href="#storage"><span class="save-status-mark" aria-hidden="true"></span><span id="draft-summary" aria-live="polite">Changes stay in this tab</span><span id="operation-timing" aria-live="off"></span></a>
+        <div class="action-option" id="save-ledger-option"><button id="save-ledger" class="primary-button" type="button" disabled aria-describedby="save-ledger-help">Save changes</button><p id="save-ledger-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+        <div class="action-option" id="draft-storage-option"><button id="draft-storage-link" class="primary-button" type="button" disabled aria-describedby="draft-storage-link-help">Save preview…</button><p id="draft-storage-link-help" class="action-help">Unavailable until the workspace is ready.</p></div>
+      </div>
       <noscript><p class="status-message" role="alert">JavaScript is required to open a ledger. No connection or save has started.</p></noscript>
     </main>
   </div>
