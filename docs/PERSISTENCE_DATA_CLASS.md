@@ -5,7 +5,7 @@ data in Node simulation. The shipped [release profile](../js/release-profile.mjs
 lists `synthetic` and `production`; the owner's GO for real financial data takes
 effect on merge of PR 61 (see [current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data)).
 The UI defaults to synthetic and offers the private-database class. See the
-[owner checklist](OWNER_ACCEPTANCE.md).
+[archived owner checklist](archive/OWNER_ACCEPTANCE_2026-11-24.md).
 
 ## Two classes, one per session
 
@@ -116,12 +116,9 @@ decision**, recorded outside the page:
    designated account and dedicated folder stay private, not in the repository.
 3. Deployment from that commit requires the required checks on `main`
    (including **Guarded code checks**, enforced since 2026-11-23) and the
-   owner's review of the exact-SHA diff. This single-owner project does not
-   require independent human approval; see [guarded code](GUARDED_CODE.md#owner-and-reviewer-checklist).
-4. The first live use of an approved production-capable release is an
-   invented-data rehearsal under [OWNER_ACCEPTANCE.md](OWNER_ACCEPTANCE.md).
-   Real-data activation is a further explicit owner decision. A merge, a
-   deployment or a synthetic acceptance pass is not activation.
+   owner's merge for guarded changes after an agent-assisted review. This
+   single-owner project does not require independent human approval; see [guarded code](GUARDED_CODE.md#owner-and-reviewer-checklist).
+4. Real-data activation was the owner's 2026-11-24 GO and is not repeated per build. The original invented-data rehearsal is archived in [OWNER_ACCEPTANCE_2026-11-24.md](archive/OWNER_ACCEPTANCE_2026-11-24.md). Run a scoped rehearsal again only when a change affects a safeguard.
 
 ## Verification (invented data only)
 

@@ -7,8 +7,8 @@ Read [the skills index](engineering-workflows/README.md) when a task needs a def
 
 ## Git workflow and permissions
 - Work on a focused branch and submit a pull request into `main`.
-- Never push directly to `main`, force-push, rewrite shared history, or merge without explicit owner authorization.
-- Do not deploy, change production configuration, or activate production financial persistence without explicit authorization.
+- Never push directly to `main`, force-push, or rewrite shared history. Merge only under the [merge policy](docs/GUARDED_CODE.md): the owner has pre-authorized merging a PR that touches no guarded code once every required check passes; for guarded code, prepare and babysit the PR, walk the owner through an agent-assisted review, declare it ready, and leave the merge click to the owner. Any other merge needs explicit owner authorization.
+- Do not change production configuration, Google Cloud settings, or the release profile without explicit authorization. The owner's standing GO for real financial data ([CURRENT_STATE.md](docs/CURRENT_STATE.md)) is not re-granted per commit; merging to `main` deploys through the existing Pages workflow.
 - Inspect the full diff and report changes, tests, deployment state, limitations, and unresolved risks.
 - Current authorization and phase boundaries are in [CURRENT_STATE.md](docs/CURRENT_STATE.md). Recheck it before acting; historical PR descriptions do not grant current permission.
 

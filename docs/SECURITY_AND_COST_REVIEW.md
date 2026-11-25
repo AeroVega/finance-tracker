@@ -223,7 +223,7 @@ No application code was changed in that initial review because it did not reprod
 
 ### Residual risks before any activation
 
-Run the [owner acceptance and release checklist](OWNER_ACCEPTANCE.md) against the exact candidate; the evidence below remains required.
+These residual risks were closed by the 2026-11-24 owner GO (see the [owner gate record](#owner-gate-record-2026-11-24)); the [archived acceptance checklist](archive/OWNER_ACCEPTANCE_2026-11-24.md) records the procedure used. They are retained as dated findings.
 
 - Confirm actual Cloud Console configuration, app mode, authorized origin, API restrictions, enabled APIs and project billing/quota assignment.
 - Complete live synthetic tests on the exact deployed candidate: expected account, wrong account, expected folder, folder ownership/effective permission, unselected/inaccessible folder content, cancellation, token expiry, revocation, reauthorization, save, reopen, wrong-folder refusal, interrupted publication and fresh-empty restore.
@@ -243,7 +243,7 @@ Run the [owner acceptance and release checklist](OWNER_ACCEPTANCE.md) against th
 | Served build | User-confirmed | Served stamps matched `58f7a52`, `778b530` and `f387592` for their sessions. The footer said production storage was disabled; the build was synthetic-only. |
 | Live synthetic acceptance | User-confirmed pass on `58f7a52` | Wrong or unverifiable folder refused; cancel kept context; Google refused an unapproved account; CSV import and explicit save; originals absent from uploads, storage and backups; release cleared the workspace; independent reopen; plain and encrypted backup; wrong-password refusal; restore to a fresh folder; live marker refused a second device; expired-session recovery through Open. |
 | Token revocation and reconnect | User-confirmed pass on `f387592` | A save refused after revocation, with no write and the draft kept. After the lease expired, Verify save outcome re-signed in and proved not saved; the explicit retry saved; release and reopen showed the change. `778b530` and `8dc804e` exposed the gaps fixed in `fbb449e`–`2f6c1f2`. |
-| Required checks and review policy | Owner decision | **Guarded code checks** is required on `main` (verified via the API). Single-owner project: the owner reviews the exact-SHA diff; no independent approval ([guarded code](GUARDED_CODE.md#owner-and-reviewer-checklist)). |
+| Required checks and review policy | Owner decision | **Guarded code checks** is required on `main` (verified via the API). Single-owner project: guarded changes are merged only by the owner after an agent-assisted review; no independent approval ([guarded code](GUARDED_CODE.md#owner-and-reviewer-checklist)). |
 | Cloud Console, quota and $0 cost | User-confirmed | No billing account is linked to the project, so it cannot be charged. Drive API usage over 30 days was 188,576 requests, mostly testing; at 5–100 quota units each this is far below the daily no-charge threshold. The owner-only console and device item was checked by the owner; details are kept privately. |
 | Physical iPhone/iPad Safari | User-confirmed (owner checklist) | Checked by the owner; measurements are not recorded here. |
 | Single-device coordination | Accepted by owner | Best-effort coordination with no strict locking (no Drive compare-and-swap). |

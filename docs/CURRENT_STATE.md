@@ -9,17 +9,21 @@ This is the one place for mutable project status and the permission boundary. Ot
 
 On 2026-11-24 the owner confirmed that the [PR 57 acceptance checks](https://github.com/AeroVega/finance-tracker/pull/57) were complete and declared the project **GO for real financial data**. [PR 61](https://github.com/AeroVega/finance-tracker/pull/61) has merged to `main`; its merge was the owner's authorization act. This record names no commit SHA.
 
+**This GO is standing.** It is not re-granted per commit, and no per-SHA acceptance checklist applies. The pre-GO checklist is archived as [OWNER_ACCEPTANCE_2026-11-24.md](archive/OWNER_ACCEPTANCE_2026-11-24.md). `main` is kept stable by the required CI checks, including **Guarded code checks**.
+
 What this means for every later merge to `main`:
 
 - Real financial data is a supported-use requirement. Preserve account and folder isolation, verified saves and recovery, encrypted private backups, and the existing required checks and owner review.
-- A change that affects those safeguards needs evidence suited to its scope.
+- A change that affects those safeguards (guarded code) needs evidence suited to its scope and is merged only by the owner, after an agent-assisted review. Agents may babysit such a PR until they declare it ready but never click merge.
+- A change that touches no guarded code merges on passing required checks alone, under the owner's standing authorization. See the [merge policy](GUARDED_CODE.md).
+- Standing rules: real data never enters the repository, CI or logs; agents never touch the owner's real Drive folder or accounts; Synthetic stays the default for development; the 3-month encrypted backup cadence and the capacity triggers below stay in force.
 - Development, CI, diagnostics and public artifacts still use invented data only. Private account and folder details stay private.
 
 The merge listed `production` in the checked-in [release profile](../js/release-profile.mjs), so Private database mode is available in the served build under the [release gate](PERSISTENCE_DATA_CLASS.md#release-gate-what-static-code-can-and-cannot-enforce). Synthetic remains the default.
 
-Before entering real records:
+Practices for real records:
 
-1. Verify the deployed build and its profile after the Pages workflow runs.
+1. After a deployment, spot-check the served build stamp and profile; this is a check for the owner or agent, not a gate.
 2. Do not enter real records into the synthetic workspace.
 3. Do not infer support for the separate historical migration workflow.
 
@@ -40,9 +44,11 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - **Historical monthly summaries** ([PR 54](https://github.com/AeroVega/finance-tracker/pull/54), [workflow](HISTORICAL_MONTHLY_SUMMARY.md)) are present on the served synthetic build. The one-time migration wizard ([PR 58](https://github.com/AeroVega/finance-tracker/pull/58)) is separate. Neither establishes exact-build live Drive acceptance.
 - **Portable encrypted backup and restore** and recovery are implemented in the selected route. Do not infer live acceptance beyond the evidence in the relevant PRs.
 - **Post-merge** Node and Pages workflows succeeded. That is not an independent live-browser check.
-- **Redesigned shell and Home** is in progress on the UX branch [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md).
+- **Redesigned shell and Home** merged in [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md). Further UX slices are in [Next steps](NEXT_STEPS.md).
 
 ## Acceptance and verification
+
+The table is dated evidence behind the 2026-11-24 GO, not a list of open gates.
 
 | Claim | Evidence | Scope |
 | --- | --- | --- |
@@ -60,7 +66,7 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - Do not access, delete or modify existing Drive folders as part of code cleanup.
 - Preserve the $0 recurring-cost constraint, permanent manual file imports, no stored bank passwords and no unauthorized scraping.
 - Green tests, owner synthetic acceptance, a merge and a deployment are distinct facts.
-- **Guarded code checks** is required on `main`, and the owner reviews the exact-SHA diff. See [Guarded code](GUARDED_CODE.md).
+- **Guarded code checks** is required on `main`. Guarded changes are merged only by the owner after an agent-assisted review; other changes merge on green required checks. See [Guarded code](GUARDED_CODE.md).
 
 ## Next work
 

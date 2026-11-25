@@ -33,7 +33,7 @@ Balances, historical valuations, net worth, investment performance and complete-
 
 ## Interruption and retry
 
-After a failed or uncertain save, preserve the folder and local draft. Do not blindly retry or delete files. Recover if offered, then perform a verified full reopen to establish what reached Drive. Recovery alone does not seed a save baseline or prove the intended draft was persisted. An uncertain release does not announce successful handoff. See the [current protocol](FULL_SNAPSHOT_STORAGE.md) and [owner guide](OWNER_ACCEPTANCE.md).
+After a failed or uncertain save, preserve the folder and local draft. Do not blindly retry or delete files. Recover if offered, then perform a verified full reopen to establish what reached Drive. Recovery alone does not seed a save baseline or prove the intended draft was persisted. An uncertain release does not announce successful handoff. See the [current protocol](FULL_SNAPSHOT_STORAGE.md) and [archived owner guide](archive/OWNER_ACCEPTANCE_2026-11-24.md).
 
 ## Historical measurements
 

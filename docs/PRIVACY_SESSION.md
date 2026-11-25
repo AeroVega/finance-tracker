@@ -1,6 +1,6 @@
 # Account and session privacy
 
-**Status:** Synthetic-only implementation. No production activation, account switching, background sign-in or automatic folder creation.
+**Status:** Implemented. Real financial data is supported under the owner's standing 2026-11-24 GO ([current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data)). Synthetic remains the default for development. No account switching, background sign-in or automatic folder creation.
 
 ## Designated account
 
@@ -14,7 +14,7 @@ Picker selection is a candidate until the token identity is verified, folder met
 
 The selected folder ID, name and account permission ID are held in the same in-memory storage object and passed to the lifecycle/adapter. Adapter operations are constructed for that folder and obtain the current token via a callback. The current source does **not** prove that the selected folder is owned by the designated account, and `drive.file` listing only covers app-visible children. The user must confirm the intended database/folder explicitly; folder ownership/effective permissions and completeness must be verified in live synthetic acceptance.
 
-The production folder name is explicitly refused; synthetic folder names are required. This is a safety affordance, not an authorization boundary. Do not use any production folder or real financial data under the present gate.
+Folder-name rules are a safety affordance, not an authorization boundary. Development, CI and agents use invented data and synthetic folders only; agents never touch the owner's real Drive folder or accounts.
 
 ## Authorization on operations
 
@@ -28,16 +28,16 @@ The account fingerprint is the only intended app-owned localStorage value for th
 
 The diagnostic pipeline converts provider failures to registered codes, fixed messages, allowlisted source/operation context and bounded request metrics. It deliberately omits raw provider response bodies, tokens, headers, account identity, folder IDs and ledger contents. A separate live artifact/log inspection is still required before production.
 
-## Acceptance still needed
+## Safeguard checks for changes
 
-Use invented records and a separately authorized synthetic folder to:
+The pre-GO acceptance is complete (see [current state](CURRENT_STATE.md)) and is not repeated per build. When a change affects these safeguards, verify the affected ones with invented records and a synthetic folder, as part of the [guarded-code review](GUARDED_CODE.md#owner-and-reviewer-checklist):
 - Verify the intended account and reject a different account on connect and recovery refresh.
 - Verify that the selected folder/account binding is the expected database and effective Drive access.
 - Test cancellation, failed folder admission/release, token expiry/revocation and interactive reauthorization.
 - Inspect application/browser storage, rendered UI and diagnostics after release/reload/abrupt close.
 - Verify successful release on physical iPhone and iPad Safari.
 
-No real financial data is authorized.
+Never put real financial data in the repository, CI or logs.
 
 ## Strict folder admission
 
@@ -60,9 +60,8 @@ permissions, create a marker, or inspect financial content.
 
 This is point-in-time evidence about the exact folder, not evidence of global
 emptiness, child-file privacy, or protection against concurrent ACL changes.
-No production activation follows. Before relying on the check for production,
-verify field population and inherited sharing behavior with live invented-data
-Google cases. Changing sharing while the session is active is unsupported;
+Re-verify field population and inherited sharing behavior with live invented-data
+Google cases if a change touches this check. Changing sharing while the session is active is unsupported;
 stop and reconnect after correcting the folder's sharing settings.
 
 ## Unreleased session handoff

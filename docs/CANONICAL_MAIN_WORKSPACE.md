@@ -64,7 +64,7 @@ The page requests an unload warning during work or while a draft is unsaved. Mob
 
 ## Acceptance
 
-Accepted behavior is recorded in [Current state](CURRENT_STATE.md) and the [owner acceptance checklist](OWNER_ACCEPTANCE.md). The owner accepted the local synthetic-year exploration, evidence and correction workflow, and mobile workspace experience on the PR32 head. Do not repeat those checks unless a later change affects them. A merge or green CI does not establish live Google latency, physical Safari behavior or deployment; record the exact SHA, device and capability with each result.
+Accepted behavior is recorded in [Current state](CURRENT_STATE.md) and the [archived owner acceptance checklist](archive/OWNER_ACCEPTANCE_2026-11-24.md). The owner accepted the local synthetic-year exploration, evidence and correction workflow, and mobile workspace experience on the PR32 head. Do not repeat those checks unless a later change affects them. A merge or green CI does not establish live Google latency, physical Safari behavior or deployment; record the exact SHA, device and capability with each result.
 
 Use invented data for these workspace checks:
 
