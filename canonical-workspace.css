@@ -183,12 +183,12 @@ pre { margin: var(--s2) 0 0; padding: var(--s4); max-width: 100%; max-height: 32
 /* Disclosure rows: one level, never nested in another disclosure. */
 .disclosure { border-top: 1px solid var(--line); }
 .disclosure:last-of-type { border-bottom: 1px solid var(--line); }
-.disclosure > summary { display: flex; align-items: center; gap: var(--s3); min-height: 52px; cursor: pointer; list-style: none; color: var(--text); font-size: var(--fs-md); font-weight: 600; }
+.disclosure > summary { display: flex; align-items: center; gap: var(--s3); min-height: 52px; padding: var(--s3) var(--s2); cursor: pointer; list-style: none; color: var(--text); font-size: var(--fs-md); font-weight: 600; }
 .disclosure > summary::-webkit-details-marker { display: none; }
 .disclosure > summary::after { content: ""; width: 8px; height: 8px; margin: 0 6px 4px auto; flex-shrink: 0; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .18s ease-out; }
 .disclosure[open] > summary::after { margin-bottom: -2px; transform: rotate(-135deg); }
 .disclosure > summary:hover::after { border-color: var(--text); }
-.disclosure > :not(summary) { margin-bottom: var(--s5); }
+.disclosure > :not(summary) { margin-bottom: var(--s5); padding-inline: var(--s2); }
 .disclosure-body { display: grid; gap: var(--s3); }
 .disclosure-body h3 { margin-top: var(--s4); font-size: var(--fs-md); }
 
@@ -231,7 +231,7 @@ pre { margin: var(--s2) 0 0; padding: var(--s4); max-width: 100%; max-height: 32
 .attention-count { color: var(--text); font-size: var(--fs-figure); font-weight: 650; line-height: 1.1; }
 .attention-count[data-state="due"] { color: var(--warning); }
 .link-list { display: grid; margin-top: var(--s4); border-top: 1px solid var(--line); }
-.link-list a, .more-links a, .row-link { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 48px; border-bottom: 1px solid var(--line); color: var(--text); font-size: var(--fs-sm); font-weight: 550; text-decoration: none; }
+.link-list a, .more-links a, .row-link { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 48px; padding: var(--s3) var(--s2); border-bottom: 1px solid var(--line); color: var(--text); font-size: var(--fs-sm); font-weight: 550; text-decoration: none; }
 .link-list a:last-child { border-bottom: 0; }
 :is(.link-list, .more-links) a .icon, .row-link .icon { width: 18px; height: 18px; color: var(--muted); }
 :is(.link-list, .more-links) a:hover .icon, .row-link:hover .icon { color: var(--accent); }
