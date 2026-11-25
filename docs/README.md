@@ -1,64 +1,86 @@
 # Documentation map
 
-Start with [Agent quick start](AGENT_QUICK_START.md), then read [current project state](CURRENT_STATE.md). This index is a map, not a reading checklist: open only the contracts relevant to the code or decision being worked on.
+Start with the [agent quick start](AGENT_QUICK_START.md), then [current state](CURRENT_STATE.md). This index is a map, not a reading list: open only the contracts your work touches.
 
-## Authority and reading order
+## Authority
 
-1. [Current state](CURRENT_STATE.md) — concise active branch/main status and permission boundary.
-2. [Contributor/agent instructions](../AGENTS.md) — mandatory privacy, Git, and engineering rules.
-3. [Next steps](NEXT_STEPS.md) — active project priorities and acceptance gates.
-4. One or more focused contracts below.
-5. [Project status evidence log](PROJECT_STATUS.md) — detailed dated implementation and verification history. Historical sections describe only their named revisions.
+When documents disagree, resolve it at the source instead of adding another summary.
+
+| Question | Authority |
+| --- | --- |
+| Current status and permissions | [Current state](CURRENT_STATE.md), then [AGENTS.md](../AGENTS.md) |
+| Active priorities and acceptance gates | [Next steps](NEXT_STEPS.md) |
+| Module and format invariants | The focused contract below |
+| What happened earlier | [Project history](PROJECT_STATUS.md) and the [archive](archive/README.md) |
 
 ## Project direction
 
 | Document | Owns |
 | --- | --- |
-| [Project charter](PROJECT_CHARTER.md) | Mission, constraints, and governing project principles |
-| [Product definition](PRODUCT_DEFINITION.md) | Product vision and owner-confirmed v1.0.0 scope |
-| [Roadmap](ROADMAP.md) | Alpha → Beta → 1.0.0 → 2.0.0 progression |
-| [Open product decisions](PRODUCT_OPEN_DECISIONS.md) | Unresolved owner/product choices |
+| [Project charter](PROJECT_CHARTER.md) | Mission, constraints, governing principles |
+| [Product definition](PRODUCT_DEFINITION.md) | Product vision and the owner-confirmed v1.0.0 scope |
+| [Roadmap](ROADMAP.md) | Alpha → Beta → 1.0.0 → 2.0.0 |
+| [Open product decisions](PRODUCT_OPEN_DECISIONS.md) | Unresolved owner and product choices |
 | [Architecture decisions](ARCHITECTURE_DECISIONS.md) | Technical decision record and rationale |
+| [Data sources](DATA_SOURCES.md) | Research on financial data sources and import strategy |
 
-## Application and financial behavior
+## Financial behavior
 
-- [Canonical main workspace](CANONICAL_MAIN_WORKSPACE.md) — user-facing ledger workflow and corrections.
-- [Canonical ledger contract](CANONICAL_LEDGER_CONTRACT.md) and [data model](DATA_MODEL.md) — financial meaning, identity, and provenance.
-- [Financial position](FINANCIAL_POSITION.md) — dated balances, holdings, liabilities, and reconciliation.
-- [Provider import specifications](PROVIDER-IMPORT-SPECS.md) and [PR28 canonical import](PR28_CANONICAL_IMPORT.md) — supported source formats, parsing, coverage, and reconciliation.
-- [Category rule scoping](CATEGORY_RULE_SCOPING.md) — deterministic categorization behavior.
-- [Posting-status corrections](POSTING_STATUS_CORRECTIONS.md) — auditable posting-state correction events.
+| Document | Owns |
+| --- | --- |
+| [Canonical ledger contract](CANONICAL_LEDGER_CONTRACT.md) | Financial meaning, identity, provenance |
+| [Data model](DATA_MODEL.md) | Record shapes |
+| [Financial position](FINANCIAL_POSITION.md) | Dated balances, holdings, liabilities, reconciliation |
+| [Historical monthly summary](HISTORICAL_MONTHLY_SUMMARY.md) | Normalized monthly history from the legacy workbook |
+| [Canonical import](CANONICAL_IMPORT.md) | Import pipeline, reconciliation, coverage |
+| [Provider import specs](PROVIDER_IMPORT_SPECS.md) | Wells Fargo, SoFi and Fidelity formats |
+| [Provider CSV import workflow](PROVIDER_CSV_IMPORT_WORKFLOW.md), [preview](PROVIDER_CSV_PREVIEW.md), [coverage selector](IMPORT_COVERAGE_SELECTOR.md) | The supported application import path |
+| [Category rule scoping](CATEGORY_RULE_SCOPING.md) | Deterministic categorization |
+| [Posting-status corrections](POSTING_STATUS_CORRECTIONS.md) | Auditable posting-state events |
+| [Canonical month index](CANONICAL_MONTH_INDEX.md) | Account/month lookup and monthly summaries |
+| [CPU performance](CPU_PERFORMANCE.md) | In-memory optimizations, invariants, benchmarks |
 
-## Storage, persistence, and recovery
+## Storage, sessions and security
 
-- [Full-snapshot storage](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) — selected application format, authority, verification, recovery and bounds.
-- [Drive simulator](DRIVE_SIMULATOR.md) — repeatable synthetic provider/authentication scenarios, performance measurements and explicit emulation limits.
-- [Storage terminology](STORAGE_TERMINOLOGY.md) — active format versus historical version namespaces.
-- [Account/session privacy](PRIVACY_SESSION.md) — designated-account checks, transactional folder selection, privacy close, and browser retention limitations.
-- [Session coordination](SESSION_COORDINATION.md), [Drive response bounds](DRIVE_RESPONSE_BOUNDS.md), [Google Drive configuration](GOOGLE_DRIVE_CONFIGURATION.md), and [security](SECURITY.md) — retained shared safety/provider boundaries.
-- Portable backup/restore and supported file ingestion remain requirements, not available features of the selected route.
+| Document | Owns |
+| --- | --- |
+| [Full-snapshot storage](FULL_SNAPSHOT_STORAGE.md) | The one supported format: authority, verification, recovery, bounds |
+| [Backup and recovery](FULL_SNAPSHOT_BACKUP_RECOVERY.md) | Encrypted portable backup and restore |
+| [Persistence data class](PERSISTENCE_DATA_CLASS.md) | Synthetic versus production release gate |
+| [Storage terminology](STORAGE_TERMINOLOGY.md) | Active format versus retired version names |
+| [Privacy and session](PRIVACY_SESSION.md), [session coordination](SESSION_COORDINATION.md) | Designated-account checks, ownership, release |
+| [Drive response bounds](DRIVE_RESPONSE_BOUNDS.md), [Google Drive configuration](GOOGLE_DRIVE_CONFIGURATION.md), [Google Cloud setup](GOOGLE_CLOUD_SETUP.md) | Provider boundaries and setup |
+| [Security](SECURITY.md), [security and cost review](SECURITY_AND_COST_REVIEW.md) | Security posture and the dated pre-approval review |
+| [Drive simulator](DRIVE_SIMULATOR.md), [Drive transaction engine testing](DRIVE_TRANSACTION_ENGINE_TESTING.md) | Synthetic provider scenarios and their limits |
 
-### Historical storage design references
+## Interface
 
-The following preserve rationale and earlier invariants; they do not describe a second supported application format: [partitioned canonical storage](PARTITIONED_CANONICAL_STORAGE.md), [database identity/lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md), [application storage lifecycle](APPLICATION_STORAGE_LIFECYCLE.md), [ledger session](LEDGER_SESSION.md), [transaction staging/recovery](TRANSACTION_STAGING_AND_RECOVERY.md), [root protocol](ROOT_TRANSACTION_PROTOCOL.md), [immutable page tree](IMMUTABLE_PAGE_TREE.md), [segmented locator catalog](SEGMENTED_LOCATOR_CATALOG.md), [canonical month index](CANONICAL_MONTH_INDEX.md), [backup/restore](DRIVE_BACKUP_AND_RESTORE.md), [framed archives](FRAMED_BACKUP_STREAM.md), [source retention](ORIGINAL_SOURCE_RETENTION.md), and [earlier private-storage architecture](PRIVATE_STORAGE_ARCHITECTURE.md).
+| Document | Owns |
+| --- | --- |
+| [Design](DESIGN.md) | Current navigation, tokens and components |
+| [Canonical main workspace](CANONICAL_MAIN_WORKSPACE.md) | Ledger workflow, corrections and workspace checks |
+| [Mobile UI design](MOBILE_UI_DESIGN.md), [mobile workspace pages](MOBILE_WORKSPACE_PAGES.md), [Apple web app](APPLE_WEB_APP.md) | Mounted-page architecture and device behavior. Visual decisions are superseded by Design. |
+| [Visualization and investigation design](VISUALIZATION_AND_INVESTIGATION_DESIGN.md) | Owner-confirmed direction for future charts, not an implementation contract |
+| [Success metrics](SUCCESS_METRICS.md) | Tab-local summary of the last successful storage action |
 
-## Interface, diagnostics, and quality
+## Quality and operations
 
-- [Interface design](DESIGN.md) — current navigation, workspace status, tokens and components.
-- [Mobile UI design](MOBILE_UI_DESIGN.md), [mobile workspace pages](MOBILE_WORKSPACE_PAGES.md), and [Apple web app](APPLE_WEB_APP.md) — earlier interface rationale and device-specific behavior.
-- [Application diagnostics](APP_DIAGNOSTICS.md) and [error codes](ERROR_CODES.md) — privacy-safe error reporting and registered codes.
-- [Testing](TESTING.md) and [owner acceptance](OWNER_ACCEPTANCE.md) — automated checks and manual acceptance boundaries.
-- [Save request measurements](ACTIVE_SAVE_REQUESTS.md) and [application testing feedback](APP_TESTING_FEEDBACK.md) — historical optimization rationale and user-facing follow-up.
+| Document | Owns |
+| --- | --- |
+| [Testing](TESTING.md) | Automated checks and commands |
+| [Owner acceptance](OWNER_ACCEPTANCE.md) | Manual acceptance and release checklist |
+| [Synthetic data](SYNTHETIC_DATA.md) | The invented-year recipe |
+| [Application diagnostics](APP_DIAGNOSTICS.md), [error codes](ERROR_CODES.md) | Privacy-safe reports and registered codes (the code list is generated) |
+| [Guarded code](GUARDED_CODE.md) | Which paths need extra verification |
 
-## Research, experiments, and evidence
+## Archive
 
-Provider feasibility, Drive experiments, CPU measurements, synthetic probes, and PR-specific reviews are evidence—not active instructions by default. Use their dates, source revisions, and limitations when relevant. Superseded reports and explorations are collected in [archive](archive/README.md).
+[Archive](archive/README.md) holds retired storage designs, performance experiments, and PR and probe reports. Treat them as evidence with dates and source revisions, never as instructions.
 
 ## Maintenance rules
 
-- Update CURRENT_STATE.md when the current `main` baseline or authorization changes.
-- Update NEXT_STEPS.md only when project priorities or acceptance gates change.
-- Update the focused contract when implementation behavior changes; do not put detailed invariants in this index.
-- Keep PROJECT_STATUS.md as a dated evidence log. Do not copy its entire history into README or agent entry points.
-- Preserve meaningful historical rationale, but archive superseded reports rather than leaving competing instructions in the active reading path.
-- Use **Verified**, **User-confirmed**, **Hypothesis**, and **Open** accurately. A merged PR, green CI, owner acceptance, and successful deployment are distinct facts.
+- Update CURRENT_STATE.md when the `main` baseline or authorization changes. Update NEXT_STEPS.md only when priorities or gates change.
+- Update the focused contract when behavior changes. Keep detailed invariants out of this index.
+- Link to status instead of copying it. Put each measurement next to its dated evidence.
+- Move a superseded report to the archive when it still has historical value. Otherwise delete it.
+- Use **Verified**, **User-confirmed**, **Hypothesis** and **Open** exactly. A merge, green CI, owner acceptance and a deployment are distinct facts.

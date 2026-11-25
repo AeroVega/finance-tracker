@@ -50,8 +50,8 @@
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
         "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs",
         "js/canonical-history.mjs", "js/canonical-import.mjs", "js/persistence-data-class.mjs", "js/release-profile.mjs", "tests/production-app-flow.test.mjs", "js/byte-ownership.mjs",
-        "js/immutable-content-type.mjs", "js/utf8-length.mjs", "docs/APPLICATION_STORAGE_LIFECYCLE.md",
-        "docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md", "docs/STORAGE_SCALING_AND_PRODUCTION_READINESS.md",
+        "js/immutable-content-type.mjs", "js/utf8-length.mjs",
+        "docs/FULL_SNAPSHOT_STORAGE.md",
         "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md"
       ],
       "tests": [

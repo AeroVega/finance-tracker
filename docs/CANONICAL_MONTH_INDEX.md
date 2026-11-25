@@ -1,12 +1,12 @@
 # Canonical monthly index and summaries
 
-> Historical storage-design reference. The selected application route is [full-snapshot v1](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
+> Historical storage-design reference. The selected application route is [full-snapshot v1](FULL_SNAPSHOT_STORAGE.md). This document preserves earlier design/rationale, not current format support or authorization. See [current state](CURRENT_STATE.md).
 
 
 **Implemented and verified with invented data only.** This adds account/month
 lookup and exact monthly summaries to the existing canonical store and workspace.
-Production persistence remains **NO-GO**. No live Drive, real financial records,
-merge, or deployment was performed for this change.
+No live Drive, real financial records, merge, or deployment was performed for
+this change. Real-data authorization is recorded only in [Current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data).
 
 ## Source and derived data
 
@@ -66,7 +66,7 @@ an old application can open a newly saved copy: the separate version-2 catalog
 root is deliberately rejected by old storage readers. Older backup application
 validators also reject unknown sidecar paths rather than silently omitting them.
 Use the updated application for opening, saving, backup and restore after a new
-catalog write. See [catalog compatibility](SEGMENTED_LOCATOR_CATALOG.md). Existing standalone grouped-v2 refusal
+catalog write. See [catalog compatibility](archive/RETIRED_STORAGE_DESIGNS.md). Existing standalone grouped-v2 refusal
 is unchanged.
 
 ## What remains whole-ledger

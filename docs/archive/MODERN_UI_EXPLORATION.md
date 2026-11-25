@@ -1,6 +1,6 @@
 # Archived modern UI exploration
 
-**Historical record, November 8, 2026:** PR29 adopted the visual direction in shared static CSS. The later owner-authorized prototype cleanup retired the isolated HTML/JavaScript demo and its Tailwind Play CDN. The original architecture discussion below remains evidence of that exploration, not current instructions to retain its runtime. See [the cleanup inventory](../PROTOTYPE_CLEANUP.md).
+**Historical record, November 8, 2026:** PR29 adopted the visual direction in shared static CSS. The later owner-authorized prototype cleanup retired the isolated HTML/JavaScript demo and its Tailwind Play CDN. The original architecture discussion below remains evidence of that exploration, not current instructions to retain its runtime. See [the cleanup inventory](PROBES_AND_PR_REPORTS.md).
 
 # Architecture Direction: Modern UI Exploration
 

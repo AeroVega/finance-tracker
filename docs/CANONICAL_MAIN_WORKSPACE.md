@@ -14,7 +14,7 @@ Transfer links are append-only canonical financial events. The effective view ex
 
 **Implemented, synthetic-only:** [Posting-status corrections](POSTING_STATUS_CORRECTIONS.md) add an explicit Posted/Pending/Unknown editor with posting-date and rationale validation. They preserve source evidence, use append-only history and require the existing explicit save. Unclassified activities still need classification; confirming posting does not prove complete coverage. Use the updated app after saving these events because older builds refuse them.
 
-The current `DashboardSyntheticStorage`, full-snapshot application/store, canonical financial-event and reporting engines enforce ownership, exact-base checks, durable writes, integrity, append-only history, recovery and financial meaning. There is no automatic migration, automatic save or complete-history assertion. The selected [full-snapshot v1 format](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) supports fresh synthetic copies; older per-record, grouped, fragmented and partitioned copies are unsupported and are not converted, overwritten or deleted.
+The current `DashboardSyntheticStorage`, full-snapshot application/store, canonical financial-event and reporting engines enforce ownership, exact-base checks, durable writes, integrity, append-only history, recovery and financial meaning. There is no automatic migration, automatic save or complete-history assertion. The selected [full-snapshot v1 format](FULL_SNAPSHOT_STORAGE.md) supports fresh synthetic copies; older per-record, grouped, fragmented and partitioned copies are unsupported and are not converted, overwritten or deleted.
 
 ## Financial-position follow-up
 
@@ -32,7 +32,7 @@ The earlier scope and acceptance record below describe the canonical activity mi
 6. In **Storage**, **Reopen saved** independently loads the selected copy again. Unsaved changes require confirmation and are discarded only after a successful verified load.
 7. In **Storage**, **Release session** verifies release and clears the workspace's authorization token. Loaded records and any draft remain read-only in this synthetic tab. Close the tab to clear them. Reconnecting reopens the saved copy rather than silently reapplying a draft.
 
-If the owner has not seeded a copy, **Storage → Explore invented data locally → Try a local preview** demonstrates the same canonical records and correction controls without connecting to Google. **Save this preview to a new folder** then requires a newly created, owner-confirmed empty folder with `synthetic` in its name. The workspace checks the fresh genesis manifest, writes the exact in-memory ledger through the canonical store using the full-snapshot layout, and independently reopens and compares the complete graph. It never modifies an existing copy. If a write outcome is uncertain, the draft remains in memory and blind retry is blocked; recover if offered and reopen to establish what reached Drive. Create new synthetic year provides deterministic pristine seeding.
+If the owner has not seeded a copy, **More → Sample data → Load an invented year** demonstrates the same canonical records and correction controls without connecting to Google. **Save this preview to a new folder** then requires a newly created, owner-confirmed empty folder with `synthetic` in its name. The workspace checks the fresh genesis manifest, writes the exact in-memory ledger through the canonical store using the full-snapshot layout, and independently reopens and compares the complete graph. It never modifies an existing copy. If a write outcome is uncertain, the draft remains in memory and blind retry is blocked; recover if offered and reopen to establish what reached Drive. Create new synthetic year provides deterministic pristine seeding.
 
 ## Meaning and limits
 
@@ -52,65 +52,30 @@ A failed or uncertain save keeps the local proposal but blocks saving it again. 
 
 The page requests an unload warning during work or while a draft is unsaved. Mobile browsers do not guarantee that warning. Keep the tab open until verification completes and release the session before moving to another device or tool.
 
-## Pre-acceptance quality pass
+## Behavior of the loaded view
 
-**Implemented, synthetic-only:** the workspace now retains a private defensive snapshot reader for the current loaded ledger. Financial reports, sorted rows and searchable text are reused only while the account and month remain the same. Search, review-only filtering and pagination do not recalculate the financial reports. Switching account or month replaces the single cached scope; opening, correcting, saving or verified reopening replaces the reader because the session supplies a new ledger object. Returned views are detached from the cache. The one-shot model API still validates and computes a fresh result.
+**Implemented, synthetic-only.** The workspace keeps one private defensive snapshot reader for the loaded ledger.
 
-Search waits 120 ms after typing stops and respects text composition. Scope changes and completed corrections render immediately. This is a small typing-coalescing delay, not a performance acceptance threshold. Initial graph validation, snapshot creation and account/month report calculation still scale with the loaded history. This optimization adds an in-memory defensive snapshot and a single scope cache; it is not a new persistence format or an unlimited multi-period cache.
+- Reports, sorted rows and searchable text are reused only while the account and month stay the same. Search, the review-only filter and pagination do not recalculate reports. Switching account or month replaces the single cached scope. Opening, correcting, saving or a verified reopen replaces the reader.
+- Search waits 120 ms after typing stops and respects text composition. Scope changes and completed corrections render immediately. The delay coalesces typing; it is not a performance threshold.
+- Initial graph validation, snapshot creation and the account/month report still scale with loaded history. The cache is in memory only, not a persistence format or a multi-period cache.
+- The source review count covers every unresolved observation in the selected account and period, and the page labels its ten-item list as a preview. Search does not filter the source queue. Observations with an unknown date stay visible in every month. Resolved observations disappear after a verified reopen. A view never creates financial activities.
+- Cancelling an operation reports cancellation. Recovery controls are disabled offline, review controls expose a busy state, and provider error text is never echoed. Closing transaction detail returns keyboard focus to its Review button, or to search if the row is gone. Page and filter status messages are atomic live announcements.
 
-The source review count covers every unresolved observation in the selected account and period. The page explicitly labels its ten-item preview as a preview of that count. Search does not filter the source queue. Unknown-date observations stay visible in any selected month rather than disappearing; resolved observations disappear after verified reopening. Resolution remains in the advanced import workbench, and a view never creates financial activities.
+## Acceptance
 
-Cancellation now reports cancellation rather than leaving an operation-in-progress message. Recovery controls are disabled offline, dynamic review controls expose their busy state, arbitrary provider error text is not echoed, and closing transaction detail returns keyboard focus to its visible Review button (or search if the row is no longer displayed). Page and filter status messages are atomic live announcements.
+Accepted behavior is recorded in [Current state](CURRENT_STATE.md) and the [owner acceptance checklist](OWNER_ACCEPTANCE.md). The owner accepted the local synthetic-year exploration, evidence and correction workflow, and mobile workspace experience on the PR32 head. Do not repeat those checks unless a later change affects them. A merge or green CI does not establish live Google latency, physical Safari behavior or deployment; record the exact SHA, device and capability with each result.
 
-No canonical financial-event contract, monetary calculation, audit record, session protocol, deployment workflow or production permission changes were part of this earlier quality pass. Its then-default fragmented v3 is now a supported legacy layout; the current v4 integration is described above. Physical Safari, live Google behavior and mobile memory capacity remain owner acceptance work.
+Use invented data for these workspace checks:
 
-### Automated evidence for the quality pass
-
-**Verified:** the deterministic scale fixture contains 3,000 activities across four accounts and USD/EUR, 3,400 events including 400 amount corrections, and 320 unresolved observations. Tests assert independently expected exact totals, compare scoped reports with the canonical engine, exercise repeated filtering and pagination, reject corrupt input, isolate caller/result mutations, and verify that resolved observations disappear without adding activities.
-
-The controller regressions cover cancelled actions, failed and uncertain saves, repeated actions while pending, draft preservation, search after corrections, recovery followed by verified reopening, offline control gating, safe errors, focus restoration and accessible status markup. The small simulated DOM does not establish Safari compatibility.
-
-A separate local Chromium run exercised the real page and canonical engines with an invented in-memory storage service. It passed at 1440×1000, 820×1180, 1180×820, 390×844 and 320×740. Search preserved totals; staged corrections survived a deliberately lost save response, recovery and verified reopen; repeated actions made one write; no page errors or horizontal document overflow occurred. This did not contact Google or test a physical device.
-
-### Measured model cost
-
-**Verified locally on Node 24.22.1:** four interleaved baseline/current runs of the fixture above, after the full test suites finished. The baseline is PR32 commit `ef1c85157ef80d8ccf0c3b79514bf97b28516457`. Values below are median milliseconds. The script measures model work, not DOM rendering, Drive, physical Safari or whole-app latency. Fixture construction is excluded.
-
-| Operation | Baseline | Snapshot reader | Reduction |
-| --- | ---: | ---: | ---: |
-| Search within the loaded scope | 225.36 | 8.92 | 96.0% |
-| Next page within the same search | 223.15 | 4.97 | 97.8% |
-| Change month | 212.85 | 104.04 | 51.1% |
-| Change account | 187.22 | 86.73 | 53.7% |
-
-Cold opening is a tradeoff. Creating the defensive reader and its first scope took a combined median **287.28 ms**, compared with **226.76 ms** for the original one-shot first view. The snapshot adds memory and setup cost so later presentation changes can avoid financial reconstruction. This pass does not claim faster startup, constant-time history loading or lower Drive latency. The single-scope cache bounds retained report copies, but total memory still grows with loaded history.
-
-Reproduce with `node tests/benchmark-canonical-workspace-view.mjs --baseline-ref ef1c85157ef80d8ccf0c3b79514bf97b28516457`. There is no wall-clock pass/fail threshold.
-
-**Verified automated validation:** final full suites on Node 24.22.1 and 26.13.0 each passed **1,025/1,025**, with zero failures, cancellations or skips. The 63 focused workspace model/session/controller/scale tests passed separately on Node 24.22.1. Syntax checks passed for all 149 JavaScript modules under `js`, `prototype` and `tests`; changed-document links and `git diff --check` passed. Independent standards and specification reviews found no remaining blocker.
-
-## Validation and owner acceptance
-
-**Open:** the newer Drive-preview persistence, transfer-link persistence and interruption flows still need owner acceptance. PR30's nine owner-reported iPad passes apply to its tested commit, not these later changes. Preserve the narrower PR32 owner observation below; it is not a complete current iPhone/iPad/live-Drive acceptance pass.
-
-The owner has already accepted the local synthetic-year exploration, source-evidence/correction workflow, and mobile workspace experience on the PR32 head. Do not repeat those checks unless a later change affects them. The new Drive persistence and transfer-link flows below remain unaccepted.
-
-PR34 and PR32 have merged; do not request review or deployment of their retired branch as if it were still pending. Before new acceptance, resolve the [current deployment gap](PROJECT_STATUS.md#repository-and-deployment), review the intended source and verify a successful authorized deployment and matching full SHA in the page. Pages is a single shared deployment. Record the exact SHA, device and capability with each result.
-
-Run the affected checks below with invented data only. Existing accepted unchanged behavior need not be retested solely because a PR merged:
-
-1. Local preview before authorization: all four accounts and twelve months appear, known annual totals match the values above, and nothing opens Google or writes Drive.
-2. Open existing per-record v1 and fragmented v3 copies without migration. Confirm a standalone grouped-v2 copy is refused without initialization or financial mutation. Confirm a new saved preview uses canonical v4, then correct/save/reopen it and follow the separate v4 backup/restore checks.
-3. Select the investment account: activities and evidence remain visible but known reports show unavailable, not complete investment totals.
-4. Search, page and change account/month. Confirm search does not change totals, while account/month does. Check narrow portrait, tablet portrait/landscape and browser Back/Forward navigation.
-5. Correct a category and an amount with a reason. Inspect unchanged original source and added audit evidence, save once, reopen and compare. Try a repeated click while saving.
-6. Cancel authorization or Picker, cancel draft replacement, and cancel release with an unsaved draft. Confirm no false success, loss or unintended save.
-7. Go offline and reconnect. Confirm records remain readable, edits/saves stay blocked until verified reopen, and local proposals are not silently retried.
-8. Use a disposable copy for interruption/recovery. An uncertain save must remain unverified until recovered and reopened. Preserve any uncertain folder; do not delete or repeatedly retry it.
-9. Release successfully, then open on the next device. Confirm the exact saved corrections. Unverified release must block any success claim.
-10. From a local preview with no edits, save the untouched generated year to a newly created empty synthetic folder. Reopen it and compare the full canonical graph. Repeat from a separate preview after staging corrections; confirm every correction and audit event is present. Confirm an existing or nonempty folder is refused without overwriting or appending, and canceling Picker leaves the preview usable.
-11. Exercise an interrupted fresh-copy save using a disposable synthetic folder. Preserve the uncertain folder, recover if offered, and reopen to establish whether the full graph committed. Confirm a blind retry is blocked until verification resolves the outcome.
-12. Link a clearly matching outgoing/incoming transfer pair. Confirm the same transfer path and rationale appear when inspecting either side, the relationship survives save/reopen, and income/spending/cash totals do not change. Confirm ambiguous equal-amount candidates are never auto-linked and that mismatched amounts, currencies, accounts, classifications, inactive activities, or already-linked activities are rejected.
-13. Stage at least two corrections. Undo the latest and confirm only that change is removed; then revert all and confirm the exact verified baseline returns. Repeat in a local preview and confirm the original generated year returns. Neither action may connect to or write Drive.
-
-Automated and local-browser results for the final commit are recorded in the PR handoff separately from these open owner observations. No automated CI result establishes live Google latency, physical Safari behavior, production readiness or deployment.
+1. Local preview before authorization shows all four accounts and twelve months. Known annual totals match the recipe in [Synthetic data](SYNTHETIC_DATA.md). Nothing opens Google or writes Drive.
+2. The investment account keeps activities and evidence visible, but known reports show *unavailable*, not complete investment totals.
+3. Search does not change totals. Changing account or month does. Check narrow portrait, tablet portrait and landscape, and browser Back and Forward.
+4. Correct a category and an amount with a reason. The original source stays unchanged and audit evidence is added. Save once, reopen and compare. A repeated click while saving does nothing extra.
+5. Cancel authorization, Picker, draft replacement, and release with an unsaved draft. None may show false success, lose work or save unintentionally.
+6. Go offline and reconnect. Records stay readable. Edits and saves stay blocked until a verified reopen, and local proposals are not silently retried.
+7. Interrupt a save on a disposable copy. The save stays unverified until recovery and reopen. Preserve the uncertain folder; do not delete it or retry blindly.
+8. Release successfully, then open on the next device and confirm the exact saved corrections. An unverified release must not report success.
+9. From a local preview, save the untouched generated year to a new empty synthetic folder, reopen it and compare the full canonical graph. Repeat after staging corrections and confirm each correction and audit event is present.
+10. Link a clearly matching outgoing and incoming transfer pair. The same path and rationale appear from either side, the link survives save and reopen, and income, spending and cash totals do not change. Ambiguous equal-amount candidates are never auto-linked.
+11. Stage two corrections. Undo removes only the latest. Revert returns the exact verified baseline, or the original generated year in a local preview. Neither action touches Drive.

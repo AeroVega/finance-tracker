@@ -7,7 +7,7 @@ after its Apple web app foundation. This changes presentation and navigation
 interactions. The canonical financial model, storage contracts, explicit save,
 uncertain-outcome blocking and synthetic-only limits remain in force.
 
-The subsequent [adversarial review](PR38_ADVERSARIAL_REVIEW.md) retains this
+The subsequent [adversarial review](archive/PROBES_AND_PR_REPORTS.md) retains this
 design and repairs unfinished-editor transitions, posting-status clarity,
 route scrolling and short-window editing space. The results below describe
 the initial redesign; [project status](PROJECT_STATUS.md) has current checks.

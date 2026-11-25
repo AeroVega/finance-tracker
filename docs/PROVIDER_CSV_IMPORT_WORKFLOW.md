@@ -36,7 +36,7 @@ No raw file bytes are added to the canonical ledger or persisted by this workflo
 - This does not authorize real-data use, production storage, automatic bank connections, or production deployment.
 - Fidelity activity is not automatically classified as ordinary income or spending. Review and the existing investment-activity rules remain in force.
 
-See [provider parser and format constraints](PROVIDER_CSV_PREVIEW.md), [canonical import contract](PR28_CANONICAL_IMPORT.md), [ledger contract](CANONICAL_LEDGER_CONTRACT.md), and [current state](CURRENT_STATE.md).
+See [provider parser and format constraints](PROVIDER_CSV_PREVIEW.md), [canonical import contract](CANONICAL_IMPORT.md), [ledger contract](CANONICAL_LEDGER_CONTRACT.md), and [current state](CURRENT_STATE.md).
 
 ## Compatibility and verification notes
 

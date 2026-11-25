@@ -90,7 +90,7 @@ Every immutable write is read back by exact generated ID, folder, kind, transact
 
 Recovery resumes a complete verified staged commit at its exact base, or verifies an already-published intended commit and finishes terminal catalog finalization. An incomplete pre-commit stage can be aborted only at its exact base; visible staged objects are verified, unavailable planned IDs remain evidence, and nothing is deleted. A missing previously verified commit/object or unrelated manifest blocks writes. Recovery repairs are restartable, and tests interrupt both the original transaction and repair. A pending marker blocks application reads and new writes until recovery succeeds.
 
-See [Per-Copy Drive Locator Catalog Design](DRIVE_LOCATOR_CATALOG_DESIGN.md) for the logical/physical identity model and [Synthetic Storage Acceptance](SYNTHETIC_STORAGE_ACCEPTANCE.md) for current acceptance evidence.
+See [Per-Copy Drive Locator Catalog Design](archive/RETIRED_STORAGE_DESIGNS.md) for the logical/physical identity model and [Synthetic Storage Acceptance](archive/PROBES_AND_PR_REPORTS.md) for current acceptance evidence.
 
 ## PR24 lifecycle regression and diagnostic requirements
 

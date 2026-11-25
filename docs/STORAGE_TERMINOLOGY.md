@@ -6,7 +6,7 @@ This glossary distinguishes the selected full-snapshot application format from h
 
 | Term | Meaning | Current application status |
 | --- | --- | --- |
-| Full-snapshot v1 | One immutable complete logical-ledger snapshot plus a commit envelope per save, selected by a published/clean manifest. | Selected application storage format; see [contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md). |
+| Full-snapshot v1 | One immutable complete logical-ledger snapshot plus a commit envelope per save, selected by a published/clean manifest. | Selected application storage format; see [contract](FULL_SNAPSHOT_STORAGE.md). |
 | Canonical ledger | Validated financial source graph: accounts, imports, observations, activities and append-only events, with optional position history. | Active domain model. |
 | Per-record v1 | Earlier canonical persistence layout with separately stored records. | Historical; unsupported by the full-snapshot application. |
 | Grouped v2 (canonical) | Deprecated experimental canonical layout that grouped records. | Rejected; do not create, migrate to or revive it. |

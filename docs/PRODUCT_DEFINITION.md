@@ -365,7 +365,7 @@ Use the following progression to separate foundational correctness from the rich
 
 - **Alpha — trustworthy financial foundation.** Establish supported CSV imports, migration of the prior-generation monthly financial history, the canonical ledger and reconciliation, categorization and auditable corrections, accurate account balances/assets/liabilities/net worth, and dependable storage, backup, recovery, and portability. Alpha is successful when the owner can load and review financial history, correct it, and trust that the information is preserved and represented honestly.
 - **Beta — visual and analytical experience.** Build the dashboard and navigation, present-day overview, historical trends and reports, insights, basic category budgets, and the baseline cash-balance projection on top of the trusted foundation. Goals and saved what-if scenarios are deferred beyond v1.0.0. Use controlled synthetic datasets to test chart layouts, missing data, edge cases, and interactions. Beta is successful when the experience works on target devices against those controlled datasets and is usable.
-- **1.0.0 — integrated first product release.** Combine the Alpha foundation and Beta experience, then validate the integrated production-capable path using synthetic financial records. The later [PR27 decision](PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#future-production-validation-and-acceptance) removes a separate real-data smoke-test prerequisite. Actual OAuth/configuration, live synthetic acceptance, security/privacy, cost, recovery, owner review and explicit production authorization remain required. Reliable import, monthly migration, categorization, storage/recovery and the user experience must work together.
+- **1.0.0 — integrated first product release.** Combine the Alpha foundation and Beta experience, then validate the integrated production-capable path using synthetic financial records. The later [PR27 decision](archive/PROBES_AND_PR_REPORTS.md) removes a separate real-data smoke-test prerequisite. Actual OAuth/configuration, live synthetic acceptance, security/privacy, cost, recovery, owner review and explicit production authorization remain required. Reliable import, monthly migration, categorization, storage/recovery and the user experience must work together.
 - **2.0.0 — expanded capabilities.** Reserve deeper investment analysis, more advanced planning and projection methods, expanded automation, additional integrations, and other deliberately deferred ambitions for later development.
 
 Alpha and Beta are deployable development milestones, not public semantic-version releases. The owner should be able to interact with each milestone on the target devices through the existing GitHub Pages workflow and perform a hands-on smoke test before the next milestone advances. The milestones may be delivered through separate or overlapping PRs; PR number order does not dictate merge order. In particular, a later-numbered PR may merge before an earlier-numbered PR when dependencies and readiness justify it.
@@ -399,13 +399,13 @@ The actual workbook inspection, conversion script, reconciliation, and import wi
 
 PR #25's synthetic-only storage-readiness implementation is merged. Its scope included backup/restore portability, immutable snapshot verification, source-retention primitives, and synthetic acceptance workflows. The product vision in this document does **not** add reporting, investments, debt, budgeting, goals, projections, insights, or other product features to PR #25.
 
-Owner-reported synthetic acceptance evidence is recorded in the [synthetic storage acceptance record](SYNTHETIC_STORAGE_ACCEPTANCE.md) and subject-based [backup/restore](DRIVE_BACKUP_AND_RESTORE.md), [retention](ORIGINAL_SOURCE_RETENTION.md), and [Google Drive configuration](GOOGLE_DRIVE_CONFIGURATION.md) guides. That evidence is distinct from automated CI and does not remove the documented limitations. Remaining owner review includes:
+Owner-reported synthetic acceptance evidence is recorded in the [synthetic storage acceptance record](archive/PROBES_AND_PR_REPORTS.md) and subject-based [backup/restore](archive/RETIRED_STORAGE_DESIGNS.md), [retention](archive/RETIRED_STORAGE_DESIGNS.md), and [Google Drive configuration](GOOGLE_DRIVE_CONFIGURATION.md) guides. That evidence is distinct from automated CI and does not remove the documented limitations. Remaining owner review includes:
 - Review the residual deletion-receipt recovery limitation and its conservative retry behavior.
 - Inspect the actual Cloud OAuth audience/scopes, API-key restrictions, assigned quotas, usage, and billing.
 - Complete final privacy/security inspection of the deployed artifact and browser storage/network behavior.
 - Manage private local exports and expired source copies, which a static app cannot remotely erase.
 
-PR #25 remains synthetic-only. Its merge does **not** authorize production financial-data persistence. Production use remains NO-GO until a separate design/approval milestone is completed and a separate implementation PR is reviewed and explicitly authorized. Do not treat this product document as release approval or as a change to the PR #25 acceptance evidence.
+PR #25 remains synthetic-only. Its merge does **not** authorize production financial-data persistence. The later owner decision to allow real financial data is recorded in [Current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data). Do not treat this product document as release approval or as a change to the PR #25 acceptance evidence.
 
 ## 13. Relationship to existing authoritative documents
 
@@ -414,9 +414,9 @@ This document captures product-level intent. Detailed technical decisions remain
 - [Roadmap](ROADMAP.md)
 - [Next steps and handoff](NEXT_STEPS.md)
 - [Architecture decisions](ARCHITECTURE_DECISIONS.md)
-- [Database identity and lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md)
+- [Database identity and lifecycle](archive/RETIRED_STORAGE_DESIGNS.md)
 - [Data model and reconciliation principles](DATA_MODEL.md)
 - [Security and privacy requirements](SECURITY.md)
-- [Synthetic storage acceptance evidence](SYNTHETIC_STORAGE_ACCEPTANCE.md)
+- [Synthetic storage acceptance evidence](archive/PROBES_AND_PR_REPORTS.md)
 
 When a future implementation proposal appears to conflict with an established decision, identify the conflict and bring it forward for resolution. Do not silently reinterpret this document or an existing technical contract.

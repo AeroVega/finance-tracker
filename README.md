@@ -10,13 +10,11 @@ A second-generation personal finance tracker built around trustworthy financial 
 
 ## Current state
 
-**Selected storage format:** full-snapshot v1. Dashboard and workspace use complete immutable ledger snapshots with verified publication and recovery. The owner accepted a synthetic 11-second open and 25-second persisted save on `86d1f2b`, then requested cleanup and merge of PR46. Cleanup is not yet merged; see [current state](docs/CURRENT_STATE.md) for exact evidence and authorization.
+The owner declared the project **GO for real financial data** when [PR 61](https://github.com/AeroVega/finance-tracker/pull/61) merged. The release profile now lists the `production` data class, so Private database mode is available in the served build. Synthetic remains the default. Verify the deployed build and profile before entering real records. [Current state](docs/CURRENT_STATE.md) holds the details, evidence and permission boundary.
 
-Use a fresh empty synthetic folder for creation. Older storage formats are unsupported and are not converted or deleted. Import and portable backup/restore for this format remain outstanding Alpha requirements. Financial position and reconciled coverage were implemented in PR36. Full ledger/history materialization and validation remain; no bounded whole-database memory claim is made.
+**Storage:** full-snapshot v1. Each save writes one complete immutable ledger snapshot with verified publication and recovery. Older formats are unsupported and are not converted or deleted. Supported CSV import (Wells Fargo, SoFi, Fidelity) and encrypted portable backup and restore are implemented. Financial position and reconciled coverage were implemented in PR36. The whole ledger loads and validates on open; no bounded-memory claim is made.
 
-CI, deployment identity, owner acceptance and production approval are separate. Historical implementation and measurement evidence remains in [project status](docs/PROJECT_STATUS.md).
-
-**Production financial-data persistence is NO-GO.** Use invented fixtures only. Do not access real financial records, the private workbook, or owner Drive data. Merge, deployment, production configuration, and real-data use require their separate authorization.
+CI, deployment identity, owner acceptance and production approval are separate facts. Development, CI and public artifacts use invented data only. Never put real financial records in this repository. See [project history](docs/PROJECT_STATUS.md) for the milestone timeline.
 
 ## Start here
 
@@ -24,15 +22,15 @@ CI, deployment identity, owner acceptance and production approval are separate. 
 - [Current project state](docs/CURRENT_STATE.md) — current main baseline, evidence, open gates, and permissions.
 - [Documentation map](docs/README.md) — find only the relevant contract.
 - [Next steps](docs/NEXT_STEPS.md) — current priorities and acceptance gates.
-- [Project status evidence log](docs/PROJECT_STATUS.md) — dated implementation history, not a second current-state summary.
+- [Project history](docs/PROJECT_STATUS.md) — dated milestone timeline, not a second current-state summary.
 - [Contributor and agent instructions](AGENTS.md) — mandatory privacy, Git, and engineering rules.
 
 ## Core technical references
 
 - [Canonical workspace](docs/CANONICAL_MAIN_WORKSPACE.md) and [canonical ledger contract](docs/CANONICAL_LEDGER_CONTRACT.md).
 - [Financial position](docs/FINANCIAL_POSITION.md) and [data model](docs/DATA_MODEL.md).
-- [Provider import specifications](docs/PROVIDER-IMPORT-SPECS.md) and [import contract](docs/PR28_CANONICAL_IMPORT.md).
-- [Full-snapshot storage contract](docs/EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) and [storage terminology](docs/STORAGE_TERMINOLOGY.md).
+- [Provider import specifications](docs/PROVIDER_IMPORT_SPECS.md) and [import contract](docs/CANONICAL_IMPORT.md).
+- [Full-snapshot storage contract](docs/FULL_SNAPSHOT_STORAGE.md) and [storage terminology](docs/STORAGE_TERMINOLOGY.md).
 - [Session coordination](docs/SESSION_COORDINATION.md), [Drive response bounds](docs/DRIVE_RESPONSE_BOUNDS.md), and [simulator coverage](docs/DRIVE_SIMULATOR.md).
 - [Security](docs/SECURITY.md) and [application diagnostics](docs/APP_DIAGNOSTICS.md).
 

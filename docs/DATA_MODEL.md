@@ -1,8 +1,8 @@
 # Data Model and Reconciliation Principles
 
-**Status:** Canonical contract and synthetic implementation are merged. Financial-position and historical-summary models remain Alpha work, as of November 10, 2026. Production persistence remains **NO-GO**.
+**Status:** Canonical contract and synthetic implementation are merged. The financial-position model ([PR36](https://github.com/AeroVega/finance-tracker/pull/36)) and the historical-summary model ([PR 54](https://github.com/AeroVega/finance-tracker/pull/54)) have since merged. See [Current state](CURRENT_STATE.md) for authorization.
 
-The [canonical contract](CANONICAL_LEDGER_CONTRACT.md) defines the ledger. [PR28](PR28_CANONICAL_IMPORT.md) implements synthetic provider parsing, reconciliation, reports and durable canonical save/reopen; the [main workspace](CANONICAL_MAIN_WORKSPACE.md) adds ordinary browsing and corrections. The principles below apply to those implementations and their remaining extensions. See [project status](PROJECT_STATUS.md) for evidence and [next steps](NEXT_STEPS.md) for the gaps.
+The [canonical contract](CANONICAL_LEDGER_CONTRACT.md) defines the ledger. [PR28](CANONICAL_IMPORT.md) implements synthetic provider parsing, reconciliation, reports and durable canonical save/reopen; the [main workspace](CANONICAL_MAIN_WORKSPACE.md) adds ordinary browsing and corrections. The principles below apply to those implementations and their remaining extensions. See [project status](PROJECT_STATUS.md) for evidence and [next steps](NEXT_STEPS.md) for the gaps.
 
 ## Logical concepts
 - **Institution/source:** provider of a file or response.

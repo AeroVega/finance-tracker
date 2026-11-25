@@ -6,7 +6,7 @@
 
 ## Current project handoff, 2026-11-08
 
-PRs #20–#25 are merged. The synthetic Drive storage foundation includes the application lifecycle, durable transactions/recovery, version-2 per-copy locator catalogs, backup/restore, portable archives, and 540-day original-source retention primitives. Owner-reported synthetic acceptance and exact-head CI evidence are recorded in [Synthetic Storage Acceptance](../SYNTHETIC_STORAGE_ACCEPTANCE.md). Operational details live in [Drive Backup and Restore](../DRIVE_BACKUP_AND_RESTORE.md), [Original Source File Retention](../ORIGINAL_SOURCE_RETENTION.md), [Drive Transaction Engine Testing](../DRIVE_TRANSACTION_ENGINE_TESTING.md), and [Google Drive Configuration](../GOOGLE_DRIVE_CONFIGURATION.md).
+PRs #20–#25 are merged. The synthetic Drive storage foundation includes the application lifecycle, durable transactions/recovery, version-2 per-copy locator catalogs, backup/restore, portable archives, and 540-day original-source retention primitives. Owner-reported synthetic acceptance and exact-head CI evidence are recorded in [Synthetic Storage Acceptance](PROBES_AND_PR_REPORTS.md). Operational details live in [Drive Backup and Restore](RETIRED_STORAGE_DESIGNS.md), [Original Source File Retention](RETIRED_STORAGE_DESIGNS.md), [Drive Transaction Engine Testing](../DRIVE_TRANSACTION_ENGINE_TESTING.md), and [Google Drive Configuration](../GOOGLE_DRIVE_CONFIGURATION.md).
 
 Production financial-data persistence remains disabled and unauthorized. PR #27 is the documentation-only production persistence planning review. Its merge would approve the plan only; implementation and production activation need separate authorization. Synthetic data remains first-class for all future development, automated tests, migrations, regression, and acceptance. [PR #26](https://github.com/AeroVega/finance-tracker/pull/26) merged the product-definition baseline on 2026-11-06. [PR #28](https://github.com/AeroVega/finance-tracker/pull/28) merged its synthetic-only canonical import work on 2026-11-08. The PR27 branch reconciles the subject-based documentation consolidation with `main` at `c5b1fa916b431debf923d9502d5e8b2447e9b914`. The plan is back with the owner for review; future production implementation and acceptance remain pending.
 
@@ -14,18 +14,18 @@ Production financial-data persistence remains disabled and unauthorized. PR #27 
 
 ## PR27 planning decisions recorded, 2026-11-08
 
-See the [PR27 decision record](../PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#decision-record-2026-11-08) for the confirmed requirements and remaining verification work.
+See the [PR27 decision record](PROBES_AND_PR_REPORTS.md) for the confirmed requirements and remaining verification work.
 
 - **User-confirmed:** Add data classes only when their features are ready. Enumerate the first-release records against the capabilities actually approved for that release.
 - **User-confirmed:** Use one designated Google account. A workflow for switching between multiple authorized accounts is out of scope; wrong-account rejection and safe reauthorization still apply.
 - **User-confirmed:** Keep working financial data and the access token in memory, clear them on sign-out or normal orderly release, and retain only the agreed non-authoritative local inventory and recovery diagnostics.
 - **User-confirmed:** Define routine backup cadence, tolerable data loss, and rotation after production OAuth is verified. Existing retention and required verified pre-migration backups remain in force. OAuth verification is still an acceptance gate, not a recorded pass.
-- **User-confirmed OAuth clarification:** No blocking configuration change is identified, so continue the design discussion without assuming formal Google app review is mandatory. Actual settings, exception applicability, and authorization behavior remain unverified. The earlier backup deferral is unchanged. See the [qualified OAuth guidance and remaining checks](../PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#oauth-clarification-no-blocking-configuration-change-identified).
+- **User-confirmed OAuth clarification:** No blocking configuration change is identified, so continue the design discussion without assuming formal Google app review is mandatory. Actual settings, exception applicability, and authorization behavior remain unverified. The earlier backup deferral is unchanged. See the [qualified OAuth guidance and remaining checks](PROBES_AND_PR_REPORTS.md).
 - **User-confirmed:** A separate real-financial-data smoke test is not required before production acceptance. Fully passing synthetic tests provide the test evidence; production OAuth, live synthetic acceptance, security/privacy, cost, residual-risk, final owner review, and explicit production authorization gates remain required. Real-data use is not authorized now.
 - **Hypothesis, recommended direction:** Evaluate grouped storage without choosing partition boundaries yet. Compatibility, integrity, ownership, recovery, backup, and restore testing remain required.
 - **Open:** Verify what supported browsers retain and document what abrupt closure or device loss can leave behind. Do not promise a perfect wipe.
 
-These decisions update the plan only. PR27 remains a documentation-only draft; production persistence is still disabled and unauthorized. Its [planning-review and merge rule](../PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#planning-review-draft-exit-and-merge-rule) separates review of the plan from later implementation and production acceptance. The merged PR28 workbench preserves the in-tab draft on release; the future production clearing requirement remains an [explicit implementation gap](../PR27_PRODUCTION_PERSISTENCE_PROPOSAL.md#current-pr28-release-behavior-and-production-gap).
+These decisions update the plan only. PR27 remains a documentation-only draft; production persistence is still disabled and unauthorized. Its [planning-review and merge rule](PROBES_AND_PR_REPORTS.md) separates review of the plan from later implementation and production acceptance. The merged PR28 workbench preserves the in-tab draft on release; the future production clearing requirement remains an [explicit implementation gap](PROBES_AND_PR_REPORTS.md).
 
 ## PR #24 status — merged 2026-11-02
 
@@ -139,7 +139,7 @@ Closing or disconnecting an account must not create gaps: preserve its historica
 
 ## Temporary prototype navigation and MVP1 cleanup
 
-The workspace links to the [owner acceptance suite](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/prototype/acceptance.html) and a [test tools index](../../prototype/). The suite orders the remaining physical-device and live synthetic checks. Specialist recovery and protocol diagnostics remain accessible in the tools index; the [cleanup inventory](../PROTOTYPE_CLEANUP.md) records retired UI and preserved coverage. These tools are development-only and must not become product features.
+The workspace links to the [owner acceptance suite](https://github.com/AeroVega/finance-tracker/blob/86d1f2b3bf510fe75f678e4d4dcd28cd8d50d32d/prototype/acceptance.html) and a [test tools index](../../prototype/). The suite orders the remaining physical-device and live synthetic checks. Specialist recovery and protocol diagnostics remain accessible in the tools index; the [cleanup inventory](PROBES_AND_PR_REPORTS.md) records retired UI and preserved coverage. These tools are development-only and must not become product features.
 
 **MVP1 completion gate:** remove the app-footer entry point and exclude all browser prototype pages under `prototype/` from the user-facing GitHub Pages deployment. Keep automated tests and useful engineering documentation; do not ship prototype pages, test controls, or prototype navigation as part of the MVP1 app. Verify the deployed artifact contains no prototype hub or prototype HTML pages before calling MVP1 complete.
 
@@ -189,7 +189,7 @@ The design now specifies:
 
 ## Completed task: synthetic-only Google Drive feasibility spike ([PR #20](https://github.com/AeroVega/finance-tracker/pull/20))
 
-See [Drive Feasibility Spike](../DRIVE_FEASIBILITY_SPIKE.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20's owner-confirmed live synthetic checks are complete. Final-head Node contract tests passed in GitHub Actions run #129 (73/73), and PR #20 merged to `main` at `1e4fc1f86948f2892b5ab88a85d6f73d632719b8`.
+See [Drive Feasibility Spike](PROBES_AND_PR_REPORTS.md) for the implemented Phase 1 harness, live test steps, pass/fail interpretation, and evidence log. PR #20's owner-confirmed live synthetic checks are complete. Final-head Node contract tests passed in GitHub Actions run #129 (73/73), and PR #20 merged to `main` at `1e4fc1f86948f2892b5ab88a85d6f73d632719b8`.
 
 The merged PR #20 adds `prototype/drive-feasibility-spike.html`, its browser module, and `tests/drive-feasibility-spike.test.mjs` for the first feasibility gates. It must not read or write a real ledger. Use only a dedicated test folder and synthetic records.
 

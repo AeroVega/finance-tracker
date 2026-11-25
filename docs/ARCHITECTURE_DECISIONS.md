@@ -5,9 +5,7 @@
 
 ## Current development status and next milestone
 
-**Verified:** the PR19 architecture baseline, PR20 through PR25 synthetic storage/recovery machinery, PR28 canonical imports and PR32/PR34 main workspace are merged. Strict fixture parsers, canonical reporting and synthetic persistence are implemented. [Project status](PROJECT_STATUS.md) records current evidence and deployment limits.
-
-**Open:** complete canonical-workspace acceptance, then financial position/reconciled coverage, January 2023 monthly history and production controls. Follow [the Alpha sequence](NEXT_STEPS.md). PR27 merged its production plan only; production financial-data persistence remains **NO-GO**.
+**Verified:** the decisions below are implemented on `main` through [project history](PROJECT_STATUS.md). The owner has since authorized real financial data; see [Current state](CURRENT_STATE.md#owner-decision-go-for-real-financial-data). Open work is in [Next steps](NEXT_STEPS.md).
 
 The accepted single-user/single-active-device model remains. Drive's tested stale-`If-Match` update is not a server-enforced lock. Preserve immutable history, serialized operations, ownership/integrity checks and conservative recovery. Synthetic tests and past live observations do not establish production OAuth/configuration, privacy, cost or new device-path acceptance.
 
@@ -64,7 +62,7 @@ The accepted single-user/single-active-device model remains. Drive's tested stal
 
 ## ADR-009 — Database identity, immutable storage, and recovery architecture
 
-**Status: Design baseline merged in PR #19; production implementation not authorized.** The owner accepted 108 numbered decisions in [Database Identity and Lifecycle](DATABASE_IDENTITY_AND_LIFECYCLE.md). The record defines the manifest, schema versions, physical copy lifecycle, immutable snapshot model, commit and transaction histories, initialization, migration, backup/restore, and recovery behavior.
+**Status: Design baseline merged in PR #19; production implementation not authorized.** The owner accepted 108 numbered decisions in [Database Identity and Lifecycle](archive/RETIRED_STORAGE_DESIGNS.md). The record defines the manifest, schema versions, physical copy lifecycle, immutable snapshot model, commit and transaction histories, initialization, migration, backup/restore, and recovery behavior.
 
 The selected target model uses immutable content-addressed data objects and complete commit snapshot descriptors. The manifest publishes the current committed snapshot only after all referenced objects and metadata are staged and verified. The transaction journal is append-only, and interrupted operations are resolved by inspection rather than guesswork.
 
