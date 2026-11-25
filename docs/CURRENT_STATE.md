@@ -5,13 +5,11 @@
 
 ## Owner decision: GO for real financial data
 
-On 2026-11-24, the owner confirmed that the [PR 57 acceptance checks](https://github.com/AeroVega/finance-tracker/pull/57) were complete and approved real financial data use as of the deployed commit produced by merging [PR 61](https://github.com/AeroVega/finance-tracker/pull/61) to `main`.
+On 2026-11-24, the owner confirmed that the [PR 57 acceptance checks](https://github.com/AeroVega/finance-tracker/pull/57) were complete and declared the project **GO for real financial data**. The GO takes effect when [PR 61](https://github.com/AeroVega/finance-tracker/pull/61) is merged to `main`. The merge is the owner's authorization act; this record names no commit SHA.
 
-The approved SHA is the full merge-result commit reported by GitHub for PR 61 and matched to the deployed Pages source stamp. It is not the draft branch head or an earlier acceptance-test build. Verify that match before relying on the approval, and retain the deployment run as evidence. The record does not name its own SHA because it is assigned when the PR lands.
+From that point, treat real financial data as a supported-use requirement for every subsequent merge to `main`. Preserve account and folder isolation, verified saves and recovery, encrypted private backups, and the existing required checks and owner review. Changes that affect those safeguards need evidence appropriate to their scope. Development, CI, diagnostics, and public artifacts still use invented data only; private account and folder details stay private.
 
-From that baseline, treat real financial data as a supported-use requirement for every subsequent merge to `main`. Preserve account and folder isolation, verified saves and recovery, encrypted private backups, and the existing required checks and owner review. Changes that affect those safeguards need evidence appropriate to their scope. Development, CI, diagnostics, and public artifacts still use invented data only; private account and folder details stay private.
-
-This is an authorization record, not a runtime change. The checked-in [release profile](../js/release-profile.mjs) still allows only synthetic mode, so merging this record alone does not make Private database mode available. Do not enter real records into the synthetic workspace or infer support for the separate historical migration workflow.
+This is an authorization record, not a runtime change. The checked-in [release profile](../js/release-profile.mjs) still allows only synthetic mode, so merging this record alone does not make Private database mode available; enabling the `production` data class is a separate change to that file, reviewed under the [release gate](PERSISTENCE_DATA_CLASS.md#release-gate-what-static-code-can-and-cannot-enforce) and the safeguards above. Do not enter real records into the synthetic workspace or infer support for the separate historical migration workflow.
 
 The [security, privacy, OAuth, cost and recovery review](SECURITY_PRIVACY_OAUTH_COST_RECOVERY_REVIEW.md) retains its dated findings and pre-approval status. [Project status](PROJECT_STATUS.md) retains historical evidence; the [full-snapshot contract](EXPERIMENTAL_FULL_SNAPSHOT_STORAGE.md) owns protocol invariants.
 
