@@ -396,6 +396,9 @@ function clearLoadedWorkspace() {
   for (const id of [...detailEditorFields, ...positionInputs, 'transaction-search','account-filter','month-filter','backup-password','backup-password-confirm','restore-password','backup-file','position-date']) $(id).value = '';
   resetActivityFilters(); closeFacetPanels(); closeFilterSheet();
   for (const id of ['type-options', 'category-options', 'active-filter-chips']) $(id).replaceChildren();
+  // Facet labels can name a category or count records; they go with the ledger.
+  for (const id of ['type-facet-summary', 'category-facet-summary', 'review-facet-count', 'pending-facet-count', 'filter-badge']) $(id).textContent = '';
+  $('apply-filter-sheet').textContent = 'Show results';
   $('active-filters').hidden = true; $('review-section').hidden = true; $('show-more').hidden = true; $('filter-badge').hidden = true;
   $('statement-full-month').checked = false;
   $('activity-detail').hidden = true; $('transaction-table-wrap').hidden = true;

@@ -1857,3 +1857,20 @@ test('Cancel closes an inline decision and discards its draft', async () => {
   assert.equal(h.get('quick-category').value, '', 'a cancelled draft is not restored');
   assert.equal(h.modelSession.dirty, false);
 });
+
+test('verified release clears facet labels, counts, chips and filters that could name records', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.navigate('#transactions');
+  const groceries = h.get('category-options').children.find(option => option.children[0].value === 'groceries').children[0];
+  groceries.checked = true; await groceries.emit('change');
+  await h.choose('review-only', true);
+  assert.equal(h.get('category-facet-summary').textContent, 'Groceries');
+  assert.notEqual(h.get('review-facet-count').textContent, '');
+  h.state.releaseVerified = true; await h.click('release-ledger');
+  assert.equal(h.modelSession.ledger, null);
+  for (const id of ['type-facet-summary', 'category-facet-summary', 'review-facet-count', 'pending-facet-count', 'filter-badge']) assert.equal(h.get(id).textContent, '', id);
+  for (const id of ['type-options', 'category-options', 'active-filter-chips', 'transaction-rows', 'review-queue']) assert.equal(h.get(id).children.length, 0, id);
+  assert.equal(h.get('apply-filter-sheet').textContent, 'Show results');
+  assert.equal(h.get('review-only').checked, false);
+  assert.equal(h.get('active-filters').hidden, true);
+  assert.equal(h.state.writes, 0);
+});
