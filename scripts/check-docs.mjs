@@ -67,7 +67,7 @@ for (const [file, original] of contents) {
 const required = [
   ['README.md', /Financial position and reconciled coverage were implemented in PR36/],
   ['docs/PROJECT_STATUS.md', /PR36[\s\S]{0,250}financial position/i],
-  ['docs/AGENT_QUICK_START.md', /Production financial-data persistence is \*\*NO-GO\*\*/],
+  ['docs/AGENT_QUICK_START.md', /GO for real financial data/],
   ['docs/STORAGE_TERMINOLOGY.md', /Grouped v2/],
   ['docs/STORAGE_TERMINOLOGY.md', /do not create, migrate to or revive it/i],
 ];
