@@ -49,8 +49,9 @@ test('specialist diagnostics remain reachable without crowding the main checklis
     assert.ok(existsSync(resolve(root, 'prototype', page)));
   }
   const workspace=read('index.html');
-  assert.doesNotMatch(workspace, /href="prototype\/acceptance.html"/);
-  assert.match(workspace, /aria-disabled="true" title="Legacy acceptance tooling is unavailable for full-snapshot copies"/);
+  // The retired acceptance tooling is neither linked nor shown as a dead placeholder in the app.
+  assert.doesNotMatch(workspace, /href="prototype\/acceptance.html"|Legacy acceptance tooling/);
+  assert.match(workspace, /href="prototype\/local-preview.html"/, 'the live CSV diagnostic stays reachable from More');
 });
 
 test('superseded runtime is removed while historical design remains', () => {
