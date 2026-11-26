@@ -87,7 +87,7 @@ What the owner confirmed, which this page relies on:
 
 Typed cells that are not staged exist only in this tab. Leaving or releasing the session warns first, like other unsaved work.
 
-**Private database.** History staging used to be refused outside the synthetic class. It now follows the session's data class like any other edit. Staging keeps the private ledger header (`version: 3`, `dataClass: "production"`), which already admits the history collections; only synthetic ledgers move from v1 to the history version.
+**Private database.** History staging used to be refused outside the synthetic class. It now follows the session's data class like any other edit. Staging keeps the private ledger header (`version: 3`, `dataClass: "production"`), which already admits the history collections; only synthetic ledgers move from v1 to the history version. The JSON file review under More stays a test-data tool (owner decision, 2026-11-25): in a private session it is disabled, so private history comes in only through the migration page. Reconciliation of an overlapping month remains available in both classes.
 
 ## Review, save, and portability
 

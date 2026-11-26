@@ -19,7 +19,7 @@ const reasonText = reason => ({
 }[reason] ?? words(reason));
 
 export function mountHistoricalMonthlySummaryWorkflow({
-  root, getLedger, isActive = () => true, getUnavailableReason = () => null,
+  root, getLedger, isActive = () => true, getUnavailableReason = () => null, getFileReviewUnavailableReason = () => null,
   stageSummaries, stageReconciliation, onStaged = () => {}, migration = null
 }) {
   if (!root || typeof getLedger !== 'function' || typeof stageSummaries !== 'function' ||
@@ -31,6 +31,9 @@ export function mountHistoricalMonthlySummaryWorkflow({
     getSavedLedger:migration.getSavedLedger, isActive:migration.isActive ?? (() => true),
     getUnavailableReason, stageSummaries, onStaged
   }) : null;
+  // The JSON file review is a test-data tool (owner decision, 2026-11-25).
+  // Private history comes in only through the migration page.
+  const fileReviewBlocked = () => getFileReviewUnavailableReason();
   const doc = root.ownerDocument;
   function el(tag, text = '', attrs = {}) {
     const node = doc.createElement(tag);
@@ -120,12 +123,13 @@ export function mountHistoricalMonthlySummaryWorkflow({
   }
   function setStageHelp() {
     const unavailable = getUnavailableReason();
+    const fileBlocked = fileReviewBlocked();
     const locked = Boolean(unavailable || staging);
-    previewButton.disabled = !selected || reading || staging || !ledger;
-    file.disabled = staging;
+    previewButton.disabled = !selected || reading || staging || !ledger || Boolean(fileBlocked);
+    file.disabled = staging || Boolean(fileBlocked);
     discard.disabled = staging || (!selected && !preview && !reading);
-    previewHelp.textContent = !ledger ? 'Open your saved data to preview this input.' : !selected
-      ? 'Choose an invented JSON file first.' : reading ? 'Reading the file locally.' : 'Preview does not change the ledger.';
+    previewHelp.textContent = fileBlocked || (!ledger ? 'Open your saved data to preview this input.' : !selected
+      ? 'Choose an invented JSON file first.' : reading ? 'Reading the file locally.' : 'Preview does not change the ledger.');
     for (const control of decisionControls) control.disabled = locked;
     const required = preview?.rows.filter(row => row.eligible) ?? [];
     const unresolved = required.filter(row => {
@@ -134,7 +138,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     }).length;
     const selectedMonths = required.filter(row => decisions.get(row.recordIndex)?.action === 'accept').map(row => row.record.month);
     const duplicateMonth = new Set(selectedMonths).size !== selectedMonths.length;
-    const disabledText = unavailable || (staging ? 'Wait for staging to finish.' : !preview ? 'Preview a file and review its records first.'
+    const disabledText = fileBlocked || unavailable || (staging ? 'Wait for staging to finish.' : !preview ? 'Preview a file and review its records first.'
       : !required.length ? 'The file has no eligible records.'
       : unresolved ? 'Choose an action and enter a reason for every eligible record.'
       : duplicateMonth ? 'Accept at most one source record per month. Exclude the other candidates.'
@@ -205,7 +209,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     setStageHelp();
   }
   async function readPreview() {
-    if (previewButton.disabled || !isActive()) return;
+    if (previewButton.disabled || !isActive() || fileReviewBlocked()) return;
     clearPreview('',false);
     const version = ++readRevision, base = getLedger(), picked = selected;
     const isCurrent = () => version === readRevision && base === getLedger() && picked === selected && isActive();
@@ -346,7 +350,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     }
   }
   async function stageChange(which) {
-    if (which.disabled || !isActive()) return;
+    if (which.disabled || !isActive() || (which === stage && fileReviewBlocked())) return;
     const selectedMonth = historyMonth.value, expectedLedger = ledger, version = revision;
     const source = which === stage, status = source ? reviewStatus : reconcileStatus;
     const request = new AbortController();

@@ -1515,6 +1515,7 @@ historicalSummaryWorkflow = mountHistoricalMonthlySummaryWorkflow({
     if (!session.canEdit()) return 'This ledger is read-only. Reopen it before staging history.';
     return null;
   },
+  getFileReviewUnavailableReason: () => isPrivate() ? 'File review is for invented test data only. Use History migration to add history to your private database.' : null,
   stageSummaries: proposal => session.stageHistoricalSummaries(proposal),
   stageReconciliation: proposal => session.stageHistoricalReconciliation(proposal),
   onStaged: message => { render(); refresh(); announce(message,'success'); },

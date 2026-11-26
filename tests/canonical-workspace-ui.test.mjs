@@ -1982,3 +1982,17 @@ test('History migration page stages a typed year with one confirmation, saves it
   await h.click('release-ledger');
   assert.doesNotMatch(text(h.get('history-migration')), /Invented finances|Invented pay/);
 });
+
+test('the JSON history file review is refused in a private-database session; migration stays the only private path', async () => {
+  const h = await workspacePage();
+  await h.click('open-ledger');
+  h.storage.dataClass = 'production';
+  await h.navigate('#storage');
+  assert.equal(h.get('historical-summary-file').disabled, true);
+  assert.equal(h.get('historical-summary-preview').disabled, true);
+  assert.match(h.get('historical-preview-help').textContent, /invented test data only.*History migration/);
+  assert.match(h.get('historical-stage-help').textContent, /invented test data only/);
+  h.storage.dataClass = undefined;
+  await h.navigate('#overview'); await h.navigate('#storage');
+  assert.equal(h.get('historical-summary-file').disabled, false, 'synthetic sessions keep the file review');
+});
