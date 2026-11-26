@@ -52,12 +52,24 @@
 
       <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a></nav>
 
-      <details class="scope-panel" id="workspace-scope"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span id="scope-period-title">All accounts · Full saved period</span><span id="scope-position-title" hidden>All accounts · Dated balances</span><span class="scope-edit">Change</span></summary><div class="scope-controls" aria-describedby="scope-help">
+      <div class="scope-bar">
+        <div id="month-scope" class="period-bar" hidden>
+          <div class="period-kinds" role="group" aria-label="Period length">
+            <button id="period-month" type="button" aria-pressed="true">Month</button><button id="period-year" type="button" aria-pressed="false">Year</button><button id="period-lifetime" type="button" aria-pressed="false">Lifetime</button>
+          </div>
+          <div class="period-step">
+            <button id="period-prev" class="icon-button" type="button" aria-label="Previous month"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+            <p id="period-title" class="period-title" aria-live="polite">No period</p>
+            <button id="period-next" class="icon-button" type="button" aria-label="Next month"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+          </div>
+          <select id="month-filter" hidden disabled aria-hidden="true" tabindex="-1"><option value="all">Lifetime</option></select>
+        </div>
+        <details class="scope-panel" id="workspace-scope"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span id="scope-period-title">All accounts</span><span id="scope-position-title" hidden>All accounts · Dated balances</span><span class="scope-edit">Change</span></summary><div class="scope-controls" aria-describedby="scope-help">
           <label for="account-filter">Account<select id="account-filter" disabled><option value="all">All accounts</option></select></label>
-          <label id="month-scope" for="month-filter">Period<select id="month-filter" disabled><option value="all">Full year</option></select></label>
           <label id="position-date-scope" hidden for="position-date">Balances as of<input id="position-date" type="date" disabled></label>
-          <p id="scope-help">Account and period apply to Home, Activity, Review and Reconcile. Search changes rows only.</p>
+          <p id="scope-help">Account and period apply to Home, Activity and Reconcile. Search changes rows only.</p>
         </div></details>
+      </div>
 
       <p id="no-ledger-notice" class="quiet-placeholder" hidden>Nothing is open yet. <a href="#overview">Open your data or try invented records on Home</a>.</p>
 
@@ -83,20 +95,25 @@
           <div class="home-main">
             <section class="home-block home-summary" aria-labelledby="summary-heading">
               <div class="block-head"><h2 id="summary-heading">Money in and out</h2><p id="summary-scope" class="block-meta">No ledger loaded</p></div>
+              <div id="summary-empty" class="period-empty" hidden></div>
               <div id="summary-cards" class="figures">
-                <article class="metric-card"><p class="metric-label">Known income</p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
-                <article class="metric-card"><p class="metric-label">Known spending</p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
-                <article class="metric-card"><p class="metric-label">Known cash movement</p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only, not a balance.</p></article>
+                <article class="metric-card"><p class="metric-label">Money in</p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
+                <article class="metric-card"><p class="metric-label">Money out</p><p class="metric-value">Unavailable</p><p class="metric-note">Open a ledger to calculate</p></article>
+                <article class="metric-card"><p class="metric-label">Cash movement</p><p class="metric-value">Unavailable</p><p class="metric-note">Checking and savings only, not a balance.</p></article>
               </div>
-              <details class="explainer"><summary>How these totals work</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p><p>Missing data is shown as unavailable, never as zero.</p></details>
+              <details class="explainer"><summary>How these totals work</summary><p id="qualification">Known subtotals, not a complete financial position. Transfers and card payments are excluded from income and spending.</p><p>Each month has one source: reconciled transactions, the workbook or manual history, or imported activity labelled partial. Missing data is shown as unavailable, never as zero.</p></details>
             </section>
 
-            <section class="home-block home-trend" aria-labelledby="home-trend-title">
-              <div class="block-head"><h2 id="home-trend-title">Last six months</h2><ul class="legend" aria-label="Legend"><li><span class="trend-key trend-key-income" aria-hidden="true"></span>In</li><li><span class="trend-key trend-key-spending" aria-hidden="true"></span>Out</li></ul></div>
-              <p id="home-trend-context" class="block-meta">Open a ledger to see recent months.</p>
-              <ol id="home-trend-months" class="trend" aria-label="Monthly money in and out. Select a month for exact amounts."></ol>
-              <div id="home-trend-readout" class="trend-readout" aria-live="polite"></div>
+            <section class="home-block home-categories" aria-labelledby="categories-heading">
+              <div class="block-head"><h2 id="categories-heading">Spending by category</h2><p id="categories-meta" class="block-meta"></p></div>
+              <div id="category-breakdown" class="breakdown">
+                <div class="donut" id="category-donut-wrap"><svg id="category-donut" class="donut-plot" viewBox="0 0 120 120" aria-hidden="true"></svg><p id="category-total" class="donut-total"></p></div>
+                <ol id="category-legend" class="category-legend" aria-label="Spending categories, largest first. Select one for details."></ol>
+              </div>
+              <div id="category-readout" class="breakdown-readout" aria-live="polite"></div>
             </section>
+
+
 
             <section class="home-block home-recent" aria-labelledby="recent-heading">
               <div class="block-head"><h2 id="recent-heading">Recent activity</h2><a href="#transactions" class="inline-action">See all<svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></div>
@@ -120,6 +137,13 @@
               <h2 id="home-import-heading">Bring in new activity</h2>
               <p id="coverage-summary" class="block-meta">Coverage has not been loaded. Missing data is unavailable, not zero.</p>
               <a href="#import" class="primary-button"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>Import a CSV</a>
+            </section>
+
+            <section class="home-block home-trend" aria-labelledby="home-trend-title">
+              <div class="block-head"><h2 id="home-trend-title">Last six months</h2><ul class="legend" aria-label="Legend"><li><span class="trend-key trend-key-income" aria-hidden="true"></span>In</li><li><span class="trend-key trend-key-spending" aria-hidden="true"></span>Out</li></ul></div>
+              <p id="home-trend-context" class="block-meta">Open a ledger to see recent months.</p>
+              <ol id="home-trend-months" class="trend" aria-label="Money in and out by period. Select a column for exact amounts."></ol>
+              <div id="home-trend-readout" class="trend-readout" aria-live="polite"></div>
             </section>
           </div>
         </div>

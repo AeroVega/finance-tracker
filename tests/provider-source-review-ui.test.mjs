@@ -33,6 +33,8 @@ async function harness(count=12, transform=ledger=>ledger) {
   class Session extends CanonicalWorkspaceSession {constructor(options){super({...options,online:()=>true});session=this;}}
   const page=await pageController('canonical-workspace',{DashboardSyntheticStorage:Storage,CanonicalWorkspaceSession:Session,createWorkspacePages,createWorkspaceViewReader,getWorkspaceActivity,getEffectiveActivities,exactSignedDecimal,isCalendarDate,createSyntheticFinancialPosition,createSyntheticFinancialYear},{htmlPath:'index.html',scriptPath:'js/canonical-workspace.mjs'});
   await page.click('open-ledger');
+  // Source review here covers the whole saved period, not the current month.
+  await page.choose('month-filter','');
   return {...page,session,storage,lifecycle,http,ledger};
 }
 const all=node=>[node,...node.children.flatMap(all)];

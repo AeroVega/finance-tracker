@@ -39,6 +39,12 @@ function monthBounds(month) {
   return {start:`${month}-01`, end:`${month}-${[31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][number - 1]}`};
 }
 
+/** A period is a month (YYYY-MM) or a calendar year (YYYY). Empty means every saved date. */
+function periodBounds(period) {
+  if (typeof period === 'string' && /^\d{4}$/.test(period)) return {start:`${period}-01-01`, end:`${period}-12-31`};
+  return monthBounds(period);
+}
+
 function addMonths(months, start, end) {
   let [year, month] = start.slice(0, 7).split('-').map(Number);
   const last = end.slice(0, 7);
@@ -96,7 +102,7 @@ function buildWorkspaceScope(ledger, effective, {accountId, month}, index = null
   const selectedSources = prepared?.selectedSources ?? ledger.observations.filter(observation => selected.has(observation.accountId) && pendingSource(observation));
   const dates = prepared?.dates ?? scopedActivities.flatMap(activity => [activity.effectiveDate, reportingDate(activity)]).filter(isCalendarDate);
   if (!prepared) { dates.push(...selectedImports.flatMap(run => [run.declaredCoverage.start, run.declaredCoverage.end])); dates.sort(); }
-  const {start, end} = month ? monthBounds(month) : {start:dates[0] ?? null, end:dates.at(-1) ?? null};
+  const {start, end} = month ? periodBounds(month) : {start:dates[0] ?? null, end:dates.at(-1) ?? null};
   const inPeriod = date => !month || !isCalendarDate(date) || (date >= start && date <= end);
   const months = prepared?.months ?? new Set();
   if (!prepared) {
@@ -179,7 +185,7 @@ function workspaceOptions({accountId = '', month = '', query = '', reviewOnly = 
       !Array.isArray(types) || !types.every(type => ACTIVITY_TYPE_GROUPS.includes(type)) ||
       !Array.isArray(categories) || !categories.every(category => typeof category === 'string') ||
       !ACTIVITY_SORTS.includes(sort) || (limit !== null && (!Number.isSafeInteger(limit) || limit < 1))) fail('invalid-workspace-options');
-  if (month !== '') monthBounds(month);
+  if (month !== '') periodBounds(month);
   return {accountId, month, query, reviewOnly, page, pageSize, types:[...new Set(types)].sort(), categories:[...new Set(categories)].sort(), pendingOnly, sort, limit};
 }
 const filterKey = ({query, reviewOnly, pendingOnly, types, categories, sort}) => JSON.stringify([query, reviewOnly, pendingOnly, types, categories, sort]);
@@ -227,6 +233,7 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
   let filtered = null;
   let positionCache = null;
   let coverageCache = null;
+  let originalCategories = null;
   const accountScope = accountId => {
     if (typeof accountId !== 'string') fail('invalid-workspace-options');
     if (accountId && !snapshot.accounts.some(account => account.accountId === accountId)) fail('unknown-account');
@@ -250,7 +257,26 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
     const {start,end} = monthBounds(month);
     const {report,availability} = index.report({start,end,currency,accountIds:accountScope(accountId)}, {includeExcluded:false});
     return {income:availability.incomeAvailable ? report.income : null,
-      spending:availability.spendingAvailable ? report.spending : null};
+      spending:availability.spendingAvailable ? report.spending : null,
+      cash:availability.cashAvailable ? report.cash : null};
+  }, spendingByCategory({month, currency, accountId = ''}) {
+    // The same per-activity rule as monthlyReport, so the categories sum to its
+    // spending. A refund counts against its original purchase's category.
+    const {start,end} = monthBounds(month);
+    const accounts = new Map(snapshot.accounts.map(account => [account.accountId, account]));
+    originalCategories ??= new Map(index.effectiveActivities().map(activity => [activity.activityId, activity.categoryId ?? null]));
+    const categories = new Map();
+    for (const activity of index.activities({accountIds:accountScope(accountId) ?? snapshot.accounts.map(a => a.accountId), month})) {
+      const date = reportingDate(activity);
+      if (!['spending', 'refund'].includes(activity.activityKind) || !date || date < start || date > end) continue;
+      const contribution = reportActivityContribution(activity, accounts.get(activity.accountId), currency);
+      if (contribution.reason) continue;
+      const categoryId = activity.categoryId ?? (activity.originalActivityId ? originalCategories.get(activity.originalActivityId) : null) ?? '';
+      const total = categories.get(categoryId) ?? {categoryId, spending:'0', count:0};
+      total.spending = addDecimal(total.spending, contribution.spending); total.count++;
+      categories.set(categoryId, total);
+    }
+    return [...categories.values()].sort((a, b) => a.categoryId.localeCompare(b.categoryId));
   }, position({asOf, accountId = ''} = {}) {
     const accountIds = accountScope(accountId);
     if (!isCalendarDate(asOf)) fail('invalid-position-as-of');

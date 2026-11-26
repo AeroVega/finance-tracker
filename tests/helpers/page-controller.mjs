@@ -7,7 +7,8 @@ import { showDiagnostic, clearDiagnostic, diagnosticMessage } from '../../js/app
 import { leaveBreadcrumb, registerContextProvider, recentReports } from '../../js/error-reporting.mjs';
 import { installDiagnosticSelfTest } from '../../js/diagnostic-selftest.mjs';
 import { mountProviderImportWorkflow } from '../../js/provider-csv-import-workflow.mjs';
-import { mountHomeMonthlyTrend } from '../../js/home-monthly-trend.mjs';
+import { mountHomeDashboard } from '../../js/home-dashboard.mjs';
+import { currentMonth, isMonthPeriod, periodKind, stepPeriod } from '../../js/home-period-report.mjs';
 import { mountHistoricalMonthlySummaryWorkflow } from '../../js/historical-monthly-summary-workflow.mjs';
 import { categoryLabel, categoryChoices, categoryIdFromText } from '../../js/category-catalog.mjs';
 import * as accountHistory from '../../js/account-history.mjs';
@@ -69,7 +70,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   } } };
   const document = { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body'),
     addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); } };
-  imports = {RELEASE_PROFILE,createLedger,FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, mountHistoricalMonthlySummaryWorkflow, mountHomeMonthlyTrend, categoryLabel, categoryChoices, categoryIdFromText, ...accountHistory, ...accountsView, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
+  imports = {RELEASE_PROFILE,createLedger,FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, mountHistoricalMonthlySummaryWorkflow, mountHomeDashboard, currentMonth, isMonthPeriod, periodKind, stepPeriod, categoryLabel, categoryChoices, categoryIdFromText, ...accountHistory, ...accountsView, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
   const executable = script.replace(/^import \{([^}]+)\} from '[^']+';$/gm, (_, names) => {
     for (const name of names.split(',').map(name => name.trim())) assert.ok(name in imports, `Missing import ${name}`);
     return '';

@@ -5,6 +5,7 @@ import {HttpFullSnapshotDrive} from './helpers/http-full-snapshot-drive.mjs';
 import {createWorkspacePages} from '../js/workspace-pages.mjs';
 import {buildFinancialPosition, buildAccountMonthCoverage} from '../js/financial-position.mjs';
 import {createSyntheticFinancialPosition} from '../js/synthetic-financial-position.mjs';
+import {currentMonth} from '../js/home-period-report.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -130,7 +131,7 @@ test('main workspace load and local preview cannot connect, persist or silently 
   assert.equal(h.get('save-ledger').disabled, true);
   assert.equal(h.get('release-ledger').disabled, true);
   assert.deepEqual(h.state.connects, []);
-  await h.click('preview-year');
+  await h.click('preview-year'); await h.choose('month-filter', '');
   assert.match(h.summary(), /\$73,739\.50/);
   assert.match(h.summary(), /\$30,381\.00/);
   assert.equal(h.get('transaction-count').textContent, '253');
@@ -149,7 +150,7 @@ test('main workspace load and local preview cannot connect, persist or silently 
 });
 
 test('account and month change totals while search, review and pagination change only visible rows', async () => {
-  const h = await workspacePage(); await h.click('preview-year');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', '');
   const annual = h.summary();
   await h.search('utility');
   assert.equal(records(h).length, 12);
@@ -167,11 +168,11 @@ test('account and month change totals while search, review and pagination change
   await h.choose('account-filter', recipe.accounts.card);
   assert.match(h.summary(), /\$366\.25/);
   assert.equal(h.get('transaction-count').textContent, '7');
-  assert.match(h.summary(), /Known cash movement.*Unavailable/);
+  assert.match(h.summary(), /Cash movement Unavailable/);
   await h.choose('account-filter', recipe.accounts.investment);
   assert.equal(h.get('transaction-count').textContent, '4');
   assert.doesNotMatch(h.summary(), /\$0\.00/);
-  assert.equal((h.summary().match(/Unavailable/g) || []).length, 3);
+  assert.equal(h.get('summary-empty').hidden, false, 'a month with nothing counted says so instead of showing $0');
   await h.search('no-results');
   assert.equal(h.get('empty-state').hidden, false);
   assert.equal(h.get('transaction-table-wrap').hidden, true);
@@ -183,16 +184,16 @@ test('switching to an account without selected-month coverage keeps the selected
   let {ledger, options} = replayFixture();
   ledger = registerAccount(ledger, {institutionId:'sofi',displayName:'Invented no coverage',currency:'EUR',accountType:'savings'}, options);
   const emptyAccount = ledger.accounts.at(-1).accountId;
-  const h = await workspacePage({ledger}); await h.click('open-ledger');
+  const h = await workspacePage({ledger}); await h.click('open-ledger'); await h.choose('month-filter', '');
   await h.choose('month-filter', '2026-01'); await h.choose('account-filter', emptyAccount);
   assert.equal(h.get('month-filter').value, '2026-01');
-  assert.match(h.get('summary-scope').textContent, /2026-01-01 to 2026-01-31/);
-  assert.match(h.get('summary-scope').textContent, /Invented no coverage/);
+  assert.match(h.get('summary-scope').textContent, /^January 2026 · Invented no coverage · No data$/);
   assert.match(h.get('coverage-summary').textContent, /^0 import runs/);
-  assert.equal((h.summary().match(/Unavailable/g) || []).length, 3);
+  assert.equal(h.get('summary-empty').hidden, false);
+  assert.match(text(h.get('summary-empty')), /missing data, not \$0/);
   assert.equal(h.get('transaction-count').textContent, '0');
   await h.choose('month-filter', '');
-  assert.match(h.get('summary-scope').textContent, /No start date to No end date/);
+  assert.match(h.get('summary-scope').textContent, /Invented no coverage · No data$/);
 });
 
 test('detail lazily exposes original evidence and staging requires an explicit later save', async () => {
@@ -426,7 +427,7 @@ test('unknown provider error codes cannot echo identifiers into the workspace st
 });
 
 test('typing coalesces into one search and respects composition without changing financial totals', async () => {
-  const h = await workspacePage(); await h.click('preview-year');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', '');
   const summary = h.summary(), rows = h.get('transaction-rows').children;
   for (const value of ['u', 'ut', 'util', 'utility']) {
     h.get('transaction-search').value = value; await h.get('transaction-search').emit('input');
@@ -448,7 +449,7 @@ test('typing coalesces into one search and respects composition without changing
 });
 
 test('account and period selections consume the latest pending search without a delayed stale render', async () => {
-  const h = await workspacePage(); await h.click('preview-year');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', '');
   h.get('transaction-search').value = 'utility'; await h.get('transaction-search').emit('input');
   await h.choose('month-filter', '2025-01');
   assert.equal(h.timeouts.size, 0);
@@ -458,7 +459,7 @@ test('account and period selections consume the latest pending search without a 
   assert.equal(records(h).length, 1);
   await h.choose('account-filter', recipe.accounts.investment);
   assert.equal(records(h).length, 0);
-  assert.equal((h.summary().match(/Unavailable/g) || []).length, 3);
+  assert.equal(h.get('summary-empty').hidden, false);
 });
 
 test('filter changes preserve staged draft and a failed reopen preserves the last visible financial view', async () => {
@@ -1009,11 +1010,11 @@ test('retired review links open the Needs review list and first-run preview open
   const h = await workspacePage();
   assert.equal(h.get('workspace-scope').hidden,true);
   assert.equal(h.get('welcome-panel').hidden,false);
-  await h.click('start-preview');
+  await h.click('start-preview'); await h.choose('month-filter', '');
   assert.equal(h.location.hash,'#overview');
   assert.equal(h.get('welcome-panel').hidden,true);
   assert.equal(h.get('workspace-scope').hidden,false);
-  await h.click('preview-year'); await h.navigate('#review'); await new Promise(setImmediate);
+  await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#review'); await new Promise(setImmediate);
   assert.equal(h.location.hash,'#transactions');
   assert.equal(h.get('transactions').hidden,false);
   assert.equal(h.get('review-only').checked,true);
@@ -1144,7 +1145,7 @@ test('Storage distinguishes the active full-snapshot saved format from local pre
 
 
 test('Home recent activity ignores Activity search, review filter and pagination, and returns focus after inspection', async () => {
-  const h = await workspacePage(); await h.click('preview-year');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', '');
   const recent = h.get('recent-activities');
   assert.equal(recent.children.length, 4);
   const original = text(recent), count = h.get('attention-count').textContent;
@@ -1181,7 +1182,7 @@ test('Home recent records follow account and month scope and preserve exact disp
 
 
 test('transaction rows open from their text while selection and bubbled button clicks remain safe', async () => {
-  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
   const row = records(h)[0], button = row.children.at(-1).children[0];
   h.window.getSelection = () => ({toString: () => 'Selected source description'});
   await row.emit('click', {target:row.children[1]});
@@ -1732,21 +1733,63 @@ test('redesigned shell keeps one connect panel, one save action per mode, and a 
   assert.equal(h.get('save-ledger-option').hidden, true);
   assert.equal(h.get('draft-storage-option').hidden, false);
   assert.equal(h.get('draft-bar').hidden, true, 'an unchanged preview has nothing to save');
+  assert.equal(h.get('month-filter').value, '2025-01', 'the first-run preview opens on an invented month with data');
+  // A ledger otherwise opens on the current calendar month. The invented year has
+  // no data there, so Home says so and offers the latest month that has data.
+  await h.click('preview-year');
+  assert.equal(h.get('month-filter').value, currentMonth());
+  assert.equal(h.get('period-month').attributes['aria-pressed'], 'true');
+  assert.equal(h.get('summary-empty').hidden, false);
+  assert.equal(h.get('summary-cards').hidden, true);
+  assert.match(text(h.get('summary-empty')), /missing data, not \$0/);
+  await h.get('summary-empty').children.find(child => child.tagName === 'BUTTON').click();
+  assert.equal(h.get('month-filter').value, '2025-12');
+  assert.match(h.get('period-title').textContent, /December 2025/);
+  assert.match(h.get('summary-scope').textContent, /^December 2025 · All accounts · Partial$/);
+  assert.match(h.summary(), /Money in/);
   const months = h.get('home-trend-months').children;
   assert.equal(months.length, 6);
-  assert.ok(months.every(item => /^\d{4}-\d{2}$/.test(item.children[0].dataset.month)));
-  assert.match(h.get('home-trend-context').textContent, /USD · All accounts\. Known transactions only, possibly partial; an empty month means no data, not zero\./);
-  const gap = months.find(item => item.children[0].dataset.source === 'no-data');
-  assert.ok(gap, 'months without transactions are labelled, never drawn as zero');
-  assert.match(gap.children[0].attributes['aria-label'], /no data/);
-  const december = months.find(item => item.children[0].dataset.month === '2024-12').children[0];
-  await december.click();
-  assert.equal(december.attributes['aria-pressed'], 'true');
-  const note = h.get('home-trend-readout').children[1];
-  assert.match(text(h.get('home-trend-readout')), /December 2024/);
-  await note.children.find(child => child.tagName === 'BUTTON').click();
+  assert.deepEqual(months.map(item => item.children[0].dataset.month), ['2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12']);
+  assert.match(h.get('home-trend-context').textContent, /USD · All accounts\. Known transactions only, possibly partial\. A gap means no data, not zero\./);
+  // Categories: a ranked legend, inspected in place, then opened in Activity on request.
+  const legend = h.get('category-legend').children.map(item => item.children[0]);
+  assert.ok(legend.length > 1, 'the month has spending categories');
+  await legend[0].click();
+  assert.equal(h.location.hash, '#overview', 'choosing a category inspects it without navigating');
+  assert.equal(h.get('category-legend').children[0].children[0].attributes['aria-pressed'], 'true');
+  const show = findText(h.get('category-readout'), child => child.tagName === 'BUTTON');
+  assert.match(show.textContent, /in Activity$/);
+  await show.click();
   assert.equal(h.location.hash, '#transactions');
-  assert.equal(h.get('month-filter').value, '2024-12');
+  assert.equal(h.get('month-filter').value, '2025-12', 'the category opens for the same period');
+  assert.notEqual(h.get('category-facet-summary').textContent, '', 'Activity filters on that category');
+  await h.click('clear-activity-filters'); await h.navigate('#overview');
+  // Year shows that year's months and steps by year; Lifetime shows years.
+  await h.click('period-year');
+  assert.equal(h.get('month-filter').value, '2025');
+  assert.equal(h.get('home-trend-title').textContent, '2025 by month');
+  assert.equal(h.get('home-trend-months').children.length, 12);
+  assert.match(h.get('summary-scope').textContent, /^2025 · All accounts · 12 months · 12 partial$/);
+  assert.match(h.summary(), /No comparison: 2024 has months without data/);
+  await h.click('period-lifetime');
+  assert.equal(h.get('month-filter').value, '');
+  assert.equal(h.get('period-prev').hidden, true);
+  assert.equal(h.get('home-trend-title').textContent, 'By year');
+  const years = h.get('home-trend-months').children.map(item => item.children[0]);
+  assert.deepEqual(years.map(column => column.dataset.month), ['2025', '2026']);
+  await years[0].click();
+  await findText(h.get('home-trend-readout'), child => child.tagName === 'BUTTON').click();
+  assert.equal(h.get('month-filter').value, '2025', 'a year column opens that year');
+  await h.click('period-month');
+  assert.equal(h.get('month-filter').value, '2025-12', 'Month returns to the last month chosen in that year');
+  await h.click('period-prev');
+  assert.equal(h.get('month-filter').value, '2025-11');
+  const november = h.get('home-trend-months').children.find(item => item.children[0].dataset.month === '2025-11').children[0];
+  await november.click();
+  assert.match(text(h.get('home-trend-readout')), /November 2025/);
+  await findText(h.get('home-trend-readout'), child => child.tagName === 'BUTTON').click();
+  assert.equal(h.location.hash, '#transactions');
+  assert.equal(h.get('month-filter').value, '2025-11');
   assert.equal(h.get('clear-activity-filters').hidden, true);
   await h.search('INVENTED');
   assert.equal(h.get('clear-activity-filters').hidden, false);
@@ -1764,7 +1807,7 @@ const findText = (root, predicate) => {
 };
 
 test('type and category facets, status chips and sort change rows only and clear back to the full list', async () => {
-  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
   const annual = h.summary();
   const typeOption = id => h.get('type-options').children.find(option => option.children[0].value === id).children[0];
   const spending = typeOption('spending'); spending.checked = true; await spending.emit('change');
@@ -1794,7 +1837,7 @@ test('type and category facets, status chips and sort change rows only and clear
 });
 
 test('month headers total posted rows with the report rule and Show more continues the list', async () => {
-  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
   const header = h.get('transaction-rows').children[0];
   assert.match(text(header), /December 2025.*21 activities.*In.*\$7,613\.00.*Out.*\$2,826\.75.*4 not counted/);
   assert.doesNotMatch(text(header), /Shown/, 'an unfiltered header is the month total for this scope');
@@ -1817,7 +1860,7 @@ test('month headers total posted rows with the report rule and Show more continu
 });
 
 test('inline decision stages type and category without leaving the list, then moves to the next flagged row', async () => {
-  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
   await h.choose('review-only', true);
   const first = records(h)[0];
   const decide = findText(first, node => node.className === 'decide-button');
@@ -1852,7 +1895,7 @@ test('inline decision stages type and category without leaving the list, then mo
 });
 
 test('Cancel closes an inline decision and discards its draft', async () => {
-  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
   await h.choose('review-only', true);
   await findText(records(h)[0], node => node.className === 'decide-button').click();
   h.get('quick-category').value = 'groceries'; await h.get('quick-category').emit('change');
@@ -1864,7 +1907,7 @@ test('Cancel closes an inline decision and discards its draft', async () => {
 });
 
 test('verified release clears facet labels, counts, chips and filters that could name records', async () => {
-  const h = await workspacePage(); await h.click('open-ledger'); await h.navigate('#transactions');
+  const h = await workspacePage(); await h.click('open-ledger'); await h.choose('month-filter', ''); await h.navigate('#transactions');
   const groceries = h.get('category-options').children.find(option => option.children[0].value === 'groceries').children[0];
   groceries.checked = true; await groceries.emit('change');
   await h.choose('review-only', true);
@@ -1881,7 +1924,7 @@ test('verified release clears facet labels, counts, chips and filters that could
 });
 
 test('inline notes follow the change until edited, and the rule checkbox is an explicit opt-in', async () => {
-  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#transactions');
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
   await h.choose('review-only', true);
   await findText(records(h)[0], node => node.className === 'decide-button').click();
   const panel = h.get('quick-review');

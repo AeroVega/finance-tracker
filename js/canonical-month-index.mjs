@@ -152,10 +152,13 @@ export function createCanonicalMonthIndex(ledger) {
   const index = Object.freeze({
     matches(source) { return canonicalizeJcs(source) === canonicalizeJcs(snapshot); },
     effectiveActivities() { return structuredClone(effective); },
+    // A month (YYYY-MM) or calendar year (YYYY) selects its buckets plus undated entries.
     activities({accountIds = allAccountIds, month = ''} = {}) {
-      if (month) monthBounds(month);
+      const year = /^\d{4}$/.test(month);
+      if (month && !year) monthBounds(month);
+      const inPeriod = key => key === '' || (year ? key.startsWith(month + '-') : key === month);
       const entries = selectedAccounts(accountIds).flatMap(account => month
-        ? [...(account.buckets.get(month)?.entries || []),...(account.buckets.get('')?.entries || [])] : account.all);
+        ? [...account.buckets].filter(([key]) => inPeriod(key)).flatMap(([, bucket]) => bucket.entries) : account.all);
       return structuredClone(entries.map(entry => entry.activity));
     },
     report, monthlySummaries
