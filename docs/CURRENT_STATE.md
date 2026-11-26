@@ -43,6 +43,7 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - **Portable encrypted backup and restore** and recovery are implemented in the selected route. Do not infer live acceptance beyond the evidence in the relevant PRs.
 - **Post-merge** Node and Pages workflows succeeded. That is not an independent live-browser check.
 - **Redesigned shell and Home** merged in [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md). Further UX slices are in [Next steps](NEXT_STEPS.md).
+- **Accounts redesign** (institution-grouped list, per-account detail with dots-only balance observations, a 12-month coverage strip and next steps for each gap; holdings folded into investment account detail) is in progress on `t3/accounts-detail-ux`. It changes presentation and navigation only: position and coverage rules are unchanged. See [Design § Accounts](DESIGN.md#accounts).
 - **Activity discovery** (type and category filters, sorting, month grouping, inline review decisions) is in progress in [PR 64](https://github.com/AeroVega/finance-tracker/pull/64). Reporting rules are unchanged. Following the owner's 2026-11-25 decision, category rules for later imports are opt-in and audit notes are suggested from templates; see [Product § 4.6](PRODUCT_DEFINITION.md#46-categories).
 
 ## Acceptance and verification

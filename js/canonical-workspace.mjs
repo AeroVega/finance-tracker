@@ -17,12 +17,32 @@ import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
 import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs';
 import { mountHistoricalMonthlySummaryWorkflow } from './historical-monthly-summary-workflow.mjs';
 import { mountHomeMonthlyTrend } from './home-monthly-trend.mjs';
+import { buildCoverageHistory, balanceObservations, institutionCoverage, mostUrgentMonth, monthEnd } from './account-history.mjs';
+import { INSTITUTIONS, ACCOUNT_TYPES, COVERAGE_STATES, COVERAGE_REASONS, POSITION_REASONS, freshness, coverageCounts, miniStrip, coverageStrip, markSelected, observationPlot, markColumn, stripLabels, dateLabel, dayLabel, monthLong } from './accounts-view.mjs';
 
 const $ = id => document.getElementById(id);
 let providerImportWorkflow = null, historicalSummaryWorkflow = null;
 let sourceReviewPage = 0, sourceReviewScope = null;
 const sourceReviewUpdates = [];
-const pages = createWorkspacePages({document, window, onAlias: () => {
+// Accounts selection state. Declared before the router because a #holdings link can
+// arrive during router construction, before anything is open.
+let selectedAccountId = null, selectedCoverageMonth = null, coverageHistory = null, positionReport = null, positionGeneration = 0, paneKey = null;
+// A navigation request for an account kind that applies once accounts are rendered.
+let pendingAccountIntent = null;
+const accountRows = new Map();
+const narrowAccounts = () => window.matchMedia?.('(max-width: 999px)')?.matches === true;
+const INVESTMENT = ['brokerage', 'retirement'];
+const firstInvestment = report => report?.accounts.find(account => INVESTMENT.includes(account.accountType)) ?? null;
+const pages = createWorkspacePages({document, window, onAlias: name => {
+  // #holdings opens the first investment account in scope, where holdings now live.
+  // With nothing rendered yet, the request waits for renderPosition; it never
+  // reads controller state that does not exist.
+  if (name === 'holdings') {
+    if (!positionReport) { pendingAccountIntent = 'investment'; return; }
+    const investment = firstInvestment(positionReport);
+    if (investment) selectAccount(investment.accountId);
+    return;
+  }
   // #review is the Needs review view of Activity. Apply it once the controller is ready.
   $('review-only').checked = true;
   Promise.resolve().then(() => { if (session?.ledger && !busy) { listLimit = PAGE_ROWS; render(); } });
@@ -432,6 +452,11 @@ function clearLoadedWorkspace() {
   $('activity-detail').hidden = true; $('transaction-table-wrap').hidden = true;
   $('empty-state').hidden = false; $('empty-state').textContent = 'No ledger loaded.';
   pages.clearDetail();
+  selectedAccountId = null; selectedCoverageMonth = null; coverageHistory = null; positionReport = null; paneKey = null; pendingAccountIntent = null; accountRows.clear();
+  for (const id of ['account-observations','observation-months','account-coverage','coverage-months','account-gap','account-conflict','account-evidence']) $(id).replaceChildren();
+  for (const id of ['account-meta','account-balance','account-freshness','observations-range','coverage-summary-line','holdings-meta']) $(id).textContent = '';
+  $('account-title').textContent = 'No account selected';
+  pages.setAccountAvailable(false);
 }
 function render({ reset = false } = {}) {
   cancelSearch();
@@ -586,66 +611,93 @@ function populateAnchors() {
     : !$('reconcile-account').value ? 'Choose an account to see its month-end balance evidence.'
     : `Required balance dates: opening ${opening}; closing ${closing}. ${!openings.length || !closings.length ? `Add dated balance evidence for the missing ${!openings.length ? 'opening' : ''}${!openings.length && !closings.length ? ' and ' : ''}${!closings.length ? 'closing' : ''} anchor before reconciling.` : 'Inspect source references before choosing. Conflicting evidence still requires a separate resolution.'}`;
 }
+// Accounts: institution-grouped list on the left, one account's detail on the
+// right (a pushed page on narrow screens). The list and the detail render only
+// when their inputs change, so unfinished decisions survive search and filters.
+function accountHistory(asOf) {
+  if (coverageHistory?.ledger !== session.ledger || coverageHistory.asOf !== asOf) {
+    coverageHistory = {ledger:session.ledger, asOf, ...buildCoverageHistory(session.ledger, {asOf})};
+  }
+  return coverageHistory;
+}
 function renderPosition() {
   if (!$('position-date').value) $('position-date').value = new Date().toISOString().slice(0, 10);
   const scopeKey = [$('position-date').value, view.scope.accountId, view.scope.month].join('|');
   if (positionRender?.ledger === session.ledger && positionRender.scopeKey === scopeKey) return;
   positionRender = {ledger:session.ledger, scopeKey};
   renderedPositionDate = $('position-date').value;
-  const position = viewReader.position({asOf:$('position-date').value, accountId:view.scope.accountId});
-  $('position-scope').textContent = `As of ${position.asOf} · ${view.scope.accountId ? 'Selected account only' : 'All ledger accounts'}. Activity month does not change this date. Currencies are never combined.`;
+  const asOf = $('position-date').value;
+  const position = viewReader.position({asOf, accountId:view.scope.accountId});
+  const history = accountHistory(asOf);
+  positionReport = position; positionGeneration++;
+  // One line: known net worth per currency, then whether it is complete and why not.
+  // The scope bar above already states the as-of date and account scope.
+  $('position-scope').replaceChildren();
+  position.currencies.forEach((subtotal, index) => {
+    const scoped = position.accounts.filter(account => account.currency === subtotal.currency);
+    const value = scoped.length && !scoped.some(account => account.balance !== null) ? null : subtotal.knownNetWorth;
+    if (index) $('position-scope').append(node('span', ' · '));
+    $('position-scope').append(node('span', `${subtotal.complete ? 'Net worth' : 'Known net worth'}${position.currencies.length > 1 ? ' ' + subtotal.currency : ''} `), node('strong', money(value, subtotal.currency)));
+  });
+  if (!position.currencies.length) $('position-scope').append(node('span', 'No accounts in scope'));
+  else $('position-scope').append(node('span', position.complete ? ' · every balance current' : ` · partial: ${position.reasons.map(reason => POSITION_REASONS[reason] || label(reason)).join('; ')}`, position.complete ? 'position-summary-state' : 'position-summary-state warn-text'));
   $('position-warning').dataset.state = position.complete ? 'complete' : 'incomplete';
-  $('position-warning').textContent = `${position.complete ? 'All scoped position evidence meets completeness checks.' : 'Incomplete financial position. Known subtotals are not complete net worth.'} ${position.reasons.map(label).join('; ')} Freshness warning after 35 calendar days. Older balances are dated observations, not live balances.`;
+  $('position-warning').textContent = position.complete
+    ? 'Every balance in scope is current within 35 days. Balances are dated observations, not live values.'
+    : `Incomplete position: ${position.reasons.map(reason => POSITION_REASONS[reason] || label(reason)).join('; ')}. Known subtotals are not complete net worth.`;
   $('position-totals').replaceChildren();
-  for (const subtotal of position.currencies) for (const [key, title] of [['knownAssets', 'Known assets'], ['knownLiabilities', 'Known liabilities'], ['knownNetWorth', 'Known net-worth subtotal']]) {
+  for (const subtotal of position.currencies) for (const [key, title] of [['knownAssets', 'Known assets'], ['knownLiabilities', 'Known liabilities'], ['knownNetWorth', 'Known net worth']]) {
     const card = node('article', undefined, 'metric-card');
     const scoped = position.accounts.filter(account => account.currency === subtotal.currency);
     const relevant = key === 'knownNetWorth' ? scoped : scoped.filter(account => account.role === (key === 'knownAssets' ? 'asset' : 'liability'));
     const value = relevant.length && !relevant.some(account => account.balance !== null) ? null : subtotal[key];
-    card.append(node('p', `${title} · ${subtotal.currency}`, 'metric-label'), node('p', money(value, subtotal.currency), 'metric-value'), node('p', subtotal.complete ? '' : 'Partial evidence only. Missing values are not zero.', 'metric-note'));
+    card.append(node('p', `${title} · ${subtotal.currency}`, 'metric-label'), node('p', money(value, subtotal.currency), 'metric-value'), node('p', subtotal.complete ? '' : 'Partial subtotal', 'metric-note'));
     $('position-totals').append(card);
   }
   if (!position.currencies.length) $('position-totals').append(node('p', 'Position unavailable: no accounts in scope.'));
-  $('position-accounts').replaceChildren(); $('holdings-accounts').replaceChildren(); positionButtons.length = 0;
-  for (const account of position.accounts) {
-    const card = node('article', undefined, 'review-item');
-    card.append(node('h3', account.displayName, 'account-name'), node('p', money(account.balance, account.currency), 'account-balance'), node('p', `${label(account.role)} · ${label(account.accountType)} · ${label(account.status)}`, 'account-meta'), node('p', `Balance date: ${account.balanceDate || 'unavailable'} · Basis: ${account.basis || 'unavailable'}`, 'account-date'), node('p', `${account.stale ? 'Stale evidence. ' : ''}${account.reasons.map(label).join('; ')}`, 'account-note'));
-    card.append(evidenceDetails('Balance evidence and history', () => (session.ledger.positionEvents || []).filter(event => event.accountId === account.accountId)));
-    if (account.status === 'conflict') {
-      card.append(node('p', 'Conflicting balances are excluded. Inspect all candidates and record why one is supported.'));
-      const rationale = node('input'); rationale.type = 'text'; rationale.setAttribute('aria-label', `Selection reason for ${account.displayName}`); rationale.maxLength = 300;
-      card.append(rationale);
-      for (const event of balanceEvents(account.accountId).filter(event => account.candidateEventIds.includes(event.eventId))) {
-        const button = node('button', `Select ${event.amountText} · ${event.source?.reference || event.eventId}`); button.type = 'button'; positionButtons.push(button);
-        button.addEventListener('click', () => {
-          if (busy || !session.canEdit()) return;
-          if (!rationale.value.trim()) { announce('Explain why this balance evidence is supported.', 'error'); rationale.focus(); return; }
-          return run('Recording an auditable balance selection.', async () => {
-            session.recordPosition({type:'balance-resolution', accountId:account.accountId, effectiveDate:event.effectiveDate, selectedEventId:event.eventId, candidateEventIds:account.candidateEventIds, reason:rationale.value.trim()});
-            render(); announce('Balance selection staged with its reason. Prior evidence is preserved. Save changes to persist it.', 'success');
-          }, null, 'select-balance-evidence');
-        });
-        card.append(button);
-      }
+  // Institutions in a stable order; each header says how far its imports reach.
+  const imports = institutionCoverage(session.ledger);
+  $('position-accounts').replaceChildren(); accountRows.clear();
+  for (const institutionId of [...new Set([...Object.keys(INSTITUTIONS), ...position.accounts.map(account => account.institutionId)])]) {
+    const accounts = position.accounts.filter(account => session.ledger.accounts.find(item => item.accountId === account.accountId)?.institutionId === institutionId);
+    if (!accounts.length) continue;
+    const group = node('section', undefined, 'account-group'), head = node('div', undefined, 'account-group-head');
+    const headingId = `institution-${institutionId}`, heading = node('h3', INSTITUTIONS[institutionId] || label(institutionId)); heading.id = headingId;
+    group.setAttribute('aria-labelledby', headingId);
+    const coverage = imports.get(institutionId), attention = accounts.filter(account => account.reasons.length).length;
+    const meta = node('p', coverage ? `Imports through ${dateLabel(coverage.through)}` : 'No imports yet', 'account-group-meta');
+    if (attention) { const flag = node('span', ` · ${attention} need${attention === 1 ? 's' : ''} attention`, 'warn-text'); meta.append(flag); }
+    head.append(heading, meta); group.append(head);
+    const list = node('ul', undefined, 'account-rows');
+    for (const account of accounts) {
+      const cells = history.byAccount.get(account.accountId) || [], fresh = freshness(account), counts = coverageCounts(cells);
+      const item = node('li'), row = node('button', undefined, 'account-row'); row.type = 'button';
+      const copy = node('span', undefined, 'account-row-copy');
+      const qualifier = node('small', `${ACCOUNT_TYPES[account.accountType] || label(account.accountType)} · ${fresh.short ?? fresh.text}`, fresh.warn ? 'warn-text' : '');
+      copy.append(node('strong', account.displayName), qualifier);
+      const balance = node('span', money(account.balance, account.currency) + (account.role === 'liability' && account.balance !== null ? ' owed' : ''), 'account-row-balance');
+      if (account.balance === null) balance.dataset.state = 'unavailable';
+      row.append(copy, miniStrip(cells, node), balance, node('span', `Coverage: ${counts.reconciled} of ${counts.total} months reconciled${counts.fix ? `, ${counts.fix} need a fix` : ''}.`, 'visually-hidden'));
+      row.addEventListener('click', () => selectAccount(account.accountId, {navigate:true}));
+      accountRows.set(account.accountId, row); item.append(row); list.append(item);
     }
-    if (['brokerage', 'retirement'].includes(account.accountType)) {
-      const link = node('a', 'View holdings', 'account-holdings-link'); link.href = '#holdings'; card.append(link);
-      const holdingCard = node('article', undefined, 'review-item');
-      holdingCard.append(node('h3', account.displayName, 'account-name'), node('p', account.holdings ? `As of ${account.holdings.effectiveDate} · ${account.holdings.scope} · ${account.currency}` : 'No supported dated holdings evidence. Transaction rows are not holdings.', 'account-date'));
-      if (account.holdings) {
-        holdingCard.append(node('p', `${account.holdings.stale ? 'Stale evidence. ' : ''}${account.holdings.reasons.map(label).join('; ')}`), evidenceDetails('Inspect dated holdings and valuation', () => account.holdings));
-      }
-      resolveHoldings(holdingCard, account); $('holdings-accounts').append(holdingCard);
-    }
-    $('position-accounts').append(card);
+    group.append(list); $('position-accounts').append(group);
   }
-  if (!$('holdings-accounts').children.length) $('holdings-accounts').append(node('p', 'No investment accounts in the selected scope.', 'quiet-placeholder'));
+  if (pendingAccountIntent === 'investment') {
+    const investment = firstInvestment(position);
+    if (investment) { selectedAccountId = investment.accountId; selectedCoverageMonth = null; }
+    pendingAccountIntent = null;
+  }
+  // Keep the selection while it stays in scope; otherwise open the account that most needs attention.
+  if (!position.accounts.some(account => account.accountId === selectedAccountId)) {
+    selectedAccountId = (position.accounts.find(account => account.reasons.length) || position.accounts[0])?.accountId ?? null;
+    selectedCoverageMonth = null;
+  }
+  pages.setAccountAvailable(selectedAccountId !== null);
   const options = session.ledger.accounts.map(account => [account.accountId, account.displayName]);
-  addOptions($('balance-account'), options, $('balance-account').value, 'Choose account');
+  addOptions($('balance-account'), options, $('balance-account').value || selectedAccountId || '', 'Choose account');
   addOptions($('reconcile-account'), options, $('reconcile-account').value, 'Choose account');
-  const zeros = (session.ledger.positionEvents || []).filter(event => event.eventType === 'balance-snapshot' && /^0(?:\.0+)?$/.test(event.amountText));
-  addOptions($('closure-anchor'), zeros.map(event => [event.eventId, `${session.ledger.accounts.find(account => account.accountId === event.accountId)?.displayName} · ${event.effectiveDate} · ${event.amountText} · ${event.source.reference}`]), $('closure-anchor').value, 'Choose zero-balance evidence');
-  addOptions($('holdings-account'), session.ledger.accounts.filter(account => ['brokerage','retirement'].includes(account.accountType)).map(account => [account.accountId, account.displayName]), $('holdings-account').value, 'Choose investment account');
+  addOptions($('holdings-account'), session.ledger.accounts.filter(account => INVESTMENT.includes(account.accountType)).map(account => [account.accountId, account.displayName]), $('holdings-account').value, 'Choose investment account');
   for (const id of ['balance-account', 'holdings-account', 'reconcile-account']) editorAccounts.set(id, $(id).value);
   populateAnchors(); updateStatementEditor();
   $('position-coverage').replaceChildren();
@@ -658,6 +710,201 @@ function renderPosition() {
       $('position-coverage').append(card);
     }
   } else $('position-coverage-help').textContent = 'Select an activity month above to inspect account-month coverage. Declared imports alone do not prove completeness.';
+  renderAccountPane();
+}
+// Unfinished evidence belongs to the account it was typed for.
+function unfinishedAccountEvidence() {
+  return ['balance-date','balance-amount','balance-source','holdings-date','holdings-source','closure-source'].some(id => $(id).value.trim()) || holdingRows.length > 0;
+}
+function clearAccountEvidence() {
+  for (const id of ['balance-date','balance-amount','balance-source','holdings-date','holdings-source','closure-source']) $(id).value = '';
+  holdingRows.length = 0; $('holdings-rows').replaceChildren(); $('holdings-scope').value = 'partial';
+}
+// Evidence staged for another account moves the detail to that account, so the
+// result (including any conflict to resolve) is visible where it was entered.
+function selectStagedAccount(accountId) {
+  if (!accountId || accountId === selectedAccountId) return;
+  selectedAccountId = accountId; selectedCoverageMonth = null; paneKey = null;
+}
+function selectAccount(accountId, {navigate = false} = {}) {
+  if (accountId !== selectedAccountId) {
+    if (unfinishedAccountEvidence() && !window.confirm('Switch account and clear the unfinished evidence form? Staged changes stay unchanged.')) return;
+    clearAccountEvidence();
+    selectedAccountId = accountId; selectedCoverageMonth = null;
+    renderAccountPane();
+  }
+  if (navigate && narrowAccounts()) pages.openAccount();
+}
+function renderAccountPane() {
+  const account = positionReport?.accounts.find(item => item.accountId === selectedAccountId);
+  for (const [id, row] of accountRows) { if (id === selectedAccountId) row.setAttribute('aria-current', 'true'); else row.removeAttribute('aria-current'); }
+  const key = `${positionGeneration}|${selectedAccountId}`;
+  if (paneKey === key) return;
+  paneKey = key;
+  $('account-pane').hidden = !account;
+  for (const id of ['account-observations','observation-months','account-coverage','coverage-months','account-gap','account-conflict','holdings-accounts','account-evidence']) $(id).replaceChildren();
+  if (!account) return;
+  const ledgerAccount = session.ledger.accounts.find(item => item.accountId === account.accountId);
+  const history = accountHistory(positionReport.asOf), cells = history.byAccount.get(account.accountId) || [];
+  const fresh = freshness(account), counts = coverageCounts(cells);
+  $('account-meta').textContent = `${INSTITUTIONS[ledgerAccount.institutionId] || label(ledgerAccount.institutionId)} · ${ACCOUNT_TYPES[account.accountType] || label(account.accountType)} · ${account.role === 'liability' ? 'Liability' : account.role === 'asset' ? 'Asset' : 'Unknown scope'}`;
+  $('account-title').textContent = account.displayName;
+  $('account-balance').textContent = money(account.balance, account.currency);
+  $('account-balance').dataset.state = account.balance === null ? 'unavailable' : 'known';
+  // Always say how old the balance is on the as-of date; stale means more than 35 days.
+  const age = account.balance === null || account.ageDays === null ? '' : account.ageDays === 0 ? ' · dated on the as-of day' : ` · ${plural(account.ageDays, 'day')} before the as-of date${account.stale ? ', stale after 35' : ''}`;
+  $('account-freshness').textContent = `${account.role === 'liability' && account.balance !== null ? 'Amount owed · ' : ''}${fresh.text}${age}`;
+  $('account-freshness').dataset.state = fresh.warn ? 'warn' : 'ok';
+  // Observations and coverage share the same twelve month columns.
+  const observations = balanceObservations(session.ledger, account.accountId, {from:history.months[0] + '-01', to:positionReport.asOf});
+  selectedCoverageMonth = cells.some(cell => cell.month === selectedCoverageMonth) ? selectedCoverageMonth : mostUrgentMonth(cells);
+  const known = observations.filter(item => item.amountText !== null);
+  $('observations-range').textContent = !observations.length ? 'None in 12 months'
+    : `${plural(observations.length, 'date')}${known.length > 1 ? ` · ${money(known.reduce((a, b) => Number(a.amountText) <= Number(b.amountText) ? a : b).amountText, account.currency)} to ${money(known.reduce((a, b) => Number(a.amountText) >= Number(b.amountText) ? a : b).amountText, account.currency)}` : ''}`;
+  observationPlot($('account-observations'), observations, {node, months:history.months, money, currency:account.currency, selected:selectedCoverageMonth});
+  stripLabels($('observation-months'), history.months, node);
+  coverageStrip($('account-coverage'), cells, {node, selected:selectedCoverageMonth, onSelect:month => selectCoverageMonth(month)});
+  stripLabels($('coverage-months'), history.months, node);
+  $('coverage-summary-line').textContent = `${counts.reconciled} of ${counts.total} reconciled${counts.fix ? ` · ${counts.fix} need${counts.fix === 1 ? 's' : ''} a fix` : ''}`;
+  renderCoverageGap(account, cells, observations);
+  if (account.status === 'conflict') renderBalanceConflict(account);
+  const investment = INVESTMENT.includes(account.accountType);
+  $('account-holdings').hidden = !investment; $('holdings-editor').hidden = !investment;
+  if (investment) renderAccountHoldings(account);
+  // Editors act on the selected account.
+  $('balance-account').value = account.accountId; editorAccounts.set('balance-account', account.accountId);
+  if (investment) { $('holdings-account').value = account.accountId; editorAccounts.set('holdings-account', account.accountId); }
+  const zeros = balanceEvents(account.accountId).filter(event => /^0(?:\.0+)?$/.test(event.amountText));
+  addOptions($('closure-anchor'), zeros.map(event => [event.eventId, `${event.effectiveDate} · ${event.amountText} · ${event.source.reference}`]), $('closure-anchor').value, zeros.length ? 'Choose zero-balance evidence' : 'No zero balance recorded');
+  const records = (session.ledger.positionEvents || []).filter(event => event.accountId === account.accountId);
+  $('account-evidence').append(evidenceDetails(`Evidence records (${records.length})`, () => (session.ledger.positionEvents || []).filter(event => event.accountId === account.accountId)));
+  refresh();
+}
+function selectCoverageMonth(month) {
+  selectedCoverageMonth = month;
+  const account = positionReport?.accounts.find(item => item.accountId === selectedAccountId);
+  if (!account) return;
+  const history = accountHistory(positionReport.asOf), cells = history.byAccount.get(account.accountId) || [];
+  markSelected($('account-coverage'), month); markColumn($('account-observations'), history.months, month);
+  renderCoverageGap(account, cells, balanceObservations(session.ledger, account.accountId, {from:history.months[0] + '-01', to:positionReport.asOf}));
+}
+// The selected month: what is true, why, and the next step that would close the gap.
+function renderCoverageGap(account, cells, observations) {
+  const cell = cells.find(item => item.month === selectedCoverageMonth), box = $('account-gap');
+  box.replaceChildren();
+  if (!cell) return;
+  box.dataset.state = cell.state;
+  const end = monthEnd(cell.month), before = new Date(cell.month + '-01T00:00:00Z'); before.setUTCDate(0);
+  const opening = before.toISOString().slice(0, 10);
+  box.append(node('h4', `${monthLong(cell.month)} · ${COVERAGE_STATES[cell.state]}${cell.partial ? ' so far' : ''}`));
+  const notes = cell.state === 'reconciled' ? ['Activity reconciles to the opening and closing balances.']
+    : cell.state === 'none' ? [observations.some(item => item.date.startsWith(cell.month))
+      ? 'No import covers this month’s activity. The dated balance below is its only evidence; missing activity stays unknown, not zero.'
+      : 'No import or balance covers this month. Missing months stay unknown, not zero.']
+    : cell.reasons.map(reason => COVERAGE_REASONS[reason] || label(reason));
+  if (cell.partial) notes.push(`The month is not over as of ${dateLabel(positionReport.asOf)}.`);
+  const list = node('ul', undefined, 'gap-reasons');
+  for (const note of [...new Set(notes)]) list.append(node('li', note));
+  box.append(list);
+  const inMonth = observations.filter(item => item.date.startsWith(cell.month));
+  for (const item of inMonth) box.append(node('p', `Balance on ${dayLabel(item.date)}: ${item.conflict ? 'conflicting evidence, no value' : `${money(item.amountText, account.currency)} · ${item.basis === 'statement' ? 'statement' : 'manual entry'}`}`, 'gap-observation'));
+  if (cell.state === 'reconciled') return;
+  // Next steps, most fundamental first: settle conflicting evidence, bring in the
+  // month's activity (cash accounts import it), add the balance anchors, then
+  // review or reconcile in Activity. Investments and loans reconcile from statements.
+  const steps = [], dated = balanceEvents(account.accountId);
+  const has = date => dated.some(event => event.effectiveDate === date);
+  const cash = ['checking', 'savings', 'credit-card'].includes(account.accountType);
+  const needsImport = cash && cell.reasons.includes('missing-declared-coverage') && !cell.observed;
+  if (account.status === 'conflict' && observations.some(item => item.conflict && item.date.startsWith(cell.month)))
+    steps.push(['Choose the supported balance', () => $('account-conflict').querySelector?.('input')?.focus()]);
+  if (needsImport) steps.push(['Import a CSV', () => pages.go('import')]);
+  if (!cell.partial && !has(end)) steps.push([`Add ${dayLabel(end)} closing balance`, () => openBalanceEditor(end)]);
+  if (!has(opening)) steps.push([`Add ${dayLabel(opening)} opening balance`, () => openBalanceEditor(opening)]);
+  if (cell.reasons.some(reason => ['unresolved-source-observation','pending-activity','unresolved-activity-lifecycle','unknown-activity-amount','missing-refund-posted-date','unknown-source-date'].includes(reason)))
+    steps.push([`Review ${monthShortName(cell.month)} in Activity`, () => openMonthInActivity(account.accountId, cell.month, 'transactions')]);
+  if (!cell.partial && !needsImport && has(end) && has(opening) && (cell.reasons.includes('reconciliation-required') || cell.reasons.some(reason => ['balance-discrepancy','superseded-balance-anchors','conflicting-balance-anchors'].includes(reason))))
+    steps.push([`Reconcile ${monthShortName(cell.month)}`, () => openMonthInActivity(account.accountId, cell.month, 'reconciliation')]);
+  steps.splice(3);
+  if (!steps.length) return;
+  const actions = node('div', undefined, 'gap-actions');
+  steps.forEach(([text, act], index) => {
+    const button = node('button', text, index === 0 ? 'primary-button' : 'secondary-button'); button.type = 'button';
+    button.addEventListener('click', () => { if (!busy) act(); });
+    actions.append(button);
+  });
+  box.append(actions);
+}
+const monthShortName = month => new Date(month + '-01T00:00:00Z').toLocaleDateString('en-US', {month:'long', timeZone:'UTC'});
+function openBalanceEditor(date) {
+  const editor = $('balance-editor'); editor.open = true;
+  $('balance-account').value = selectedAccountId; editorAccounts.set('balance-account', selectedAccountId);
+  // Prefill the date unless the owner has already started typing this record.
+  if (!$('balance-amount').value.trim() && !$('balance-source').value.trim()) $('balance-date').value = date;
+  $('balance-basis').value = 'statement';
+  refresh(); $('balance-amount').focus();
+}
+// Reconciliation and review stay in Activity; this sets that page's month and account.
+function openMonthInActivity(accountId, month, destination) {
+  if (!Array.from($('month-filter').children).some(option => option.value === month)) {
+    const option = node('option', monthLabel(month)); option.value = month; $('month-filter').append(option);
+  }
+  $('month-filter').value = month;
+  if (destination === 'reconciliation') { $('reconcile-account').value = accountId; editorAccounts.set('reconcile-account', accountId); }
+  // Review keeps the owner's account scope: it sets the period and the Needs review
+  // filter only, so returning to Accounts shows the same accounts as before.
+  else { $('review-only').checked = true; listLimit = PAGE_ROWS; }
+  page = 0; render(); pages.go(destination);
+  announce(destination === 'reconciliation' ? `Reconciling ${monthLabel(month)}. The activity period is now ${monthLabel(month)}.`
+    : `Showing ${monthLabel(month)} activity that needs review. The account scope is unchanged.`, 'info');
+}
+function renderBalanceConflict(account) {
+  const card = node('article', undefined, 'account-conflict-card');
+  card.append(node('h4', 'Conflicting balances'), node('p', `Evidence for ${dateLabel(account.balanceDate)} disagrees, so this balance is excluded until you choose the supported record and say why.`));
+  const rationale = node('input'); rationale.type = 'text'; rationale.setAttribute('aria-label', `Selection reason for ${account.displayName}`); rationale.maxLength = 300; rationale.placeholder = 'Why is this record supported?';
+  card.append(rationale);
+  // One row per candidate record: what it says, where it came from, and the choice.
+  const list = node('ul', undefined, 'conflict-candidates'); card.append(list);
+  for (const event of balanceEvents(account.accountId).filter(event => account.candidateEventIds.includes(event.eventId))) {
+    const reference = event.source?.reference || 'No reference', amount = money(event.amountText, account.currency);
+    const row = node('li', undefined, 'conflict-candidate'), copy = node('span', undefined, 'conflict-candidate-copy');
+    copy.append(node('strong', amount), node('small', `${event.basis === 'statement' ? 'Statement' : 'Manual entry'} · ${reference}`));
+    const button = node('button', 'Use this balance', 'secondary-button'); button.type = 'button'; positionButtons.push(button);
+    button.setAttribute('aria-label', `Use ${amount} from ${reference}`);
+    row.append(copy, button, evidenceDetails('Inspect source', () => event));
+    list.append(row);
+    button.addEventListener('click', () => {
+      if (busy || !session.canEdit()) return;
+      if (!rationale.value.trim()) { announce('Explain why this balance evidence is supported.', 'error'); rationale.focus(); return; }
+      return run('Recording an auditable balance selection.', async () => {
+        session.recordPosition({type:'balance-resolution', accountId:account.accountId, effectiveDate:event.effectiveDate, selectedEventId:event.eventId, candidateEventIds:account.candidateEventIds, reason:rationale.value.trim()});
+        render(); announce('Balance selection staged with its reason. Prior evidence is preserved. Save changes to persist it.', 'success');
+      }, null, 'select-balance-evidence');
+    });
+  }
+  $('account-conflict').append(card);
+}
+function renderAccountHoldings(account) {
+  const card = node('article', undefined, 'holdings-card');
+  card.append(node('h4', `${account.displayName} holdings`, 'visually-hidden'));
+  const holdings = account.holdings;
+  $('holdings-meta').textContent = holdings ? `${holdings.scope === 'complete' ? 'Complete' : 'Partial'} statement, ${dateLabel(holdings.effectiveDate)}${holdings.stale ? ' · stale' : ''}` : '';
+  if (!holdings) card.append(node('p', 'No dated holdings evidence. Transaction rows are not holdings.', 'quiet-placeholder'));
+  else {
+    const list = node('ul', undefined, 'holding-rows');
+    for (const holding of holdings.holdings) {
+      const item = node('li'), copy = node('span');
+      copy.append(node('strong', holding.symbol), node('small', `${label(holding.assetType)} · ${holding.quantity} units`));
+      item.append(copy, node('span', money(holding.valueText, account.currency), 'holding-value'));
+      list.append(item);
+    }
+    card.append(list);
+    const reasons = holdings.reasons.filter(reason => reason !== 'partial-holdings');
+    card.append(node('p', reasons.length ? reasons.map(reason => COVERAGE_REASONS[reason] || label(reason)).join(' ') : 'Supports the account balance. Never added to it again.', reasons.length ? 'holdings-note warn-text' : 'holdings-note'));
+    card.append(evidenceDetails('Inspect dated holdings and valuation', () => account.holdings));
+  }
+  resolveHoldings(card, account);
+  $('holdings-accounts').append(card);
 }
 // Source review is part of the same in-memory draft and explicit-save path.
 // Pagination bounds DOM work without hiding the remaining source evidence.
@@ -1186,12 +1433,17 @@ action('preview-position', 'Preparing invented balances and reconciliation evide
 action('start-preview', 'Preparing your invented workspace locally.', () => previewPosition('overview'));
 action('stage-balance', 'Validating dated balance evidence locally.', async () => {
   const basis = $('balance-basis').value;
+  selectStagedAccount($('balance-account').value);
   session.recordPosition({type:'balance-snapshot', accountId:$('balance-account').value, effectiveDate:$('balance-date').value, amountText:$('balance-amount').value.trim(), basis, source:{kind:basis === 'statement' ? 'statement' : 'manual', reference:$('balance-source').value.trim()}});
+  // The staged record is now evidence; the form is ready for the next one.
+  for (const id of ['balance-date','balance-amount','balance-source']) $(id).value = '';
+  $('balance-editor').open = false;
   render(); announce('Dated balance staged. Source evidence is preserved; resolve any same-date conflict before using it. Save changes to persist.', 'success');
 });
 action('stage-closure', 'Checking closure evidence locally.', async () => {
   const anchor = session.ledger.positionEvents.find(event => event.eventId === $('closure-anchor').value);
   session.recordPosition({type:'account-closure', accountId:anchor.accountId, effectiveDate:anchor.effectiveDate, balanceEventId:anchor.eventId, source:{kind:'manual', reference:$('closure-source').value.trim()}});
+  $('closure-source').value = '';
   render(); announce('Account closure staged with its evidence. Account history remains intact. Save changes to persist.', 'success');
 });
 $('closure-form').addEventListener('submit', event => event.preventDefault());
@@ -1214,7 +1466,10 @@ action('stage-account', 'Validating a synthetic account locally.', async () => {
 });
 $('account-form').addEventListener('submit', event => event.preventDefault());
 action('stage-holdings', 'Checking dated holdings locally.', async () => {
+  selectStagedAccount($('holdings-account').value);
   session.recordPosition({type:'holdings-snapshot', accountId:$('holdings-account').value, effectiveDate:$('holdings-date').value, scope:$('holdings-scope').value, source:{kind:'statement',reference:$('holdings-source').value.trim()}, holdings:holdingRows.map(row => ({symbol:row.fields.symbol.value.trim(), assetType:row.fields.assetType.value, quantity:row.fields.quantity.value.trim(), valueText:row.fields.valueText.value.trim()}))});
+  for (const id of ['holdings-date','holdings-source']) $(id).value = '';
+  holdingRows.length = 0; $('holdings-rows').replaceChildren(); $('holdings-scope').value = 'partial';
   render(); announce('Dated holdings staged. Review completeness, balance discrepancy and any conflicts before saving.', 'success');
 });
 $('holdings-form').addEventListener('submit', event => event.preventDefault());

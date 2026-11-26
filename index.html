@@ -51,7 +51,6 @@
       <p id="action-status" class="action-status" role="status" aria-live="polite" aria-atomic="true"></p>
 
       <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a></nav>
-      <nav id="position-navigation" class="page-switcher" aria-label="Account views" hidden><a id="sub-position" href="#position">Balances</a><a id="sub-holdings" href="#holdings">Holdings</a></nav>
 
       <details class="scope-panel" id="workspace-scope"><summary><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span id="scope-period-title">All accounts · Full saved period</span><span id="scope-position-title" hidden>All accounts · Dated balances</span><span class="scope-edit">Change</span></summary><div class="scope-controls" aria-describedby="scope-help">
           <label for="account-filter">Account<select id="account-filter" disabled><option value="all">All accounts</option></select></label>
@@ -222,66 +221,96 @@
         </div>
       </section>
 
-      <section class="workspace-page position-panel" id="position" hidden aria-labelledby="position-heading">
-        <h2 id="position-heading" class="visually-hidden">Balances</h2>
-        <p id="position-scope" class="block-meta">Choose a ledger. The balance date is independent of the activity period.</p>
-        <div id="position-totals" class="figures"></div>
-        <p id="position-warning" class="notice" role="status" aria-live="polite">Missing balances are unavailable, not zero.</p>
-        <div id="position-accounts" class="account-list"></div>
-        <section class="editors" aria-labelledby="editors-heading">
-          <h2 id="editors-heading">Add or correct</h2>
-          <p class="field-help">Entries stay in your draft until you save. Invented account names only in synthetic copies.</p>
-          <details class="disclosure manage-accounts"><summary>Add an account</summary>
-            <form id="account-form" class="position-form">
-              <p>Do not enter account numbers. This adds an account without connecting to an institution.</p>
-              <label for="new-account-name">Display name<input id="new-account-name" type="text" maxlength="200" disabled></label>
-              <label for="new-account-institution">Institution<select id="new-account-institution" disabled><option value="wells-fargo">Wells Fargo</option><option value="sofi">SoFi</option><option value="fidelity">Fidelity</option></select></label>
-              <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Brokerage</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
-              <label for="new-account-currency">Three-letter currency<input id="new-account-currency" type="text" maxlength="3" placeholder="USD" disabled></label>
-              <button id="stage-account" type="button" class="secondary-button" disabled>Stage account</button>
-              <p id="account-form-status" class="status-message" tabindex="-1"></p>
-            </form>
-          </details>
-          <details class="disclosure"><summary>Add or correct a dated balance</summary>
-            <form id="position-form" class="position-form" aria-describedby="position-help">
-              <p id="position-help">Enter the signed asset balance, or a nonnegative amount owed for a liability. Each entry adds evidence; a correction on the same date creates a conflict until you choose the supported source. Staging does not save.</p>
-              <label for="balance-account">Account<select id="balance-account" disabled></select></label>
-              <label for="balance-date">Effective date<input id="balance-date" type="date" disabled></label>
-              <label for="balance-amount">Exact balance<input type="text" id="balance-amount" inputmode="decimal" placeholder="100.00" disabled></label>
-              <label for="balance-basis">Basis<select id="balance-basis" disabled><option value="manual">Manual</option><option value="statement">Statement</option></select></label>
-              <label for="balance-source">Evidence reference or correction reason<input type="text" id="balance-source" maxlength="300" disabled></label>
-              <button id="stage-balance" type="button" class="secondary-button" disabled>Stage dated balance</button>
-              <p id="position-form-status" class="status-message" tabindex="-1"></p>
-            </form>
-          </details>
-          <details class="disclosure"><summary>Record an account closure</summary>
-            <form id="closure-form" class="position-form">
-              <p>A closure needs a selected zero balance on the closure date. The account and its history are kept. Later contradictory evidence prevents a complete closure claim.</p>
-              <label for="closure-anchor">Zero-balance evidence<select id="closure-anchor" disabled></select></label>
-              <label for="closure-source">Closure evidence reference<input type="text" id="closure-source" maxlength="300" disabled></label>
-              <button id="stage-closure" type="button" class="secondary-button" disabled>Stage account closure</button>
-              <p id="closure-form-status" class="status-message" tabindex="-1"></p>
-            </form>
-          </details>
-        </section>
-      </section>
+      <section class="workspace-page position-panel" id="position" hidden aria-labelledby="position-heading" data-view="list">
+        <h2 id="position-heading" class="visually-hidden">Accounts and balances</h2>
+        <div class="accounts-layout">
+          <div class="accounts-list-column">
+            <p id="position-scope" class="position-summary">Choose a ledger. The balance date is independent of the activity period.</p>
+            <details class="disclosure totals-disclosure"><summary>Assets, liabilities and completeness</summary>
+              <div class="disclosure-body">
+                <div id="position-totals" class="figures figures-compact"></div>
+                <p id="position-warning" class="position-note" role="status" aria-live="polite">Missing balances are unavailable, not zero.</p>
+              </div>
+            </details>
+            <div id="position-accounts" class="account-groups"></div>
+            <p class="coverage-key" aria-hidden="true"><span><i data-state="reconciled"></i>Reconciled</span><span><i data-state="imported"></i>Imported</span><span><i data-state="declared"></i>Declared only</span><span><i data-state="none"></i>No data</span><span><i data-state="needs-fix"></i>Needs a fix</span></p>
+            <details class="disclosure manage-accounts"><summary>Add an account</summary>
+              <form id="account-form" class="position-form">
+                <p>Do not enter account numbers. This adds an account without connecting to an institution. Invented account names only in synthetic copies.</p>
+                <label for="new-account-name">Display name<input id="new-account-name" type="text" maxlength="200" disabled></label>
+                <label for="new-account-institution">Institution<select id="new-account-institution" disabled><option value="wells-fargo">Wells Fargo</option><option value="sofi">SoFi</option><option value="fidelity">Fidelity</option></select></label>
+                <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Brokerage</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
+                <label for="new-account-currency">Three-letter currency<input id="new-account-currency" type="text" maxlength="3" placeholder="USD" disabled></label>
+                <button id="stage-account" type="button" class="secondary-button" disabled>Stage account</button>
+                <p id="account-form-status" class="status-message" tabindex="-1"></p>
+              </form>
+            </details>
+          </div>
 
-      <section class="workspace-page position-panel" id="holdings" aria-labelledby="holdings-heading" hidden>
-        <h2 id="holdings-heading" class="visually-hidden">Dated holdings</h2>
-        <div id="holdings-accounts" class="account-list"><p class="quiet-placeholder">Open a ledger to see investment holdings.</p></div>
-        <details class="disclosure editor-disclosure"><summary>Enter dated holdings</summary>
-          <form id="holdings-form" class="position-form">
-            <p>Copy statement evidence only. Quantities and values stay exact decimals. Holdings do not replace account balances or fetch prices. Same-date conflicting statements need a deliberate selection.</p>
-            <label for="holdings-account">Investment account<select id="holdings-account" disabled></select></label>
-            <label for="holdings-date">Holdings effective date<input id="holdings-date" type="date" disabled></label>
-            <label for="holdings-scope">Statement scope<select id="holdings-scope" disabled><option value="partial">Partial holdings</option><option value="complete">Complete holdings</option></select></label>
-            <label for="holdings-source">Statement evidence reference<input id="holdings-source" type="text" maxlength="300" disabled></label>
-            <div id="holdings-rows" class="position-editor-rows"></div>
-            <button id="add-holding" type="button" class="secondary-button" disabled>Add holding row</button>
-            <button id="stage-holdings" type="button" class="secondary-button" disabled>Stage dated holdings</button>
-            <p id="holdings-form-status" class="status-message" tabindex="-1"></p>
-          </form>
-        </details>
+          <section id="account-pane" class="account-pane" aria-labelledby="account-title">
+            <a class="account-back" href="#position"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>All accounts</a>
+            <header class="account-head">
+              <h2 id="account-title" tabindex="-1">No account selected</h2>
+              <p id="account-meta" class="account-head-meta"></p>
+              <p id="account-balance" class="account-figure"></p>
+              <p id="account-freshness" class="account-freshness"></p>
+            </header>
+            <section class="account-block" aria-labelledby="observations-heading">
+              <div class="account-block-head"><h3 id="observations-heading">Balance observations</h3><p id="observations-range" class="block-meta"></p></div>
+              <div id="account-observations" class="observation-plot"></div>
+              <div id="observation-months" class="strip-labels" aria-hidden="true"></div>
+            </section>
+            <section class="account-block" aria-labelledby="coverage-heading">
+              <div class="account-block-head"><h3 id="coverage-heading">Coverage</h3><p id="coverage-summary-line" class="block-meta"></p></div>
+              <div id="account-coverage" class="coverage-strip coverage-strip-large" role="group" aria-labelledby="coverage-heading"></div>
+              <div id="coverage-months" class="strip-labels" aria-hidden="true"></div>
+              <p class="coverage-key coverage-key-detail" aria-hidden="true"><span><i data-state="reconciled"></i>Reconciled</span><span><i data-state="imported"></i>Imported</span><span><i data-state="declared"></i>Declared only</span><span><i data-state="none"></i>No data</span><span><i data-state="needs-fix"></i>Needs a fix</span></p>
+              <div id="account-gap" class="account-gap" aria-live="polite"></div>
+            </section>
+            <div id="account-conflict" class="account-conflict"></div>
+            <section id="account-holdings" class="account-block" aria-labelledby="holdings-heading" hidden>
+              <div class="account-block-head"><h3 id="holdings-heading">Holdings</h3><p id="holdings-meta" class="block-meta"></p></div>
+              <div id="holdings-accounts" class="holdings-body"><p class="quiet-placeholder">Open a ledger to see investment holdings.</p></div>
+            </section>
+            <div class="account-editors">
+              <details class="disclosure" id="balance-editor"><summary>Add or correct a dated balance</summary>
+                <form id="position-form" class="position-form" aria-describedby="position-help">
+                  <p id="position-help">Enter the signed asset balance, or a nonnegative amount owed for a liability. Each entry adds evidence; a correction on the same date creates a conflict until you choose the supported source. Staging does not save.</p>
+                  <label for="balance-account" class="editor-account">Account<select id="balance-account" disabled></select></label>
+                  <label for="balance-date">Effective date<input id="balance-date" type="date" disabled></label>
+                  <label for="balance-amount">Exact balance<input type="text" id="balance-amount" inputmode="decimal" placeholder="100.00" disabled></label>
+                  <label for="balance-basis">Basis<select id="balance-basis" disabled><option value="manual">Manual</option><option value="statement">Statement</option></select></label>
+                  <label for="balance-source">Evidence reference or correction reason<input type="text" id="balance-source" maxlength="300" disabled></label>
+                  <button id="stage-balance" type="button" class="secondary-button" disabled>Stage dated balance</button>
+                  <p id="position-form-status" class="status-message" tabindex="-1"></p>
+                </form>
+              </details>
+              <details class="disclosure" id="holdings-editor" hidden><summary>Enter dated holdings</summary>
+                <form id="holdings-form" class="position-form">
+                  <p>Copy statement evidence only. Quantities and values stay exact decimals. Holdings do not replace account balances or fetch prices. Same-date conflicting statements need a deliberate selection.</p>
+                  <label for="holdings-account" class="editor-account">Investment account<select id="holdings-account" disabled></select></label>
+                  <label for="holdings-date">Holdings effective date<input id="holdings-date" type="date" disabled></label>
+                  <label for="holdings-scope">Statement scope<select id="holdings-scope" disabled><option value="partial">Partial holdings</option><option value="complete">Complete holdings</option></select></label>
+                  <label for="holdings-source">Statement evidence reference<input id="holdings-source" type="text" maxlength="300" disabled></label>
+                  <div id="holdings-rows" class="position-editor-rows"></div>
+                  <button id="add-holding" type="button" class="secondary-button" disabled>Add holding row</button>
+                  <button id="stage-holdings" type="button" class="secondary-button" disabled>Stage dated holdings</button>
+                  <p id="holdings-form-status" class="status-message" tabindex="-1"></p>
+                </form>
+              </details>
+              <details class="disclosure" id="closure-editor"><summary>Record an account closure</summary>
+                <form id="closure-form" class="position-form">
+                  <p>A closure needs a selected zero balance on the closure date. The account and its history are kept. Later contradictory evidence prevents a complete closure claim.</p>
+                  <label for="closure-anchor">Zero-balance evidence<select id="closure-anchor" disabled></select></label>
+                  <label for="closure-source">Closure evidence reference<input type="text" id="closure-source" maxlength="300" disabled></label>
+                  <button id="stage-closure" type="button" class="secondary-button" disabled>Stage account closure</button>
+                  <p id="closure-form-status" class="status-message" tabindex="-1"></p>
+                </form>
+              </details>
+              <div id="account-evidence" class="account-evidence"></div>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section class="workspace-page migration" id="migration" hidden aria-labelledby="page-title">
