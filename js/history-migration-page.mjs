@@ -7,8 +7,8 @@ import { fail } from './app-error.mjs';
 import { previewHistoricalMonthlySummaries } from './historical-monthly-summary.mjs';
 import {
   DEFAULT_SOURCE_ID, MIGRATION_START, acceptedMonths, buildYear, closingEstimates, displayCents,
-  lastCompleteMonth, migrationMonths, migrationYears, monthName, monthShort, monthStates,
-  netWorthCheck, parseAmount, previousMonth, savedCells, savedSetup, setupProblems, yearMonths
+  DEFAULT_LAST_MONTH, migrationMonths, migrationYears, monthName, monthShort, monthStates,
+  netWorthCheck, parseAmount, parseCellAmount, previousMonth, savedCells, savedSetup, setupProblems, yearMonths
 } from './history-migration.mjs';
 
 const STATE_TEXT = {
@@ -20,7 +20,7 @@ const ignoredFindings = new Set(['historical-record-already-accepted','historica
 
 export function mountHistoryMigration({
   root, homeLink = null, getLedger, getSavedLedger = () => null, isActive = () => true,
-  getUnavailableReason = () => null, stageSummaries, onStaged = () => {}, today = () => new Date()
+  getUnavailableReason = () => null, stageSummaries, onStaged = () => {}
 }) {
   if (!root || typeof getLedger !== 'function' || typeof stageSummaries !== 'function') fail('invalid-options');
   const doc = root.ownerDocument;
@@ -98,7 +98,7 @@ export function mountHistoryMigration({
   const yearState = el('p', '', {id:'migration-year-state', class:'block-meta'});
   const [sheetWrap, sheet] = field('migration-sheet', 'Worksheet', null, {maxlength:'200', class:'migration-short'});
   const gridWrap = el('div', '', {id:'migration-grid-wrap', class:'migration-grid-wrap', tabindex:'0', role:'region', 'aria-labelledby':'migration-year-heading'});
-  const gridHelp = el('p', 'Tab moves across a month. Enter moves to the next month. Amounts keep their exact cents; $ and commas are fine. Net-worth figures you type here are only compared, never saved.', {class:'field-help migration-grid-help'});
+  const gridHelp = el('p', 'Type every amount as a positive number, the way the workbook shows it. Income columns are money in and expense columns are money out, so no minus signs. Tab moves across a month and Enter moves to the next month. $ and commas are fine. Net-worth figures typed here are only compared, never saved.', {class:'field-help migration-grid-help'});
   const yearProblems = el('ul', '', {id:'migration-year-problems', class:'migration-problems', 'aria-live':'polite'});
   const reviewTotals = el('dl', '', {id:'migration-year-totals', class:'migration-totals'});
   const confirm = el('input', '', {id:'migration-confirm', type:'checkbox'});
@@ -127,7 +127,7 @@ export function mountHistoryMigration({
   function initialSetup() {
     const restored = savedSetup(ledger);
     const latestSaved = restored ? [...acceptedMonths(ledger).keys()].sort().at(-1) : null;
-    const lastMonth = latestSaved && latestSaved > lastCompleteMonth(today()) ? latestSaved : lastCompleteMonth(today());
+    const lastMonth = latestSaved && latestSaved > DEFAULT_LAST_MONTH ? latestSaved : DEFAULT_LAST_MONTH;
     setup = {
       workbook:restored?.workbook ?? '', sourceId:restored?.sourceId ?? DEFAULT_SOURCE_ID, currency:restored?.currency ?? 'USD',
       last:lastMonth, accountIds:restored?.accountIds ?? [], opening:restored?.opening ?? ''
@@ -209,7 +209,7 @@ export function mountHistoryMigration({
   let gridInputs = [], rowRefs = new Map(), head = null;
   function cellInput(month, side, row) {
     const input = el('input', '', {id:`migration-cell-${month}-${side}-${row.id}`, type:'text', inputmode:'decimal', autocomplete:'off', spellcheck:'false', class:'migration-cell',
-      'aria-label':`${monthName(month)} ${month.slice(0, 4)}, ${row.label || 'unnamed category'}`});
+      'aria-label':`${monthName(month)} ${month.slice(0, 4)}, ${side === 'income' ? 'income' : 'expense'}: ${row.label || 'unnamed category'}`});
     input.value = cells.get(month)?.[side]?.[row.id] ?? '';
     input.addEventListener('input', () => {
       const value = cells.get(month) ?? {income:{}, expenses:{}};
@@ -219,7 +219,7 @@ export function mountHistoryMigration({
       updateRow(month); update();
     });
     input.addEventListener('blur', () => {
-      const parsed = parseAmount(input.value);
+      const parsed = parseCellAmount(input.value);
       if (parsed.cents !== undefined) input.value = displayCents(parsed.cents).replace('−', '-');
       markCell(input);
     });
@@ -242,7 +242,7 @@ export function mountHistoryMigration({
     next?.[0]?.focus();
   }
   function markCell(input) {
-    const parsed = parseAmount(input.value);
+    const parsed = parseCellAmount(input.value);
     if (parsed.error) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
   }
   function renderGridHead() {
@@ -262,7 +262,7 @@ export function mountHistoryMigration({
     corner.textContent = 'Month';
     groups.append(corner);
     head = {labels:{income:[], expenses:[]}};
-    for (const [side, title, cls] of [['income','Income','migration-in'],['expenses','Expenses','migration-out']]) {
+    for (const [side, title, cls] of [['income','Income · money in','migration-in'],['expenses','Expenses · money out','migration-out']]) {
       groups.append(el('th', title, {scope:'colgroup', colspan:String(rows[side].length + 1), class:'migration-group ' + cls}));
       for (const row of rows[side]) {
         const th = el('th', row.label.trim() || 'Unnamed', {scope:'col'});
@@ -303,7 +303,7 @@ export function mountHistoryMigration({
   function sum(month, side) {
     let total = 0n, complete = true;
     for (const row of rows[side]) {
-      const parsed = parseAmount(cells.get(month)?.[side]?.[row.id]);
+      const parsed = parseCellAmount(cells.get(month)?.[side]?.[row.id]);
       if (parsed.cents === undefined) complete = false; else total += parsed.cents;
     }
     return {total, complete};
@@ -443,12 +443,12 @@ export function mountHistoryMigration({
     const yearIssues = (built?.problems ?? []).filter(problem => !problem.label || problem.label.trim());
     const grouped = [], untouched = [], cellCount = rows.income.length + rows.expenses.length;
     for (const month of months) {
-      const blanks = yearIssues.filter(problem => problem.month === month && problem.label && parseAmount(cells.get(month)?.[problem.side]?.[rows[problem.side].find(row => row.label === problem.label)?.id]).blank);
+      const blanks = yearIssues.filter(problem => problem.month === month && problem.label && parseCellAmount(cells.get(month)?.[problem.side]?.[rows[problem.side].find(row => row.label === problem.label)?.id]).blank);
       if (blanks.length === cellCount) untouched.push(month);
       else if (blanks.length) grouped.push(`${monthName(month)}: ${blanks.length} empty ${blanks.length === 1 ? 'cell' : 'cells'}. Enter 0 where the workbook shows nothing.`);
     }
     for (const problem of yearIssues) {
-      if (problem.label && !parseAmount(cells.get(problem.month)?.[problem.side]?.[rows[problem.side].find(row => row.label === problem.label)?.id]).error) continue;
+      if (problem.label && !parseCellAmount(cells.get(problem.month)?.[problem.side]?.[rows[problem.side].find(row => row.label === problem.label)?.id]).error) continue;
       const where = problem.month ? `${monthName(problem.month)}${problem.label ? ', ' + problem.label.trim() : ''}: ` : '';
       grouped.push(where + problem.message);
     }

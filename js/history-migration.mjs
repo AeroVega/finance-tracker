@@ -33,9 +33,8 @@ export function yearMonths(year, last) {
   return migrationMonths(last).filter(month => month.startsWith(String(year) + '-'));
 }
 /** The last calendar month that has fully ended on `today`. */
-export function lastCompleteMonth(today = new Date()) {
-  return monthLabel(today.getFullYear() * 12 + today.getMonth() - 1);
-}
+/** The owner's chosen last month to migrate (2026-11-25). Still editable in setup. */
+export const DEFAULT_LAST_MONTH = '2026-09';
 
 /**
  * Parses an amount as typed or pasted from a spreadsheet: 1234.5, 1,234.50,
@@ -55,6 +54,15 @@ export function parseAmount(text) {
   if (whole.length > 18) return {error:true};
   const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
   return {cents: negative ? -cents : cents};
+}
+/**
+ * An income or expense cell. The column says which way the money moved, so
+ * every cell is a positive amount or 0 (owner decision, 2026-11-25). A minus
+ * sign is refused rather than flipped, so a sign is never silently guessed.
+ */
+export function parseCellAmount(text) {
+  const parsed = parseAmount(text);
+  return parsed.cents !== undefined && parsed.cents < 0n ? {error:true, negative:true} : parsed;
 }
 export function centsToAmount(cents) {
   const negative = cents < 0n, size = negative ? -cents : cents;
@@ -170,10 +178,12 @@ export function buildYear({year, setup, cells, worksheet}) {
       let total = 0n;
       const items = [];
       for (const label of labels) {
-        const parsed = parseAmount(cells?.[month]?.[side]?.[label]);
+        const parsed = parseCellAmount(cells?.[month]?.[side]?.[label]);
         if (parsed.cents === undefined) {
           complete = false;
-          problems.push({month, side, label, message:parsed.blank ? 'Empty. Enter 0 if nothing was recorded.' : 'Not a valid amount.'});
+          problems.push({month, side, label, message:parsed.blank ? 'Empty. Enter 0 if nothing was recorded.'
+            : parsed.negative ? `Remove the minus sign. ${side === 'income' ? 'Income columns are money in' : 'Expense columns are money out'}, so every amount is positive.`
+            : 'Not a valid amount.'});
           continue;
         }
         total += parsed.cents;

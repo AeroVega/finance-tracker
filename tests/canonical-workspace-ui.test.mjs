@@ -1937,6 +1937,7 @@ test('History migration page stages a typed year with one confirmation, saves it
   assert.equal(h.get('home-migration-link').hidden, false);
   await h.navigate('#migration');
   assert.equal(h.get('page-title').textContent, 'History migration');
+  assert.equal(h.get('migration-last').value, '2026-09', 'the owner’s last month is the default');
   await type('migration-workbook', 'Invented finances.xlsx');
   await type('migration-opening', '1,000.00');
   const last = h.get('migration-last'); last.value = '2023-03'; await last.emit('change');
@@ -1950,6 +1951,11 @@ test('History migration page stages a typed year with one confirmation, saves it
     await type(`migration-cell-${month}-income-r0`, '$100');
     await type(`migration-cell-${month}-expenses-r1`, '40.00');
   }
+  await type('migration-cell-2023-03-expenses-r1', '-40.00');
+  await h.get('migration-cell-2023-03-expenses-r1').emit('blur');
+  assert.equal(h.get('migration-cell-2023-03-expenses-r1').attributes['aria-invalid'], 'true');
+  assert.match(text(h.get('migration-year-problems')), /March, Invented living: Remove the minus sign\. Expense columns are money out/);
+  await type('migration-cell-2023-03-expenses-r1', '40.00');
   await type('migration-check-2023-02', '1060.00');
   await type('migration-check-2023-03', '1100.00');
   assert.match(text(h.get('migration-grid-wrap')), /Matches/);

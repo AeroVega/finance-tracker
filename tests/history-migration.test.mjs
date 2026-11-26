@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createLedger, registerAccount } from '../js/canonical-import.mjs';
 import { prepareHistoricalSummaries, previewHistoricalMonthlySummaries, getHistoricalMonthlySummaryView } from '../js/historical-monthly-summary.mjs';
 import {
-  buildYear, closingEstimates, lastCompleteMonth, migrationMonths, monthStates, netWorthCheck,
+  DEFAULT_LAST_MONTH, buildYear, closingEstimates, migrationMonths, monthStates, netWorthCheck, parseCellAmount,
   parseAmount, savedCells, savedSetup, setupProblems, centsToAmount
 } from '../js/history-migration.mjs';
 
@@ -26,8 +26,10 @@ test('amounts typed or pasted from a spreadsheet keep exact cents and reject amb
   assert.deepEqual(parseAmount('  '), {blank:true});
   for (const text of ['1.234', '12,34', '1e3', '--1', '(-1)', 'abc', '1,2345.00', '$-1']) assert.deepEqual(parseAmount(text), {error:true}, text);
   assert.equal(centsToAmount(-5n), '-0.05');
-  assert.equal(lastCompleteMonth(new Date(2026, 10, 25)), '2026-10');
-  assert.equal(lastCompleteMonth(new Date(2027, 0, 3)), '2026-12');
+  assert.equal(DEFAULT_LAST_MONTH, '2026-09', 'the owner migrates January 2023 through September 2026');
+  assert.deepEqual(parseCellAmount('-12'), {error:true, negative:true}, 'income and expense cells refuse a minus sign');
+  assert.deepEqual(parseCellAmount('(12.00)'), {error:true, negative:true});
+  assert.equal(parseCellAmount('0').cents, 0n);
 });
 
 test('a typed year becomes the existing v2 input with category totals, account scope and the January closing anchor', () => {
@@ -121,4 +123,18 @@ test('a private-database session can stage the migration like any other edit, an
   assert.equal(session.dirty, true);
   const synthetic = new CanonicalWorkspaceSession({storage:{dataClass:'synthetic', lifecycle:null}});
   assert.throws(() => synthetic.preview(privateLedger), {code:'data-class-mismatch'});
+});
+
+test('a minus sign in an income or expense cell blocks the year with a plain reason; net worth may be negative', () => {
+  const cells = year2023();
+  cells['2023-04'].expenses['Invented food'] = '-25.00';
+  cells['2023-05'].income['Invented pay'] = '(3000)';
+  const built = buildYear({year:2023, setup:setup({opening:'-2,500.00'}), cells, worksheet:'2023'});
+  assert.equal(built.ready, false);
+  assert.deepEqual(built.problems.map(item => [item.month, item.label, item.message]), [
+    ['2023-04', 'Invented food', 'Remove the minus sign. Expense columns are money out, so every amount is positive.'],
+    ['2023-05', 'Invented pay', 'Remove the minus sign. Income columns are money in, so every amount is positive.']]);
+  const fixed = buildYear({year:2023, setup:setup({opening:'-2,500.00'}), cells:year2023(), worksheet:'2023'});
+  assert.equal(fixed.ready, true);
+  assert.equal(fixed.records[0].summary.netWorthSnapshot.amount, '-1100.50', 'a negative opening net worth is a real value');
 });
