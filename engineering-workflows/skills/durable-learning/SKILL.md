@@ -5,20 +5,12 @@ description: "Use when mistakes, defects, or corrections recur and a change to c
 
 # Durable Learning
 
-Identify a demonstrated recurring failure, its actual impact, and the conditions that allow it. Find an example and investigate the cause before proposing a new rule.
+Start from a recurring failure with real instances. Find at least two examples with the same cause and name the condition that let the mistake through. A single unusual correction gets a local fix, not a new rule.
 
-Consider whether a design change, type, validation, lint, test, documentation, or no additional mechanism best addresses the problem. Prefer the least burdensome safeguard that prevents or detects the meaningful failure without blocking legitimate work. When adding an automated check, demonstrate that it detects a representative failure and permits a valid case. Record the reason and limitations.
+Pick the least costly safeguard from the "Encode lessons in structure" section of AGENTS.md. Record why the safeguard prevents or detects the failure and what it cannot catch.
 
-## Turn a correction into a check
+## Prove the safeguard works
 
-Find concrete instances of the mistake and group examples with the same cause. A single unusual correction may call for a local fix rather than a new rule. Explain the consequence and the condition that allowed the mistake.
+For an automated check, show that it fails on a representative bad case and passes on a valid case. Make the failure message name the next action for the contributor.
 
-Consider eliminating the invalid state in the design, expressing the constraint in a type, adding a focused check, or documenting a judgment call. Choose the least costly option that addresses the demonstrated failure. A repository-wide rule may need an incremental adoption path if existing code already violates it.
-
-For an automated safeguard, demonstrate a representative bad case that fails and a valid case that passes. Make failures tell the contributor what to change. Note any exceptions and their owner according to project policy; do not silently weaken a check to clear the build.
-
-## Make the safeguard useful
-
-Name a real example of the mistake and where the team corrected it. If the examples come from review history or other connected systems, use only sources authorized for the task. Explain why the chosen safeguard prevents or detects that class of mistake, and whether a legitimate exception is possible.
-
-When a check fails, make its message point to a useful next action. Test the check against both a known failure and a legitimate case. If existing violations block rollout, choose a project-approved incremental approach and report what remains unchecked.
+Do not weaken a check to clear the build. Record any exception and its owner under the project policy. If existing code already violates a new rule, roll it out in steps the project approves and report the cases still unchecked.

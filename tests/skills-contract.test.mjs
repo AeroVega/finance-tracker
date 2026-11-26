@@ -16,9 +16,8 @@ const names = [
   'adversarial-review', 'debugging-and-change-impact', 'design-exploration',
   'durable-learning', 'engineering-design', 'formal-verification',
   'measurement-and-benchmarks', 'planning-and-execution', 'project-verification',
-  'safe-execution-and-migrations', 'simplification', 'task-framing',
-  'technical-explanation', 'technical-writing', 'typescript-guidance',
-  'verification-and-testing',
+  'safe-execution-and-migrations', 'task-framing', 'technical-explanation',
+  'typescript-guidance', 'verification-and-testing',
 ];
 const read = (relative) => readFileSync(path.join(root, relative), 'utf8');
 const readSkill = (name) => read(`engineering-workflows/skills/${name}/SKILL.md`);
@@ -36,7 +35,7 @@ function frontmatter(name, text = readSkill(name)) {
   return match[1];
 }
 
-test('the root package replaces the old skills collection with all sixteen workflows', () => {
+test('the root package replaces the old skills collection with all fourteen workflows', () => {
   assert.equal(existsSync(path.join(root, 'skills')), false, 'the old root skills directory must be removed');
   const directories = readdirSync(skillsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
@@ -88,7 +87,7 @@ test('Codex discovery links resolve to the new canonical skill folders without c
   }
 });
 
-test('an isolated package copy preserves all sixteen self-contained skills and licenses', (t) => {
+test('an isolated package copy preserves all fourteen self-contained skills and licenses', (t) => {
   const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'engineering-workflows-'));
   t.after(() => rmSync(temporaryRoot, { recursive: true, force: true }));
   const copy = path.join(temporaryRoot, 'engineering-workflows');
@@ -119,6 +118,7 @@ test('an isolated package copy preserves all sixteen self-contained skills and l
 
 test('the agent entry point and package instructions describe local discovery', () => {
   assert.match(read('AGENTS.md'), /\[the skills index\]\(engineering-workflows\/README\.md\)/);
+  assert.match(read('AGENTS.md'), /^## Unslop$/m, 'the Unslop rules live in AGENTS.md');
   const index = read('engineering-workflows/README.md');
   assert.ok(index.includes('.agents/skills/'));
   assert.ok(index.includes('engineering-workflows/skills/'));
@@ -167,7 +167,6 @@ test('local Markdown links and section references resolve outside illustrative c
 
 test('familiar workflow triggers remain discoverable in consolidated skills', () => {
   for (const [name, triggers] of Object.entries({
-    'technical-writing': ['unslop'],
     'adversarial-review': ['pr-review', 'code review'],
     'task-framing': ['grill-me', 'grill-with-docs'],
   })) {
