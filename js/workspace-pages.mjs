@@ -6,19 +6,23 @@ const pages = {
   transactions: {title:'Activity', description:'Find, filter and inspect transactions.', group:'transactions', period:true},
   reconciliation: {title:'Reconcile', description:'Check a month against its opening and closing balances.', group:'transactions', period:true},
   'activity-detail': {title:'Transaction', description:'Inspect the evidence before making a change.', group:'transactions'},
-  position: {title:'Accounts', description:'Dated balances. Missing values stay unknown.', group:'position', date:true},
-  holdings: {title:'Holdings', description:'Investment holdings from dated statements, without live prices.', group:'position', date:true},
+  position: {title:'Accounts', description:'Is every account current? Dated balances and 12 months of coverage.', group:'position', date:true},
+  // On phones one account's detail replaces the list. Wider screens show both in
+  // the same section, so this route only changes which column is visible.
+  account: {title:'Accounts', description:'One account: dated balances, coverage and evidence.', group:'position', date:true, section:'position'},
   storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'}
 };
 const primary = ['overview', 'transactions', 'position', 'storage'];
-const secondary = {position:['position', 'holdings'], transactions:['transactions', 'reconciliation']};
+const secondary = {transactions:['transactions', 'reconciliation']};
 // Retired page names that still resolve, so saved links and history keep working.
-// #review opens Activity with the Needs review filter on.
-const aliases = {review:'transactions'};
+// #review opens Activity with the Needs review filter on; #holdings opens an
+// investment account's detail, where holdings now live.
+const aliases = {review:'transactions', holdings:'account'};
+const sectionOf = page => pages[page].section || page;
 export function createWorkspacePages({document, window, onNavigate = () => {}, onAlias = () => {}}) {
   const $ = id => document.getElementById(id);
   const scrollPositions = new Map();
-  let current = null, revision = 0, loaded = false, detailAvailable = false, detailReturn = 'transactions';
+  let current = null, revision = 0, loaded = false, detailAvailable = false, detailReturn = 'transactions', accountAvailable = false;
   if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
   function syncScope() {
     const info = pages[current];
@@ -32,20 +36,21 @@ export function createWorkspacePages({document, window, onNavigate = () => {}, o
       requested = aliases[requested];
     }
     const next = Object.hasOwn(pages, requested) ? requested : 'overview';
-    const target = next === 'activity-detail' && !detailAvailable ? 'transactions' : next;
+    const target = next === 'activity-detail' && !detailAvailable ? 'transactions' : next === 'account' && !accountAvailable ? 'position' : next;
     if (window.location.hash !== '#' + target) window.history.replaceState(null, '', '#' + target);
     if (current === target) return;
     if (current) scrollPositions.set(current, window.scrollY || 0);
     current = target; revision++;
     try { onNavigate(target); } catch { /* Observational only; navigation must not depend on diagnostics. */ }
     const info = pages[target];
-    for (const key of Object.keys(pages)) $(key).hidden = key !== target;
+    for (const key of new Set(Object.keys(pages).map(sectionOf))) $(key).hidden = key !== sectionOf(target);
+    $('position').setAttribute('data-view', target === 'account' ? 'detail' : 'list');
     for (const key of primary) {
       const link = $('nav-' + key);
       if (info.group === key) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     }
-    for (const key of [...secondary.position, ...secondary.transactions]) {
+    for (const key of secondary.transactions) {
       const link = $('sub-' + key);
       if (target === key) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
@@ -53,7 +58,6 @@ export function createWorkspacePages({document, window, onNavigate = () => {}, o
     $('page-title').textContent = info.title;
     $('page-description').textContent = info.description;
     document.title = info.title + ' · Finance Tracker';
-    $('position-navigation').hidden = info.group !== 'position';
     $('activity-navigation').hidden = !secondary.transactions.includes(target);
     syncScope();
     $('month-scope').hidden = !info.period;
@@ -63,11 +67,12 @@ export function createWorkspacePages({document, window, onNavigate = () => {}, o
     $('scope-help').textContent = info.date
       ? 'Account and date apply to balances and holdings. The activity period is separate.'
       : 'Account and period apply to Home, Activity and Reconcile. Search and filters change rows only.';
-    if (focus) $('page-title').focus({preventScroll:true});
+    if (focus) $(target === 'account' ? 'account-title' : 'page-title').focus({preventScroll:true});
     window.scrollTo?.({top:scrollPositions.get(target) || 0, behavior:'instant'});
   }
   function go(page, {replace = false, focus = true} = {}) {
     if (Object.hasOwn(aliases, page)) { try { onAlias(page); } catch { /* still navigates */ } page = aliases[page]; }
+    if (page === 'account' && !accountAvailable) page = 'position';
     if (!Object.hasOwn(pages, page)) page = 'overview';
     if (current !== page) window.history[replace ? 'replaceState' : 'pushState'](null, '', '#' + page);
     apply(page, {focus});
@@ -104,6 +109,12 @@ export function createWorkspacePages({document, window, onNavigate = () => {}, o
       if (navigate) { if (current !== 'activity-detail') detailReturn = current === 'overview' ? current : 'transactions'; go('activity-detail'); }
     },
     closeDetail() { detailAvailable = false; $('resume-detail').hidden = true; go(detailReturn, {replace:true}); },
+    // An account detail exists only while the controller has an account selected.
+    setAccountAvailable(value) {
+      accountAvailable = Boolean(value);
+      if (!accountAvailable && current === 'account') go('position', {replace:true});
+    },
+    openAccount() { if (accountAvailable && current !== 'account') go('account'); },
     clearDetail() {
       detailAvailable = false; $('resume-detail').hidden = true;
       if (current === 'activity-detail') go('transactions', {replace:true});

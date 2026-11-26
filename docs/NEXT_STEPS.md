@@ -10,7 +10,7 @@ This is the active priority queue. It grants no permission to merge, deploy or c
 1. **Verify the deployed build.** After the Pages workflow runs, confirm the served source stamp, Google configuration and release profile before real records are entered. Record the result in the PR or thread; no per-build owner GO is required.
 2. **UX redesign, in slices** ([PR 62](https://github.com/AeroVega/finance-tracker/pull/62) is the first). Remaining slices:
    - Activity: type and category filters, sorting, inline review decisions, grouping by month. In progress on `t3/activity-filters-review`; see [Design § Activity](DESIGN.md#activity).
-   - Accounts: per-account detail with balance history and coverage gaps.
+   - Accounts: per-account detail with balance history and coverage gaps. In progress on `t3/accounts-detail-ux`; see [Design § Accounts](DESIGN.md#accounts).
    - Home: category breakdown, and period switching for year and lifetime.
    - Planning, once budgets or a baseline projection exist.
    - A physical iPhone and iPad pass: standalone launch, VoiceOver and keyboard.

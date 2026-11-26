@@ -4,6 +4,8 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/full-snapshot-storage.mjs",
   "js/full-snapshot-backup.mjs",
   "js/full-snapshot-application.mjs",
+  "js/account-history.mjs",
+  "js/accounts-view.mjs",
   "js/app-error.mjs",
   "js/app-diagnostic-codes.mjs",
   "js/app-diagnostic-messages.mjs",

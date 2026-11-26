@@ -1,6 +1,6 @@
 // Fixed vocabulary. No provider can install its own string fields or validators.
 export const ACTIONS = new Set(['preview-position','start-preview','stage-balance','stage-closure','stage-reconciliation','stage-account','stage-holdings','open-ledger','preview-year','save-preview','save-ledger','reopen-ledger','release-ledger','recover-ledger','recover-stale','link-transfer','undo-last-change','revert-all-changes','stage-correction','select-holdings-evidence','select-balance-evidence','diagnostic-self-test','workspace-action']);
-export const PAGES = new Set(['overview','transactions','position','holdings','review','reconciliation','storage','activity-detail']);
+export const PAGES = new Set(['overview','transactions','position','holdings','review','reconciliation','storage','activity-detail','account']);
 export const SURFACES = new Set(['workspace','synthetic-year','import','local-preview','developer-tool','copy-guide']);
 export const PHASES = new Set(['starting','configuration','connecting','reconnecting','preparing','checking','saving','recovering','reopening','releasing','verifying']);
 export const STATES = new Set(['idle','disconnected','connecting','ready','ownership-unknown','ownership-lost','recovering','recovering-session','recovery-required','connection-error','offline','reconnecting','releasing','released','release-unconfirmed','authorization-required','saving','cancelled','error']);
