@@ -24,10 +24,22 @@ const $ = id => document.getElementById(id);
 let providerImportWorkflow = null, historicalSummaryWorkflow = null;
 let sourceReviewPage = 0, sourceReviewScope = null;
 const sourceReviewUpdates = [];
+// Accounts selection state. Declared before the router because a #holdings link can
+// arrive during router construction, before anything is open.
+let selectedAccountId = null, selectedCoverageMonth = null, coverageHistory = null, positionReport = null, positionGeneration = 0, paneKey = null;
+// A navigation request for an account kind that applies once accounts are rendered.
+let pendingAccountIntent = null;
+const accountRows = new Map();
+const narrowAccounts = () => window.matchMedia?.('(max-width: 999px)')?.matches === true;
+const INVESTMENT = ['brokerage', 'retirement'];
+const firstInvestment = report => report?.accounts.find(account => INVESTMENT.includes(account.accountType)) ?? null;
 const pages = createWorkspacePages({document, window, onAlias: name => {
   // #holdings opens the first investment account in scope, where holdings now live.
+  // With nothing rendered yet, the request waits for renderPosition; it never
+  // reads controller state that does not exist.
   if (name === 'holdings') {
-    const investment = positionReport?.accounts.find(account => ['brokerage', 'retirement'].includes(account.accountType));
+    if (!positionReport) { pendingAccountIntent = 'investment'; return; }
+    const investment = firstInvestment(positionReport);
     if (investment) selectAccount(investment.accountId);
     return;
   }
@@ -440,7 +452,7 @@ function clearLoadedWorkspace() {
   $('activity-detail').hidden = true; $('transaction-table-wrap').hidden = true;
   $('empty-state').hidden = false; $('empty-state').textContent = 'No ledger loaded.';
   pages.clearDetail();
-  selectedAccountId = null; selectedCoverageMonth = null; coverageHistory = null; positionReport = null; paneKey = null; accountRows.clear();
+  selectedAccountId = null; selectedCoverageMonth = null; coverageHistory = null; positionReport = null; paneKey = null; pendingAccountIntent = null; accountRows.clear();
   for (const id of ['account-observations','observation-months','account-coverage','coverage-months','account-gap','account-conflict','account-evidence']) $(id).replaceChildren();
   for (const id of ['account-meta','account-balance','account-freshness','observations-range','coverage-summary-line','holdings-meta']) $(id).textContent = '';
   $('account-title').textContent = 'No account selected';
@@ -602,10 +614,6 @@ function populateAnchors() {
 // Accounts: institution-grouped list on the left, one account's detail on the
 // right (a pushed page on narrow screens). The list and the detail render only
 // when their inputs change, so unfinished decisions survive search and filters.
-let selectedAccountId = null, selectedCoverageMonth = null, coverageHistory = null, positionReport = null, positionGeneration = 0, paneKey = null;
-const accountRows = new Map();
-const narrowAccounts = () => window.matchMedia?.('(max-width: 999px)')?.matches === true;
-const INVESTMENT = ['brokerage', 'retirement'];
 function accountHistory(asOf) {
   if (coverageHistory?.ledger !== session.ledger || coverageHistory.asOf !== asOf) {
     coverageHistory = {ledger:session.ledger, asOf, ...buildCoverageHistory(session.ledger, {asOf})};
@@ -674,6 +682,11 @@ function renderPosition() {
       accountRows.set(account.accountId, row); item.append(row); list.append(item);
     }
     group.append(list); $('position-accounts').append(group);
+  }
+  if (pendingAccountIntent === 'investment') {
+    const investment = firstInvestment(position);
+    if (investment) { selectedAccountId = investment.accountId; selectedCoverageMonth = null; }
+    pendingAccountIntent = null;
   }
   // Keep the selection while it stays in scope; otherwise open the account that most needs attention.
   if (!position.accounts.some(account => account.accountId === selectedAccountId)) {
@@ -838,9 +851,12 @@ function openMonthInActivity(accountId, month, destination) {
   }
   $('month-filter').value = month;
   if (destination === 'reconciliation') { $('reconcile-account').value = accountId; editorAccounts.set('reconcile-account', accountId); }
-  else { $('account-filter').value = accountId; $('review-only').checked = true; listLimit = PAGE_ROWS; }
+  // Review keeps the owner's account scope: it sets the period and the Needs review
+  // filter only, so returning to Accounts shows the same accounts as before.
+  else { $('review-only').checked = true; listLimit = PAGE_ROWS; }
   page = 0; render(); pages.go(destination);
-  announce(`Activity period set to ${monthLabel(month)}.`, 'info');
+  announce(destination === 'reconciliation' ? `Reconciling ${monthLabel(month)}. The activity period is now ${monthLabel(month)}.`
+    : `Showing ${monthLabel(month)} activity that needs review. The account scope is unchanged.`, 'info');
 }
 function renderBalanceConflict(account) {
   const card = node('article', undefined, 'account-conflict-card');

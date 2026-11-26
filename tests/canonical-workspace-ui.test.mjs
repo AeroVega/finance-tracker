@@ -2019,3 +2019,41 @@ test('a gap with both balance anchors reconciles in Activity for that account an
   assert.match(h.get('reconcile-anchor-help').textContent, /opening 2024-12-31; closing 2025-01-31/);
   assert.equal(h.state.writes, 0);
 });
+
+test('reviewing a month from Accounts sets the period and review filter but keeps the account scope', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  h.get('position-date').value = '2025-12-31'; await h.get('position-date').emit('change');
+  await h.navigate('#position');
+  assert.equal(h.get('account-filter').value, '');
+  await accountRow(h, 'Invented investment').click();
+  const actions = h.get('account-gap').children.find(child => child.className === 'gap-actions');
+  const review = actions.children.find(button => /^Review .+ in Activity$/.test(button.textContent));
+  assert.ok(review, 'a month with unresolved activity offers review');
+  const month = h.get('account-coverage').children.find(cell => cell.attributes['aria-pressed'] === 'true').dataset.month;
+  await review.click();
+  assert.equal(h.location.hash, '#transactions');
+  assert.equal(h.get('month-filter').value, month);
+  assert.equal(h.get('review-only').checked, true);
+  assert.equal(h.get('account-filter').value, '', 'the account scope is not changed behind the owner');
+  assert.match(h.get('action-status').textContent, /account scope is unchanged/);
+  await h.navigate('#position');
+  assert.equal(h.get('position-accounts').children.flatMap(group => group.children.filter(child => child.tagName === 'UL')).flatMap(list => list.children).length,
+    h.modelSession.ledger.accounts.length, 'Accounts still lists every account');
+  assert.equal(h.state.writes, 0);
+});
+
+test('#holdings before anything is open waits and opens the investment account once accounts render', async () => {
+  const fixture = await createSyntheticFinancialPosition();
+  const h = await workspacePage({ledger:fixture.ledger});
+  await h.navigate('#holdings');
+  assert.equal(h.location.hash, '#position', 'no account detail exists yet');
+  assert.equal(h.diagnostics().length, 0);
+  await h.click('open-ledger');
+  h.get('position-date').value = fixture.asOf; await h.get('position-date').emit('change');
+  assert.equal(h.get('account-title').textContent, 'Invented brokerage');
+  assert.equal(h.get('account-holdings').hidden, false);
+  // The request is consumed once: a later render keeps the owner's own choice.
+  await accountRow(h, 'Invented savings').click();
+  h.get('position-date').value = '2025-01-30'; await h.get('position-date').emit('change');
+  assert.equal(h.get('account-title').textContent, 'Invented savings');
+});
