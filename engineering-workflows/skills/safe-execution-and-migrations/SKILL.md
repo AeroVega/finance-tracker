@@ -7,7 +7,7 @@ description: "Use when changing an API, schema, data, deployment, shared state, 
 
 Identify the desired end state, current consumers, compatibility requirements, shared state, and rollback or recovery options. Sequence work into reviewable units with observable checks; retain intermediate compatibility where consumers or staged rollout require it.
 
-Design repeated operations to converge safely after retries or partial completion. Avoid concurrent writes to shared state when work can be separated; otherwise use the repository's established coordination. Verify each stage before advancing and preserve data and external contracts.
+Avoid concurrent writes to shared state when work can be separated; otherwise use the repository's established coordination. Verify each stage before advancing and preserve data and external contracts.
 
 Separate reversible local preparation from destructive, publishing, deployment, or shared-system changes. Follow the project's approval gates and report incomplete stages and recovery steps. Do not delete a legacy interface until its consumers and removal authorization are established.
 

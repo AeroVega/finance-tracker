@@ -1,6 +1,6 @@
 # Engineering Workflows
 
-Sixteen self-contained Markdown skills for engineering design, investigation,
+Fourteen self-contained Markdown skills for engineering design, investigation,
 verification, planning, and communication. They are newly written, selective
 consolidations informed by Matt Pocock's skills and Cursor pstack; they are not
 full ports of either upstream library. See [PROVENANCE.md](PROVENANCE.md) for
@@ -26,7 +26,7 @@ node --test tests/skills-contract.test.mjs
 ```
 
 The Node suite copies the package into a temporary directory and checks all
-sixteen skills and both upstream licenses there. GitHub CI includes this test
+fourteen skills and both upstream licenses there. GitHub CI includes this test
 in its complete `tests/*.test.mjs` run. No separate Python test runner is needed.
 
 Invoke a skill by its name using your client's skill interface or request the
@@ -39,11 +39,11 @@ project's own approved tools and synthetic examples for checks.
 
 ## Find familiar workflows
 
-Four workflows have prominent homes in the consolidated skills:
+Four workflows have prominent homes:
 
 | Request | Skill | What to expect |
 |---|---|---|
-| `unslop` | `technical-writing` | Remove AI writing patterns while preserving meaning and voice. |
+| `unslop` | [AGENTS.md](../AGENTS.md#unslop) | Apply the Unslop rules to prose. |
 | `pr-review` or code review | `adversarial-review` | Review the selected diff, verify findings, and report actionable defects. |
 | `grill-me` | `task-framing` | Work through dependent design decisions with a focused interview. |
 | `grill-with-docs` | `task-framing` | Interview against project terminology and record resolved decisions where authorized. |
@@ -63,11 +63,9 @@ invoke the consolidated skill by name when you want this package's workflow.
 | `project-verification` | Create or maintain repeatable project verification. |
 | `formal-verification` | Scope and interpret formal models. |
 | `safe-execution-and-migrations` | Sequence recoverable multi-step changes. |
-| `simplification` | Reduce complexity while preserving behavior. |
 | `design-exploration` | Compare alternatives and prototype decisions. |
 | `durable-learning` | Address recurring mistakes with proportionate safeguards. |
 | `technical-explanation` | Explain code and systems with evidence. |
-| `technical-writing` | Write and edit technical material. |
 | `planning-and-execution` | Plan and carry out multi-step work. |
 | `task-framing` | Clarify a task or prepare a handoff. |
 | `typescript-guidance` | Work within a project's TypeScript conventions. |

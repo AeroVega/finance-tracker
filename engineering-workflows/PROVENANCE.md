@@ -13,7 +13,7 @@ legal approval.
 | [Cursor pstack](https://github.com/cursor/plugins/tree/236e5481d05cbadc315b374a5de54971858c27bb/pstack) | 0.15.36 | `236e5481d05cbadc315b374a5de54971858c27bb` | [MIT, Lauren Tan](licenses/pstack-MIT.txt) |
 
 The source inventories below record the upstream scope, not a claim that
-every behavior was retained. The sixteen packaged skills are listed in the
+every behavior was retained. The fourteen packaged skills are listed in the
 README. Their workflows are independent and have no references to upstream
 skills or helpers. Cursor-specific orchestration, models and rules; transcript
 mining; broad multi-source searches; webhooks; video generation; credential
@@ -36,11 +36,9 @@ Names refer to the inventories below; `M` means Matt Pocock and `P` means pstack
 | project-verification | P create-verification-skill, maintain-verification-skill |
 | formal-verification | P create-formal-verification-skill, maintain-formal-verification-skill, statechart |
 | safe-execution-and-migrations | P principle-make-operations-idempotent, principle-separate-before-serializing-shared-state, principle-sequence-verifiable-units; M implement-spec |
-| simplification | P principle-laziness-protocol, principle-subtract-before-you-add, principle-minimize-reader-load; M codebase-design |
 | design-exploration | P principle-exhaust-the-design-space, principle-experience-first; M prototype |
 | durable-learning | P correct, principle-encode-lessons-in-structure |
 | technical-explanation | P how, teach; M teach |
-| technical-writing | P technical-writing, unslop; M writing-for-agents |
 | planning-and-execution | P figure-it-out, show-me-your-work, principle-never-block-on-the-human; M implement, implement-spec, wayfinder |
 | task-framing | P sharpen, ketchup; M handoff, grill-me, grilling, grill-with-docs, domain-modeling |
 | typescript-guidance | P typescript-best-practices |
