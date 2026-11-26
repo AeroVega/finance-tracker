@@ -216,6 +216,7 @@ Why? Keeping every intermediate step fully stable often creates temporary compat
 	- Declare where temporary breakage is acceptable
 	- Keep high-signal checks for actively touched areas while migrating
 	- Require full static and runtime verification at plan completion
+- Financial import and storage changes do not use this rule. Keep compatible transitions until every consumer migrates, as `safe-execution-and-migrations` requires.
 
 ### Subtract before you add
 
