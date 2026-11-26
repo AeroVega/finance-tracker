@@ -10,7 +10,8 @@ const pages = {
   // On phones one account's detail replaces the list. Wider screens show both in
   // the same section, so this route only changes which column is visible.
   account: {title:'Accounts', description:'One account: dated balances, coverage and evidence.', group:'position', date:true, section:'position'},
-  storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'}
+  storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'},
+  migration: {title:'History migration', description:'Move the old workbook’s monthly history in, one year at a time.', group:'storage'}
 };
 const primary = ['overview', 'transactions', 'position', 'storage'];
 const secondary = {transactions:['transactions', 'reconciliation']};

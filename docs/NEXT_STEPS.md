@@ -14,7 +14,7 @@ This is the active priority queue. It grants no permission to merge, deploy or c
    - Home: category breakdown, and period switching for year and lifetime.
    - Planning, once budgets or a baseline projection exist.
    - A physical iPhone and iPad pass: standalone launch, VoiceOver and keyboard.
-3. **Historical monthly summaries and the legacy-workbook converter.** Keep them in separate PRs from readiness work. Use invented workbook fixtures in CI. Never commit or upload the private workbook. Missing data stays unavailable, not zero. The migration wizard ([PR 58](https://github.com/AeroVega/finance-tracker/pull/58)) resumes only at the owner's direction.
+3. **Workbook history migration.** The owner resumed it on 2026-11-25. They will type the history in on the in-app History migration page; there is no converter. After the guarded PR merges and deploys, the owner migrates January 2023 onward year by year, then a later PR retires the page. Use invented values in CI. Never commit or upload the private workbook. Missing data stays unavailable, not zero.
 4. **Backup rehearsal.** Run the owner's 3-month encrypted backup and restore cadence, and watch the capacity triggers recorded in [Current state](CURRENT_STATE.md#acceptance-and-verification).
 
 ## Acceptance boundaries

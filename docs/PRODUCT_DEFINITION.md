@@ -380,7 +380,7 @@ The first-generation Excel archive is a first-class Alpha input. Its month-by-mo
 
 The first-generation Excel workbook is a one-time Alpha migration input, not a permanent import format or a reason to build a general-purpose Excel-import interface.
 
-The migration should use a small, purpose-built Python conversion script. The script may be disposable after successful migration; the converted records, source workbook archive, mapping specification, validation results, and provenance are durable.
+**Owner-confirmed 2026-11-25:** The owner migrates the workbook by typing each month into a temporary in-app page instead of using a conversion script. Expense subcategories are not migrated; their amounts roll into top-level categories. The page may be retired after migration. The migrated records, provenance and confirmation notes are durable. See [In-app history migration](HISTORICAL_MONTHLY_SUMMARY.md#in-app-history-migration).
 
 The agreed historical scope is month-by-month financial summaries beginning in 2023, preserving the level of detail the workbook actually contains:
 

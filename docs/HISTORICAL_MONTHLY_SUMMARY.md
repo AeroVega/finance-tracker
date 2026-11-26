@@ -6,7 +6,7 @@ This contract describes the Alpha normalized-history workflow. It does not descr
 
 The product definition requires a one-time migration of month-by-month workbook history beginning in 2023. The intended normalized history includes a monthly net-worth snapshot, total income and available income-source breakdown, and total expenses and available primary expense-category breakdown. The source workbook must remain unchanged, with workbook/worksheet and mapping provenance retained. Do not turn monthly aggregates into transaction/activity records.
 
-The Storage workspace accepts explicitly normalized synthetic JSON. It does not inspect Excel files, parse formulas, infer workbook structure, or map labels. The future one-time converter remains a separate purpose-built tool. Use the [invented JSON fixture](../fixtures/historical-monthly-summary.synthetic.json) as its output-contract example.
+The Storage workspace accepts explicitly normalized JSON. It does not inspect Excel files, parse formulas, infer workbook structure, or map labels. The owner's actual migration uses [in-app manual entry](#in-app-history-migration) instead of a converter. Use the [invented JSON fixture](../fixtures/historical-monthly-summary.synthetic.json) as the output-contract example.
 
 ## Normalized input
 
@@ -66,6 +66,29 @@ A file using the same format marker and explicit input version 2 is reserved for
 
 Manual reviews persist as historical batch v2 inside the existing logical ledger. Older builds that only understand historical batch v1 reject those ledgers and backups. The physical storage format and backup envelope do not change. The Historical months view may show a separate exact-decimal estimate, not an actual snapshot: January's closing anchor plus each subsequent accepted month's manual income minus expenses. The estimate stops at the first gap or source/currency change. It never substitutes transaction totals or accounts for market-value changes.
 
+## In-app history migration
+
+**Owner direction (2026-11-25).** The owner migrates the first-generation workbook into the private database by typing it in, inside the app. There is no converter, no workbook parsing, and no intermediate JSON file. The page is temporary: once every month is saved it is retired in a later PR. The earlier localhost wizard (`tools/manual-history/`, PR 58) is removed.
+
+What the owner confirmed, which this page relies on:
+
+- **Scope.** Each month from January 2023 through **September 2026** (the default last month; still editable) has income and expense totals with top-level category breakdowns. The history is complete: no blank, partial or estimated months. Transfers and the Fidelity investment account are out of scope.
+- **Categories.** Top-level categories never changed, so they are defined once for the whole migration. **Subcategories are not migrated.** The owner adds each subcategory's amount into its category. This needs no format change: a breakdown item is just a labelled amount.
+- **Net worth.** The workbook's net worth is a formula: the previous month plus income minus expenses. Its figure for a month is the balance at midnight on the 1st. Only one value is stored: January 2023's closing balance, computed as the workbook's opening figure (January 1, 2023) plus January income minus expenses. That is the workbook's own formula. `provenance.snapshotAsOf` is `2023-01-31` and `provenance.cells.netWorthSnapshot` records the opening amount and the derivation. Every later month uses the existing cash-flow estimate. No workbook estimate is stored as an observed snapshot.
+- **Overlap.** Imported CSVs should replace a migrated month. Every migrated record has `scope: {kind:"accounts"}` with the accounts the owner selects, so the existing overlap policy applies unchanged: a month switches to transaction detail only after a complete reconciliation is recorded for it (More → Historical monthly summaries).
+
+**Flow** (`#migration`, [history-migration-page.mjs](../js/history-migration-page.mjs), model in [history-migration.mjs](../js/history-migration.mjs)):
+
+1. **About the old workbook** is filled in once: workbook name, currency, last month, opening net worth, the accounts the workbook tracked, and the income and expense categories. After the first save, all of it is recovered from the saved records, so a new session resumes without retyping.
+2. **One year at a time.** The year grid has one row per month and one column per category, with live totals. Every cell must hold an amount; 0 is a valid amount and a blank cell blocks the year. Amounts accept `$` and thousands separators and keep exact cents. Income and expense cells take positive amounts only (owner decision, 2026-11-25): the columns are labelled money in and money out, and a minus sign is refused with a plain reason, never flipped. The opening net worth and the check figures may be negative.
+3. **Net-worth check.** An optional column takes the workbook's figure for the start of each month. The page compares it with the app's closing estimate for the previous month: for January 2023, the opening figure itself. A match confirms that every total up to that month was typed as the workbook has it. These figures stay in the tab and are never stored.
+4. **One confirmation per year.** A checkbox and a single note replace per-month Accept/Exclude decisions. Staging submits the year as one v2 batch, accepting every month with that note, through `stageHistoricalSummaries`. It then waits for the workspace's explicit **Save changes**. Re-staging an unchanged saved year is a no-op. Editing a saved year appends a replacement batch and keeps the earlier one.
+5. **Progress map.** Every month from January 2023 shows as saved, staged but not saved, typed but not staged, or not entered, plus whether its net-worth check matched. Home's Needs attention list links to the page until every month is saved.
+
+Typed cells that are not staged exist only in this tab. Leaving or releasing the session warns first, like other unsaved work.
+
+**Private database.** History staging used to be refused outside the synthetic class. It now follows the session's data class like any other edit. Staging keeps the private ledger header (`version: 3`, `dataClass: "production"`), which already admits the history collections; only synthetic ledgers move from v1 to the history version. The JSON file review under More stays a test-data tool (owner decision, 2026-11-25): in a private session it is disabled, so private history comes in only through the migration page. Reconciliation of an overlapping month remains available in both classes.
+
 ## Review, save, and portability
 
 Preview never writes storage. The app shows all input rows, gaps and findings. Malformed and out-of-range rows are visible but not admitted. For each eligible row select **Accept** or **Exclude** and give a reason. Only one record per month may be accepted in each batch. Accepting a different record for a previously accepted month replaces the effective workbook summary without erasing the old record. Accepted and valid excluded rows and their reasons remain inspectable. An exact replay with the same range, decisions and current accepted records is a no-op. Malformed source inputs are not copied into the ledger; keep the local input file if the rejection must be revisited.
@@ -82,7 +105,7 @@ The saved review binds to the selected workbook record, calendar range, account 
 
 ## Workbook decisions still open
 
-The actual workbook has not been inspected. A future converter/reconciliation design must establish, from the workbook and owner review:
+**Superseded for the owner's migration (2026-11-25).** The owner types the figures in instead of using a converter, and answered the questions that matter for that: see [In-app history migration](#in-app-history-migration). The list below is kept for any future converter. A converter design would still need to establish, from the workbook and owner review:
 
 - Actual workbook/worksheet names, used ranges, formulas, hidden rows/columns, merged cells, date/month encoding, and whether displayed values differ from formulas or cached results.
 - Which rows represent months, whether months are contiguous, and how blanks, duplicate month labels, subtotals, annual totals, and formula errors are represented.
@@ -93,14 +116,14 @@ The actual workbook has not been inspected. A future converter/reconciliation de
 - How to represent months with missing totals, zero totals, missing worksheets, formula errors, or partially populated rows without silently filling them.
 - How provenance will identify workbook version/hash, worksheet, cell/range, converter version, mapping version, and any human-reviewed mapping decisions without publishing private workbook content.
 
-Expense subcategory migration remains undecided until workbook inspection. Do not infer per-account monthly summaries: product decisions explicitly preserve the workbook's actual granularity.
+**Expense subcategories are not migrated** (owner decision, 2026-11-25): they changed over time and are beyond the history the migration is meant to capture. Do not infer per-account monthly summaries: product decisions explicitly preserve the workbook's actual granularity.
 
 ## Verification and limitations
 
 Focused synthetic tests use invented values only. Run:
 
 ```sh
-node --test tests/historical-monthly-summary.test.mjs tests/historical-workspace-persistence.test.mjs
+node --test tests/historical-monthly-summary.test.mjs tests/historical-workspace-persistence.test.mjs tests/history-migration.test.mjs
 FINANCE_EXTENDED_STORAGE_TESTS=1 node --max-old-space-size=768 --test --test-concurrency=1 tests/*.test.mjs
 ```
 
