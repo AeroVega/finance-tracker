@@ -5,7 +5,8 @@ import {createWorkspacePages} from '../js/workspace-pages.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const primary = ['overview', 'transactions', 'position', 'storage'];
-const routes = [...primary, 'import', 'holdings', 'reconciliation', 'activity-detail'];
+const routes = [...primary, 'import', 'reconciliation', 'activity-detail'];
+const sectionOf = page => page === 'account' ? 'position' : page;
 const activityViews = ['transactions', 'reconciliation'];
 
 // A deliberately small DOM/history substitute: real HTML IDs and initial hidden
@@ -87,21 +88,20 @@ test('ordinary route links preserve scroll, active-tab clicks return to the head
   }
 });
 
-const groups = {reconciliation:'transactions', holdings:'position', import:'overview', 'activity-detail':'transactions'};
+const groups = {reconciliation:'transactions', account:'position', import:'overview', 'activity-detail':'transactions'};
 function assertPage(f, page, group = groups[page] ?? page) {
   assert.equal(f.router.current, page);
   assert.equal(f.window.location.hash, '#' + page);
-  assert.deepEqual(routes.filter(id => !f.get(id).hidden), [page]);
+  assert.deepEqual(routes.filter(id => !f.get(id).hidden), [sectionOf(page)]);
   assert.deepEqual(primary.filter(id => f.get('nav-' + id).getAttribute('aria-current') === 'page'), [group]);
-  const secondary = ['position', 'holdings', ...activityViews];
-  assert.deepEqual(secondary.filter(id => f.get('sub-' + id).getAttribute('aria-current') === 'page'), secondary.includes(page) ? [page] : []);
-  assert.equal(f.get('position-navigation').hidden, group !== 'position');
+  assert.deepEqual(activityViews.filter(id => f.get('sub-' + id).getAttribute('aria-current') === 'page'), activityViews.includes(page) ? [page] : []);
+  assert.equal(f.get('position').getAttribute('data-view'), page === 'account' ? 'detail' : 'list');
   assert.equal(f.get('activity-navigation').hidden, !activityViews.includes(page));
 }
 
 for (const [page, group, title, mode] of [
   ['overview','overview','Home','period'], ['transactions','transactions','Activity','period'],
-  ['position','position','Accounts','date'], ['holdings','position','Holdings','date'],
+  ['position','position','Accounts','date'],
   ['reconciliation','transactions','Reconcile','period'],
   ['import','overview','Import',null], ['storage','storage','More',null]
 ]) {
@@ -140,14 +140,14 @@ test('empty, malformed, unknown and unavailable detail hashes have safe canonica
 
 test('native hash links and pushState routes both survive Back and Forward without duplicate entries', () => {
   const f = fixture('#overview');
-  f.followHash('#holdings');
+  f.followHash('#position');
   f.router.go('storage');
   f.followHash('#reconciliation');
   assert.equal(f.window.history.length, 4);
-  for (const [page, group] of [['storage','storage'], ['holdings','position'], ['overview','overview']]) {
+  for (const [page, group] of [['storage','storage'], ['position','position'], ['overview','overview']]) {
     f.window.history.back(); assertPage(f, page, group);
   }
-  for (const [page, group] of [['holdings','position'], ['storage','storage'], ['reconciliation','transactions']]) {
+  for (const [page, group] of [['position','position'], ['storage','storage'], ['reconciliation','transactions']]) {
     f.window.history.forward(); assertPage(f, page, group);
   }
   assert.equal(f.window.history.length, 4);
@@ -177,11 +177,11 @@ test('routes restore per-page scroll and focus once even when history emits both
 });
 
 test('skip link focuses main content without changing the visible workspace page', () => {
-  const f = fixture('#holdings');
+  const f = fixture('#position');
   f.followHash('#main-content');
-  assert.equal(f.router.current, 'holdings');
+  assert.equal(f.router.current, 'position');
   assert.equal(f.document.activeElement, f.get('main-content'));
-  assert.deepEqual(routes.filter(id => !f.get(id).hidden), ['holdings']);
+  assert.deepEqual(routes.filter(id => !f.get(id).hidden), ['position']);
 });
 
 test('navigation preserves mounted editor identity, unsaved values, and conditional child states', () => {
@@ -192,7 +192,8 @@ test('navigation preserves mounted editor identity, unsaved values, and conditio
   const conditions = ['category-field', 'amount-field', 'classification-field', 'transfer-link-panel', 'overview-loaded'];
   conditions.forEach((id, i) => { f.get(id).hidden = i % 2 === 0; });
   f.router.openDetail();
-  for (const page of [...primary, 'holdings', 'reconciliation', 'activity-detail']) f.router.go(page);
+  f.router.setAccountAvailable(true);
+  for (const page of [...primary, 'account', 'reconciliation', 'activity-detail']) f.router.go(page);
   editors.forEach((id, i) => {
     assert.equal(f.get(id), references[i]);
     assert.equal(f.get(id).value, `invented unsaved value ${i}`);
@@ -206,7 +207,7 @@ test('detail opens in the activity group, resumes across pages, and closes to it
     f.router.openDetail();
     assertPage(f, 'activity-detail', 'transactions');
     assert.equal(f.get('resume-detail').hidden, false);
-    f.router.go('holdings');
+    f.router.go('position');
     f.followHash('#activity-detail');
     assertPage(f, 'activity-detail', 'transactions');
     const count = f.window.history.length;
@@ -250,7 +251,7 @@ test('clearDetail invalidates resume and replaces an open detail route without n
 });
 
 test('loaded state updates scope and empty notice without changing route or stealing focus', () => {
-  const f = fixture('#holdings');
+  const f = fixture('#position');
   f.router.setLoaded(true);
   assert.equal(f.get('workspace-scope').hidden, false);
   f.router.go('storage');
@@ -279,4 +280,38 @@ test('retired #review links open Activity with the review filter and keep one hi
   assertPage(f, 'transactions');
   assert.equal(calls.length, 3);
   assert.doesNotMatch(html, /id="sub-review"/, 'the retired Review tab is gone');
+});
+
+test('account detail exists only while an account is selected and shares the Accounts section', () => {
+  const f = fixture('#account');
+  assertPage(f, 'position');
+  assert.equal(f.window.history.length, 1);
+  f.router.openAccount();
+  assertPage(f, 'position');
+  f.router.setAccountAvailable(true);
+  f.router.openAccount();
+  assertPage(f, 'account');
+  assert.equal(f.get('page-title').textContent, 'Accounts');
+  assert.equal(f.document.activeElement, f.get('account-title'), 'detail focus starts on the account heading');
+  f.window.history.back(); assertPage(f, 'position');
+  f.window.history.forward(); assertPage(f, 'account');
+  const length = f.window.history.length;
+  f.router.setAccountAvailable(false);
+  assertPage(f, 'position');
+  assert.equal(f.window.history.length, length, 'losing the account replaces the route');
+  f.followHash('#account');
+  assertPage(f, 'position');
+  assert.doesNotMatch(html, /id="(?:holdings|sub-holdings|sub-position|position-navigation)"/, 'holdings are part of account detail');
+});
+
+test('retired #holdings links open the selected investment account', () => {
+  const calls = [];
+  let f;
+  f = fixture('#holdings', {onAlias:name => { calls.push(name); f?.router.setAccountAvailable(true); }});
+  assertPage(f, 'position', 'position');
+  assert.deepEqual(calls, ['holdings']);
+  f.router.go('storage');
+  f.router.go('holdings');
+  assertPage(f, 'account');
+  assert.deepEqual(calls, ['holdings', 'holdings']);
 });

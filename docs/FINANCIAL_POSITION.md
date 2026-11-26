@@ -48,7 +48,7 @@ The [PR36 review](archive/PR36_ADVERSARIAL_REVIEW.md) records reproduced financi
 
 ## Page layout
 
-The [focused mobile workspace](MOBILE_WORKSPACE_PAGES.md) puts balances on **Position → Balances**, investment evidence on **Position → Holdings**, and account-month coverage on **Review → Reconciliation**. Setup, undo/revert, reopening and release are on **Storage**. The compact draft bar offers explicit saving when needed. Page changes preserve the mounted editors and staged ledger.
+**Accounts** lists balances by institution, each account with 12 months of calculated account-month coverage. An account's detail holds its dated balance observations, coverage gaps, holdings (investment accounts) and the balance, holdings and closure editors; see [Design § Accounts](DESIGN.md#accounts). Month reconciliation stays on **Activity → Reconcile**. Setup, undo/revert, reopening and release are on **Storage**. The compact draft bar offers explicit saving when needed. Page changes preserve the mounted editors and staged ledger.
 
 ## Invented scenario and acceptance
 
