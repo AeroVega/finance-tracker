@@ -23,7 +23,7 @@ Practices for real records:
 
 1. After a deployment, spot-check the served build stamp and profile; this is a check for the owner or agent, not a gate.
 2. Do not enter real records into the synthetic workspace.
-3. Do not infer support for the separate historical migration workflow.
+3. The workbook history migration is done in the app's History migration page into the private database (owner direction, 2026-11-25; see [In-app history migration](HISTORICAL_MONTHLY_SUMMARY.md#in-app-history-migration)). It applies once its guarded PR is merged and deployed. Only the owner types real figures; agents and tests use invented values.
 
 The [security and cost review](SECURITY_AND_COST_REVIEW.md) retains its dated findings and pre-approval status.
 
@@ -39,7 +39,7 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 ## Application features
 
 - **Supported CSV import** for Wells Fargo, SoFi and Fidelity is merged. The owner confirmed the Wells Fargo import, save and reopen path on the PR head. That is not evidence for the other providers or all devices.
-- **Historical monthly summaries** ([PR 54](https://github.com/AeroVega/finance-tracker/pull/54), [workflow](HISTORICAL_MONTHLY_SUMMARY.md)) are present on the served synthetic build. The one-time migration wizard ([PR 58](https://github.com/AeroVega/finance-tracker/pull/58)) is separate. Neither establishes exact-build live Drive acceptance.
+- **Historical monthly summaries** ([PR 54](https://github.com/AeroVega/finance-tracker/pull/54), [workflow](HISTORICAL_MONTHLY_SUMMARY.md)) are present on the served synthetic build. The localhost wizard from [PR 58](https://github.com/AeroVega/finance-tracker/pull/58) is replaced by the in-app **History migration** page (`#migration`) on branch `t3/polish-migration-wizard`. That branch also lets history be staged into the private database. Neither the page nor that change has had a live Drive acceptance run.
 - **Portable encrypted backup and restore** and recovery are implemented in the selected route. Do not infer live acceptance beyond the evidence in the relevant PRs.
 - **Post-merge** Node and Pages workflows succeeded. That is not an independent live-browser check.
 - **Redesigned shell and Home** merged in [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md). Further UX slices are in [Next steps](NEXT_STEPS.md).

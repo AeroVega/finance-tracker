@@ -1509,7 +1509,7 @@ historicalSummaryWorkflow = mountHistoricalMonthlySummaryWorkflow({
   isActive: () => pages.current === 'storage',
   getUnavailableReason: () => {
     if (busy || session.busy) return 'Wait for the current workspace or storage action to finish.';
-    if (!session.ledger) return 'Open or create a synthetic ledger before staging history.';
+    if (!session.ledger) return 'Open your saved data before staging history.';
     if (session.unverified) return 'Verify the save outcome before staging history.';
     if (session.needsReopen) return 'Reconnect and reopen the verified ledger before staging history.';
     if (!session.canEdit()) return 'This ledger is read-only. Reopen it before staging history.';
@@ -1517,7 +1517,12 @@ historicalSummaryWorkflow = mountHistoricalMonthlySummaryWorkflow({
   },
   stageSummaries: proposal => session.stageHistoricalSummaries(proposal),
   stageReconciliation: proposal => session.stageHistoricalReconciliation(proposal),
-  onStaged: message => { render(); refresh(); announce(message,'success'); }
+  onStaged: message => { render(); refresh(); announce(message,'success'); },
+  migration: {
+    root: $('history-migration'), homeLink: $('home-migration-link'),
+    getSavedLedger: () => session.baselineLedger,
+    isActive: () => pages.current === 'migration'
+  }
 });
 refresh();
 // Prepare only invented data ahead of the click so OAuth starts within the

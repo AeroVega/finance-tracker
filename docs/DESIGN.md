@@ -15,7 +15,7 @@ A calm, information-dense dark finance app (owner choice, 2026-11-24). The scree
 | Home | `#overview`, `#import` | Period, money in and out, needs attention, Import, six-month trend, recent activity |
 | Activity | `#transactions`, `#reconciliation`, `#activity-detail` | Search, filters, sort and month sections; Needs review with inline decisions and imported rows awaiting a decision; month reconciliation; transaction detail |
 | Accounts | `#position`, `#holdings` | Dated balances with provenance on demand, holdings, evidence editors |
-| More | `#storage` | Session and save actions, connect panel once something is open, historical summaries, backup and restore, recovery and diagnostics, sample data, build identity |
+| More | `#storage`, `#migration` | Session and save actions, connect panel once something is open, historical summaries, backup and restore, recovery and diagnostics, sample data, build identity. The temporary History migration page sits under More and is linked from Home's Needs attention list until every month is saved. |
 
 Planning is part of the product direction but has no tab until a feature exists. Route names are unchanged so existing links, history and tests keep working; only titles and grouping changed. The separate Review page was folded into Activity: `#review` still resolves, opening Activity with Needs review on. Phones use a four-item bottom bar, 761–1199px a labelled rail, and wider screens a sidebar.
 

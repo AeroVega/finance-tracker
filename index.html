@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="components/import-coverage-selector.css">
   <link rel="stylesheet" href="components/provider-csv-import-workflow.css">
   <link rel="stylesheet" href="components/historical-monthly-summary-workflow.css">
+  <link rel="stylesheet" href="components/history-migration.css">
   <script async src="https://accounts.google.com/gsi/client"></script>
   <script async src="https://apis.google.com/js/api.js"></script>
   <script src="js/build-info.js" defer></script>
@@ -112,6 +113,7 @@
                 <a href="#review"><span>Review what needs a decision</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
                 <a href="#reconciliation"><span>Check month coverage</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
                 <a href="#position"><span>Accounts and balances</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+                <a href="#migration" id="home-migration-link" hidden><span>Migrate your old workbook</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
               </div>
             </section>
 
@@ -282,6 +284,10 @@
         </details>
       </section>
 
+      <section class="workspace-page migration" id="migration" hidden aria-labelledby="page-title">
+        <div id="history-migration" class="history-migration"></div>
+      </section>
+
       <section class="workspace-page more" id="storage" hidden aria-labelledby="page-title">
         <section class="more-section" aria-labelledby="session-heading">
           <h2 id="session-heading">This workspace</h2>
@@ -299,6 +305,7 @@
 
         <nav class="more-links" aria-label="Data">
           <a href="#import"><span>Import a CSV<small>Wells Fargo, SoFi or Fidelity export</small></span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+          <a href="#migration"><span>History migration<small>Type the old workbook’s monthly history in, one year at a time</small></span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
         </nav>
 
         <details class="disclosure more-section historical-summary-panel"><summary>Historical monthly summaries</summary>

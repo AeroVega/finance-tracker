@@ -4,7 +4,7 @@ import { canonicalizeJcs, sha256Hex } from './transaction-protocol.mjs';
 import { summarizeLedgerPeriods } from './canonical-import.mjs';
 import { isCalendarDate } from './import-reconciliation.mjs';
 
-import { HISTORICAL_LEDGER_VERSION } from './persistence-data-class.mjs';
+import { HISTORICAL_LEDGER_VERSION, persistenceDataClass } from './persistence-data-class.mjs';
 export { HISTORICAL_LEDGER_VERSION };
 export const HISTORICAL_COLLECTIONS = Object.freeze({
   historicalSummaryBatches: 'batchId',
@@ -152,7 +152,9 @@ export function prepareHistoricalSummaries(ledger, {input, decisions}, options =
     expectedMonthRange: result.expectedMonthRange,
     entries
   };
-  return {...ledger, version:HISTORICAL_LEDGER_VERSION,
+  // Synthetic ledgers move from v1 to the history version. The private-database
+  // header (v3) already admits history collections and keeps its version.
+  return {...ledger, version:persistenceDataClass('ledger', ledger) === 'production' ? ledger.version : HISTORICAL_LEDGER_VERSION,
     historicalSummaryBatches:[...(ledger.historicalSummaryBatches ?? []),batch],
     historicalReconciliations:ledger.historicalReconciliations ?? []};
 }

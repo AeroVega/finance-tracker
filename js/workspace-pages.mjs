@@ -8,7 +8,8 @@ const pages = {
   'activity-detail': {title:'Transaction', description:'Inspect the evidence before making a change.', group:'transactions'},
   position: {title:'Accounts', description:'Dated balances. Missing values stay unknown.', group:'position', date:true},
   holdings: {title:'Holdings', description:'Investment holdings from dated statements, without live prices.', group:'position', date:true},
-  storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'}
+  storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'},
+  migration: {title:'History migration', description:'Move the old workbook’s monthly history in, one year at a time.', group:'storage'}
 };
 const primary = ['overview', 'transactions', 'position', 'storage'];
 const secondary = {position:['position', 'holdings'], transactions:['transactions', 'reconciliation']};

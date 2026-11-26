@@ -307,8 +307,9 @@ export class CanonicalWorkspaceSession {
   }
 
   #assertHistoricalReviewCurrent(expectedLedger) {
-    // Workbook-history import is a separate, synthetic-only workstream.
-    if (this.dataClass !== 'synthetic') appFail('data-class-mismatch');
+    // Owner direction (2026-11-25): migrate the first-generation workbook into
+    // the private database. History staging follows the session's data class
+    // like any other edit; the ledger's class is checked when it is opened.
     if (!this.canEdit()) appFail('reopen-before-editing');
     if (this.ledger !== expectedLedger) appFail('stale-historical-summary-review');
   }

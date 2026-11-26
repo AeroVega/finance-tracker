@@ -1928,3 +1928,57 @@ test('the full correction form suggests a note from the change and defaults to n
   h.get('amount').value = '-12.00'; await h.get('amount').emit('input');
   assert.match(h.get('correction-rationale').value, /^Corrected amount from -\$[\d,]+\.\d{2} to -\$12\.00\.$/);
 });
+
+test('History migration page stages a typed year with one confirmation, saves it, and resumes after reopen', async () => {
+  const h = await workspacePage();
+  const type = async (id, value) => { const node = h.get(id); node.value = value; await node.emit('input'); };
+  assert.equal(h.get('home-migration-link').hidden, true);
+  await h.click('open-ledger');
+  assert.equal(h.get('home-migration-link').hidden, false);
+  await h.navigate('#migration');
+  assert.equal(h.get('page-title').textContent, 'History migration');
+  await type('migration-workbook', 'Invented finances.xlsx');
+  await type('migration-opening', '1,000.00');
+  const last = h.get('migration-last'); last.value = '2023-03'; await last.emit('change');
+  const account = h.modelSession.ledger.accounts.find(item => item.institutionId !== 'fidelity');
+  await h.choose('migration-account-' + account.accountId, true);
+  await type('migration-income-label-r0', 'Invented pay');
+  await type('migration-expenses-label-r1', 'Invented living');
+  assert.equal(h.get('migration-stage').disabled, true);
+  assert.match(h.get('migration-stage-help').textContent, /Fill every cell for 2023/);
+  for (const month of ['2023-01', '2023-02', '2023-03']) {
+    await type(`migration-cell-${month}-income-r0`, '$100');
+    await type(`migration-cell-${month}-expenses-r1`, '40.00');
+  }
+  await type('migration-check-2023-02', '1060.00');
+  await type('migration-check-2023-03', '1100.00');
+  assert.match(text(h.get('migration-grid-wrap')), /Matches/);
+  assert.match(text(h.get('migration-grid-wrap')), /Off by 20.00/);
+  assert.match(h.get('migration-stage-help').textContent, /Confirm that you compared/);
+  await h.choose('migration-confirm', true);
+  assert.equal(h.get('migration-stage').disabled, false);
+  await h.click('migration-stage');
+  assert.equal(h.state.writes, 0, 'staging never writes');
+  assert.equal(h.modelSession.dirty, true);
+  assert.match(text(h.get('migration-progress-summary')), /0 of 3 months saved\s+· 3 staged, not saved yet/);
+  await h.click('save-ledger');
+  assert.equal(h.state.writes, 1);
+  assert.match(text(h.get('migration-progress-summary')), /3 of 3 months saved/);
+  assert.equal(h.get('home-migration-link').hidden, true, 'the Home link disappears once every month is saved');
+  const saved = await h.storedLedger();
+  const batch = saved.historicalSummaryBatches.at(-1);
+  assert.equal(batch.version, 2);
+  assert.deepEqual(batch.entries.map(entry => [entry.record.month, entry.action, entry.reason]), ['2023-01', '2023-02', '2023-03']
+    .map(month => [month, 'accept', 'Typed by hand from the 2023 sheet of Invented finances.xlsx.']));
+  assert.deepEqual(batch.entries[0].record.summary.netWorthSnapshot, {amount:'1060.00', currency:'USD'});
+  assert.deepEqual(batch.entries[1].record.scope, {kind:'accounts', accountIds:[account.accountId]});
+  assert.equal(JSON.stringify(saved).includes('1100.00'), false, 'workbook check values are never stored');
+  await h.click('reopen-ledger');
+  await h.navigate('#migration');
+  assert.match(text(h.get('migration-progress-summary')), /3 of 3 months saved/);
+  assert.equal(h.get('migration-workbook').value, 'Invented finances.xlsx');
+  assert.equal(h.get('migration-stage').disabled, true);
+  assert.match(h.get('migration-stage-help').textContent, /already saved/);
+  await h.click('release-ledger');
+  assert.doesNotMatch(text(h.get('history-migration')), /Invented finances|Invented pay/);
+});

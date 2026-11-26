@@ -1,6 +1,7 @@
 import {fail} from './app-error.mjs';
 import {getHistoricalMonthlySummaryView,previewHistoricalMonthlySummaries} from './historical-monthly-summary.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
+import {mountHistoryMigration} from './history-migration-page.mjs';
 
 import {HISTORICAL_INPUT_MAX_BYTES} from './historical-monthly-summary-validation.mjs';
 const PAGE_SIZE = 12;
@@ -19,10 +20,17 @@ const reasonText = reason => ({
 
 export function mountHistoricalMonthlySummaryWorkflow({
   root, getLedger, isActive = () => true, getUnavailableReason = () => null,
-  stageSummaries, stageReconciliation, onStaged = () => {}
+  stageSummaries, stageReconciliation, onStaged = () => {}, migration = null
 }) {
   if (!root || typeof getLedger !== 'function' || typeof stageSummaries !== 'function' ||
       typeof stageReconciliation !== 'function') fail('invalid-options');
+  // The one-time migration page (#migration) shares this module's staging
+  // seam and lifecycle, so release, offline and reopen clear it the same way.
+  const migrationPage = migration?.root ? mountHistoryMigration({
+    root:migration.root, homeLink:migration.homeLink ?? null, getLedger,
+    getSavedLedger:migration.getSavedLedger, isActive:migration.isActive ?? (() => true),
+    getUnavailableReason, stageSummaries, onStaged
+  }) : null;
   const doc = root.ownerDocument;
   function el(tag, text = '', attrs = {}) {
     const node = doc.createElement(tag);
@@ -116,7 +124,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     previewButton.disabled = !selected || reading || staging || !ledger;
     file.disabled = staging;
     discard.disabled = staging || (!selected && !preview && !reading);
-    previewHelp.textContent = !ledger ? 'Open a synthetic ledger to preview this input.' : !selected
+    previewHelp.textContent = !ledger ? 'Open your saved data to preview this input.' : !selected
       ? 'Choose an invented JSON file first.' : reading ? 'Reading the file locally.' : 'Preview does not change the ledger.';
     for (const control of decisionControls) control.disabled = locked;
     const required = preview?.rows.filter(row => row.eligible) ?? [];
@@ -284,7 +292,7 @@ export function mountHistoricalMonthlySummaryWorkflow({
     historyRequest = null; viewRows = []; historyMonth.replaceChildren(el('option','Choose a month',{value:''}));
     historyBatch.replaceChildren(el('option','Choose a batch',{value:''}));
     history.replaceChildren(); batchView.replaceChildren();
-    historyStatus.textContent = 'Open a synthetic ledger to see its historical months.';
+    historyStatus.textContent = 'Open your saved data to see its historical months.';
     clearConfirmation(); reconcileStatus.textContent = ''; setStageHelp();
   }
   function loadHistory(base, priorMonth) {
@@ -386,8 +394,9 @@ export function mountHistoricalMonthlySummaryWorkflow({
   confirm.addEventListener('change',setStageHelp);
   refresh();
   return {
-    refresh,
-    hasUnfinishedReview,adoptVerifiedSave,
-    reset() { stagingRequest?.abort(); revision++; active = false; ledger = null; clearPreview(); clearHistory(); }
+    refresh() { migrationPage?.refresh(); return refresh(); },
+    hasUnfinishedReview: () => hasUnfinishedReview() || Boolean(migrationPage?.hasUnfinishedWork()),
+    adoptVerifiedSave(before, after) { adoptVerifiedSave(before, after); migrationPage?.refresh(); },
+    reset() { stagingRequest?.abort(); revision++; active = false; ledger = null; clearPreview(); clearHistory(); migrationPage?.reset(); }
   };
 }
