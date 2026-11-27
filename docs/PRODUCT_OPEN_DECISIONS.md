@@ -4,18 +4,18 @@
 
 **Companion:** [Product Definition](PRODUCT_DEFINITION.md)
 
-**Last updated:** 2026-11-26
+**Last updated:** 2026-11-27
 
-After the reporting, savings-rate, forecast, investment/debt, reliability, and release-boundary confirmations, the remaining consequential choices are organized into **three v1.0.0 owner-review bundles**. Engineering should prepare evidence and proposals before the owner reviews them. Unpresented choices remain open; no recommendation becomes an owner decision without confirmation. Reliability implementation and release-evidence preparation are engineering work under the confirmed boundaries. Actual owner release approval is still required.
+After the reporting, savings-rate, forecast, investment/debt, reliability, and release-boundary confirmations, the three v1.0.0 owner-review bundles were closed on 2026-11-27. Unpresented choices remain open; no recommendation becomes an owner decision without confirmation. Reliability implementation and release-evidence preparation are engineering work under the confirmed boundaries. Actual owner release approval is still required.
 
 ## At a glance
 
-- **Owner review:** 3 bundles containing 9 detailed entries.
+- **Owner review:** none open. The 9 entries in the three bundles were confirmed on 2026-11-27.
 - **Engineering proposals and research:** 4 work packages containing 27 detailed entries.
 - **Explicitly later work:** 5 groups containing 15 detailed entries.
 - **Existing-policy change, only if requested:** 1 conditional entry, not a v1 release blocker.
 
-**Count basis:** The consolidation preserved 57 earlier unchecked entries as 59 entries by splitting investment performance and debt-payoff forecasting into current-release and later portions. Subsequent owner confirmations resolved Q8, Q15, Q37, Q38, Q39a, Q46b, and Q29, leaving 52 open entries. Six remaining entries moved from owner review to engineering after their product rules were confirmed. Resolved IDs remain in the settled record. These are inventory-entry counts, not atomic subquestions or additional owner decisions. Cross-references do not count twice.
+**Count basis:** The consolidation preserved 57 earlier unchecked entries as 59 entries by splitting investment performance and debt-payoff forecasting into current-release and later portions. Subsequent owner confirmations resolved Q8, Q15, Q37, Q38, Q39a, Q46b, and Q29, leaving 52 open entries. The owner confirmed 9 of them on 2026-11-27. Six remaining entries moved from owner review to engineering after their product rules were confirmed. Resolved IDs remain in the settled record. These are inventory-entry counts, not atomic subquestions or additional owner decisions. Cross-references do not count twice.
 
 Scope and recorded decisions are unchanged except for the owner confirmations already recorded in the Product Definition. The numerical Health Score, goals, saved what-if scenarios, and other explicitly deferred capabilities must not return as v1 prerequisites. Topics without a release decision remain proposals or unresolved details; this organization does not silently defer them.
 
@@ -25,46 +25,23 @@ Scope and recorded decisions are unchanged except for the owner confirmations al
 
 This resolves those bounded implementation choices within Q9/Q10, Q35, Q4, Q13/Q54 and the liability-schema follow-up. It does not close their remaining broader questions or change the inventory counts below. Cost basis, employer-match treatment, savings-rate edge cases, trade/settlement reporting, rates/payment schedules/amortization, forecasts, production activation and release approval remain outside this decision.
 
-## Three remaining v1 owner-review bundles
+## Owner-review bundles, closed 2026-11-27
 
-- **O1. Financial reporting and budget rules.** Settle the remaining financial meanings and report boundaries: remaining savings-rate inputs and edge cases, pending activity and dates, corrections/chargebacks, and unresolved budget behavior. Engineering should supply a coherent calculation proposal first. 4 detailed entries below.
-- **O2. Cash-forecast methodology.** Review remaining calculation edge cases, unusual activity, and confidence after the confirmed coverage gate. The three-month average, debt-payment inclusion, exclusion of internal cash transfers, editable assumptions, and recalculation after changes are settled alongside cash scope, month-end granularity, horizon, and coverage gate. 2 detailed entries below.
-- **O3. Initial investment and debt scope.** Review remaining investment types and consequential data/calculation scope within the confirmed boundaries: imported balances and dated values, holdings and activity, no live prices or performance calculations, and three debt types with manual updates and no payoff modelling. Research source data first. 3 detailed entries below.
+**Owner-confirmed 2026-11-27:** The owner accepted engineering's proposed answer to each of the nine entries below. They apply to v1.0.0. Where an answer defers work, the work is later work with no committed date.
 
-Resolve these as coherent bundles after reviewing engineering's proposal, not as separate questions for every field or screen. The owner still decides consequential behavior and risk; engineering handles implementation detail within approved contracts.
+| Entry | Decision |
+| --- | --- |
+| Q9 | Aggregation, valuation and period rules are the behavior on `main` plus the answers to Q10 to Q12. This entry was the umbrella for them. |
+| Q10 | Pending rows stay out of balances, reported totals and the projection. Chargebacks and reversals follow the confirmed bank-correction rule: original period, audit trail. The persistent refund link and the compacted-summary adjustment are deferred to 1.1.x. In v1.0.0 the user assigns a refund's category by hand. |
+| Q11 | Every reported total uses the posted (settlement) date. The trade date stays visible as detail and never moves a total between months. |
+| Q12 | Income is net income as it lands in the user's accounts. Employer contributions that never touch cash are not income. A month where spending exceeds income shows a negative savings rate. A month with zero or negative total income shows not applicable. |
+| Q16 | No seasonality adjustment in v1.0.0. The projection says it is a flat three-month average and does not account for annual or seasonal bills. |
+| Q19 | No confidence score or range in v1.0.0. The coverage gate is the only confidence rule: the projection shows, or it is blocked with the reasons. |
+| Q35 | Investment accounts are brokerage and retirement (401(k), IRA). Securities are kept as source-provided text with no taxonomy. HSA and 529 accounts are deferred to 1.1.x. |
+| Q40 | Store and show only the cost basis, gains and employer match that a source file provides, labelled as source-provided. Calculate nothing. Employer match appears as an ordinary contribution row. |
+| Q44 | Credit cards, mortgages and auto loans keep a manually updated balance and date. Interest rate, minimum payment, payment schedule and amortization are deferred to 1.1.x. |
 
-### O1. Financial reporting and budget rules
-
-<details>
-<summary>4 remaining detailed entries</summary>
-
-- [ ] **Q9.** What detailed aggregation, valuation, remaining period-boundary, and calculation rules implement income, spending, cash flow, savings, assets, liabilities, net worth, and basic investment reporting? Apply the confirmed posted-activity total basis, calendar-year annual views, optional custom ranges, and savings-rate formula without reopening them. Use the agreed meanings and a clean mathematical design, not the old workbook's formulas or quirks.
-- [ ] **Q10.** What are the remaining pending-transaction rules for balances, projections, and cash-flow presentation beyond the confirmed posted-activity reporting totals? What date-treatment edge cases remain after preserving the confirmed refund and original-period correction rules? Beyond the confirmed unmatched-refund behavior, what remaining refund edge cases, review-resolution criteria, and linkage/matching behavior need specification, and what report inclusion and date rules apply to chargebacks, reversals, and other non-category corrections? Engineering must assess persistent refund-link feasibility and implementation. The cumulative effective-state calculations and compacted-summary adjustment mechanism still need a contract.
-- [ ] **Q11.** When should reporting use trade date versus settlement date? Preserving both dates does not choose a reporting basis.
-- [ ] **Q12.** What income basis, including gross versus net, and employer-contribution treatment should the confirmed savings-rate formula use? How should negative-income and other residual input edge cases be handled? The formula is income minus spending, divided by income; savings/investment transfers are not spending, and zero-income months show not applicable. Preserve existing economic classifications without treating those decisions as answers to every input edge case. See [Product §4.4][product-financial].
-
-</details>
-
-### O2. Cash-forecast methodology
-
-<details>
-<summary>2 remaining detailed entries</summary>
-
-- [ ] **Q16.** How should the confirmed three-month-average baseline handle seasonality and remaining calculation edge cases? One-off activity is settled: owner-confirmed 2026-11-26, the app flags unusually large rows and the user explicitly excludes them, with a reason, reversibly. Apply the approved averaging method, debt-payment inclusion, internal cash-transfer exclusion, editable assumptions, and coverage gate. See [Product §5.1][product-planning].
-- [ ] **Q19.** How should projection confidence reflect remaining data-quality limitations after the confirmed coverage gate is met?
-
-</details>
-
-### O3. Initial investment and debt scope
-
-<details>
-<summary>3 remaining detailed entries</summary>
-
-- [ ] **Q35.** What exact investment account and security types belong in the basic v1.0.0 balances, holdings, and activity scope?
-- [ ] **Q40.** What initial cost-basis, source-provided realized/unrealized-gain, and employer-match data behavior is necessary? Field and retention requirements remain open within the existing historical-record contract. Do not add performance calculations or advanced tax-lot analysis to v1.0.0.
-- [ ] **Q44.** Should v1.0.0 include interest rates, minimum payments, scheduled payments, and amortization, or defer some of them? These details were not approved by the initial debt-scope decision. Debt-payoff modelling is excluded from v1.0.0.
-
-</details>
+The unchecked entries for these IDs are removed from this register. Q9, Q10, Q12, Q16 and Q19 still name open sub-details in [Product §4.4](PRODUCT_DEFINITION.md#44-financial-activity-and-reporting-semantics) and [Product §5.1](PRODUCT_DEFINITION.md#51-projections). The answers above govern v1.0.0 where they differ.
 
 ## Engineering proposals and research
 

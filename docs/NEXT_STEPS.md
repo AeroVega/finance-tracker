@@ -19,9 +19,12 @@ The [v1.0.0 scope table](PRODUCT_DEFINITION.md#minimum-coherent-v100-scope-owner
 - **Data-quality indicators.** Stale balances, coverage gaps and reconciliation issues exist per account. Add one place on Home or More that lists them across accounts.
 - **Dashboard customization** is not a v1.0.0 requirement. Leave it out.
 
-### 2. Settle the open owner decisions (owner, by 2026-12-04)
+### 2. Owner decisions (done 2026-11-27, build what they change)
 
-[Open decisions](PRODUCT_OPEN_DECISIONS.md) still lists 52 entries. Most are engineering detail. The ones that change a number on screen need a yes or no now: Q9 to Q12 (reporting, pending, trade versus settlement date, savings-rate income basis), Q16 and Q19 (projection seasonality and confidence), Q35, Q40 and Q44 (investment and debt detail). For each, either accept the current implemented behavior and record it, or name the change. Defer the rest to 1.1.x by a single recorded decision, not one by one.
+The owner confirmed Q9 to Q12, Q16, Q19, Q35, Q40 and Q44 on 2026-11-27. See [Open decisions](PRODUCT_OPEN_DECISIONS.md#owner-review-bundles-closed-2026-11-27). The remaining entries are engineering detail or later work. Defer any of them to 1.1.x by one recorded decision. Two answers need code:
+
+- **Savings rate** (Q12): negative when spending exceeds income, not applicable at zero or negative income. Build it with goal 1.
+- **Projection wording** (Q16): the Planning intro text in `js/planning-page.mjs` must say the estimate is a flat three-month average that does not account for annual or seasonal bills. It now says each month looks like the average.
 
 ### 3. Migrate the workbook history (owner, rolling, done by 2026-12-18)
 
