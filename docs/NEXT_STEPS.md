@@ -22,10 +22,13 @@ The [v1.0.0 scope table](PRODUCT_DEFINITION.md#minimum-coherent-v100-scope-owner
 
 ### 2. Owner decisions (done 2026-11-27, build what they change)
 
-The owner confirmed Q9 to Q12, Q16, Q19, Q35, Q40 and Q44 on 2026-11-27. See [Open decisions](PRODUCT_OPEN_DECISIONS.md#owner-review-bundles-closed-2026-11-27). A second review the same day closed 15 more. The remaining entries are engineering detail or later work. Defer any of them to 1.1.x by one recorded decision. Two answers need code:
+The owner closed every v1.0.0 product question on 2026-11-27 in four reviews, and deferred the 17 later-work entries. See [Open decisions](PRODUCT_OPEN_DECISIONS.md#owner-review-bundles-closed-2026-11-27). Three answers need code:
 
 - **Savings rate** (Q12): negative when spending exceeds income, not applicable at zero or negative income. Build it with goal 1.
 - **Projection wording** (Q16): the Planning intro text in `js/planning-page.mjs` must say the estimate is a flat three-month average that does not account for annual or seasonal bills. It now says each month looks like the average.
+- **Start screen and folder-title data class**: see goal 1.
+
+Engineering detail inside these answers, such as exact screens, does not return to the owner unless it changes a financial meaning.
 
 ### 3. Migrate the workbook history (owner, rolling, done by 2026-12-18)
 

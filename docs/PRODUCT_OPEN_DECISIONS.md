@@ -11,8 +11,8 @@ After the reporting, savings-rate, forecast, investment/debt, reliability, and r
 ## At a glance
 
 - **Owner review:** none open. The 9 entries in the three bundles were confirmed on 2026-11-27.
-- **Engineering proposals and research:** 1 work package containing 1 detailed entry. The owner confirmed 26 on 2026-11-27 and moved 2 to later work.
-- **Explicitly later work:** 5 groups containing 17 detailed entries.
+- **Engineering proposals and research:** none open. The owner confirmed 27 entries on 2026-11-27.
+- **Explicitly later work:** 5 groups containing 17 detailed entries, all deferred past v1.0.0 by the owner on 2026-11-27. No v1.0.0 product question is open.
 - **Existing-policy change, only if requested:** 1 conditional entry, not a v1 release blocker.
 
 **Count basis:** The consolidation preserved 57 earlier unchecked entries as 59 entries by splitting investment performance and debt-payoff forecasting into current-release and later portions. Subsequent owner confirmations resolved Q8, Q15, Q37, Q38, Q39a, Q46b, and Q29, leaving 52 open entries. The owner confirmed 9 of them on 2026-11-27. Six remaining entries moved from owner review to engineering after their product rules were confirmed. Resolved IDs remain in the settled record. These are inventory-entry counts, not atomic subquestions or additional owner decisions. Cross-references do not count twice.
@@ -70,18 +70,14 @@ The unchecked entries for these IDs are removed from this register. Q9, Q10, Q12
 | Q50 | Each of the four insights shows its inputs (the months and amounts compared), the rule that fired, and links to the supporting transactions. |
 | Q18, Q21 | The uncertainty cone and the forecast-accuracy comparison are later work. They need saved forecasts, which are deferred past v1.0.0. See L5. |
 
-## Engineering proposals and research
+## Fourth owner review, closed 2026-11-27
 
-Prepare concrete designs, inspect source formats, and define tests. Escalate choices that change user-visible financial meaning, privacy, cost, data integrity, release scope, or an accepted contract. Inclusion here does not approve a design, notification, implementation, or a new release requirement.
+**Owner-confirmed 2026-11-27:** The owner accepted both proposals below.
 
-### E1. Interface and review flows
-
-<details>
-<summary>1 remaining detailed entry</summary>
-
-- [ ] **Q5.** Which app settings are required for v1.0.0, and which of them must be reachable before a Drive directory is open (see the third review below)? Engineering proposes no new settings beyond those that exist.
-
-</details>
+| Entries | Decision |
+| --- | --- |
+| Q5 | v1.0.0 adds no settings. Diagnostics (copy a report) and build identity are the app settings, and they are reachable before a Drive directory is open. Retention and the 35-day staleness threshold stay fixed. |
+| Q18, Q20, Q21, Q23 to Q28, Q30 to Q34, Q39b, Q46a, Q52 | Deferred past v1.0.0 with no design work now. They cover goals, saved what-if scenarios, subcategory budgets, multi-currency, the Data Quality Health Score, the uncertainty cone, forecast accuracy, investment performance and debt payoff. No release or date is committed. Each keeps its ID in the [later work](#explicitly-later-work) list below and is not a v1.0.0 question. |
 
 ## Explicitly later work
 
@@ -94,12 +90,12 @@ Explicitly deferred beyond v1.0.0. Preserve the intended behavior and questions 
 <details>
 <summary>6 preserved detailed entries</summary>
 
-- [ ] **Q20.** For later saved what-if scenarios, how should they be versioned and compared beyond the agreed named-alternative behavior?
-- [ ] **Q23.** For later goals, which simple types and fields should be introduced first, and in which release? Goals are explicitly outside v1.0.0.
-- [ ] **Q24.** For the later goal experience, should milestones, multiple funding sources, priorities, or dependencies be supported? Do not make the deferred complex hierarchy a v1.0.0 prerequisite.
-- [ ] **Q25.** How should goals without a fixed date or amount be represented?
-- [ ] **Q26.** How should goal progress and likelihood of achievement be calculated and explained?
-- [ ] **Q27.** How should competing goals be shown when available resources cannot satisfy all of them?
+- **Q20.** For later saved what-if scenarios, how should they be versioned and compared beyond the agreed named-alternative behavior?
+- **Q23.** For later goals, which simple types and fields should be introduced first, and in which release? Goals are explicitly outside v1.0.0.
+- **Q24.** For the later goal experience, should milestones, multiple funding sources, priorities, or dependencies be supported? Do not make the deferred complex hierarchy a v1.0.0 prerequisite.
+- **Q25.** How should goals without a fixed date or amount be represented?
+- **Q26.** How should goal progress and likelihood of achievement be calculated and explained?
+- **Q27.** How should competing goals be shown when available resources cannot satisfy all of them?
 
 </details>
 
@@ -110,7 +106,7 @@ Deferred as a possible compatible 1.x addition. No allocation design or delivery
 <details>
 <summary>1 preserved detailed entry</summary>
 
-- [ ] **Q28.** For later subcategory budgeting, how should parent and child targets interact, share limits, and handle historical parent-level actuals? The category rules settle actuals classification, not budget allocation. This is not a v1.0.0 requirement.
+- **Q28.** For later subcategory budgeting, how should parent and child targets interact, share limits, and handle historical parent-level actuals? The category rules settle actuals classification, not budget allocation. This is not a v1.0.0 requirement.
 
 </details>
 
@@ -121,11 +117,11 @@ Not a v1.0.0 release requirement. Preserve the foundational currency/history con
 <details>
 <summary>5 preserved detailed entries</summary>
 
-- [ ] **Q30.** For later multi-currency capability, which currencies are supported and how is the primary display currency selected?
-- [ ] **Q31.** Which exchange-rate source, if any, is authorized under the privacy and $0 constraints?
-- [ ] **Q32.** Which date's rate applies to transactions and account/portfolio valuations?
-- [ ] **Q33.** How should fees, spreads, and user-provided rates be represented?
-- [ ] **Q34.** How should rate data be corrected or handled when unavailable while preserving the agreed historical basis and auditability?
+- **Q30.** For later multi-currency capability, which currencies are supported and how is the primary display currency selected?
+- **Q31.** Which exchange-rate source, if any, is authorized under the privacy and $0 constraints?
+- **Q32.** Which date's rate applies to transactions and account/portfolio valuations?
+- **Q33.** How should fees, spreads, and user-provided rates be represented?
+- **Q34.** How should rate data be corrected or handled when unavailable while preserving the agreed historical basis and auditability?
 
 </details>
 
@@ -136,7 +132,7 @@ Explicitly deferred until its scoring method is defined. Useful v1 indicators re
 <details>
 <summary>1 preserved detailed entry</summary>
 
-- [ ] **Q52.** For the later numerical Health Score, what components, weights, thresholds, and interpretation should it use? No later release or date is committed.
+- **Q52.** For the later numerical Health Score, what components, weights, thresholds, and interpretation should it use? No later release or date is committed.
 
 </details>
 
@@ -147,10 +143,10 @@ Advanced investment performance analysis is outside the v1 minimum, and the init
 <details>
 <summary>4 preserved detailed entries</summary>
 
-- [ ] **Q18.** What statistical meaning and calibration should the uncertainty cone have when implemented? The intended widening-cone presentation is settled; the methodology is not.
-- [ ] **Q21.** Which error measures and presentation should compare retained forecasts with subsequent actual outcomes, including systematic over- or under-estimation?
-- [ ] **Q39b.** Which methodology, such as time-weighted or money-weighted return, should later performance analysis use?
-- [ ] **Q46a.** What debt-payoff projection should be considered later?
+- **Q18.** What statistical meaning and calibration should the uncertainty cone have when implemented? The intended widening-cone presentation is settled; the methodology is not.
+- **Q21.** Which error measures and presentation should compare retained forecasts with subsequent actual outcomes, including systematic over- or under-estimation?
+- **Q39b.** Which methodology, such as time-weighted or money-weighted return, should later performance analysis use?
+- **Q46a.** What debt-payoff projection should be considered later?
 
 </details>
 
