@@ -5,6 +5,7 @@ import { applyFinancialEvent, applyFinancialEvents, applyReviewDecision, reverse
 import { persistenceDataClass } from './persistence-data-class.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
+import { applyPlanningEvents } from './planning.mjs';
 
 import { FULL_SNAPSHOT_LIMITS } from './full-snapshot-storage.mjs';
 import { utf8ByteLength } from './utf8-length.mjs';
@@ -245,7 +246,8 @@ export class CanonicalWorkspaceSession {
       persistenceDataClass('ledger', proposal) !== persistenceDataClass('ledger', current) ||
       proposal.version !== current.version || !same(proposal.accounts, current.accounts) ||
       Object.keys(HISTORICAL_COLLECTIONS).some(key => !same(proposal[key] ?? null, current[key] ?? null)) ||
-      !same(proposal.positionEvents ?? [], current.positionEvents ?? [])) fail('invalid-parsed-import');
+      !same(proposal.positionEvents ?? [], current.positionEvents ?? []) ||
+      !same(proposal.planningEvents ?? [], current.planningEvents ?? [])) fail('invalid-parsed-import');
     for (const key of ['activities', 'events']) {
       const before = current[key], after = proposal[key];
       if (!Array.isArray(after) || after.length < before.length ||
@@ -335,6 +337,17 @@ export class CanonicalWorkspaceSession {
   recordPosition(command) {
     if (!this.canEdit()) fail('reopen-before-editing');
     const next = applyPositionEvent(this.ledger, { ...command, commandId: crypto.randomUUID() });
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return this.ledger;
+  }
+
+  /** Stage one or more planning records as one undoable step. */
+  recordPlanning(commands) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    const list = Array.isArray(commands) ? commands : [commands];
+    const next = applyPlanningEvents(this.ledger, list.map(command => ({ ...command, commandId: crypto.randomUUID() })));
     this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();

@@ -4,18 +4,18 @@
 
 **Companion:** [Product Definition](PRODUCT_DEFINITION.md)
 
-**Last updated:** 2026-11-05
+**Last updated:** 2026-11-26
 
 After the reporting, savings-rate, forecast, investment/debt, reliability, and release-boundary confirmations, the remaining consequential choices are organized into **three v1.0.0 owner-review bundles**. Engineering should prepare evidence and proposals before the owner reviews them. Unpresented choices remain open; no recommendation becomes an owner decision without confirmation. Reliability implementation and release-evidence preparation are engineering work under the confirmed boundaries. Actual owner release approval is still required.
 
 ## At a glance
 
-- **Owner review:** 3 bundles containing 10 detailed entries.
+- **Owner review:** 3 bundles containing 9 detailed entries.
 - **Engineering proposals and research:** 4 work packages containing 27 detailed entries.
 - **Explicitly later work:** 5 groups containing 15 detailed entries.
 - **Existing-policy change, only if requested:** 1 conditional entry, not a v1 release blocker.
 
-**Count basis:** The consolidation preserved 57 earlier unchecked entries as 59 entries by splitting investment performance and debt-payoff forecasting into current-release and later portions. Subsequent owner confirmations resolved Q8, Q15, Q37, Q38, Q39a, and Q46b, leaving 53 open entries. Six remaining entries moved from owner review to engineering after their product rules were confirmed. Resolved IDs remain in the settled record. These are inventory-entry counts, not atomic subquestions or additional owner decisions. Cross-references do not count twice.
+**Count basis:** The consolidation preserved 57 earlier unchecked entries as 59 entries by splitting investment performance and debt-payoff forecasting into current-release and later portions. Subsequent owner confirmations resolved Q8, Q15, Q37, Q38, Q39a, Q46b, and Q29, leaving 52 open entries. Six remaining entries moved from owner review to engineering after their product rules were confirmed. Resolved IDs remain in the settled record. These are inventory-entry counts, not atomic subquestions or additional owner decisions. Cross-references do not count twice.
 
 Scope and recorded decisions are unchanged except for the owner confirmations already recorded in the Product Definition. The numerical Health Score, goals, saved what-if scenarios, and other explicitly deferred capabilities must not return as v1 prerequisites. Topics without a release decision remain proposals or unresolved details; this organization does not silently defer them.
 
@@ -27,7 +27,7 @@ This resolves those bounded implementation choices within Q9/Q10, Q35, Q4, Q13/Q
 
 ## Three remaining v1 owner-review bundles
 
-- **O1. Financial reporting and budget rules.** Settle the remaining financial meanings and report boundaries: remaining savings-rate inputs and edge cases, pending activity and dates, corrections/chargebacks, and unresolved budget behavior. Engineering should supply a coherent calculation proposal first. 5 detailed entries below.
+- **O1. Financial reporting and budget rules.** Settle the remaining financial meanings and report boundaries: remaining savings-rate inputs and edge cases, pending activity and dates, corrections/chargebacks, and unresolved budget behavior. Engineering should supply a coherent calculation proposal first. 4 detailed entries below.
 - **O2. Cash-forecast methodology.** Review remaining calculation edge cases, unusual activity, and confidence after the confirmed coverage gate. The three-month average, debt-payment inclusion, exclusion of internal cash transfers, editable assumptions, and recalculation after changes are settled alongside cash scope, month-end granularity, horizon, and coverage gate. 2 detailed entries below.
 - **O3. Initial investment and debt scope.** Review remaining investment types and consequential data/calculation scope within the confirmed boundaries: imported balances and dated values, holdings and activity, no live prices or performance calculations, and three debt types with manual updates and no payoff modelling. Research source data first. 3 detailed entries below.
 
@@ -36,13 +36,12 @@ Resolve these as coherent bundles after reviewing engineering's proposal, not as
 ### O1. Financial reporting and budget rules
 
 <details>
-<summary>5 remaining detailed entries</summary>
+<summary>4 remaining detailed entries</summary>
 
 - [ ] **Q9.** What detailed aggregation, valuation, remaining period-boundary, and calculation rules implement income, spending, cash flow, savings, assets, liabilities, net worth, and basic investment reporting? Apply the confirmed posted-activity total basis, calendar-year annual views, optional custom ranges, and savings-rate formula without reopening them. Use the agreed meanings and a clean mathematical design, not the old workbook's formulas or quirks.
 - [ ] **Q10.** What are the remaining pending-transaction rules for balances, projections, and cash-flow presentation beyond the confirmed posted-activity reporting totals? What date-treatment edge cases remain after preserving the confirmed refund and original-period correction rules? Beyond the confirmed unmatched-refund behavior, what remaining refund edge cases, review-resolution criteria, and linkage/matching behavior need specification, and what report inclusion and date rules apply to chargebacks, reversals, and other non-category corrections? Engineering must assess persistent refund-link feasibility and implementation. The cumulative effective-state calculations and compacted-summary adjustment mechanism still need a contract.
 - [ ] **Q11.** When should reporting use trade date versus settlement date? Preserving both dates does not choose a reporting basis.
 - [ ] **Q12.** What income basis, including gross versus net, and employer-contribution treatment should the confirmed savings-rate formula use? How should negative-income and other residual input edge cases be handled? The formula is income minus spending, divided by income; savings/investment transfers are not spending, and zero-income months show not applicable. Preserve existing economic classifications without treating those decisions as answers to every input edge case. See [Product §4.4][product-financial].
-- [ ] **Q29.** What overspend carryover behavior should apply? The owner rejected unused-budget rollover but did not decide overspend carryover. Budget visualization and forecast-data sufficiency remain engineering work under Q3 and Q54.
 
 </details>
 
@@ -51,7 +50,7 @@ Resolve these as coherent bundles after reviewing engineering's proposal, not as
 <details>
 <summary>2 remaining detailed entries</summary>
 
-- [ ] **Q16.** How should the confirmed three-month-average baseline handle seasonality, unusual one-off activity, and remaining calculation edge cases? Apply the approved averaging method, debt-payment inclusion, internal cash-transfer exclusion, editable assumptions, and coverage gate. See [Product §5.1][product-planning].
+- [ ] **Q16.** How should the confirmed three-month-average baseline handle seasonality and remaining calculation edge cases? One-off activity is settled: owner-confirmed 2026-11-26, the app flags unusually large rows and the user explicitly excludes them, with a reason, reversibly. Apply the approved averaging method, debt-payment inclusion, internal cash-transfer exclusion, editable assumptions, and coverage gate. See [Product §5.1][product-planning].
 - [ ] **Q19.** How should projection confidence reflect remaining data-quality limitations after the confirmed coverage gate is met?
 
 </details>
@@ -255,6 +254,7 @@ Canonical financial history defaults to indefinite retention. Original source CS
 - [x] ~~What forecast horizon should v1.0.0 use?~~ Owner-confirmed 2026-11-05: use three months initially. Extending to at least a full year is a later aspiration, without a committed date or release. See [Product §5.1][product-planning].
 - [x] ~~What forecast granularity should v1.0.0 show?~~ Owner-confirmed 2026-11-05: show projected month-end cash balances for each of the next three months. Daily projected balances are deferred; no implementation-effort estimate is established. See [Product §5.1][product-planning].
 - [x] ~~Must scenarios change actual records, and may old forecasts be replaced silently?~~ Named alternatives leave actual records unchanged. Historical forecasts retain their assumptions and then-available information for comparison with actual outcomes. See [Product §§5.3 and 5.4][product-planning].
+- [x] ~~Which coverage state passes the baseline gate, and where does the projection start?~~ Owner-confirmed 2026-11-26: only reconciled account-months pass. The projection starts from the reconciled closing balances of the latest qualifying month. Saving past forecasts is deferred past v1.0.0. See [Product §5.1][product-planning].
 - [x] ~~What minimum history permits a v1.0.0 baseline forecast?~~ Owner-confirmed 2026-11-05: require confirmed coverage across the included accounts for the three most recent completed calendar months, consecutively. Otherwise show missing coverage instead of a projection, without a manual-assumption bypass. See [Product §5.1][product-planning].
 - [x] **Q15.** ~~What update cadence should the baseline projection use?~~ Owner-confirmed 2026-11-05: recalculate after changes. See [Product §5.1][product-planning].
 - [x] **Q46b.** ~~How should debt-payment assumptions affect the initial cash-balance forecast?~~ Owner-confirmed 2026-11-05: include debt payments in the three qualifying months' inflows/outflows used for the baseline, with editable assumptions. See [Product §5.1][product-planning].
@@ -268,6 +268,8 @@ Canonical financial history defaults to indefinite retention. Original source CS
 - [x] ~~Are goals and saved what-if scenarios required for v1.0.0 planning?~~ Owner-confirmed 2026-11-05: defer both, retaining basic category budgets and the baseline projection as initial planning features. No later version or date is committed. See [Product §5][product-planning].
 
 ### Budgeting
+
+- [x] **Q29.** ~~What overspend carryover behavior should apply?~~ Owner-confirmed 2026-11-26: none. Each month starts fresh in both directions, and overspend shows only in its own month. Setup suggestions, the "Not budgeted" row and the month-end estimate method were confirmed the same day. See [Product §5.5][product-planning].
 
 - [x] ~~What initial budget period applies, and should unused budget carry forward?~~ Owner-confirmed 2026-11-05: use calendar-month category budgets, start each month fresh without unused-budget rollover, and retain previous months for comparison. No savings-transfer or overspend-carryover behavior was decided. See [Product §5.5][product-planning].
 - [x] ~~Which budgeting capabilities are essential for v1.0.0 versus later releases?~~ Basic category budgets and spending comparisons are the required initial form; advanced rollover/customization can follow. Budgeting remains optional, and budgets represent targets while projections estimate outcomes. See [Product §5.5][product-planning] and [minimum scope][product-minimum].

@@ -17,12 +17,13 @@ import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
 import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs';
 import { mountHistoricalMonthlySummaryWorkflow } from './historical-monthly-summary-workflow.mjs';
 import { mountHomeDashboard } from './home-dashboard.mjs';
+import { mountPlanning } from './planning-page.mjs';
 import { currentMonth, isMonthPeriod, periodKind, stepPeriod } from './home-period-report.mjs';
 import { buildCoverageHistory, balanceObservations, institutionCoverage, mostUrgentMonth, monthEnd } from './account-history.mjs';
 import { INSTITUTIONS, ACCOUNT_TYPES, COVERAGE_STATES, COVERAGE_REASONS, POSITION_REASONS, freshness, coverageCounts, miniStrip, coverageStrip, markSelected, observationPlot, markColumn, stripLabels, dateLabel, dayLabel, monthLong } from './accounts-view.mjs';
 
 const $ = id => document.getElementById(id);
-let providerImportWorkflow = null, historicalSummaryWorkflow = null;
+let providerImportWorkflow = null, historicalSummaryWorkflow = null, planningPage = null;
 let sourceReviewPage = 0, sourceReviewScope = null;
 const sourceReviewUpdates = [];
 // Accounts selection state. Declared before the router because a #holdings link can
@@ -47,7 +48,7 @@ const pages = createWorkspacePages({document, window, onAlias: name => {
   // #review is the Needs review view of Activity. Apply it once the controller is ready.
   $('review-only').checked = true;
   Promise.resolve().then(() => { if (session?.ledger && !busy) { listLimit = PAGE_ROWS; render(); } });
-}, onNavigate: page => { leaveBreadcrumb({e:'page.view', page}); if ($('action-status').dataset.kind !== 'error') $('action-status').textContent = ''; if (page !== 'import') providerImportWorkflow?.reset(); historicalSummaryWorkflow?.refresh(); }});
+}, onNavigate: page => { leaveBreadcrumb({e:'page.view', page}); if ($('action-status').dataset.kind !== 'error') $('action-status').textContent = ''; if (page !== 'import') providerImportWorkflow?.reset(); historicalSummaryWorkflow?.refresh(); if (page === 'planning') planningPage?.activate(); }});
 const node = (tag, text, className) => {
   const result = document.createElement(tag);
   if (text !== undefined) result.textContent = text;
@@ -456,7 +457,7 @@ const action = (id, message, callback) => $(id).addEventListener('click', () => 
   if (!$(id).disabled) return run(message, callback, formStatuses[id], id);
 });
 function hasUnfinishedEvidence() {
-  return historicalSummaryWorkflow?.hasUnfinishedReview() || holdingRows.length > 0 || componentRows.length > 0 || $('statement-full-month').checked ||
+  return historicalSummaryWorkflow?.hasUnfinishedReview() || planningPage?.hasUnfinishedWork() || holdingRows.length > 0 || componentRows.length > 0 || $('statement-full-month').checked ||
     ['balance-date','balance-amount','balance-source','holdings-date','holdings-source','reconcile-source','closure-source','new-account-name'].some(id => $(id).value.trim());
 }
 function confirmReplace(message = 'Replace your local draft with verified saved records? Unsaved corrections will be discarded only after the saved records open successfully. An unverified save may already be on Drive.') {
@@ -473,6 +474,7 @@ function addOptions(select, options, selected, first) {
 // verified closure. This is not a claim of browser/OS memory zeroization.
 function clearLoadedWorkspace() {
   historicalSummaryWorkflow?.reset();
+  planningPage?.clear();
   homeDashboard.clear(); lastMonth = null;
   cancelSearch();
   view = null; viewLedger = null; viewReader = null; homeView = null; positionRender = null;
@@ -537,6 +539,7 @@ function render({ reset = false } = {}) {
     homeView = viewReader.view({accountId:view.scope.accountId, month:view.scope.month, pageSize:4});
   }
   homeDashboard.refresh(session.ledger, viewReader, view);
+  planningPage?.refresh(session.ledger, viewReader, view);
   const recent = homeView;
   homeButtons.clear(); $('recent-activities').replaceChildren();
   for (const row of recent.rows) {
@@ -1816,6 +1819,25 @@ historicalSummaryWorkflow = mountHistoricalMonthlySummaryWorkflow({
     isActive: () => pages.current === 'migration'
   }
 });
+planningPage = mountPlanning({document, root: $('planning-root'), homeRoot: $('home-budget'), money, monthLabel,
+  isActive: () => pages.current === 'planning',
+  getUnavailableReason: () => {
+    if (busy || session.busy) return 'Wait for the current workspace or storage action to finish.';
+    if (!session.ledger) return 'Open your saved data before changing budgets.';
+    if (navigator.onLine === false) return 'Reconnect before staging changes to a saved ledger.';
+    if (session.unverified) return 'Verify the save outcome before staging budgets.';
+    if (session.needsReopen) return 'Reconnect and reopen the verified ledger before staging budgets.';
+    if (!session.canEdit()) return 'This ledger is read-only. Reopen it before staging changes.';
+    return null;
+  },
+  stage: (commands, message) => { session.recordPlanning(commands); render(); refresh(); announce(message, 'success'); },
+  // A projection gap opens that account's month in Accounts, where its next steps are.
+  onOpenAccount: (accountId, month) => {
+    pages.go('position');
+    if (!positionReport?.accounts.some(account => account.accountId === accountId)) return;
+    selectAccount(accountId, {navigate:true});
+    selectedCoverageMonth = month; paneKey = null; renderAccountPane();
+  }});
 refresh();
 // Prepare only invented data ahead of the click so OAuth starts within the
 // user's create-button gesture, without awaiting fixture generation first.

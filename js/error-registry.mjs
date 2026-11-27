@@ -7,6 +7,9 @@ const workspace = {
   'invalid-historical-summary-review': 'Decide which valid rows to accept or exclude, with a reason for each choice. Only one source can be accepted per month.',
   'invalid-historical-summary-ledger': 'The saved historical summary or its decision evidence is invalid. Keep this copy unchanged.',
   'stale-historical-summary-review': 'The working ledger changed. Review the historical data again before staging.',
+  'invalid-budget-target': 'Enter a budget target above zero for one category and currency.',
+  'budget-target-before-current-month': 'A budget change applies from the current month on. Earlier months keep their targets.',
+  'invalid-projection-exclusion': 'Give a reason for excluding or restoring this row in the projection average.',
   'historical-detail-not-reconciled': 'The transaction detail does not yet qualify to replace the workbook summary.',
   'unsupported-ledger-version-transition': 'The ledger format changed in an unsupported way. Keep the original copy unchanged.',
   'records-must-be-an-array': 'The normalized history must include an array of records.',
@@ -354,6 +357,8 @@ const codeGroups = {
     invalid-statement-coverage invalid-workspace-month invalid-workspace-options
     liability-balance-must-be-positive negative-holding-value new-empty-folder-required no-staged-changes
     position-command-conflict position-source-required reconciliation-requires-selected-anchors
+    budget-target-before-current-month invalid-budget-target invalid-planning-event invalid-planning-events
+    invalid-projection-exclusion planning-command-conflict unknown-planning-activity
     reconnect-required recovery-not-required release-before-preview reopen-before-editing
     seed-readback-mismatch statement-reconciliation-evidence-required synthetic-data-required
     transfer-link-rationale-required unknown-position-account unsupported-workspace-correction

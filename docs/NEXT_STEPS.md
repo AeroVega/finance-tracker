@@ -1,6 +1,6 @@
 # Next steps
 
-**Updated:** 2026-11-24
+**Updated:** 2026-11-26
 **Release target:** v1.0.0 on 2027-01-01, conditional on all release gates. Defer the date rather than weaken a gate.
 
 This is the active priority queue. It grants no permission to merge, deploy or change production configuration. [Current state](CURRENT_STATE.md) owns authorization. The [product definition](PRODUCT_DEFINITION.md) owns the v1.0.0 scope.
@@ -9,10 +9,8 @@ This is the active priority queue. It grants no permission to merge, deploy or c
 
 1. **Verify the deployed build.** After the Pages workflow runs, confirm the served source stamp, Google configuration and release profile before real records are entered. Record the result in the PR or thread; no per-build owner GO is required.
 2. **UX redesign, in slices** ([PR 62](https://github.com/AeroVega/finance-tracker/pull/62) is the first). Remaining slices:
-   - Activity: type and category filters, sorting, inline review decisions, grouping by month. In progress on `t3/activity-filters-review`; see [Design § Activity](DESIGN.md#activity).
-   - Accounts: per-account detail with balance history and coverage gaps. In progress on `t3/accounts-detail-ux`; see [Design § Accounts](DESIGN.md#accounts).
-   - Home: category breakdown, and period switching for year and lifetime. In progress on `t3/home-dashboard-periods`; see [Design § Home](DESIGN.md#home). Dashboard customization follows in a later PR.
-   - Planning, once budgets or a baseline projection exist.
+   - Activity, Accounts and Home merged in PRs 64, 65 and 68. Dashboard customization follows in a later PR.
+   - Planning: budgets, the baseline cash projection, the fifth tab and a Home card. In progress on `t3/planning-prerequisites`; see [Planning](PLANNING.md) and [Design § Planning](DESIGN.md#planning). The owner confirms the SoFi Checking and Savings import, save and reopen path on the deployed build before the projection is used with real records.
    - A physical iPhone and iPad pass: standalone launch and keyboard. VoiceOver is out of scope; see [Product § 3](PRODUCT_DEFINITION.md#3-intended-user-and-platforms).
 3. **Workbook history migration.** The owner resumed it on 2026-11-25. They will type the history in on the in-app History migration page; there is no converter. After the guarded PR merges and deploys, the owner migrates January 2023 onward year by year, then a later PR retires the page. Use invented values in CI. Never commit or upload the private workbook. Missing data stays unavailable, not zero.
 4. **Backup rehearsal.** Run the owner's 3-month encrypted backup and restore cadence, and watch the capacity triggers recorded in [Current state](CURRENT_STATE.md#acceptance-and-verification).

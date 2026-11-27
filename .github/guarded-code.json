@@ -49,6 +49,7 @@
         "js/drive-feasibility-spike.mjs", "js/success-metrics.mjs",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
         "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs",
+        "js/planning-contract.mjs", "js/planning.mjs",
         "js/canonical-history.mjs", "js/canonical-import.mjs", "js/persistence-data-class.mjs", "js/release-profile.mjs", "tests/production-app-flow.test.mjs", "js/byte-ownership.mjs",
         "js/immutable-content-type.mjs", "js/utf8-length.mjs",
         "docs/FULL_SNAPSHOT_STORAGE.md",
@@ -59,7 +60,7 @@
         "full-snapshot-witness-concurrency", "full-snapshot-version-convergence",
         "drive-session-adapter", "drive-mutation-lifetime", "drive-transaction-engine", "drive-request-metrics",
         "transaction-protocol", "canonical-workspace-session", "drive-feasibility-spike", "historical-workspace-persistence",
-        "financial-position-adversarial"
+        "financial-position-adversarial", "planning-records", "planning-persistence"
       ],
       "manual": "Interrupt a synthetic save, follow recheck/recovery without blindly retrying, and independently reopen to verify one committed result. For limit or cost changes, record workload size, requests, rejection/recovery at admitted limits, and any current provider quota assumptions."
     },
@@ -71,11 +72,12 @@
         "js/transaction-protocol.mjs", "js/canonical-history.mjs", "js/canonical-import.mjs", "js/persistence-data-class.mjs", "js/release-profile.mjs", "tests/production-app-flow.test.mjs", "js/source-original-retention.mjs",
         "js/byte-ownership.mjs", "js/utf8-length.mjs", "docs/FULL_SNAPSHOT_BACKUP_RECOVERY.md",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs",
-        "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs"
+        "js/import-reconciliation.mjs", "js/financial-position-contract.mjs", "js/financial-position.mjs",
+        "js/planning-contract.mjs", "js/planning.mjs"
       ],
       "tests": [
         "full-snapshot-backup", "persistence-data-class", "production-app-flow", "full-snapshot-backup-session", "full-snapshot-backup-ui",
-        "provider-csv-import-workflow", "historical-workspace-persistence"
+        "provider-csv-import-workflow", "historical-workspace-persistence", "planning-persistence"
       ],
       "manual": "Export an encrypted synthetic backup, verify wrong passphrase and nonempty destination are refused, restore to a different empty synthetic folder, and reopen independently. Compare records and verify the source was not changed. Do not publish backup contents or passphrases."
     }

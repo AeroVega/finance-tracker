@@ -47,6 +47,10 @@ Balances and holdings use exact normalized decimal strings and the account curre
 
 Old ledgers may omit `positionEvents`. New storage indexes the collection when present, and existing position records cannot be removed, reordered or rewritten. See the linked contract and `js/financial-position-contract.mjs` for required fields, source references, anchor checks, conflict rules and compatibility limits. This extension does not authorize production data or new provider formats.
 
+### Planning extension
+
+**Owner-confirmed scope, November 26, 2026:** [Planning](PLANNING.md) adds optional append-only `planningEvents` to synthetic and production ledgers. Its event types are `budget-target` and `projection-exclusion`. Planning records never rewrite activities, balances or report totals. Old ledgers may omit the collection, and existing planning records cannot be removed, reordered or rewritten. See `js/planning-contract.mjs`.
+
 ### Canonical activity
 
 The entity is called **activity**, not just transaction, because Fidelity files contain trades, fees, dividends, contributions, and valuation events.
