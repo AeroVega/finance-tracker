@@ -56,11 +56,11 @@ The unchecked entries for these IDs are removed from this register. Q9, Q10, Q12
 
 ## Third owner review, closed 2026-11-27
 
-**Owner-confirmed 2026-11-27:** The owner accepted engineering's proposed answer to each group below, except the first-run answer, which the owner replaced.
+**Owner-confirmed 2026-11-27:** The owner accepted engineering's proposed answer to each group below, except the first-run answer, which the owner replaced and then extended with the folder-title rule.
 
 | Entries | Decision |
 | --- | --- |
-| Q2 | **Owner's wording.** When the app opens and no Google Drive directory is loaded, the user can only open an existing directory, create a new empty directory, restore from a backup, or change app settings. Nothing else is offered until a directory is open. Q5 asks which settings. The current build also offers the invented-data preview on this screen and keeps restore under More, so both need to move or be removed. See [Next steps](NEXT_STEPS.md#1-close-the-scope-gaps-build). |
+| Q2 | **Owner's wording.** When the app opens and no Google Drive directory is loaded, the user can only open an existing directory, create a new empty directory, restore from a backup, or change app settings. Nothing else is offered until a directory is open. There is no separate synthetic mode or data selector. The app reads the data class from the Drive folder title. A title that contains "synthetic" (any case) is a synthetic folder, and any other title is treated as real financial data. Creating a folder whose title contains "synthetic" fills it with the invented 2025 year. Opening a synthetic folder from Drive works as it does for real data. Restore currently lives under More and moves to this screen. See [Next steps](NEXT_STEPS.md#1-close-the-scope-gaps-build) and [Persistence data class](PERSISTENCE_DATA_CLASS.md). |
 | Q1, Q3 | The five-tab map and the Home and Planning layouts merged in PRs 62 to 69 are the v1.0.0 screens. Later changes are polish found in the iPhone and iPad pass. The budget view stays as built. |
 | Q17 | The one editable assumption is excluding a row from the projection average, with a reason, reversible. No editable window length and no per-category override. |
 | Q55 | Each quality finding links to the screen that fixes it (import, balance entry or review). A line on the finding says what the fix changes: the indicator, totals and the projection gate. No separate resolution screens. |
