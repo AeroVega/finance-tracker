@@ -38,6 +38,7 @@
         <a id="nav-overview" href="#overview"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg><span class="nav-title">Home</span></a>
         <a id="nav-transactions" href="#transactions"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"/></svg><span class="nav-title">Activity</span></a>
         <a id="nav-position" href="#position"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.5 9.5 12 4.5l8.5 5M6 10.5v6.5M10 10.5v6.5M14 10.5v6.5M18 10.5v6.5M3.5 19.5h17"/></svg><span class="nav-title">Accounts</span></a>
+        <a id="nav-planning" href="#planning"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5M12 8a4 4 0 1 0 4 4M12 12l7-7M16 5h3v3"/></svg><span class="nav-title">Planning</span></a>
         <a id="nav-storage" href="#storage"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5.5 12h.01M12 12h.01M18.5 12h.01"/></svg><span class="nav-title">More</span></a>
       </nav>
     </aside>
@@ -131,6 +132,12 @@
                 <a href="#position"><span>Accounts and balances</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
                 <a href="#migration" id="home-migration-link" hidden><span>Migrate your old workbook</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
               </div>
+            </section>
+
+            <section class="home-block home-budget" id="home-budget" aria-labelledby="home-budget-heading">
+              <h2 id="home-budget-heading">Budgets</h2>
+              <div id="home-budget-body" class="home-budget-body"><p class="block-meta">Open a ledger to see this month's budgets.</p></div>
+              <div class="link-list"><a href="#planning"><span>Open Planning</span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></div>
             </section>
 
             <section class="home-block home-import" aria-labelledby="home-import-heading">
@@ -335,6 +342,10 @@
             </div>
           </section>
         </div>
+      </section>
+
+      <section class="workspace-page planning" id="planning" hidden aria-labelledby="page-title">
+        <div id="planning-root" class="planning-root"></div>
       </section>
 
       <section class="workspace-page migration" id="migration" hidden aria-labelledby="page-title">

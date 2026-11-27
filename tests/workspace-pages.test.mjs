@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createWorkspacePages} from '../js/workspace-pages.mjs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const primary = ['overview', 'transactions', 'position', 'storage'];
+const primary = ['overview', 'transactions', 'position', 'planning', 'storage'];
 const routes = [...primary, 'import', 'reconciliation', 'activity-detail'];
 const sectionOf = page => page === 'account' ? 'position' : page;
 const activityViews = ['transactions', 'reconciliation'];

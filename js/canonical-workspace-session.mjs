@@ -5,7 +5,7 @@ import { applyFinancialEvent, applyFinancialEvents, applyReviewDecision, reverse
 import { persistenceDataClass } from './persistence-data-class.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
-import { applyPlanningEvent } from './planning.mjs';
+import { applyPlanningEvents } from './planning.mjs';
 
 import { FULL_SNAPSHOT_LIMITS } from './full-snapshot-storage.mjs';
 import { utf8ByteLength } from './utf8-length.mjs';
@@ -343,9 +343,11 @@ export class CanonicalWorkspaceSession {
     return this.ledger;
   }
 
-  recordPlanning(command) {
+  /** Stage one or more planning records as one undoable step. */
+  recordPlanning(commands) {
     if (!this.canEdit()) fail('reopen-before-editing');
-    const next = applyPlanningEvent(this.ledger, { ...command, commandId: crypto.randomUUID() });
+    const list = Array.isArray(commands) ? commands : [commands];
+    const next = applyPlanningEvents(this.ledger, list.map(command => ({ ...command, commandId: crypto.randomUUID() })));
     this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();

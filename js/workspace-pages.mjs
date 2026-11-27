@@ -10,10 +10,11 @@ const pages = {
   // On phones one account's detail replaces the list. Wider screens show both in
   // the same section, so this route only changes which column is visible.
   account: {title:'Accounts', description:'One account: dated balances, coverage and evidence.', group:'position', date:true, section:'position'},
+  planning: {title:'Planning', description:'Monthly budgets and a three-month cash projection.', group:'planning'},
   storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'},
   migration: {title:'History migration', description:'Move the old workbook’s monthly history in, one year at a time.', group:'storage'}
 };
-const primary = ['overview', 'transactions', 'position', 'storage'];
+const primary = ['overview', 'transactions', 'position', 'planning', 'storage'];
 const secondary = {transactions:['transactions', 'reconciliation']};
 // Retired page names that still resolve, so saved links and history keep working.
 // #review opens Activity with the Needs review filter on; #holdings opens an

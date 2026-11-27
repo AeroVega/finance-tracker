@@ -103,10 +103,10 @@ function estimateFor({key, spent, day, month, coverage, history}) {
   if (history.ok) {
     const after = history.months.map(({month:past, days}) => spentAfter(days.get(key) ?? [], Math.min(day, daysIn(past))));
     return {amount:addExact(spent, averageOf(after, after.length)), method:'history',
-      note:`Estimate: spending so far plus what you usually spend after day ${day} (${history.months.length} months).`};
+      note:`Spending so far plus your usual spending after day ${day}, from the last ${history.months.length} months.`};
   }
   if (day < PACE_FIRST_DAY) return {amount:null, method:null, note:`No estimate before day ${PACE_FIRST_DAY} without three months of detail.`};
-  return {amount:scale(spent, daysIn(month), day), method:'pace', note:'Estimate from this month’s pace.'};
+  return {amount:scale(spent, daysIn(month), day), method:'pace', note:'Based on this month’s pace.'};
 }
 
 /** The three previous months, usable for the history-shaped estimate only if all qualify. */
@@ -142,8 +142,11 @@ export function suggestTargets({basis, reader, month, limit = 12}) {
   return {months:used.map(row => row.month), suggestions};
 }
 
-/** Budgets for one month across all accounts. `today` is the local calendar date. */
-export function buildBudgetReport({ledger, history, view, reader, month, today}) {
+/**
+ * Budgets for one month across all accounts. `today` is the local calendar date.
+ * Home's card passes `detail:false` to skip coverage, estimates and suggestions.
+ */
+export function buildBudgetReport({ledger, history, view, reader, month, today, detail = true}) {
   const basis = evidenceBasis({history, view:{scope:{accountId:''}, accounts:view.accounts}});
   const currentMonth = today.slice(0, 7);
   const timing = month === currentMonth ? 'current' : month < currentMonth ? 'past' : 'future';
@@ -156,7 +159,7 @@ export function buildBudgetReport({ledger, history, view, reader, month, today})
   if (data) for (const item of row.categories) spentBy.set(item.key, addExact(spentBy.get(item.key) ?? '0', item.spending));
   // Workbook and manual months report their own totals; import coverage does not apply to them.
   const summary = row !== null && [SOURCES.workbook, SOURCES.manual].includes(row.source);
-  const coverage = timing === 'future' || summary ? null : monthCoverage(ledger, month, {today, coverageReport:reader.coverage({month})});
+  const coverage = !detail || timing === 'future' || summary ? null : monthCoverage(ledger, month, {today, coverageReport:reader.coverage({month})});
   const day = coverage?.through ? Number(coverage.through.slice(8)) : null;
   let shape = null;
   if (timing === 'current' && targets.length && coverage?.complete) {
@@ -183,5 +186,5 @@ export function buildBudgetReport({ledger, history, view, reader, month, today})
     total:{target:rows.length ? targetTotal : null, budgetedSpending, spending:data ? row.spending : null,
       remaining:rows.length && budgetedSpending !== null ? subtractExact(targetTotal, budgetedSpending) : null},
     overCount:rows.filter(item => item.over).length,
-    suggestions:timing === 'past' ? null : suggestTargets({basis, reader, month})};
+    suggestions:!detail || timing === 'past' ? null : suggestTargets({basis, reader, month})};
 }

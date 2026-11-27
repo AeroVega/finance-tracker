@@ -17,6 +17,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
+// Planning renders with real DOM APIs this small DOM lacks. Its read models and
+// page have their own tests; the controller only needs the mount contract.
+const planningStub = () => ({refresh() {}, activate() {}, clear() {}, hasUnfinishedWork: () => false});
+
 // Execute the checked-in controller with a deliberately small DOM. Imports are
 // supplied explicitly: financial code stays real; browser/service seams vary.
 // This checks handlers, not layout, native browser permissions or live Google.
@@ -70,7 +74,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   } } };
   const document = { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body'),
     addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); } };
-  imports = {RELEASE_PROFILE,createLedger,FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, mountHistoricalMonthlySummaryWorkflow, mountHomeDashboard, currentMonth, isMonthPeriod, periodKind, stepPeriod, categoryLabel, categoryChoices, categoryIdFromText, ...accountHistory, ...accountsView, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
+  imports = {RELEASE_PROFILE,createLedger,FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, mountHistoricalMonthlySummaryWorkflow, mountHomeDashboard, mountPlanning: planningStub, currentMonth, isMonthPeriod, periodKind, stepPeriod, categoryLabel, categoryChoices, categoryIdFromText, ...accountHistory, ...accountsView, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
   const executable = script.replace(/^import \{([^}]+)\} from '[^']+';$/gm, (_, names) => {
     for (const name of names.split(',').map(name => name.trim())) assert.ok(name in imports, `Missing import ${name}`);
     return '';

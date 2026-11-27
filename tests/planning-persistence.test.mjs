@@ -95,3 +95,16 @@ for (const collision of ['eventId', 'commandId']) {
     assert.equal(validateLedger(session.validatedSnapshot()), true);
   });
 }
+
+test('several targets staged together are one undoable step', async () => {
+  const session = await setup(); session.preview(recipe.ledger);
+  const original = structuredClone(session.ledger);
+  session.recordPlanning([targetCommand('320.00'), targetCommand('80.00', 'dining'), targetCommand('60.00', 'transport')]);
+  assert.equal(session.ledger.planningEvents.length, 3);
+  assert.equal(session.stagedHistory.length, 1);
+  session.undoLastStagedChange();
+  assert.deepEqual(session.ledger, original);
+  // One invalid amount refuses the whole batch.
+  assert.throws(() => session.recordPlanning([targetCommand('320.00'), targetCommand('-1', 'dining')]), {code:'invalid-budget-target'});
+  assert.deepEqual(session.ledger, original);
+});
