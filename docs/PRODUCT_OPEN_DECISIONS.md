@@ -11,8 +11,8 @@ After the reporting, savings-rate, forecast, investment/debt, reliability, and r
 ## At a glance
 
 - **Owner review:** none open. The 9 entries in the three bundles were confirmed on 2026-11-27.
-- **Engineering proposals and research:** 3 work packages containing 12 detailed entries. The owner confirmed 15 more on 2026-11-27, and the fourth package (E4) is closed.
-- **Explicitly later work:** 5 groups containing 15 detailed entries.
+- **Engineering proposals and research:** 1 work package containing 1 detailed entry. The owner confirmed 26 on 2026-11-27 and moved 2 to later work.
+- **Explicitly later work:** 5 groups containing 17 detailed entries.
 - **Existing-policy change, only if requested:** 1 conditional entry, not a v1 release blocker.
 
 **Count basis:** The consolidation preserved 57 earlier unchecked entries as 59 entries by splitting investment performance and debt-payoff forecasting into current-release and later portions. Subsequent owner confirmations resolved Q8, Q15, Q37, Q38, Q39a, Q46b, and Q29, leaving 52 open entries. The owner confirmed 9 of them on 2026-11-27. Six remaining entries moved from owner review to engineering after their product rules were confirmed. Resolved IDs remain in the settled record. These are inventory-entry counts, not atomic subquestions or additional owner decisions. Cross-references do not count twice.
@@ -54,59 +54,32 @@ The unchecked entries for these IDs are removed from this register. Q9, Q10, Q12
 | Q4, Q42, Q43 | A manual balance has an amount and an as-of date that defaults to today. Its source is "manual entry". Only a new dated entry corrects it. Closing an account is explicit, with a closing date and a confirmation. History stays, and the account leaves the cash projection. A debt account has a name, institution, type (credit card, mortgage or auto loan), currency, balance and as-of date. |
 | Q6, Q7, Q22, Q56 | The dates in [Next steps](NEXT_STEPS.md#6-release-gate) are the plan of record. The release date moves before an acceptance item is dropped. Done means the Alpha journey passes and the six live items in goal 4 pass. The projection is accepted when its live synthetic run passes. There is no offline mode in v1.0.0: no offline reading, service worker or new IndexedDB cache. |
 
+## Third owner review, closed 2026-11-27
+
+**Owner-confirmed 2026-11-27:** The owner accepted engineering's proposed answer to each group below, except the first-run answer, which the owner replaced.
+
+| Entries | Decision |
+| --- | --- |
+| Q2 | **Owner's wording.** When the app opens and no Google Drive directory is loaded, the user can only open an existing directory, create a new empty directory, restore from a backup, or change app settings. Nothing else is offered until a directory is open. Q5 asks which settings. The current build also offers the invented-data preview on this screen and keeps restore under More, so both need to move or be removed. See [Next steps](NEXT_STEPS.md#1-close-the-scope-gaps-build). |
+| Q1, Q3 | The five-tab map and the Home and Planning layouts merged in PRs 62 to 69 are the v1.0.0 screens. Later changes are polish found in the iPhone and iPad pass. The budget view stays as built. |
+| Q17 | The one editable assumption is excluding a row from the projection average, with a reason, reversible. No editable window length and no per-category override. |
+| Q55 | Each quality finding links to the screen that fixes it (import, balance entry or review). A line on the finding says what the fix changes: the indicator, totals and the projection gate. No separate resolution screens. |
+| Q36 | Supported holdings are the ones Fidelity's export provides, with a dated value. A format not yet inspected is unsupported and shows as unavailable, never guessed. |
+| Q41 | An investment account's balance is its dated source total. Holdings that do not sum to it show a "holdings do not match balance" flag with the difference. The account total is never recomputed from holdings. |
+| Q45 | A card or loan balance comes from a dated snapshot. Purchases and payments reconcile against the change between two snapshots. A mismatch shows as an unexplained difference with no automatic adjustment. |
+| Q50 | Each of the four insights shows its inputs (the months and amounts compared), the rule that fired, and links to the supporting transactions. |
+| Q18, Q21 | The uncertainty cone and the forecast-accuracy comparison are later work. They need saved forecasts, which are deferred past v1.0.0. See L5. |
+
 ## Engineering proposals and research
 
 Prepare concrete designs, inspect source formats, and define tests. Escalate choices that change user-visible financial meaning, privacy, cost, data integrity, release scope, or an accepted contract. Inclusion here does not approve a design, notification, implementation, or a new release requirement.
 
 ### E1. Interface and review flows
 
-Propose screens, navigation/report destinations, default cards, transaction-type controls, settings, account lifecycle flows, and review interactions within the agreed scope.
-
 <details>
-<summary>6 remaining detailed entries</summary>
+<summary>1 remaining detailed entry</summary>
 
-- [ ] **Q1.** What detailed screen hierarchy, section contents, and navigation behavior implement the agreed Home / Activity / Accounts / Planning / More map? The precise report destinations, complete built-in transaction-type set, and detailed discovery controls remain open. The map does not make every eventual planning feature a v1.0.0 requirement.
-- [ ] **Q2.** What exact first-run screens, transitions, and recovery presentation implement those established states and safeguards?
-- [ ] **Q3.** Which exact default cards, report layouts, remaining period controls, and breakdowns implement the agreed Home content and reporting families? What budget visualization communicates the confirmed target, actual, remaining/over-target, and labeled month-end estimate? Apply the settled reporting-period decision; the examples do not settle a complete card inventory or every ready-made report.
-- [ ] **Q5.** What additional settings are required for v1.0.0, and how should advanced settings be organized?
-- [ ] **Q55.** What remaining resolution screens and actions are needed for each quality finding, and how should the user see its effect on indicators, scores, reports, and projections?
-- [ ] **Q17.** What assumption fields and editing controls implement the confirmed editable assumptions and recalculation after changes? Manual assumptions cannot bypass missing required coverage. See [Product §5.1][product-planning].
-
-</details>
-
-### E2. Inputs, reconciliation, and storage design
-
-Inspect provider formats and propose schema mappings, required debt fields, report/source-selection contracts, refund linkage, balance provenance, numerical reconciliation, and permitted local-cache behavior. Escalate changes to approved contracts before implementation.
-
-<details>
-<summary>3 remaining detailed entries</summary>
-
-- [ ] **Q36.** Which exact holdings schemas, original CSV mechanics, action semantics, and other initial-provider formats remain to be inspected and supported?
-- [ ] **Q41.** How do those components reconcile numerically to account balances and basic portfolio reporting, including incomplete holdings or activity?
-- [ ] **Q45.** How should purchases, statements, payments, and liability-balance snapshots reconcile, beyond those settled classifications?
-
-</details>
-
-### E3. Analysis, insights, and data-quality proposals
-
-Prepare report-reliability criteria, forecast-accountability and uncertainty proposals, initial insight candidates, evidence drill-downs, and stale-data/remediation thresholds. These are proposals to review, not automatically new v1 requirements or approved notifications.
-
-<details>
-<summary>3 remaining detailed entries</summary>
-
-- [ ] **Q18.** What statistical meaning and calibration should the uncertainty cone have when implemented? The intended widening-cone presentation is settled; the methodology is not.
-- [ ] **Q21.** Which error measures and presentation should compare retained forecasts with subsequent actual outcomes, including systematic over- or under-estimation?
-- [ ] **Q50.** What exact fields, calculations, and drill-downs implement that evidence standard for each chosen insight type?
-
-</details>
-
-### E4. Acceptance criteria and delivery plan
-
-The [four-step Alpha plan](NEXT_STEPS.md) now records dependencies and proposed completion checks against current implementation. Complete estimates, a realistic calendar and later Beta/release checks without treating this documentation as acceptance evidence. Preserve the confirmed release boundary and obtain the owner's evidence review and explicit release approval; preparation does not approve release.
-
-<details>
-<summary>3 remaining detailed entries</summary>
-
+- [ ] **Q5.** Which app settings are required for v1.0.0, and which of them must be reachable before a Drive directory is open (see the third review below)? Engineering proposes no new settings beyond those that exist.
 
 </details>
 
@@ -172,8 +145,10 @@ Explicitly deferred until its scoring method is defined. Useful v1 indicators re
 Advanced investment performance analysis is outside the v1 minimum, and the initial forecast output is cash balance. Retain later performance-method and debt-payoff questions without adding a release commitment.
 
 <details>
-<summary>2 preserved detailed entries</summary>
+<summary>4 preserved detailed entries</summary>
 
+- [ ] **Q18.** What statistical meaning and calibration should the uncertainty cone have when implemented? The intended widening-cone presentation is settled; the methodology is not.
+- [ ] **Q21.** Which error measures and presentation should compare retained forecasts with subsequent actual outcomes, including systematic over- or under-estimation?
 - [ ] **Q39b.** Which methodology, such as time-weighted or money-weighted return, should later performance analysis use?
 - [ ] **Q46a.** What debt-payoff projection should be considered later?
 

@@ -17,6 +17,7 @@ The [v1.0.0 scope table](PRODUCT_DEFINITION.md#minimum-coherent-v100-scope-owner
 - **Savings and net-worth reporting.** The scope requires savings reporting. No code computes the savings rate (income minus spending, divided by income; zero income shows not applicable). Home shows no net-worth figure by name. Confirm what the trend card plots. Net worth shows a total only when every account is fresh, otherwise a labelled subtotal.
 - **Custom date range.** Product § 6 settles an optional custom range next to Month, Year and Lifetime. The Home period bar has only those three.
 - **Data-quality indicators.** Stale balances, coverage gaps and reconciliation issues exist per account. Add one place on Home or More that lists them across accounts.
+- **No-directory start screen.** The owner decided on 2026-11-27 that, until a Drive directory is open, the app offers only: open an existing directory, create a new empty directory, restore from a backup, and app settings. Move restore out of More and settle the invented-data preview, which the owner has not addressed.
 - **Dashboard customization** is not a v1.0.0 requirement. Leave it out.
 
 ### 2. Owner decisions (done 2026-11-27, build what they change)
