@@ -11,7 +11,7 @@ After the reporting, savings-rate, forecast, investment/debt, reliability, and r
 ## At a glance
 
 - **Owner review:** none open. The 9 entries in the three bundles were confirmed on 2026-11-27.
-- **Engineering proposals and research:** 4 work packages containing 27 detailed entries.
+- **Engineering proposals and research:** 3 work packages containing 12 detailed entries. The owner confirmed 15 more on 2026-11-27, and the fourth package (E4) is closed.
 - **Explicitly later work:** 5 groups containing 15 detailed entries.
 - **Existing-policy change, only if requested:** 1 conditional entry, not a v1 release blocker.
 
@@ -43,6 +43,17 @@ This resolves those bounded implementation choices within Q9/Q10, Q35, Q4, Q13/Q
 
 The unchecked entries for these IDs are removed from this register. Q9, Q10, Q12, Q16 and Q19 still name open sub-details in [Product §4.4](PRODUCT_DEFINITION.md#44-financial-activity-and-reporting-semantics) and [Product §5.1](PRODUCT_DEFINITION.md#51-projections). The answers above govern v1.0.0 where they differ.
 
+## Second owner review, closed 2026-11-27
+
+**Owner-confirmed 2026-11-27:** The owner accepted engineering's proposed answer to each group below for v1.0.0. The entries leave the open list. Detail the answers do not cover, such as exact screens, goes to implementation within these rules.
+
+| Entries | Decision |
+| --- | --- |
+| Q47, Q48, Q49, Q51 | Insights has four types: a category's spending against its three-month average, the month's savings rate against the three-month average, an unusually large transaction (the projection's quarter-of-average rule), and cash-flow risk, shown only when the projection is available and a projected month-end balance is below zero. The page shows at most five findings, ranked by dollar impact. A finding dismissed with "Got it" does not return until it changes, and a Dismissed list restores it. Dismissals are append-only ledger records. Thresholds are fixed, not configurable. |
+| Q53, Q13, Q54, Q14 | A balance is stale after 35 days, per account. An import is stale when its coverage ended more than 35 days ago. There are no reminders or push notifications. Net worth shows a complete total only when every account has a dated balance inside 35 days. Otherwise it shows a labelled known subtotal and names the accounts that are missing or stale. |
+| Q4, Q42, Q43 | A manual balance has an amount and an as-of date that defaults to today. Its source is "manual entry". Only a new dated entry corrects it. Closing an account is explicit, with a closing date and a confirmation. History stays, and the account leaves the cash projection. A debt account has a name, institution, type (credit card, mortgage or auto loan), currency, balance and as-of date. |
+| Q6, Q7, Q22, Q56 | The dates in [Next steps](NEXT_STEPS.md#6-release-gate) are the plan of record. The release date moves before an acceptance item is dropped. Done means the Alpha journey passes and the six live items in goal 4 pass. The projection is accepted when its live synthetic run passes. There is no offline mode in v1.0.0: no offline reading, service worker or new IndexedDB cache. |
+
 ## Engineering proposals and research
 
 Prepare concrete designs, inspect source formats, and define tests. Escalate choices that change user-visible financial meaning, privacy, cost, data integrity, release scope, or an accepted contract. Inclusion here does not approve a design, notification, implementation, or a new release requirement.
@@ -52,14 +63,12 @@ Prepare concrete designs, inspect source formats, and define tests. Escalate cho
 Propose screens, navigation/report destinations, default cards, transaction-type controls, settings, account lifecycle flows, and review interactions within the agreed scope.
 
 <details>
-<summary>8 remaining detailed entries</summary>
+<summary>6 remaining detailed entries</summary>
 
 - [ ] **Q1.** What detailed screen hierarchy, section contents, and navigation behavior implement the agreed Home / Activity / Accounts / Planning / More map? The precise report destinations, complete built-in transaction-type set, and detailed discovery controls remain open. The map does not make every eventual planning feature a v1.0.0 requirement.
 - [ ] **Q2.** What exact first-run screens, transitions, and recovery presentation implement those established states and safeguards?
 - [ ] **Q3.** Which exact default cards, report layouts, remaining period controls, and breakdowns implement the agreed Home content and reporting families? What budget visualization communicates the confirmed target, actual, remaining/over-target, and labeled month-end estimate? Apply the settled reporting-period decision; the examples do not settle a complete card inventory or every ready-made report.
-- [ ] **Q4.** What should account creation, explicit closure, and manual balance-update screens and confirmation flows look like?
 - [ ] **Q5.** What additional settings are required for v1.0.0, and how should advanced settings be organized?
-- [ ] **Q49.** How should users dismiss, revisit, or mark an insight as understood?
 - [ ] **Q55.** What remaining resolution screens and actions are needed for each quality finding, and how should the user see its effect on indicators, scores, reports, and projections?
 - [ ] **Q17.** What assumption fields and editing controls implement the confirmed editable assumptions and recalculation after changes? Manual assumptions cannot bypass missing required coverage. See [Product §5.1][product-planning].
 
@@ -70,15 +79,11 @@ Propose screens, navigation/report destinations, default cards, transaction-type
 Inspect provider formats and propose schema mappings, required debt fields, report/source-selection contracts, refund linkage, balance provenance, numerical reconciliation, and permitted local-cache behavior. Escalate changes to approved contracts before implementation.
 
 <details>
-<summary>7 remaining detailed entries</summary>
+<summary>3 remaining detailed entries</summary>
 
 - [ ] **Q36.** Which exact holdings schemas, original CSV mechanics, action semantics, and other initial-provider formats remain to be inspected and supported?
 - [ ] **Q41.** How do those components reconcile numerically to account balances and basic portfolio reporting, including incomplete holdings or activity?
-- [ ] **Q43.** How should manual balance updates be dated and sourced?
 - [ ] **Q45.** How should purchases, statements, payments, and liability-balance snapshots reconcile, beyond those settled classifications?
-- [ ] **Q56.** Engineering must reconcile persistent offline-reading/cache behavior with §107's current restriction of IndexedDB to inventory and narrow recovery diagnostics before proposing that implementation. A change to the accepted storage contract requires explicit review; the product direction does not silently authorize it.
-- [ ] **Q14.** What exact ready-made reports, formulas, remaining period controls, and drill-downs implement the required income, spending, cash-flow, savings, and net-worth report families? Calendar-year annual views and optional custom ranges are settled in [Product §6][product-ux]. For overlapping history, what evidence and reconciliation criteria establish a complete month, and how should source selection work where workbook and transaction data have different scopes or levels of detail? Use transaction detail only for months reconciled as complete; otherwise retain workbook summaries and label coverage. Never double-count or assume unsupported per-account workbook detail. The selection principle is settled in [Product §11.1][product-migration]; its engineering contract remains open.
-- [ ] **Q42.** What fields are required for the confirmed initial credit-card, mortgage, and auto-loan scope with manual updates? Align the technical account-type representation with those product types; see [documented mismatches](#documentation-conflicts-and-existing-constraints).
 
 </details>
 
@@ -87,17 +92,11 @@ Inspect provider formats and propose schema mappings, required debt fields, repo
 Prepare report-reliability criteria, forecast-accountability and uncertainty proposals, initial insight candidates, evidence drill-downs, and stale-data/remediation thresholds. These are proposals to review, not automatically new v1 requirements or approved notifications.
 
 <details>
-<summary>9 remaining detailed entries</summary>
+<summary>3 remaining detailed entries</summary>
 
 - [ ] **Q18.** What statistical meaning and calibration should the uncertainty cone have when implemented? The intended widening-cone presentation is settled; the methodology is not.
 - [ ] **Q21.** Which error measures and presentation should compare retained forecasts with subsequent actual outcomes, including systematic over- or under-estimation?
-- [ ] **Q47.** Which specific insight types are reliable and useful enough for v1.0.0? Spending changes, savings pace, unusual activity, and cash-flow risk are examples, not a selected initial catalog.
-- [ ] **Q48.** How should findings be prioritized without repetitive or low-value observations?
 - [ ] **Q50.** What exact fields, calculations, and drill-downs implement that evidence standard for each chosen insight type?
-- [ ] **Q51.** Are user-configurable thresholds needed? The dedicated Insights experience and no-default-push-notification direction are already settled in [Product §§5.6 and 6][product-insights].
-- [ ] **Q53.** What stale-data thresholds, source-remediation actions, and any optional reminders are appropriate beyond that agreed presentation? Keep institution-source unavailability separate from the already-defined Drive failure behavior.
-- [ ] **Q13.** What report-specific engineering rules implement the confirmed known-amount, date, and coverage-warning behavior? If a missing value prevents a trustworthy complete total, show a clearly labeled known subtotal and withhold the complete total. Preserve stale-value qualifications; define exact reliability thresholds and estimate treatment without treating missing data as zero. See [Product §7][product-quality].
-- [ ] **Q54.** What detailed timeline presentation and reliability thresholds should govern coverage gaps and budget estimates? How should engineering implement the confirmed dated-value and coverage-warning rules when combining account data? Complete totals must be withheld when missing values prevent a trustworthy total, with known subtotals clearly labeled. Exact thresholds and treatment of other reports or projections remain to be specified alongside the settled budget and baseline-forecast gates. Storage-integrity failures already have fail-closed constraints under [database lifecycle §§39 to 42][database-integrity].
 
 </details>
 
@@ -108,9 +107,6 @@ The [four-step Alpha plan](NEXT_STEPS.md) now records dependencies and proposed 
 <details>
 <summary>3 remaining detailed entries</summary>
 
-- [ ] **Q6.** What additional measurable acceptance criteria demonstrate completion of the minimum v1.0.0 scope? Alpha checks are now mapped in [next steps](NEXT_STEPS.md); validate them during the relevant engineering review. Beta/integrated-release detail remains open. Reuse existing contracts rather than asking the owner to redefine them.
-- [ ] **Q7.** What dependency-aware schedule and sequencing complete Alpha, Beta, integration, and owner validation toward January 1, 2027? The milestone order and dependency rules are settled, but task estimates, dates, and critical dependencies are not. See [Roadmap sequencing][roadmap-sequencing].
-- [ ] **Q22.** What remaining acceptance criteria demonstrate a useful complete initial cash-balance projection under the confirmed averaging method, recalculation behavior, cash boundary, coverage gate, and three-month horizon? Later projection types need separate prioritization.
 
 </details>
 

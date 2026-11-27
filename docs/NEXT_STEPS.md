@@ -13,15 +13,15 @@ Checked against `main` at `f212f2a` on 2026-11-27. The target is 2027-01-01, fiv
 
 The [v1.0.0 scope table](PRODUCT_DEFINITION.md#minimum-coherent-v100-scope-owner-confirmed-2026-11-05) lists items that a search of `js/` and `index.html` does not find. Confirm each gap before building.
 
-- **Insights.** Product § 6 specifies a Home card that opens an Insights page. No code mentions insights. Build the limited version: evidence-based observations with a stated basis, each optional to act on.
-- **Savings and net-worth reporting.** The scope requires savings reporting. No code computes the savings rate (income minus spending, divided by income; zero income shows not applicable). Home shows no net-worth figure by name. Confirm what the trend card plots and add what is missing.
+- **Insights.** Product § 6 specifies a Home card that opens an Insights page. No code mentions insights. Build the four types the owner confirmed on 2026-11-27, with a five-finding cap and a Dismissed list. Dismissals are new append-only ledger records, so that PR is guarded code and the owner merges it. See [Open decisions](PRODUCT_OPEN_DECISIONS.md#second-owner-review-closed-2026-11-27).
+- **Savings and net-worth reporting.** The scope requires savings reporting. No code computes the savings rate (income minus spending, divided by income; zero income shows not applicable). Home shows no net-worth figure by name. Confirm what the trend card plots. Net worth shows a total only when every account is fresh, otherwise a labelled subtotal.
 - **Custom date range.** Product § 6 settles an optional custom range next to Month, Year and Lifetime. The Home period bar has only those three.
 - **Data-quality indicators.** Stale balances, coverage gaps and reconciliation issues exist per account. Add one place on Home or More that lists them across accounts.
 - **Dashboard customization** is not a v1.0.0 requirement. Leave it out.
 
 ### 2. Owner decisions (done 2026-11-27, build what they change)
 
-The owner confirmed Q9 to Q12, Q16, Q19, Q35, Q40 and Q44 on 2026-11-27. See [Open decisions](PRODUCT_OPEN_DECISIONS.md#owner-review-bundles-closed-2026-11-27). The remaining entries are engineering detail or later work. Defer any of them to 1.1.x by one recorded decision. Two answers need code:
+The owner confirmed Q9 to Q12, Q16, Q19, Q35, Q40 and Q44 on 2026-11-27. See [Open decisions](PRODUCT_OPEN_DECISIONS.md#owner-review-bundles-closed-2026-11-27). A second review the same day closed 15 more. The remaining entries are engineering detail or later work. Defer any of them to 1.1.x by one recorded decision. Two answers need code:
 
 - **Savings rate** (Q12): negative when spending exceeds income, not applicable at zero or negative income. Build it with goal 1.
 - **Projection wording** (Q16): the Planning intro text in `js/planning-page.mjs` must say the estimate is a flat three-month average that does not account for annual or seasonal bills. It now says each month looks like the average.
