@@ -93,7 +93,7 @@ System sans with a fixed scale of 12/14/16/18/22/28/30px, and tabular numerals f
 
 ## Components
 
-- Figures are a statement row of label, exact value and one qualifier. They are not a card grid. On phones, the value sits right-aligned in each row.
+- Figures are a statement row of label, exact value and one qualifier. They are not a card grid. At every width, the label and qualifier sit on the left and the value sits right-aligned in the same row.
 - Lists use hairline rows (recent activity, transactions under 1100px, accounts, review items, links). A table is used only for transactions on wide screens.
 - Disclosures are one level deep (`.disclosure`). Nested disclosures are avoided.
 - Panels (`--surface`) are used only for Home's side column, the account detail on wide screens, the connect panel and the correction form.
