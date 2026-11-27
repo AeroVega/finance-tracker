@@ -28,6 +28,7 @@ export function createWorkspacePages({document, window, onNavigate = () => {}, o
   function syncScope() {
     const info = pages[current];
     $('workspace-scope').hidden = !loaded || (!info.period && !info.date);
+    $('month-scope').hidden = !loaded || !info.period;
     $('no-ledger-notice').hidden = loaded || current === 'overview' || current === 'storage';
   }
   function apply(requested, {focus = true} = {}) {
@@ -61,7 +62,6 @@ export function createWorkspacePages({document, window, onNavigate = () => {}, o
     document.title = info.title + ' · Finance Tracker';
     $('activity-navigation').hidden = !secondary.transactions.includes(target);
     syncScope();
-    $('month-scope').hidden = !info.period;
     $('position-date-scope').hidden = !info.date;
     $('scope-period-title').hidden = Boolean(info.date);
     $('scope-position-title').hidden = !info.date;

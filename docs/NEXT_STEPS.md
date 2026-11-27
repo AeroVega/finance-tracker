@@ -11,9 +11,9 @@ This is the active priority queue. It grants no permission to merge, deploy or c
 2. **UX redesign, in slices** ([PR 62](https://github.com/AeroVega/finance-tracker/pull/62) is the first). Remaining slices:
    - Activity: type and category filters, sorting, inline review decisions, grouping by month. In progress on `t3/activity-filters-review`; see [Design § Activity](DESIGN.md#activity).
    - Accounts: per-account detail with balance history and coverage gaps. In progress on `t3/accounts-detail-ux`; see [Design § Accounts](DESIGN.md#accounts).
-   - Home: category breakdown, and period switching for year and lifetime.
+   - Home: category breakdown, and period switching for year and lifetime. In progress on `t3/home-dashboard-periods`; see [Design § Home](DESIGN.md#home). Dashboard customization follows in a later PR.
    - Planning, once budgets or a baseline projection exist.
-   - A physical iPhone and iPad pass: standalone launch, VoiceOver and keyboard.
+   - A physical iPhone and iPad pass: standalone launch and keyboard. VoiceOver is out of scope; see [Product § 3](PRODUCT_DEFINITION.md#3-intended-user-and-platforms).
 3. **Workbook history migration.** The owner resumed it on 2026-11-25. They will type the history in on the in-app History migration page; there is no converter. After the guarded PR merges and deploys, the owner migrates January 2023 onward year by year, then a later PR retires the page. Use invented values in CI. Never commit or upload the private workbook. Missing data stays unavailable, not zero.
 4. **Backup rehearsal.** Run the owner's 3-month encrypted backup and restore cadence, and watch the capacity triggers recorded in [Current state](CURRENT_STATE.md#acceptance-and-verification).
 

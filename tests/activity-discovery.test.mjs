@@ -181,3 +181,22 @@ test('opting in makes the staged category a rule for later imports; correct() de
   const declined = session.ledger.events.at(-1).prospectiveRule;
   assert.deepEqual([declined.version, declined.requested, declined.enabled], [2, false, false]);
 });
+
+test('category spending sums exactly to the month report, and a year view covers exactly its months', () => {
+  const reader = createWorkspaceViewReader(ledger);
+  const months = Array.from({length:12}, (_, i) => `2025-${String(i + 1).padStart(2, '0')}`);
+  let yearRows = 0;
+  for (const month of months) {
+    const report = reader.monthlyReport({month, currency:'USD'});
+    const categories = reader.spendingByCategory({month, currency:'USD'});
+    const total = categories.reduce((sum, item) => sum + cents(item.spending), 0);
+    assert.equal(total, report.spending === null ? 0 : cents(report.spending), `${month} categories account for all spending`);
+    assert.ok(categories.every(item => typeof item.categoryId === 'string' && item.count > 0));
+    yearRows += reader.view({month, limit:1000}).filteredCount;
+  }
+  const year = reader.view({month:'2025', limit:1000});
+  assert.equal(year.filteredCount, yearRows, 'no month is dropped or counted twice');
+  assert.deepEqual([year.scope.start, year.scope.end], ['2025-01-01', '2025-12-31']);
+  assert.equal(year.groups.length, 12, 'Activity keeps month sections inside a year');
+  assert.throws(() => reader.view({month:'25'}), /invalid-workspace-month/);
+});

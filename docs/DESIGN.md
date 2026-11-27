@@ -2,7 +2,7 @@
 
 **Status:** Shell and Home merged to `main` in [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). See [CURRENT_STATE.md](CURRENT_STATE.md) for acceptance and deployment evidence.
 
-This is the working reference for the main app's look and layout: [index.html](../index.html), [canonical-workspace.css](../canonical-workspace.css), and the presentation code in [canonical-workspace.mjs](../js/canonical-workspace.mjs), [workspace-pages.mjs](../js/workspace-pages.mjs) and [home-monthly-trend.mjs](../js/home-monthly-trend.mjs). Product scope stays in [PRODUCT_DEFINITION.md](PRODUCT_DEFINITION.md). The earlier [mobile UI design](MOBILE_UI_DESIGN.md) and [mobile workspace pages](MOBILE_WORKSPACE_PAGES.md) keep their rationale for the mounted-page architecture, which is unchanged.
+This is the working reference for the main app's look and layout: [index.html](../index.html), [canonical-workspace.css](../canonical-workspace.css), and the presentation code in [canonical-workspace.mjs](../js/canonical-workspace.mjs), [workspace-pages.mjs](../js/workspace-pages.mjs) , [home-dashboard.mjs](../js/home-dashboard.mjs) and [home-period-report.mjs](../js/home-period-report.mjs). Product scope stays in [PRODUCT_DEFINITION.md](PRODUCT_DEFINITION.md). The earlier [mobile UI design](MOBILE_UI_DESIGN.md) and [mobile workspace pages](MOBILE_WORKSPACE_PAGES.md) keep their rationale for the mounted-page architecture, which is unchanged.
 
 ## Direction
 
@@ -12,7 +12,7 @@ A calm, information-dense dark finance app (owner choice, 2026-11-24). The scree
 
 | Tab | Route(s) | Holds |
 | --- | --- | --- |
-| Home | `#overview`, `#import` | Period, money in and out, needs attention, Import, six-month trend, recent activity |
+| Home | `#overview`, `#import` | Period bar, money in and out, spending by category, needs attention, Import, trend, recent activity |
 | Activity | `#transactions`, `#reconciliation`, `#activity-detail` | Search, filters, sort and month sections; Needs review with inline decisions and imported rows awaiting a decision; month reconciliation; transaction detail |
 | Accounts | `#position`, `#account` | Accounts grouped by institution with 12 months of coverage each; one account's dated balances, coverage gaps, holdings and evidence editors |
 | More | `#storage`, `#migration` | Session and save actions, connect panel once something is open, historical summaries, backup and restore, recovery and diagnostics, sample data, build identity. The temporary History migration page sits under More and is linked from Home's Needs attention list until every month is saved. |
@@ -58,9 +58,17 @@ Accounts is an Operate surface whose first job is checking that every account's 
 
 Disabled actions keep their reason beside them. Actions that cannot apply in the current mode are hidden, for example Release without a session.
 
-## Home trend
+## Home
 
-[home-monthly-trend.mjs](../js/home-monthly-trend.mjs) (data rules from draft PR 59) shows six calendar months, ending with the latest month that has evidence. It uses reconciled or workbook monthly history when available, otherwise known transaction subtotals from the existing canonical report. Each month is labelled **Reconciled**, **Reported**, **Manual**, **Partial**, **No data** or **Not comparable**. Gaps are never drawn as zero, and currencies are never combined. Selecting a column shows exact amounts and its source, and offers to open that month in Activity. No chart library is used.
+Home answers "how much came in and went out, and what needs me?" for one period (owner decisions, 2026-11-26). The read model is [home-period-report.mjs](../js/home-period-report.mjs) and the presentation is [home-dashboard.mjs](../js/home-dashboard.mjs). Customizing the layout is deferred.
+
+- **Period bar.** A Month, Year and Lifetime switch with previous and next arrows, shared by Home, Activity and Reconcile. The account picker sits beside it. A ledger opens on the current calendar month, even when that month has no data yet. The arrows reach from the first month with evidence to the later of today and the last evidence. Month remembers the last month chosen in a year. The hidden `#month-filter` select stores the period: an empty value is Lifetime, `YYYY` a calendar year and `YYYY-MM` a month. Reconcile and account-month coverage need a single month and say so otherwise.
+- **One source per month.** A history month uses reconciled transaction detail when its review holds, otherwise the workbook or manual summary. A month with no history summary uses imported activity, labelled **Partial**. This replaced the earlier trend rule that left post-history months blank. Year and Lifetime sum these months, and a gap is never summed as zero. Currencies are never combined: a mixed-currency scope shows each currency's known totals and asks for one account before drawing categories or the trend.
+- **Layout.** A two-column bento from 1000px, the breakpoint the shell has used since PR 62, so iPad portrait (820px) shows one column: money in and out, categories and recent activity in the wide column; Needs attention, Import and the trend in the narrow one. Phones show one column: figures, Needs attention, categories, trend, Import, recent activity.
+- **Figures.** Money in, Money out and Cash movement, each with one qualifier: the change against the previous month, or against the same data months a year earlier. A comparison appears only when every matching month has data; otherwise the qualifier says which period has gaps. Lifetime has no comparison. Cash movement counts imported months only and says so when workbook months have no cash detail. The block meta names the period, the account and how many months each source supplied. An empty month replaces the figures with "Nothing recorded for November 2026 yet. That is missing data, not $0." and a button to the latest earlier month with data.
+- **Spending by category.** A donut with the total in the centre, beside a ranked legend of name, exact amount and share. Workbook and app categories with the same name, ignoring case, merge into one row. Workbook spending without a category is **Not broken down**, and imported spending without one is **No category**. Both are hatched, never a hue. Categories under 3% fold into one expandable **Smaller categories** row, so no target is too small to tap. Selecting a row or slice inspects it in place: amount, share, transaction count, workbook months and the change against the comparison period. **Show … in Activity** then opens Activity filtered to that category for the same account and period. A category from workbook months only has no Activity link. A category whose refunds exceed its spending is listed under the legend with no slice.
+- **Category colour.** The six largest lifetime categories keep the slots `--cat-1` to `--cat-6` in every period; every other category uses `--cat-0`. Slices are drawn in slot order with 2px gaps, so neighbours keep the validated contrast.
+- **Trend.** Six months ending at the chosen month, that year's months for a year, or one column per year for Lifetime. Columns are labelled **Reconciled**, **Reported**, **Manual**, **Partial**, **No data** or **Not comparable**; year columns say **Full** or how many months have data. Twelve narrow columns draw a gap as the missing-data hatch and keep their source in the accessible name and readout only. Selecting a column shows exact amounts and its source. A month column then offers to open it in Activity, and a year column offers to show that year. No chart library is used.
 
 ## Tokens
 
@@ -73,6 +81,7 @@ Defined once on `.canonical-workspace` in `canonical-workspace.css`; the app no 
 - **Accent:** mint `#8fdccb` with ink `#06261f`. It marks the primary action, focus and the current place, never decoration.
 - **Status:** warning `#f0c56f`, danger `#f4a3b0`, success `#85dcb6`. Each is always paired with words.
 - **Chart series:** in `#28a28d`, out `#9079e4`. Validated with the dataviz palette checker for lightness, chroma, colorblind separation and contrast on the page and surface colors.
+- **Categories:** `#338ced`, `#e76624`, `#00a888`, `#d28e05`, `#e24d8b`, `#9887ef` in that slot order, plus `#6b7d8a` for every other category. The six pass the dataviz checker as adjacent pairs on the surface color; any two may meet in a donut, so slices keep 2px gaps and the legend carries every name.
 
 ## Typography
 
@@ -84,7 +93,7 @@ System sans with a fixed scale of 12/14/16/18/22/28/30px, and tabular numerals f
 
 ## Components
 
-- Figures are a statement row of label, exact value and one qualifier. They are not a card grid. On phones, the value sits right-aligned in each row.
+- Figures are a statement row of label, exact value and one qualifier. They are not a card grid. At every width, the label and qualifier sit on the left and the value sits right-aligned in the same row.
 - Lists use hairline rows (recent activity, transactions under 1100px, accounts, review items, links). A table is used only for transactions on wide screens.
 - Disclosures are one level deep (`.disclosure`). Nested disclosures are avoided.
 - Panels (`--surface`) are used only for Home's side column, the account detail on wide screens, the connect panel and the correction form.
@@ -94,4 +103,4 @@ System sans with a fixed scale of 12/14/16/18/22/28/30px, and tabular numerals f
 
 Touch targets are at least 44px, apart from the 40px transaction row button, whose whole row is also tappable. Focus is a 2px mint outline. Escape closes transaction detail. The trend columns are buttons with full accessible names. Decorative separators are hidden from assistive tech. With reduced motion, the busy-status pulse stops. In forced-colors mode, chart bars fall back to system colors.
 
-**Verified in Chromium:** 320, 390, 820, 844×390, 1440px and 200% text, all without horizontal overflow. **Unverified:** physical iPhone/iPad Safari, VoiceOver, installed Home Screen launch and on-screen keyboard behavior.
+**Verified in Chromium:** 320, 390, 820, 844×390, 1440px and 200% text, all without horizontal overflow. **Unverified:** physical iPhone/iPad Safari, installed Home Screen launch and on-screen keyboard behavior. VoiceOver is out of scope; see [Product § 3](PRODUCT_DEFINITION.md#3-intended-user-and-platforms).

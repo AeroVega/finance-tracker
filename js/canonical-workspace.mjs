@@ -16,7 +16,8 @@ import { leaveBreadcrumb, registerContextProvider, recentReports } from './error
 import { installDiagnosticSelfTest } from './diagnostic-selftest.mjs';
 import { mountProviderImportWorkflow } from './provider-csv-import-workflow.mjs';
 import { mountHistoricalMonthlySummaryWorkflow } from './historical-monthly-summary-workflow.mjs';
-import { mountHomeMonthlyTrend } from './home-monthly-trend.mjs';
+import { mountHomeDashboard } from './home-dashboard.mjs';
+import { currentMonth, isMonthPeriod, periodKind, stepPeriod } from './home-period-report.mjs';
 import { buildCoverageHistory, balanceObservations, institutionCoverage, mostUrgentMonth, monthEnd } from './account-history.mjs';
 import { INSTITUTIONS, ACCOUNT_TYPES, COVERAGE_STATES, COVERAGE_REASONS, POSITION_REASONS, freshness, coverageCounts, miniStrip, coverageStrip, markSelected, observationPlot, markColumn, stripLabels, dateLabel, dayLabel, monthLong } from './accounts-view.mjs';
 
@@ -74,11 +75,50 @@ function chevron() {
   return svg;
 }
 let freshYearLedger = null;
-const homeTrend = mountHomeMonthlyTrend({context:$('home-trend-context'), months:$('home-trend-months'), readout:$('home-trend-readout'), node, money, monthLabel, shortMonth,
-  onOpenMonth: month => {
-    if (busy || !session.ledger || !Array.from($('month-filter').children).some(option => option.value === month)) return;
-    $('month-filter').value = month; page = 0; render(); pages.go('transactions');
+// The period is the #month-filter value: '' lifetime, 'YYYY' a year, 'YYYY-MM' a month.
+// The period bar and Home's links change it only through choosePeriod.
+const periodLabel = period => periodKind(period) === 'month' ? monthLabel(period) : period || 'Lifetime';
+let lastMonth = null;
+function ensurePeriodOption(period) {
+  if (period && !Array.from($('month-filter').children).some(option => option.value === period)) {
+    const option = node('option', periodLabel(period)); option.value = period; $('month-filter').append(option);
+  }
+}
+function choosePeriod(period, destination = null) {
+  if (busy || !session.ledger) return false;
+  const prior = $('month-filter').value;
+  if (period !== prior) {
+    ensurePeriodOption(period); $('month-filter').value = period;
+    if (!changeReconciliationScope('month-filter', prior)) return false;
+    updateStatementEditor(); page = 0; listLimit = PAGE_ROWS; render();
+  }
+  if (destination) pages.go(destination);
+  return true;
+}
+const homeDashboard = mountHomeDashboard({document, $, node, money, monthLabel, shortMonth,
+  onChoosePeriod: period => choosePeriod(period),
+  onOpenMonth: month => choosePeriod(month, 'transactions'),
+  // The category filter in Activity, for the same account and period.
+  onOpenCategory: categoryId => {
+    if (busy || !session.ledger) return;
+    resetActivityFilters(); activityFilters.categories.add(categoryId);
+    page = 0; listLimit = PAGE_ROWS; render(); pages.go('transactions');
   }});
+$('period-month').addEventListener('click', () => {
+  const period = $('month-filter').value, today = currentMonth();
+  if (periodKind(period) === 'month') return;
+  const year = periodKind(period) === 'year' ? period : (lastMonth ?? today).slice(0, 4);
+  choosePeriod(lastMonth?.startsWith(year + '-') ? lastMonth : year === today.slice(0, 4) ? today : `${year}-12`);
+});
+$('period-year').addEventListener('click', () => {
+  const period = $('month-filter').value;
+  if (periodKind(period) !== 'year') choosePeriod((periodKind(period) === 'month' ? period : lastMonth ?? currentMonth()).slice(0, 4));
+});
+$('period-lifetime').addEventListener('click', () => choosePeriod(''));
+for (const [id, direction] of [['period-prev', -1], ['period-next', 1]]) $(id).addEventListener('click', () => {
+  const next = homeDashboard.bounds && stepPeriod($('month-filter').value, direction, homeDashboard.bounds);
+  if (next) choosePeriod(next);
+});
 // The connect panel lives on Home until something is open, then in More, so
 // Open and Reconnect never disappear while a ledger is loaded.
 let entrySlot = 'home-connect';
@@ -259,7 +299,7 @@ function refresh() {
   $('stage-holdings').disabled = !editable || !$('holdings-account').value || !$('holdings-date').value || !$('holdings-source').value.trim();
   $('stage-closure').disabled = !editable || !$('closure-anchor').value || !$('closure-source').value.trim();
   $('stage-balance').disabled = !editable || !$('balance-account').value || !$('balance-date').value || !$('balance-amount').value.trim() || !$('balance-source').value.trim();
-  $('stage-reconciliation').disabled = !editable || !$('month-filter').value || !$('reconcile-opening').value || !$('reconcile-closing').value || !$('reconcile-source').value.trim();
+  $('stage-reconciliation').disabled = !editable || !isMonthPeriod($('month-filter').value) || !$('reconcile-opening').value || !$('reconcile-closing').value || !$('reconcile-source').value.trim();
   $('preview-year').disabled = busy || Boolean(lifecycle) || privateClass;
   $('save-preview').disabled = busy || !configured || navigator.onLine === false || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.backupPreview || session.unverified;
   $('save-preview').textContent = session.mode === 'preview' ? 'Save this preview to a new folder' : 'Save this preview to a new folder';
@@ -296,6 +336,9 @@ function refresh() {
   $('transactions').setAttribute('aria-busy', String(busy));
   for (const id of ['account-filter', 'month-filter', 'transaction-search', 'review-only', 'pending-only', 'activity-sort', 'open-filters', 'type-facet-toggle', 'category-facet-toggle', 'show-more', 'clear-activity-filters', 'clear-sheet-filters']) $(id).disabled = busy || !session.ledger;
   for (const input of facetInputs()) input.disabled = busy || !session.ledger;
+  for (const id of ['period-month', 'period-year', 'period-lifetime']) $(id).disabled = busy || !session.ledger;
+  // The dashboard marks an arrow at the first or last reachable period as an edge.
+  for (const id of ['period-prev', 'period-next']) $(id).disabled = busy || !session.ledger || $(id).dataset.edge !== 'false';
   for (const id of ['correction-type', 'classification', 'category', 'category-rule', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
   const postingCorrection = $('correction-type').value === 'posting-status-correction';
   $('posting-date').disabled = !editable || !postingCorrection || $('posting-status').value !== 'posted';
@@ -430,7 +473,7 @@ function addOptions(select, options, selected, first) {
 // verified closure. This is not a claim of browser/OS memory zeroization.
 function clearLoadedWorkspace() {
   historicalSummaryWorkflow?.reset();
-  homeTrend.clear();
+  homeDashboard.clear(); lastMonth = null;
   cancelSearch();
   view = null; viewLedger = null; viewReader = null; homeView = null; positionRender = null;
   renderedPositionDate = null; selectedActivity = null; detailEditorBaseline = null; detailActivity = null;
@@ -468,7 +511,10 @@ function render({ reset = false } = {}) {
     $('statement-full-month').checked = false; componentRows.length = 0; holdingRows.length = 0;
     $('component-rows').replaceChildren(); $('holdings-rows').replaceChildren();
     for (const id of ['holdings-source','holdings-date','reconcile-source','balance-source','balance-date','balance-amount','closure-source','new-account-name']) $(id).value = '';
-    page = 0; selectedActivity = null; detailEditorBaseline = null; detailActivity = null; $('transaction-search').value = ''; resetActivityFilters(); $('account-filter').value = ''; $('month-filter').value = ''; $('activity-detail').hidden = true; pages.clearDetail(); }
+    page = 0; selectedActivity = null; detailEditorBaseline = null; detailActivity = null; $('transaction-search').value = ''; resetActivityFilters(); $('account-filter').value = '';
+    // Home opens on the current calendar month, even before it has data.
+    lastMonth = currentMonth(); ensurePeriodOption(lastMonth); $('month-filter').value = lastMonth;
+    $('activity-detail').hidden = true; pages.clearDetail(); }
   if (viewLedger !== session.ledger) {
     const reader = createWorkspaceViewReader(session.ledger, {monthlyIndex:session.store?.monthIndex});
     viewReader = reader; viewLedger = session.ledger; homeView = null;
@@ -478,29 +524,19 @@ function render({ reset = false } = {}) {
     categories: [...activityFilters.categories], sort: $('activity-sort').value || 'newest', limit: listLimit });
   page = view.page;
   addOptions($('account-filter'), view.accounts.map(a => [a.accountId, a.displayName]), view.scope.accountId, 'All accounts');
-  const months = view.scope.month && !view.months.includes(view.scope.month) ? [view.scope.month, ...view.months] : view.months;
-  addOptions($('month-filter'), months.map(month => [month, monthLabel(month)]), view.scope.month, 'Full saved period');
-  $('summary-scope').textContent = `${view.scope.start || 'No start date'} to ${view.scope.end || 'No end date'} · ${view.scope.accountId ? view.accounts.find(a => a.accountId === view.scope.accountId)?.displayName : 'All accounts'}`;
+  if (isMonthPeriod(view.scope.month)) lastMonth = view.scope.month;
+  // The select only stores the period; the period bar is its visible control.
+  const periods = view.scope.month && !view.months.includes(view.scope.month) ? [view.scope.month, ...view.months] : view.months;
+  addOptions($('month-filter'), periods.map(period => [period, periodLabel(period)]), view.scope.month, 'Lifetime');
   $('qualification').textContent = view.qualifications.join(' ');
-  $('summary-cards').replaceChildren();
-  const summaries = view.summary.length ? view.summary : [{ currency: 'USD', income: null, spending: null, cash: null }];
-  for (const summary of summaries) {
-    const available = view.summaryAvailability?.[summary.currency];
-    for (const [key, heading, note] of [['income', 'Known income', 'Posted and classified records only'], ['spending', 'Known spending', 'Refunds count in their posting period'], ['cash', 'Known cash movement', 'Checking and savings only, not a balance.']]) {
-      const card = node('article', undefined, 'metric-card');
-      const value = available && available[key + 'Available'] === false ? null : summary[key];
-      card.append(node('p', `${heading} · ${summary.currency}`, 'metric-label'), node('p', money(value, summary.currency), 'metric-value'), node('p', note, 'metric-note'));
-      $('summary-cards').append(card);
-    }
-  }
-  $('coverage-summary').textContent = `${view.coverage.importCount} import runs. Latest activity: ${view.coverage.latestActivityDate || 'unavailable'}. Imported dates alone do not prove complete history.`;
+  $('coverage-summary').textContent = `${view.coverage.importCount} import runs cover this period. Latest imported activity, any period: ${view.coverage.latestActivityDate || 'unavailable'}. Imported dates alone do not prove complete history.`;
   // Home uses account/month scope, independently of the Activity search,
   // review filter and page. Retain only the current Home scope so its read does
   // not evict the Activity reader's latest filtered result on every render.
   if (!homeView || homeView.scope.accountId !== view.scope.accountId || homeView.scope.month !== view.scope.month) {
     homeView = viewReader.view({accountId:view.scope.accountId, month:view.scope.month, pageSize:4});
   }
-  homeTrend.refresh(session.ledger, viewReader, homeView);
+  homeDashboard.refresh(session.ledger, viewReader, view);
   const recent = homeView;
   homeButtons.clear(); $('recent-activities').replaceChildren();
   for (const row of recent.rows) {
@@ -533,7 +569,7 @@ function render({ reset = false } = {}) {
   }
   renderPosition();
   const accountTitle = view.scope.accountId ? view.accounts.find(account => account.accountId === view.scope.accountId)?.displayName : 'All accounts';
-  $('scope-period-title').textContent = `${accountTitle} · ${view.scope.month ? monthLabel(view.scope.month) : 'Full saved period'}`;
+  $('scope-period-title').textContent = accountTitle;
   $('scope-position-title').textContent = `${accountTitle} · As of ${$('position-date').value}`;
   refresh();
   applyQuickFocus();
@@ -570,7 +606,7 @@ function statementMethod() {
 }
 function updateStatementEditor() {
   $('statement-components-panel').hidden = !statementMethod();
-  const month = $('month-filter').value;
+  const month = isMonthPeriod($('month-filter').value) ? $('month-filter').value : '';
   $('statement-coverage-period').textContent = month ? `Complete statement declaration applies only to ${month}, for the selected account.` : 'Select an activity month above. No coverage can be declared without a month.';
 }
 function resolveHoldings(card, account) {
@@ -595,7 +631,7 @@ function balanceEvents(accountId) {
   return (session.ledger.positionEvents || []).filter(event => event.eventType === 'balance-snapshot' && event.accountId === accountId);
 }
 function populateAnchors() {
-  const month = $('month-filter').value;
+  const month = isMonthPeriod($('month-filter').value) ? $('month-filter').value : '';
   const events = balanceEvents($('reconcile-account').value);
   let opening, closing;
   if (month && isCalendarDate(month + '-01')) {
@@ -701,7 +737,7 @@ function renderPosition() {
   for (const id of ['balance-account', 'holdings-account', 'reconcile-account']) editorAccounts.set(id, $(id).value);
   populateAnchors(); updateStatementEditor();
   $('position-coverage').replaceChildren();
-  if (view.scope.month) {
+  if (isMonthPeriod(view.scope.month)) {
     const coverage = viewReader.coverage({month:view.scope.month, accountId:view.scope.accountId});
     $('position-coverage-help').textContent = `${view.scope.month}: ${coverage.complete ? 'Reconciled complete for selected scope.' : 'Not reconciled complete for selected scope.'} Declared imports alone are insufficient.`;
     for (const item of coverage.accounts) {
@@ -709,7 +745,7 @@ function renderPosition() {
       card.append(node('h4', session.ledger.accounts.find(account => account.accountId === item.accountId)?.displayName || item.accountId), node('p', `${label(item.state)} · Declared: ${item.declared ? 'yes' : 'no'} · Observed: ${item.observed ? 'yes' : 'no'}`), node('p', `Opening balance: ${item.openingBalanceEventId ? 'selected' : 'missing'} · Closing balance: ${item.closingBalanceEventId ? 'selected' : 'missing'} · Difference: ${item.discrepancy ?? 'unavailable'}`), node('p', item.reasons.map(label).join('; ')), evidenceDetails('Inspect reconciliation evidence', () => item));
       $('position-coverage').append(card);
     }
-  } else $('position-coverage-help').textContent = 'Select an activity month above to inspect account-month coverage. Declared imports alone do not prove completeness.';
+  } else $('position-coverage-help').textContent = 'Choose a single month in the period bar to inspect account-month coverage. Declared imports alone do not prove completeness.';
   renderAccountPane();
 }
 // Unfinished evidence belongs to the account it was typed for.

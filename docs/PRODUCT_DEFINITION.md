@@ -74,6 +74,7 @@ v1.0.0 is the first complete release of this product direction, not the end of d
 - **Tablet:** iPad-friendly, using the additional space for dashboards, charts, comparisons, and detail.
 - **Desktop:** fully capable for all core features, not a crippled companion.
 - **Accessibility readiness:** use scalable layouts and typography, semantic structure, and avoid color-only communication or hardcoded assumptions that would make future accessibility work require architectural rework. Comprehensive accessibility implementation can be phased; do not introduce barriers now.
+- **VoiceOver: out of scope.** The owner decided on 2026-11-26 that VoiceOver integration is out of scope for this project. Do not test, tune or claim VoiceOver behavior. Semantic markup, control labels and keyboard access stay, because the readiness rule above still applies.
 
 ## 4. Core financial model and organization
 
