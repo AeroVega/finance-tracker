@@ -1,6 +1,6 @@
 # Current project state
 
-**Checked:** 2026-11-26
+**Checked:** 2026-11-27
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
 
 This is the one place for mutable project status and the permission boundary. Other documents link here instead of copying it. [Project history](PROJECT_STATUS.md) holds the dated timeline.
@@ -35,7 +35,7 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - **Older layouts** (per-record, grouped, fragmented, partitioned) are unsupported. They are not converted, overwritten or deleted. Their code and exclusive tests are removed; see [retired storage designs](archive/RETIRED_STORAGE_DESIGNS.md).
 - **Limits:** snapshot 8 MiB, envelope/manifest 16 KiB, history 10,000 commits. Full-history cost grows with retained snapshots. These are not whole-database memory or Safari capacity claims. There is no compare-and-swap guarantee.
 - **Contracts:** [full-snapshot storage](FULL_SNAPSHOT_STORAGE.md) and [backup and recovery](FULL_SNAPSHOT_BACKUP_RECOVERY.md).
-- **Open and save speed** (owner request, 2026-11-26) is on `t3/optimize-drive-load-save`, live synthetic run confirmed 2026-11-27. Independent verification reads run together, and repeated checks are removed. No check is dropped. An admitted Open audits history while it claims the session. Backup and restore are unchanged. See [overlapped verification reads](FULL_SNAPSHOT_STORAGE.md#overlapped-verification-reads-2026-11-26).
+- **Open and save speed** (owner request, 2026-11-26) merged in [PR 70](https://github.com/AeroVega/finance-tracker/pull/70). A live synthetic run was confirmed 2026-11-27. Independent verification reads run together, and repeated checks are removed. No check is dropped. An admitted Open audits history while it claims the session. Backup and restore are unchanged. See [overlapped verification reads](FULL_SNAPSHOT_STORAGE.md#overlapped-verification-reads-2026-11-26).
 
 ## Application features
 
@@ -46,7 +46,7 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - **Redesigned shell and Home** merged in [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md). Further UX slices are in [Next steps](NEXT_STEPS.md).
 - **Accounts redesign** (institution-grouped list, per-account detail with dots-only balance observations, a 12-month coverage strip and next steps for each gap; holdings folded into investment account detail) merged in [PR 65](https://github.com/AeroVega/finance-tracker/pull/65). It changes presentation and navigation only: position and coverage rules are unchanged. See [Design § Accounts](DESIGN.md#accounts).
 - **Home periods and categories** (a Month, Year and Lifetime period bar that opens on the current month, spending by category, a period-aware trend and a two-column layout) merged in [PR 68](https://github.com/AeroVega/finance-tracker/pull/68). Months after the workbook history now use imported activity labelled partial, and Year and Lifetime sum one source per month. Dashboard customization is deferred. See [Design § Home](DESIGN.md#home).
-- **Planning** (monthly category budgets and the baseline cash projection, a fifth Planning tab and a Home budget card) is in progress on `t3/planning-prerequisites`. It adds optional append-only `planningEvents` to the ledger, so the PR is guarded and the owner merges it. Neither a live Drive save nor a physical-device check has been run on it. The projection is not usable with real records until every checking and savings account has three reconciled months and the owner has confirmed the SoFi Checking and Savings import. See [Planning](PLANNING.md).
+- **Planning** (monthly category budgets and the baseline cash projection, a fifth Planning tab and a Home budget card) merged in [PR 69](https://github.com/AeroVega/finance-tracker/pull/69). It adds optional append-only `planningEvents` to the ledger. Neither a live Drive save nor a physical-device check has been run on it. The projection is not usable with real records until every checking and savings account has three reconciled months and the owner has confirmed the SoFi Checking and Savings import. See [Planning](PLANNING.md).
 - **VoiceOver** is out of scope, by the owner's 2026-11-26 decision. See [Product § 3](PRODUCT_DEFINITION.md#3-intended-user-and-platforms).
 - **Activity discovery** (type and category filters, sorting, month grouping, inline review decisions) merged in [PR 64](https://github.com/AeroVega/finance-tracker/pull/64). Reporting rules are unchanged. Following the owner's 2026-11-25 decision, category rules for later imports are opt-in and audit notes are suggested from templates; see [Product § 4.6](PRODUCT_DEFINITION.md#46-categories).
 

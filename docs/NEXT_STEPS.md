@@ -1,19 +1,68 @@
 # Next steps
 
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 **Release target:** v1.0.0 on 2027-01-01, conditional on all release gates. Defer the date rather than weaken a gate.
 
 This is the active priority queue. It grants no permission to merge, deploy or change production configuration. [Current state](CURRENT_STATE.md) owns authorization. The [product definition](PRODUCT_DEFINITION.md) owns the v1.0.0 scope.
 
-## Priorities
+## Goals to v1.0.0
 
-1. **Verify the deployed build.** After the Pages workflow runs, confirm the served source stamp, Google configuration and release profile before real records are entered. Record the result in the PR or thread; no per-build owner GO is required.
-2. **UX redesign, in slices** ([PR 62](https://github.com/AeroVega/finance-tracker/pull/62) is the first). Remaining slices:
-   - Activity, Accounts and Home merged in PRs 64, 65 and 68. Dashboard customization follows in a later PR.
-   - Planning: budgets, the baseline cash projection, the fifth tab and a Home card. In progress on `t3/planning-prerequisites`; see [Planning](PLANNING.md) and [Design § Planning](DESIGN.md#planning). The owner confirms the SoFi Checking and Savings import, save and reopen path on the deployed build before the projection is used with real records.
-   - A physical iPhone and iPad pass: standalone launch and keyboard. VoiceOver is out of scope; see [Product § 3](PRODUCT_DEFINITION.md#3-intended-user-and-platforms).
-3. **Workbook history migration.** The owner resumed it on 2026-11-25. They will type the history in on the in-app History migration page; there is no converter. After the guarded PR merges and deploys, the owner migrates January 2023 onward year by year, then a later PR retires the page. Use invented values in CI. Never commit or upload the private workbook. Missing data stays unavailable, not zero.
-4. **Backup rehearsal.** Run the owner's 3-month encrypted backup and restore cadence, and watch the capacity triggers recorded in [Current state](CURRENT_STATE.md#acceptance-and-verification).
+Checked against `main` at `f212f2a` on 2026-11-27. The target is 2027-01-01, five weeks out. The shell, Home, Activity, Accounts, Planning, storage, backup and the three provider imports are merged. What remains is a few missing scope items, owner decisions, owner-only data entry, live acceptance and release hardening.
+
+### 1. Close the scope gaps (build)
+
+The [v1.0.0 scope table](PRODUCT_DEFINITION.md#minimum-coherent-v100-scope-owner-confirmed-2026-11-05) lists items that a search of `js/` and `index.html` does not find. Confirm each gap before building.
+
+- **Insights.** Product § 6 specifies a Home card that opens an Insights page. No code mentions insights. Build the four types the owner confirmed on 2026-11-27, with a five-finding cap and a Dismissed list. Dismissals are new append-only ledger records, so that PR is guarded code and the owner merges it. See [Open decisions](PRODUCT_OPEN_DECISIONS.md#second-owner-review-closed-2026-11-27).
+- **Savings and net-worth reporting.** The scope requires savings reporting. No code computes the savings rate (income minus spending, divided by income; zero income shows not applicable). Home shows no net-worth figure by name. Confirm what the trend card plots. Net worth shows a total only when every account is fresh, otherwise a labelled subtotal.
+- **Custom date range.** Product § 6 settles an optional custom range next to Month, Year and Lifetime. The Home period bar has only those three.
+- **Data-quality indicators.** Stale balances, coverage gaps and reconciliation issues exist per account. Add one place on Home or More that lists them across accounts.
+- **No-directory start screen and folder-title data class.** Until a Drive directory is open, the app offers only: open an existing directory, create a new empty directory, restore from a backup, and app settings (owner, 2026-11-27). Remove the data-class selector and the separate invented-data preview. Choose the class from the Picker folder title after the metadata read and before any folder-content read: a title containing "synthetic" opens or creates a synthetic folder (creation seeds the invented 2025 year), and any other title is a production folder. The header check keeps refusing a class mismatch, so a real ledger in a folder titled "synthetic", or the reverse, is refused (`data-class-mismatch`). A title never authorizes a folder. This changes the session class selection, so the PR is guarded code. Update [Persistence data class](PERSISTENCE_DATA_CLASS.md), which says the class is chosen before connection. Settle which app settings show before a directory opens (Q5).
+- **Dashboard customization** is not a v1.0.0 requirement. Leave it out.
+
+### 2. Owner decisions (done 2026-11-27, build what they change)
+
+The owner closed every v1.0.0 product question on 2026-11-27 in four reviews, and deferred the 17 later-work entries. See [Open decisions](PRODUCT_OPEN_DECISIONS.md#owner-review-bundles-closed-2026-11-27). Three answers need code:
+
+- **Savings rate** (Q12): negative when spending exceeds income, not applicable at zero or negative income. Build it with goal 1.
+- **Projection wording** (Q16): the Planning intro text in `js/planning-page.mjs` must say the estimate is a flat three-month average that does not account for annual or seasonal bills. It now says each month looks like the average.
+- **Start screen and folder-title data class**: see goal 1.
+
+Engineering detail inside these answers, such as exact screens, does not return to the owner unless it changes a financial meaning.
+
+### 3. Migrate the workbook history (owner, rolling, done by 2026-12-18)
+
+The owner types January 2023 onward into the History migration page, one year at a time. This is the longest task and depends on no code. Run the first year now so any page defect surfaces in December, not January. A later PR retires the page after the last month is saved and backed up.
+
+### 4. Live acceptance on the deployed build (owner with agent support, by 2026-12-18)
+
+Each item below has Node or simulator evidence only. Record each on a named commit, separately from CI.
+
+1. SoFi Checking and Savings and Fidelity import, save and reopen. Only Wells Fargo is owner-confirmed. The Planning projection stays blocked until this passes.
+2. Planning: set a budget, exclude a row, save, reopen on a live Drive folder.
+3. History migration: save one year, reopen, check the Home trend against the typed values.
+4. Encrypted backup and restore into a new folder, then compare against the source.
+5. Physical iPhone and iPad pass over every tab: standalone launch, keyboard, safe areas, portrait and landscape.
+6. Check the served source stamp, Google configuration and release profile after the last deploy.
+
+### 5. Release hardening (agents, from 2026-12-04)
+
+- Empty, partial and failed states on every tab, with the first-run path from an empty private database to a first import.
+- Account for the 8 MiB snapshot limit against five years of history. Run the dense-ledger benchmark at three years of imports and compare with the capacity triggers in [Current state](CURRENT_STATE.md#acceptance-and-verification).
+- Stamp the build as 1.0.0, add a short user guide for the weekly check-in and import, and write release notes with the known limitations.
+- Documentation pass. [ROADMAP.md](ROADMAP.md) was last reconciled 2026-11-14. [PROJECT_STATUS.md](PROJECT_STATUS.md) predates the Home, Accounts and Planning merges. [PRODUCT_DEFINITION.md](PRODUCT_DEFINITION.md) is 56 KB and repeats decisions that also sit in the open-decisions file. Keep one statement of each.
+
+### 6. Release gate
+
+| Date | Milestone |
+| --- | --- |
+| 2026-12-04 | Gaps in goal 1 merged or cut. Goal 2 decisions recorded. First migration year saved. |
+| 2026-12-11 | Goal 4 items 1 to 4 accepted. Hardening PRs merged. |
+| 2026-12-18 | Feature freeze. Migration complete. Goal 4 items 5 and 6 on the release candidate. |
+| 2026-12-25 | Only blocking fixes. Owner reviews the evidence. |
+| 2027-01-01 | Tag v1.0.0, or move the date. Incorrect totals, data loss and privacy failures block the release. Documented cosmetic issues do not. |
+
+Run the 3-month encrypted backup and restore cadence from [Current state](CURRENT_STATE.md#acceptance-and-verification) once before the tag.
 
 ## Acceptance boundaries
 
