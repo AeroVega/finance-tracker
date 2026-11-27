@@ -13,10 +13,12 @@ for(const failure of ['first-read-rejection','invalidation','second-binding-chan
  try{
   await store.start({initialize:true});const ledger=replayFixture(1).ledger;await store.save(ledger);
   const candidate=applyFinancialEvent(ledger,{activityId:getEffectiveActivities(ledger)[0].activityId,type:'category-correction',categoryId:'invented-pair',commandId:'invented-pair-command',evidence:{rationale:'Invented concurrency test'}},{now:()=> '2026-11-17T00:00:00.000Z',idFactory:()=> 'f0110001-0000-4000-8000-000000000001'});
-  const mutations=http.mutations;let seen={},enteredResolve;const entered=new Promise(resolve=>{enteredResolve=resolve;});
+  // The fifth metadata read of each kind is its base witness in the closing
+  // check before the first publication: two base reads and two create reads precede it.
+  let mutations,seen={},enteredResolve;const entered=new Promise(resolve=>{enteredResolve=resolve;});
   http.beforeResponse=async({category,fileId,row})=>{
    if(category!=='metadata'||!['commit-record','snapshot-object'].includes(row.kind))return;
-   seen[row.kind]=(seen[row.kind]||0)+1;if(seen[row.kind]!==3)return;
+   seen[row.kind]=(seen[row.kind]||0)+1;if(seen[row.kind]!==5)return;mutations??=http.mutations;
    if(row.kind==='commit-record'&&failure==='first-read-rejection')throw Error('invented witness failure');
    if(row.kind==='snapshot-object'){
     enteredResolve();await gate;
@@ -41,7 +43,8 @@ test('both paired witnesses can settle version-only drift without concurrent con
   http.beforeResponse=async({category,fileId,row})=>{
    if(!['commit-record','snapshot-object'].includes(row.kind))return;
    if(category==='metadata'&&(seen[row.kind]=(seen[row.kind]||0)+1)===3){const m=http.files.get(fileId).metadata;m.version=String(BigInt(m.version)+1n);bumps++;}
-   if(category==='media'){peak=Math.max(peak,++active);await new Promise(resolve=>setTimeout(resolve,1));active--;}
+   // Only settling reads follow the bump; ordinary reads of different objects may overlap.
+   if(category==='media'&&bumps>0){peak=Math.max(peak,++active);await new Promise(resolve=>setTimeout(resolve,1));active--;}
   };
   assert.deepEqual(await store.save(ledger),ledger);assert.equal(bumps,2);assert.equal(peak,1);assert.equal(store.recoveryRequired,false);
  }finally{http.beforeResponse=null;http.reboot();await store.release().catch(()=>{});}

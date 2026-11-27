@@ -23,6 +23,13 @@ const PRODUCTION_PROFILE=Object.freeze({
  commitProfile:'canonical-ledger-production-v3',validateLedger:validateProductionLedger
 });
 const PROFILES=Object.freeze({synthetic:SYNTHETIC_PROFILE,production:PRODUCTION_PROFILE});
+// Read concurrency bounds. Closing checks read witness metadata in groups of
+// WITNESS_READS. A history audit holds at most SNAPSHOT_READS snapshots, read
+// or in flight, which bounds its memory to a few snapshots.
+const WITNESS_READS=8,SNAPSHOT_READS=2;
+// Settle every started request before judging any result, so no read outlives
+// the operation that issued it. The first rejection in argument order wins.
+const settled=async promises=>{const results=await Promise.allSettled(promises),failed=results.find(r=>r.status==='rejected');if(failed)throw failed.reason;return results.map(r=>r.value);};
 const profileFor=dataClass=>Object.hasOwn(PROFILES,dataClass)?PROFILES[dataClass]:fail('invalid-engine-config');
 const enc=new TextEncoder(),dec=new TextDecoder('utf-8',{fatal:true});
 const clone=x=>structuredClone(x),same=(a,b)=>canonicalizeJcs(a)===canonicalizeJcs(b);
@@ -104,7 +111,7 @@ class FullSnapshotStorage {
   this.coordinator=new SessionCoordinator({adapter:createDriveSessionAdapter({folderId,accessToken,fetchImpl,cryptoImpl})});
   this.adapter=new GoogleDriveTransactionAdapter({folderId,accessToken,fetchImpl,cryptoImpl,visibilityDelayMs,visibilityMaxDelayMs:visibilityDelayMs,
    responseLimits:{'snapshot-object':FULL_SNAPSHOT_LIMITS.snapshotBytes,'commit-record':FULL_SNAPSHOT_LIMITS.envelopeBytes,'stored-object':FULL_SNAPSHOT_LIMITS.manifestBytes,manifest:FULL_SNAPSHOT_LIMITS.manifestBytes},
-   captureMutationGuard:()=>this.#capture(),onExpiredMutation:()=>this.invalidate()});
+   captureMutationGuard:()=>this.#capture({write:true}),onExpiredMutation:()=>this.invalidate()});
  }
  get dataClass(){return this.#profile.class;}
  get saveAttempt(){return this.#saveAttempt?clone(this.#saveAttempt):null;}
@@ -117,14 +124,20 @@ class FullSnapshotStorage {
  get verifiedManifest(){return this.#baseline?clone(this.#assertBaseline().manifest):null;}
  assertVerifiedBaseline(expected){const record=this.#assertBaseline();if(!same(record.manifest,expected)||this.#assertBaseline()!==record)fail('verified-base-required');}
  invalidate(){this.#epoch=Object.freeze({});this.#baseline=null;}
- #capture(){const context=this.#context;return ()=>{if(!context||this.#context!==context||this.#epoch!==context.epoch||this.adapter!==context.adapter||this.coordinator!==context.coordinator||Object.getOwnPropertyDescriptor(this.adapter,'folderId')?.value!==this.folderId)fail('verification-scope-closed');context.transport();context.owner();context.transport();if(this.#context!==context||this.#epoch!==context.epoch||this.adapter!==context.adapter||this.coordinator!==context.coordinator)fail('verification-scope-closed');};}
+ // A read context opened before the session claim has no owner until #run
+ // adopts it. It permits reads only; a mutation guard refuses it.
+ #capture({write=false}={}){const context=this.#context;return ()=>{if(!context||this.#context!==context||this.#epoch!==context.epoch||this.adapter!==context.adapter||this.coordinator!==context.coordinator||Object.getOwnPropertyDescriptor(this.adapter,'folderId')?.value!==this.folderId)fail('verification-scope-closed');context.transport();if(context.owner)context.owner();else if(write)fail('verification-scope-closed');context.transport();if(this.#context!==context||this.#epoch!==context.epoch||this.adapter!==context.adapter||this.coordinator!==context.coordinator)fail('verification-scope-closed');};}
  async #digest(raw){return Array.from(new Uint8Array(await this.crypto.subtle.digest('SHA-256',raw)),x=>x.toString(16).padStart(2,'0')).join('');}
  async #owned(){const check=this.#capture();check();await this.coordinator.assertCanWrite({online:true});check();}
- async #run(operation){
+ #readContext(transport,controller){return {owner:null,controller,transport,adapter:this.adapter,coordinator:this.coordinator,epoch:this.#epoch,used:new Map(),revalidationBytes:0,revalidationReads:0,manifestRevalidationReads:0};}
+ // An early read context, still current, is adopted with its witnesses and budgets.
+ async #run(operation,early=null){
   this.adapter.assertMutationsSettled();if(this.#busy)fail('operation-in-progress');this.#busy=true;
   try{return await this.coordinator.withWrite(async()=>{
    const guard=createNativeOwnershipGuard(this.coordinator);if(!guard)fail('verification-scope-closed');
-   const owner=getNativeOwnershipCapability(guard).capture(),transport=getNativeDriveReadCheck(this.adapter);if(!transport)fail('verification-scope-closed');const context={owner,transport,adapter:this.adapter,coordinator:this.coordinator,epoch:this.#epoch,used:new Map(),revalidationBytes:0,revalidationReads:0,manifestRevalidationReads:0};this.#context=context;
+   const owner=getNativeOwnershipCapability(guard).capture(),transport=getNativeDriveReadCheck(this.adapter);if(!transport)fail('verification-scope-closed');
+   if(early&&(this.#context!==early||early.owner||early.epoch!==this.#epoch||early.adapter!==this.adapter||early.coordinator!==this.coordinator))fail('verification-scope-closed');
+   const context=early?Object.assign(early,{owner,transport}):{...this.#readContext(transport),owner};this.#context=context;
    try{const result=await operation();this.#capture()();return result;}
    finally{if(this.#context===context)this.#context=null;}
   });}catch(error){this.#recoveryRequired=true;this.invalidate();throw error;}finally{this.#busy=false;}
@@ -141,16 +154,16 @@ class FullSnapshotStorage {
  // byte/attempt budget. All non-version bindings remain exact; authority does
  // not use this exception.
  async #settleImmutable(expected,current,ref,kind,transactionId){
-  const check=this.#capture(),max=kind==='snapshot-object'?FULL_SNAPSHOT_LIMITS.snapshotBytes:FULL_SNAPSHOT_LIMITS.envelopeBytes;
+  const check=this.#capture(),max=kind==='snapshot-object'?FULL_SNAPSHOT_LIMITS.snapshotBytes:FULL_SNAPSHOT_LIMITS.envelopeBytes,signal=this.#context.controller?.signal;
   for(let attempt=0;attempt<3;attempt++){
    check();this.#metadata(current,ref.fileId,kind,ref.sha256,transactionId);
    if(same(expected,current))return current;
    if(!sameExceptVersion(expected,current)||BigInt(current.version)<=BigInt(expected.version))metadataChanged(expected,current);
    if(this.#context.revalidationReads>=8||this.#context.revalidationBytes+ref.byteLength>3*FULL_SNAPSHOT_LIMITS.snapshotBytes)metadataChanged(expected,current,'revalidation-limit');
    this.#context.revalidationBytes+=ref.byteLength;this.#context.revalidationReads++;
-   const raw=await this.adapter.readBytes(ref.fileId,{kind,maxBytes:max});check();
+   const raw=await this.adapter.readBytes(ref.fileId,{kind,maxBytes:max,signal});check();
    if(raw.length!==ref.byteLength||String(raw.length)!==current.size||await this.#digest(raw)!==ref.sha256)fail('hash-mismatch');check();
-   const after=this.#metadata(await this.adapter.readMetadata(ref.fileId),ref.fileId,kind,ref.sha256,transactionId);check();
+   const after=this.#metadata(await this.adapter.readMetadata(ref.fileId,{signal}),ref.fileId,kind,ref.sha256,transactionId);check();
    if(same(current,after))return after;
    if(!sameExceptVersion(current,after)||BigInt(after.version)<=BigInt(current.version))metadataChanged(current,after);
    expected=current;current=after;
@@ -158,15 +171,25 @@ class FullSnapshotStorage {
   metadataChanged(expected,current,'metadata-unstable');
  }
  #remember(ref,kind,transactionId,metadata){this.#context.used.set(ref.fileId,{ref:clone(ref),kind,transactionId,metadata:clone(metadata)});}
- async #read(ref,kind,transactionId){
+ // Returns a hash-verified immutable body, its opening metadata, and a promise
+ // for the closing half of the metadata bracket. The SHA-256 binds the content,
+ // so the opening metadata read overlaps the media read. The closing metadata
+ // read starts after both settle and enrolls the witness.
+ async #fetch(ref,kind,transactionId){
   const max=kind==='snapshot-object'?FULL_SNAPSHOT_LIMITS.snapshotBytes:FULL_SNAPSHOT_LIMITS.envelopeBytes;reference(ref,max);
-  const check=this.#capture();check();const before=this.#metadata(await this.adapter.readMetadata(ref.fileId),ref.fileId,kind,ref.sha256,transactionId);check();
-  const raw=await this.adapter.readBytes(ref.fileId,{kind,maxBytes:max});check();
+  const check=this.#capture();check();
+  const signal=this.#context.controller?.signal;
+  const [opening,raw]=await settled([this.adapter.readMetadata(ref.fileId,{signal}),this.adapter.readBytes(ref.fileId,{kind,maxBytes:max,signal})]);check();
+  const before=this.#metadata(opening,ref.fileId,kind,ref.sha256,transactionId);
   if(raw.length!==ref.byteLength||String(raw.length)!==before.size||await this.#digest(raw)!==ref.sha256)fail('hash-mismatch');check();
-  const observed=this.#metadata(await this.adapter.readMetadata(ref.fileId),ref.fileId,kind,ref.sha256,transactionId);check();
-  const after=await this.#settleImmutable(before,observed,ref,kind,transactionId);check();
-  this.#remember(ref,kind,transactionId,after);return {value:JSON.parse(dec.decode(raw)),metadata:after};
+  const value=JSON.parse(dec.decode(raw)),closing=(async()=>{
+   const observed=this.#metadata(await this.adapter.readMetadata(ref.fileId,{signal}),ref.fileId,kind,ref.sha256,transactionId);check();
+   const after=await this.#settleImmutable(before,observed,ref,kind,transactionId);check();
+   this.#remember(ref,kind,transactionId,after);return after;
+  })();
+  closing.catch(()=>{});return {value,metadata:before,closing};
  }
+ async #read(ref,kind,transactionId){const {value,closing}=await this.#fetch(ref,kind,transactionId);return {value,metadata:await closing};}
  async #selected(){
   const check=this.#capture();check();
   const readMetadata=async()=>{
@@ -194,43 +217,71 @@ class FullSnapshotStorage {
   }
   return manifest(JSON.parse(dec.decode(raw)),true,this.#profile);
  }
- async #exact(expected){await this.#owned();if(!same(await this.#selected(),expected))fail('base-conflict');this.#capture()();}
- async #close(expected){
-  const check=this.#capture(),witnesses=[...this.#context.used];
-  // Only independent metadata GETs overlap. Drain each pair even on failure so
-  // no read survives this operation; content settling and its budgets stay serial.
-  for(let offset=0;offset<witnesses.length;offset+=2){
-   check();const pair=witnesses.slice(offset,offset+2);
-   const results=await Promise.allSettled(pair.map(([fileId])=>this.adapter.readMetadata(fileId)));check();
-   const failed=results.find(result=>result.status==='rejected');if(failed)throw failed.reason;
-   for(let index=0;index<pair.length;index++){
-    check();const witness=pair[index][1],fresh=results[index].value;
-    const settled=await this.#settleImmutable(witness.metadata,fresh,witness.ref,witness.kind,witness.transactionId);check();witness.metadata=clone(settled);
-   }
+ // Ownership and the exact manifest are independent reads of the current state.
+ async #exact(expected,readback=false){const [,current]=await settled([this.#owned(),this.#selected()]);if(!same(current,expected))fail(readback?'manifest-readback-mismatch':'base-conflict');this.#capture()();}
+ async #witnessMetadata(witnesses){
+  const check=this.#capture(),fresh=[];
+  for(let offset=0;offset<witnesses.length;offset+=WITNESS_READS){
+   check();fresh.push(...await settled(witnesses.slice(offset,offset+WITNESS_READS).map(([fileId])=>this.adapter.readMetadata(fileId))));check();
   }
-  await this.#exact(expected);check();
+  return fresh;
  }
- async #current(m){
-  if(m.head===null)return {ledger:null,envelope:null};
-  const read=await this.#read(m.head,'commit-record'),e=envelope(read.value,m,m.head,this.#profile);
+ // The closing check reads every witness, ownership and the exact manifest
+ // together. Content settling and its budgets stay serial. When a witness
+ // needed settling reads, the exact check runs again after them.
+ async #close(expected,readback=false){
+  const check=this.#capture(),witnesses=[...this.#context.used];
+  const [fresh]=await settled([this.#witnessMetadata(witnesses),this.#exact(expected,readback)]);check();
+  let settling=false;
+  for(let index=0;index<witnesses.length;index++){
+   check();const witness=witnesses[index][1];settling||=!same(witness.metadata,fresh[index]);
+   const current=await this.#settleImmutable(witness.metadata,fresh[index],witness.ref,witness.kind,witness.transactionId);check();witness.metadata=clone(current);
+  }
+  if(settling)await this.#exact(expected,readback);check();
+ }
+ // Reads and binds the head envelope of manifest m and the clean manifest before
+ // it. With tails, the closing metadata read is left running and pushed there.
+ async #envelope(m,tails){
+  let read;if(tails){read=await this.#fetch(m.head,'commit-record');tails.push(read.closing);}else read=await this.#read(m.head,'commit-record');
+  const e=envelope(read.value,m,m.head,this.#profile);
   if(read.metadata.appProperties?.financeTrackerTransaction!==e.transactionId)fail('metadata-mismatch');
-  const {value:ledger}=await this.#read(e.snapshot,'snapshot-object',e.transactionId);this.#profile.validateLedger(ledger);
   const prior=clean(this.#profile,m.databaseId,m.copyId,String(revision(m.revision)-1n),e.parent);
   if(await this.#digest(bytes(prior,FULL_SNAPSHOT_LIMITS.manifestBytes))!==e.previousManifestHash)fail('history-mismatch');
-  if(m.pending&&!same(m.pending.base,prior))fail('history-mismatch');this.#capture()();return {ledger,envelope:e};
+  if(m.pending&&!same(m.pending.base,prior))fail('history-mismatch');this.#capture()();return {envelope:e,prior};
  }
+ async #snapshot(e){const {value:ledger}=await this.#read(e.snapshot,'snapshot-object',e.transactionId);this.#profile.validateLedger(ledger);this.#capture()();return ledger;}
+ // A known envelope names the snapshot, so both reads run together. The head
+ // hash binds the envelope, and the envelope read must return exactly it.
+ async #current(m,known){
+  if(m.head===null)return {ledger:null,envelope:null};
+  if(known){const [{envelope:e},ledger]=await settled([this.#envelope(m),this.#snapshot(known)]);if(!same(e,known))fail('history-mismatch');return {ledger,envelope:e};}
+  const {envelope:e}=await this.#envelope(m);return {ledger:await this.#snapshot(e),envelope:e};
+ }
+ // Walks the envelope chain from the head. The walk moves to the parent once a
+ // body is hash-verified; each closing metadata read finishes before the audit
+ // returns. Each snapshot read starts when its envelope names it. Transitions
+ // are checked newest first, as each snapshot arrives in chain order. Returns
+ // the selected ledger and its head envelope.
  async #audit(m){
-  let cursor=m,current=await this.#current(cursor),selected=current.ledger,seen=new Set(),count=0;
-  while(cursor.head!==null){
-   if(++count>FULL_SNAPSHOT_LIMITS.maxHistory||seen.has(cursor.head.fileId))fail('history-mismatch');seen.add(cursor.head.fileId);
-   const prior=clean(this.#profile,m.databaseId,m.copyId,String(revision(cursor.revision)-1n),current.envelope.parent);
-   const previous=await this.#current(prior);assertCanonicalLedgerTransition(previous.ledger,current.ledger);this.#capture()();cursor=prior;current=previous;
-  }
-  return selected;
+  const reads=[],tails=[],seen=new Set();let cursor=m,count=0,newer,selected=null,head=null;
+  const next=async()=>{const ledger=await reads.shift();if(newer===undefined)selected=ledger;else assertCanonicalLedgerTransition(ledger,newer);newer=ledger;this.#capture()();};
+  try{
+   while(cursor.head!==null){
+    if(++count>FULL_SNAPSHOT_LIMITS.maxHistory||seen.has(cursor.head.fileId))fail('history-mismatch');seen.add(cursor.head.fileId);
+    const {envelope:e,prior}=await this.#envelope(cursor,tails),read=this.#snapshot(e);read.catch(()=>{});reads.push(read);head??=e;
+    while(reads.length>=SNAPSHOT_READS)await next();
+    cursor=prior;
+   }
+   while(reads.length)await next();
+   await settled(tails);
+  }catch(error){await Promise.allSettled([...reads,...tails]);throw error;}
+  if(newer!==undefined)assertCanonicalLedgerTransition(null,newer);
+  return {ledger:selected,envelope:head};
  }
- async #create(raw,kind,transactionId,expected){
-  const check=this.#capture(),fileId=await this.adapter.allocateFileId();check();const sha256=await this.#digest(raw);check();
-  const ref={fileId,sha256,byteLength:raw.length};
+ // Allocates the file ID and digest before any upload, so a parent can name it.
+ async #plan(raw){const check=this.#capture(),fileId=await this.adapter.allocateFileId();check();const sha256=await this.#digest(raw);check();return {fileId,sha256,byteLength:raw.length};}
+ async #create(raw,ref,kind,transactionId){
+  const check=this.#capture(),{fileId,sha256}=ref;
   let receipt,dispatched=false;try{receipt=await this.adapter.createImmutable({fileId,name:'ft-full-'+sha256+'.bin',kind,transactionId,content:raw,expectedSha256:sha256,maxBytes:kind==='snapshot-object'?FULL_SNAPSHOT_LIMITS.snapshotBytes:FULL_SNAPSHOT_LIMITS.envelopeBytes,beforeMutation:async()=>{check();dispatched=true;}});check();}
   catch(error){if(dispatched){this.#recoveryRequired=true;fail('write-unresolved',{cause:error});}throw error;}
   // Native receipt contains detached bytes from the actual exact-ID GET, not
@@ -241,32 +292,54 @@ class FullSnapshotStorage {
   const before=this.#metadata(receipt.readback.metadata,fileId,kind,sha256,transactionId);
   if(before.size!==String(actual.length)||await this.#digest(actual)!==sha256)fail('hash-mismatch');check();
   const after=this.#metadata(await this.adapter.readMetadata(fileId),fileId,kind,sha256,transactionId);check();
-  const settled=await this.#settleImmutable(before,after,ref,kind,transactionId);check();this.#remember(ref,kind,transactionId,settled);return ref;
+  const current=await this.#settleImmutable(before,after,ref,kind,transactionId);check();this.#remember(ref,kind,transactionId,current);return ref;
  }
- async #publish(next,expected,{saveAttempt=false}={}){
-  await this.#close(expected);this.#capture()();
-  let dispatched=false;try{await this.adapter.publishManifest(this.#manifestId,next,{beforeMutation:async()=>{await this.#exact(expected);dispatched=true;if(saveAttempt&&this.#saveAttempt)this.#saveAttempt.authorityDispatched=true;this.#recoveryRequired=true;}});this.#capture()();
-   if(!same(await this.#selected(),next))fail('manifest-readback-mismatch');
+ // The complete closing check runs immediately before dispatch, unless the
+ // caller has just run it. With readback, a complete closing check of the new
+ // manifest follows; without it, the caller runs that check.
+ async #publish(next,expected,{saveAttempt=false,checked=false,readback=true}={}){
+  let dispatched=false;try{await this.adapter.publishManifest(this.#manifestId,next,{beforeMutation:async()=>{if(!checked)await this.#close(expected);dispatched=true;if(saveAttempt&&this.#saveAttempt)this.#saveAttempt.authorityDispatched=true;this.#recoveryRequired=true;}});this.#capture()();
+   if(readback)await this.#close(next,true);
   }catch(error){if(dispatched)fail('write-unresolved',{cause:error});throw error;}
  }
- async #verifyRecoveryManifest(m){
-  const ledger=await this.#audit(m);
+ async #verifyRecoveryManifest(m,audit=this.#audit(m)){
+  const {ledger,envelope:e}=await audit;
   const manifest=m.pending?{...m,pending:null}:m;
-  if(m.pending)await this.#publish(manifest,m);
-  await this.#close(manifest);
-  return {manifest,ledger};
+  if(m.pending)await this.#publish(manifest,m);else await this.#close(manifest);
+  return {manifest,ledger,envelope:e};
  }
+ // An admitted copy names its manifest, so the folder listing, the manifest
+ // read and the history audit, which only read, run while the session is
+ // claimed. #run adopts those reads. The closing check then reads every
+ // witness, ownership and the exact manifest again under ownership.
+ #earlyAudit(admission,recoverStale){
+  const transport=getNativeDriveReadCheck(this.adapter);
+  if(!admission||this.#context||!transport||admission.folderId!==this.folderId||admission.dataClass!==this.#profile.class)return null;
+  let m;try{m=manifest(JSON.parse(admission.canonical),true,this.#profile);}catch{return null;}
+  if(m.pending&&!recoverStale)return null;
+  const context=this.#readContext(transport,new AbortController());this.#context=context;this.#manifestId=admission.fileId;
+  const reads=[this.adapter.listChildren(),this.#selected(),this.#audit(m)];for(const read of reads)read.catch(()=>{});
+  const [listing,selected,audit]=reads;return {context,listing,selected,audit,reads};
+ }
+ // Cancels and settles an early audit that will not be used.
+ async #dropEarly(early){if(!early)return;this.invalidate();early.context.controller.abort();await Promise.allSettled(early.reads);if(this.#context===early.context)this.#context=null;}
  async start({initialize=false,recoverStale=false,admission,expectedStaleSessionId}={}){
   if(initialize&&(recoverStale||admission))fail('invalid-initialization');
   if(expectedStaleSessionId!==undefined&&!recoverStale)fail('invalid-initialization');
   const priorSessionId=this.coordinator.session?.sessionId,hadUnresolved=this.#recoveryRequired;
-  if(recoverStale)await this.coordinator.recoverStale({confirm:true,...(expectedStaleSessionId===undefined?{}:{expectedSessionId:expectedStaleSessionId})});else await this.coordinator.start();
+  const early=this.#earlyAudit(admission,recoverStale);
+  try{
+   if(recoverStale)await this.coordinator.recoverStale({confirm:true,...(expectedStaleSessionId===undefined?{}:{expectedSessionId:expectedStaleSessionId})});else await this.coordinator.start();
+   this.#stopHeartbeat?.();this.#stopHeartbeat=this.coordinator.startHeartbeat({setIntervalImpl:this.setIntervalImpl,clearIntervalImpl:this.clearIntervalImpl,isOnline:()=>true,onError:()=>this.invalidate()});
+  }catch(error){await this.#dropEarly(early);throw error;}
   const claimedSessionId=this.coordinator.session?.sessionId;
-  this.#stopHeartbeat?.();this.#stopHeartbeat=this.coordinator.startHeartbeat({setIntervalImpl:this.setIntervalImpl,clearIntervalImpl:this.clearIntervalImpl,isOnline:()=>true,onError:()=>this.invalidate()});
   let checkingAdmission=false;
-  try{return await this.#run(async()=>{
+  try{return await this.#run(async()=>{try{
    checkingAdmission=Boolean(admission);
-   await this.#owned();const files=await this.adapter.listChildren();this.#capture()();
+   // withWrite verified remote ownership immediately before this operation.
+   this.#capture()();
+   const [listed,admitted]=await Promise.allSettled(early?[early.listing,early.selected]:[this.adapter.listChildren()]);this.#capture()();
+   if(listed.status==='rejected')throw listed.reason;const files=listed.value;
    const candidates=files.filter(f=>f.name===FULL_SNAPSHOT_MANIFEST_NAME||f.appProperties?.financeTrackerKind===MANIFEST);
    if(candidates.length>1)fail('ambiguous-manifest');
    if(candidates.length){this.#manifestId=candidates[0].id;if(initialize)fail('new-empty-folder-required');}
@@ -276,14 +349,14 @@ class FullSnapshotStorage {
     let dispatched=false;try{await this.adapter.createImmutable({fileId:this.#manifestId,name:FULL_SNAPSHOT_MANIFEST_NAME,kind:MANIFEST,transactionId:this.crypto.randomUUID(),content:raw,expectedSha256:await this.#digest(raw),maxBytes:FULL_SNAPSHOT_LIMITS.manifestBytes,beforeMutation:async()=>{await this.#owned();const latest=await this.adapter.listChildren();this.#capture()();if(latest.some(f=>f.appProperties?.financeTrackerSession!=='v1'))fail('new-empty-folder-required');dispatched=true;}});}
     catch(error){if(dispatched){this.#recoveryRequired=true;fail('write-unresolved',{cause:error});}throw error;}
    }
-   const m=await this.#selected();
+   let m;if(early&&this.#manifestId===admission.fileId){if(admitted.status==='rejected')throw admitted.reason;m=admitted.value;}else m=await this.#selected();
    this.#assertAdmission(admission,m);
    checkingAdmission=false;
    if(m.pending&&!recoverStale)fail('recovery-required');
-   const {manifest,ledger}=await this.#verifyRecoveryManifest(m);
-   this.#baseline={manifest:clone(manifest),owner:this.#context.owner};this.#recoveryRequired=false;return clone(ledger);
-  });}catch(error){
-   this.invalidate();
+   const {manifest,ledger,envelope:e}=await this.#verifyRecoveryManifest(m,early?.audit);
+   this.#baseline={manifest:clone(manifest),owner:this.#context.owner,envelope:clone(e)};this.#recoveryRequired=false;return clone(ledger);
+  }catch(error){if(early){this.invalidate();early.context.controller.abort();await Promise.allSettled(early.reads);}throw error;}},early?.context);}catch(error){
+   this.invalidate();await this.#dropEarly(early);
    if(checkingAdmission&&!hadUnresolved){
     // No publication was attempted by this invocation. Preserve any prior
     // unresolved evidence, and never release a reused or unverified marker.
@@ -301,31 +374,44 @@ class FullSnapshotStorage {
    throw error;
   }
  }
- async open(){return this.#run(async()=>{const m=await this.#selected();if(m.pending)fail('recovery-required');const ledger=await this.#audit(m);await this.#close(m);this.#baseline={manifest:clone(m),owner:this.#context.owner};this.#recoveryRequired=false;return clone(ledger);});}
+ async open(){return this.#run(async()=>{const m=await this.#selected();if(m.pending)fail('recovery-required');const {ledger,envelope:e}=await this.#audit(m);await this.#close(m);this.#baseline={manifest:clone(m),owner:this.#context.owner,envelope:clone(e)};this.#recoveryRequired=false;return clone(ledger);});}
  async save(input){
   // Size admission precedes detached byte-buffer allocation and all writes. The
   // serializer may allocate a string; this is not a constant-memory promise.
   this.#profile.validateLedger(input);const raw=bytes(input,FULL_SNAPSHOT_LIMITS.snapshotBytes),candidate=JSON.parse(dec.decode(raw));
   return this.#run(async()=>{
    this.#saveAttempt=null;
-   const baseline=this.#baseline;if(!baseline)fail('verified-base-required');baseline.owner();const base=await this.#selected();if(!same(base,baseline.manifest)||base.pending)fail('base-conflict');
-   this.#saveAttempt={sequence:++this.#saveSequence,base:clone(base),candidate:null,authorityDispatched:false};
+   const baseline=this.#baseline;if(!baseline)fail('verified-base-required');baseline.owner();
+   // The verified baseline names the base objects, so they are read while the
+   // manifest is checked. A changed manifest still refuses the save.
+   this.#saveAttempt={sequence:++this.#saveSequence,base:clone(baseline.manifest),candidate:null,authorityDispatched:false};
+   const [base,current]=await settled([this.#selected(),this.#current(baseline.manifest,baseline.envelope)]);if(!same(base,baseline.manifest)||base.pending)fail('base-conflict');
    if(revision(base.revision)>=BigInt(FULL_SNAPSHOT_LIMITS.maxHistory))fail('byte-limit');
-   const current=await this.#current(base);assertCanonicalLedgerTransition(current.ledger,candidate);await this.#close(base);
-   if(same(current.ledger,candidate))return clone(current.ledger);
-   const transactionId=this.crypto.randomUUID(),snapshot=await this.#create(raw,'snapshot-object',transactionId,base);
+   assertCanonicalLedgerTransition(current.ledger,candidate);
+   // An unchanged ledger is verified and returned. Otherwise the closing check
+   // before the first publication covers the base.
+   if(same(current.ledger,candidate)){await this.#close(base);return clone(current.ledger);}
+   const transactionId=this.crypto.randomUUID(),snapshot=await this.#plan(raw);
    const value={format:ENVELOPE,version:this.#profile.version,databaseId:base.databaseId,copyId:base.copyId,revision:String(revision(base.revision)+1n),transactionId,parent:base.head,previousManifestHash:await this.#digest(bytes(base,FULL_SNAPSHOT_LIMITS.manifestBytes)),snapshot,profile:this.#profile.commitProfile,
     ...(this.#profile===PRODUCTION_PROFILE?{dataClass:this.#profile.markerValue}:{})};
-   const head=await this.#create(bytes(value,FULL_SNAPSHOT_LIMITS.envelopeBytes),'commit-record',transactionId,base);
+   const sealed=bytes(value,FULL_SNAPSHOT_LIMITS.envelopeBytes),head=await this.#plan(sealed);
    const next=clean(this.#profile,base.databaseId,base.copyId,value.revision,head),published={...next,pending:{state:'published',base:clone(base)}};
-   manifest(published,true,this.#profile);envelope(value,published,head,this.#profile);this.#capture()();this.#saveAttempt.candidate=clone(next);
+   manifest(published,true,this.#profile);envelope(value,published,head,this.#profile);this.#capture()();
+   // The envelope names the snapshot by its planned reference, so the two
+   // immutable uploads are independent and run together.
+   await settled([this.#create(raw,snapshot,'snapshot-object',transactionId),this.#create(sealed,head,'commit-record',transactionId)]);
+   this.#capture()();this.#saveAttempt.candidate=clone(next);
    // Candidate and transition were validated above; both immutable canonical
    // encodings have independently bound actual GET receipts. Publication still
    // closes all witnesses, then the actual base/new bodies are read below.
-   await this.#publish(published,base,{saveAttempt:true});
+   await this.#publish(published,base,{saveAttempt:true,readback:false});
    // Re-read actual base and new bytes after publication, not a cached upload.
-   const old=await this.#current(base),after=await this.#current(published);assertCanonicalLedgerTransition(old.ledger,after.ledger);if(!same(after.ledger,candidate))fail('canonical-preparation-mismatch');
-   await this.#publish(next,published,{saveAttempt:true});await this.#close(next);this.#baseline={manifest:clone(next),owner:this.#context.owner};this.#recoveryRequired=false;return clone(after.ledger);
+   // The readback of the first publication runs with them. It is the complete
+   // closing check that the second publication needs before dispatch.
+   const readback=this.#close(published,true).catch(cause=>fail('write-unresolved',{cause}));
+   const [,[old,after]]=await settled([readback,settled([this.#current(base,current.envelope),this.#current(published,value)])]);
+   assertCanonicalLedgerTransition(old.ledger,after.ledger);if(!same(after.ledger,candidate))fail('canonical-preparation-mismatch');
+   await this.#publish(next,published,{saveAttempt:true,checked:true});this.#baseline={manifest:clone(next),owner:this.#context.owner,envelope:clone(value)};this.#recoveryRequired=false;return clone(after.ledger);
   });
  }
  #assertAdmission(admission,m){

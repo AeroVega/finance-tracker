@@ -43,6 +43,26 @@ sum, not concurrent critical-path latency. Local elapsed time measures fake-prov
 execution, not a user's experience. Use counts/bytes to detect regressions and compare
 candidate optimizations; do not infer a real-world speedup without real measurements.
 
+## Latency benchmark
+
+`tests/benchmark-drive-latency.mjs` times save, open after release, and open with a
+stale marker through the real workspace session. It mirrors the Open admission and
+stale recovery that `DashboardSyntheticStorage.connect` performs. Each request waits a
+fixed latency and its bytes cross one shared link, so concurrent transfers get no
+extra bandwidth. A file's version moves on its first media read after a write. Aborted
+requests reject at once, as browser fetch does. History is built at near-zero latency.
+
+```sh
+node tests/benchmark-drive-latency.mjs --history=3 --profile=phone
+node tests/benchmark-drive-latency.mjs --history=5 --profile=phone --dense
+node tests/benchmark-drive-latency.mjs --history=1 --profile=trace --trace
+```
+
+The `phone` profile assumes 180 ms per read, 700 ms per write, 1.5 MB/s upload and
+6 MB/s download. The `slow` profile matches the scenario profile above. The `trace`
+profile prints request start and end times for finding the critical path. Results
+are wall-clock times of the model, not measured Google or Safari performance.
+
 ## Optional browser acceptance
 
 ```sh
@@ -78,10 +98,14 @@ smoke test can remain a final compatibility check; it should not be the primary 
 
 ## Bounded witness-read overlap (2026-11-17)
 
-`#close` now overlaps at most two independent immutable metadata GETs. Each pair
-fully drains, including on rejection, before any result is processed. Content
-revalidation and its shared budgets remain sequential. Ownership and manifest
-checks and all mutation ordering remain unchanged; no verification request is removed.
+This section is historical. On 2026-11-26 the pairs were replaced by groups of eight
+that run with the ownership and manifest checks. See
+[overlapped verification reads](FULL_SNAPSHOT_STORAGE.md#overlapped-verification-reads-2026-11-26).
+
+On 2026-11-17, `#close` overlapped at most two independent immutable metadata GETs.
+Each pair fully drained, including on rejection, before any result was processed.
+Content revalidation and its shared budgets remained sequential. Ownership and
+manifest checks and all mutation ordering were unchanged; no verification request was removed.
 
 Run a timing-injected benchmark with:
 

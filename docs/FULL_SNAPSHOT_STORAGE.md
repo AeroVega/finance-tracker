@@ -87,3 +87,42 @@ prove recovery does not establish a verified save baseline. A successful recover
 or release does not prove the intended local preview was saved. Diagnostic request
 counts cover the current connection lifecycle; an earlier released connection's
 requests are not included. Do not infer folder content from PATCH counts.
+
+## Overlapped verification reads (2026-11-26)
+
+On 2026-11-26 the owner asked for average open and save wait times to be cut in half. Backup and restore were out of scope. Every check described above still runs. The time went to serial Drive round trips, so independent reads now run together, and requests that repeated the check just before them are removed. The code is `js/full-snapshot-storage.mjs`.
+
+These reads now run together:
+
+- An immutable read sends its opening metadata read with its media read, because the SHA-256 in its reference binds the content. The closing metadata read starts after both settle. A manifest read stays serial, because no hash binds a manifest body.
+- A closing check reads witness metadata in groups of eight, together with the ownership check and the exact manifest read. When a witness needs version settling, the exact check runs again after the settling reads.
+- A history audit walks the envelope chain from the head. It moves to the parent once an envelope body is hash-verified, and each closing metadata read finishes before the audit returns. Each snapshot read starts when its envelope names it. At most two snapshots are in flight or waiting for their transition check. Transitions are checked newest first.
+- A save reads the base envelope and snapshot during its manifest check, because the verified baseline names them. A changed manifest still refuses the save. The save attempt is recorded before these reads, from the verified baseline.
+- The snapshot and envelope uploads run together, because the envelope names the snapshot by its planned ID, digest and length. Mutation concurrency is two during these uploads. A failed upload can leave one more unpublished immutable orphan than before.
+- After the first publication, its readback closing check runs together with the re-read of the actual base and new snapshots. That closing check is also the check before dispatch of the second publication, which follows it with no other request between.
+- An Open that carries a read-only admission starts the folder listing, the manifest read and the history audit while the session is claimed. These reads use a context with no owner. It checks the transport and the epoch, and the mutation guard refuses it. `#run` adopts the context under ownership. The admission must still match the manifest, and the closing check reads every witness, ownership and the exact manifest again. A refused claim aborts these reads and settles them before it reports. Open, independent reopen and reclaiming this page's own stale session carry an admission. Other starts audit after the claim, as before.
+
+These requests are removed:
+
+- `publishManifest` no longer reads the manifest metadata before its PATCH or the body after it. The caller's closing check runs immediately before dispatch, and a closing check reads the published manifest back.
+- `start` no longer repeats the ownership check that `withWrite` ran immediately before it.
+- A changed save no longer runs a closing check before its immutable uploads. The closing check before the first publication covers the base. A save of an unchanged ledger still runs its closing check.
+
+### Measured in the latency model
+
+`tests/benchmark-drive-latency.mjs` runs the real workspace session, lifecycle and adapters against the invented-HTTP Drive. Each request waits a fixed latency, and all transfers share one link. A file's version moves on its first media read after a write. The phone profile assumes 180 ms per read, 700 ms per write, 1.5 MB/s upload and 6 MB/s download. These are assumptions, not measured Google or Safari performance. Reproduce a row with `node tests/benchmark-drive-latency.mjs --history=3 --profile=phone`, and on the base revision for comparison.
+
+One run each, base `c5bdfcb` against this change. Retained saves are the revisions before the timed save, using the generated synthetic year of about 0.9 MB:
+
+| Retained saves | Save, base | Save, now | Open, base | Open, now | Stale open, base | Stale open, now |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 19.36 s | 8.03 s | 9.24 s | 5.11 s | 9.68 s | 5.33 s |
+| 3 | 19.35 s | 8.09 s | 12.45 s | 5.23 s | 12.84 s | 5.46 s |
+| 10 | 19.34 s | 8.05 s | 23.75 s | 6.62 s | 24.10 s | 7.29 s |
+| 30 | 19.49 s | 8.09 s | 56.05 s | 16.27 s | 56.43 s | 16.90 s |
+
+Open is the open after release. Stale open is the open of a folder whose marker heartbeat expired without release.
+
+With the slow profile of [the simulator guide](DRIVE_SIMULATOR.md#cost-reporting) and 3 retained saves, save went from 27.04 s to 11.58 s, open from 16.69 s to 7.01 s, and stale open from 17.27 s to 7.31 s. With the dense one-year ledger of about 6 MB and 5 retained saves, save went from 27.57 s to 16.18 s, open from 21.36 s to 10.14 s, and stale open from 21.69 s to 11.94 s.
+
+A dense save is limited by bandwidth: it uploads one 6 MB snapshot and downloads about 30 MB. The download includes the base read, the create readback, a settling re-read and the post-publication re-read of both snapshots. Peak Node RSS for the dense run rose from 394 MB to 448 MB. That is not Safari memory evidence. A stale-marker open first tries a normal claim, so its early audit is aborted once and restarted. That costs up to one snapshot of extra download. Live Drive and iPhone timings are not measured.

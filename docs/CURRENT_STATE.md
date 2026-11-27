@@ -35,6 +35,7 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - **Older layouts** (per-record, grouped, fragmented, partitioned) are unsupported. They are not converted, overwritten or deleted. Their code and exclusive tests are removed; see [retired storage designs](archive/RETIRED_STORAGE_DESIGNS.md).
 - **Limits:** snapshot 8 MiB, envelope/manifest 16 KiB, history 10,000 commits. Full-history cost grows with retained snapshots. These are not whole-database memory or Safari capacity claims. There is no compare-and-swap guarantee.
 - **Contracts:** [full-snapshot storage](FULL_SNAPSHOT_STORAGE.md) and [backup and recovery](FULL_SNAPSHOT_BACKUP_RECOVERY.md).
+- **Open and save speed** (owner request, 2026-11-26) is in progress on `t3/optimize-drive-load-save`. Independent verification reads run together, and repeated checks are removed. No check is dropped. An admitted Open audits history while it claims the session. Backup and restore are unchanged. See [overlapped verification reads](FULL_SNAPSHOT_STORAGE.md#overlapped-verification-reads-2026-11-26).
 
 ## Application features
 
@@ -61,6 +62,7 @@ The table is dated evidence behind the 2026-11-24 GO, not a list of open gates.
 | **Verified** pre-cleanup tree | Local extended suite 2,339/2,339. [Node CI 44013565187](https://github.com/AeroVega/finance-tracker/actions/runs/44013565187) passed both required jobs. | That tree, not later changes. |
 | **Verified** cleanup | Retained suite 858/858 with no failures or skips. PR 46 merged, then PR 47 removed obsolete formats. Exact-head Node CI 44019112471 passed. Merged `main` `ae10e45` has tree `5c97803`. | Cleanup only. New feature tests and CI are separate gates. |
 | **Simulated, not live** | One latency-injected comparison: save 27.80 → 25.97 s, seed 36.02 → 34.94 s. | See [simulator scope](DRIVE_SIMULATOR.md). Google sign-in, Picker and physical Safari are not emulated. |
+| **Simulated, not live** (2026-11-26) | Latency model, base `c5bdfcb` against `t3/optimize-drive-load-save`, 3 retained saves: save went from 19.35 s to 8.09 s, open from 12.45 s to 5.23 s, and open with a stale marker from 12.84 s to 5.46 s. | Assumed latencies. See [the measurements](FULL_SNAPSHOT_STORAGE.md#measured-in-the-latency-model). Not live Drive or iPhone timing. |
 
 **Deployment** must be checked independently: verify the served source stamp and generated Google configuration. Branch-source Pages publication can omit those generated assets, and CI success alone does not prove a usable configured deployment. The [Nov 23 verification update](SECURITY_AND_COST_REVIEW.md#november-23-verification-update) records one checked build.
 

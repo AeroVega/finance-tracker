@@ -396,12 +396,13 @@ export class GoogleDriveTransactionAdapter {
     });
   }
 
+  // The caller checks the exact current manifest in beforeMutation and reads the
+  // published manifest back under a metadata bracket. This method adds no reads.
   async publishManifest(manifestFileId, manifest, { beforeMutation } = {}) {
     return this.#mutation(async mutationScope=>{
     const content = canonicalizeJcs(manifest);
     const bytes = new TextEncoder().encode(content);
     assertResponseSize(bytes.length, { kind: "manifest", limits: this.responseLimits });
-    await this.readMetadata(manifestFileId);
     const boundary = `ft-manifest-${manifest.revision}`;
     const metadata = { mimeType: MIME_JSON };
     const head = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${MIME_JSON}\r\n\r\n`);
@@ -412,10 +413,6 @@ export class GoogleDriveTransactionAdapter {
       body: joinBytes([head, bytes, tail])
     },"manifest-patch")), {beforeMutation,mutationScope,endpointClass:"files.update"});
     await discardDriveResponse(published);
-    const visible = await this.readBytes(manifestFileId, { kind: "manifest" });
-    if (new TextDecoder().decode(visible) !== content) {
-      fail("manifest-readback-mismatch", "The published manifest did not read back exactly.");
-    }
     await this.afterMutation?.({ kind: "manifest", operation: "publish" });
     return manifest;
     });
