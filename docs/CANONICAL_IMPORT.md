@@ -54,7 +54,7 @@ Readouts use exact decimal arithmetic. Pending activity is excluded from finaliz
 
 The fixtures and adapter tests cover UTF-8 with optional BOM, comma-delimited fields, quoting and escaped quotes, multiline fields, line endings, exact ordered headers, optional Wells Fargo check-number and SoFi current-balance columns, and Fidelity's observed 18-column shape. Numeric grammar is a signed decimal string; unsupported grouping/symbols/precision are retained as errors rather than rounded or guessed.
 
-Wells Fargo's documented US date form and the existing invented ISO fixture variant are recognized. SoFi uses the documented ISO form. Fidelity preserves run and settlement dates separately. Only the exact invented Fidelity explanatory footer is ignored; unknown nonblank footer-like text remains rejected evidence. Missing currency or lifecycle is not inferred from provider name. These are synthetic-tested variants, not validation of every original provider export.
+Wells Fargo's documented US date form and the existing invented ISO fixture variant are recognized. SoFi uses the documented ISO form. Fidelity preserves run and settlement dates separately. The exact invented Fidelity explanatory footer is ignored, and so is any Fidelity row that has a single cell that is not a date, such as the disclaimer and download-date lines that end a real export. Both count as ignored. Any other nonblank footer-like text remains rejected evidence. Missing currency or lifecycle is not inferred from provider name. These are synthetic-tested variants, not validation of every original provider export.
 
 
 ## Overlap reconciliation

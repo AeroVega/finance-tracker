@@ -130,7 +130,15 @@ test('leading malformed text cannot hide behind later header; footer-like text n
   const source = await readFile(new URL('../fixtures/fidelity.csv', import.meta.url), 'utf8');
   const h = source.split('\n')[2];
   const result = await parse(`${h}\nThis is invented explanatory footer text, not a transaction row.,unexpected\nAccount summary\n`, fidelity);
-  assert.equal(result.records.length, 2); assert.ok(result.records.every(r => !r.valid));
+  assert.equal(result.records.length, 1); assert.ok(result.records.every(r => !r.valid));
+});
+
+test('Fidelity single-cell trailer lines are ignored and counted, never mapped as rows', async () => {
+  const source = await readFile(new URL('../fixtures/fidelity.csv', import.meta.url), 'utf8');
+  const h = source.split('\n')[2];
+  const result = await parse(`${h}\n\n"The data and information in this spreadsheet is provided solely for your use."\n"Date downloaded 11/27/2026 10:00 am"\n`, fidelity);
+  assert.equal(result.records.length, 0);
+  assert.equal(result.ignoredCount, 4);
 });
 
 test('quoted money commas reject, exact extra precision survives boundary without rounding', async () => {

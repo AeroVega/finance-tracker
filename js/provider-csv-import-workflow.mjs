@@ -125,7 +125,17 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     const coverageRoot = element(document, 'div', { className: 'provider-import-coverage' });
     const context = { sourceKey, institutionId, select, observed, records, manual, accepted: null, selector: null };
     state.mappings.set(sourceKey, context);
-    wrap.append(legend, accountLabel, rangeNote, coverageRoot);
+    wrap.append(legend);
+    if (sourceKey === null) {
+      const list = element(document, 'ul', { className: 'field-help' });
+      for (const row of records.slice(0, 20)) {
+        const text = (row.sourceDescription || row.sourceFields?.Action || '(no description)').slice(0, 80);
+        list.append(element(document, 'li', {}, 'Line ' + row.physicalLine + ' · ' + (row.errorCode ?? 'valid') + ' · ' + text));
+      }
+      if (records.length > 20) list.append(element(document, 'li', {}, '… and ' + (records.length - 20) + ' more rows.'));
+      wrap.append(list);
+    }
+    wrap.append(accountLabel, rangeNote, coverageRoot);
     const changed = () => {
       context.accepted = null;
       state.validated = false;
