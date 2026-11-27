@@ -89,29 +89,38 @@ function calendar(which,value,view) {
     const selected=date===value, label=new Intl.DateTimeFormat(undefined,{dateStyle:"full",timeZone:"UTC"}).format(utcDate(view.year,view.month,day));
     cells.push("<button type='button' class='ics-day"+(selected?" selected":"")+"' data-date='"+date+"' data-for='"+which+"' aria-pressed='"+selected+"' aria-label='"+label+"'>"+day+"</button>");
   }
-  return "<section class='ics-calendar' aria-label='"+which+" date calendar'><header><button type='button' data-month='"+which+"' data-step='-1' aria-label='Previous "+which+" month'>‹</button><h3>"+monthTitle(view.year,view.month)+"</h3><button type='button' data-month='"+which+"' data-step='1' aria-label='Next "+which+" month'>›</button></header><div class='ics-weekdays' aria-hidden='true'><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class='ics-grid'>"+cells.join("")+"</div></section>";
+  return "<section class='ics-calendar' aria-label='"+which+" date calendar'><header><button type='button' data-month='"+which+"' data-step='-1' aria-label='Previous "+which+" month'>‹</button><p class='ics-month'>"+monthTitle(view.year,view.month)+"</p><button type='button' data-month='"+which+"' data-step='1' aria-label='Next "+which+" month'>›</button></header><div class='ics-weekdays' aria-hidden='true'><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div><div class='ics-grid'>"+cells.join("")+"</div></section>";
 }
-export function mountImportCoverageSelector({container,observedDates=[],sourceCoverage=null,priorConfirmedCoverageEnd=null,contextKey=null,reviewedEmptyExport=false,onConfirm=()=>{},onCancel=()=>{},onInvalidate=()=>{}}={}) {
+export function mountImportCoverageSelector({container,observedDates=[],sourceCoverage=null,priorConfirmedCoverageEnd=null,contextKey=null,reviewedEmptyExport=false,onConfirm=()=>{},onInvalidate=()=>{}}={}) {
   if(!container||typeof container.addEventListener!=="function")fail("invalid-options");
   const model=createImportCoverageModel({observedDates,sourceCoverage,priorConfirmedCoverageEnd,contextKey,reviewedEmptyExport});
   const now=new Date(), monthFor=value=>isRealIsoDate(value)?{year:+value.slice(0,4),month:+value.slice(5,7)-1}:{year:now.getFullYear(),month:now.getMonth()};
   const initial=model.getState(),views={start:monthFor(initial.start),end:monthFor(initial.end)};let disposed=false;
   const notifyInvalidation=(reason,previous)=>{if(previous)onInvalidate({status:"invalidated",reason,previous});};
   const resetSelection=focus=>{const previous=model.getState().confirmed;model.reset();const s=model.getState();views.start=monthFor(s.start);views.end=monthFor(s.end);notifyInvalidation("reset",previous);render(focus);};
+  const SOURCE_NOTE={start:{"source-metadata":"Start date comes from the file.","day-after-prior-confirmed-end":"Start date is the day after your last confirmed import."},end:{"source-metadata":"End date comes from the file."}};
+  let calendarsOpen=false;
   const render=focus=>{
-    if(disposed)return;const s=model.getState(),v=s.validation;
+    if(disposed)return;
+    calendarsOpen=container.querySelector?.(".ics-pick")?.open??calendarsOpen;
+    const s=model.getState(),v=s.validation,hint=s.suggestions;
     const messages=v.errors.map(x=>({ "invalid-start-date":"Enter a real calendar start date.","invalid-end-date":"Enter a real calendar end date.","reversed-date-range":"Start must be on or before end.","no-usable-transaction-dates":"No usable transaction dates were supplied; review is required.","unusable-observed-dates":"Some supplied transaction dates are unusable; review is required."}[x.reason]));
     const outside=v.outside.map(x=>"<li>"+x.date+(x.rowReference===null?"":" (row "+escapeHtml(x.rowReference)+")")+"</li>").join("");
-    const hints=[s.suggestions.start?"Suggested start: "+s.suggestions.start+" ("+s.suggestions.startSource+")":"",s.suggestions.end?"Suggested end: "+s.suggestions.end+" ("+s.suggestions.endSource+")":""].filter(Boolean).join(" · ");
-    container.innerHTML="<div class='ics'><header><h2>Declare import coverage</h2><p>Choose the inclusive dates this file is intended to cover. Suggestions are not confirmation.</p></header><p class='ics-hints' aria-live='polite'>"+(hints||"No suggestions available.")+"</p><div class='ics-fields'><label>Start date (inclusive)<input type='date' data-field='start' value='"+s.start+"'></label><label>End date (inclusive)<input type='date' data-field='end' value='"+s.end+"'></label></div><div class='ics-calendars'>"+calendar("start",s.start,views.start)+calendar("end",s.end,views.end)+"</div><section class='ics-review' aria-live='polite'><h3>Coverage review</h3><p>"+v.usableObservedCount+" usable transaction date(s) observed. Observed dates do not prove completeness.</p>"+(v.reviewedEmptyExport?"<p>Recognized empty export explicitly acknowledged. Confirm declared coverage separately; no transaction dates or completeness are inferred.</p>":"")+(messages.length?"<ul class='ics-errors'>"+messages.map(x=>"<li>"+x+"</li>").join("")+"</ul>":"")+(outside?"<p>Out-of-range transaction dates; rows are retained for review:</p><ul>"+outside+"</ul>":"")+(v.unusableObserved.length?"<p>"+v.unusableObserved.length+" unusable date value(s) require review.</p>":"")+(s.confirmed?"<p role='status'>Coverage explicitly confirmed.</p>":"")+"</section><footer><button type='button' data-action='reset'>Reset suggestions</button><button type='button' data-action='cancel'>Cancel</button><button type='button' data-action='confirm' "+(v.valid&&!s.cancelled?"":"disabled")+">Confirm coverage</button></footer></div>";
+    const notes=hint.startSource==="source-metadata"&&hint.endSource==="source-metadata"?"Both dates come from the file.":[SOURCE_NOTE.start[hint.startSource],SOURCE_NOTE.end[hint.endSource]].filter(Boolean).join(" ");
+    const edited=(hint.start||hint.end)&&(s.start!==(hint.start||"")||s.end!==(hint.end||""));
+    container.innerHTML="<div class='ics'><header><h5>Dates this file covers</h5><p>Enter the first and last day this export covers. Dates seen in the file do not prove it is complete.</p></header>"
+      +"<div class='ics-fields'><label>First day<input type='date' data-field='start' value='"+s.start+"'></label><label>Last day<input type='date' data-field='end' value='"+s.end+"'></label></div>"
+      +(notes?"<p class='ics-hints'>"+notes+"</p>":"")
+      +"<details class='ics-pick'"+(calendarsOpen?" open":"")+"><summary>Pick from a calendar</summary><div class='ics-calendars'>"+calendar("start",s.start,views.start)+calendar("end",s.end,views.end)+"</div></details>"
+      +"<div class='ics-review' aria-live='polite'>"+(v.reviewedEmptyExport?"<p>Empty export acknowledged. Confirm the dates separately. No transaction dates or completeness are inferred.</p>":"")+(messages.length?"<ul class='ics-errors'>"+messages.map(x=>"<li>"+x+"</li>").join("")+"</ul>":"")+(outside?"<p>Transaction dates outside these days. Rows are kept for review:</p><ul>"+outside+"</ul>":"")+(v.unusableObserved.length?"<p>"+v.unusableObserved.length+" unusable date value(s) require review.</p>":"")+(s.confirmed?"<p role='status'>Coverage confirmed.</p>":"")+"</div>"
+      +"<footer>"+(edited?"<button type='button' data-action='reset'>Reset to suggested dates</button>":"")+"<button type='button' data-action='confirm' "+(v.valid&&!s.cancelled?"":"disabled")+">Confirm coverage</button></footer></div>";
     if(focus)container.querySelector(focus)?.focus();
   };
   const click=e=>{
     const b=e.target.closest("button");if(!b||!container.contains(b))return;
     if(b.dataset.month){const v=views[b.dataset.month],d=utcDate(v.year,v.month+Number(b.dataset.step),1);v.year=d.getUTCFullYear();v.month=d.getUTCMonth();render('[data-month="'+b.dataset.month+'"][data-step="'+b.dataset.step+'"]');}
     else if(b.dataset.date){const k=b.dataset.for,previous=model.getState().confirmed;model.setDates({[k]:b.dataset.date});views[k]=monthFor(b.dataset.date);notifyInvalidation("date-edit",previous);render('[data-field="'+k+'"]');}
-    else if(b.dataset.action==="reset"){resetSelection('[data-action=reset]');}
-    else if(b.dataset.action==="cancel"){const previous=model.getState().confirmed,r=model.cancel();notifyInvalidation("cancelled",previous);onCancel(r);render('[data-action=cancel]');}
+    else if(b.dataset.action==="reset"){resetSelection('[data-field="start"]');}
     else if(b.dataset.action==="confirm"){const r=model.confirm();if(r.status==="confirmed")onConfirm(r);render('[data-action=confirm]');}
   };
   const change=e=>{const k=e.target.dataset?.field;if(k==="start"||k==="end"){const previous=model.getState().confirmed;model.setDates({[k]:e.target.value});if(isRealIsoDate(e.target.value))views[k]=monthFor(e.target.value);notifyInvalidation("date-edit",previous);render('[data-field="'+k+'"]');}};

@@ -33,8 +33,8 @@ export function yearMonths(year, last) {
   return migrationMonths(last).filter(month => month.startsWith(String(year) + '-'));
 }
 /** The last calendar month that has fully ended on `today`. */
-/** The owner's chosen last month to migrate (2026-11-25). Still editable in setup. */
-export const DEFAULT_LAST_MONTH = '2026-09';
+/** The owner's last month to migrate. September 2026 is covered by CSV imports instead (2026-11-27). Still editable in setup. */
+export const DEFAULT_LAST_MONTH = '2026-08';
 
 /**
  * Parses an amount as typed or pasted from a spreadsheet: 1234.5, 1,234.50,

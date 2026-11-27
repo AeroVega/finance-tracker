@@ -11,7 +11,7 @@ const pages = {
   // the same section, so this route only changes which column is visible.
   account: {title:'Accounts', description:'One account: dated balances, coverage and evidence.', group:'position', date:true, section:'position'},
   planning: {title:'Planning', description:'Monthly budgets and a three-month cash projection.', group:'planning'},
-  storage: {title:'More', description:'Saving, backups, recovery and diagnostics.', group:'storage'},
+  storage: {title:'More', description:'Import files, save, back up and recover your data.', group:'storage'},
   migration: {title:'History migration', description:'Move the old workbook’s monthly history in, one year at a time.', group:'storage'}
 };
 const primary = ['overview', 'transactions', 'position', 'planning', 'storage'];

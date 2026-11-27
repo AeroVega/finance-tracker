@@ -26,7 +26,7 @@ test('amounts typed or pasted from a spreadsheet keep exact cents and reject amb
   assert.deepEqual(parseAmount('  '), {blank:true});
   for (const text of ['1.234', '12,34', '1e3', '--1', '(-1)', 'abc', '1,2345.00', '$-1']) assert.deepEqual(parseAmount(text), {error:true}, text);
   assert.equal(centsToAmount(-5n), '-0.05');
-  assert.equal(DEFAULT_LAST_MONTH, '2026-09', 'the owner migrates January 2023 through September 2026');
+  assert.equal(DEFAULT_LAST_MONTH, '2026-08', 'the owner migrates January 2023 through August 2026');
   assert.deepEqual(parseCellAmount('-12'), {error:true, negative:true}, 'income and expense cells refuse a minus sign');
   assert.deepEqual(parseCellAmount('(12.00)'), {error:true, negative:true});
   assert.equal(parseCellAmount('0').cents, 0n);

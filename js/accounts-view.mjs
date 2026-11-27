@@ -4,7 +4,7 @@
 import {stripPosition} from './account-history.mjs';
 
 export const INSTITUTIONS = {'wells-fargo':'Wells Fargo', sofi:'SoFi', fidelity:'Fidelity'};
-export const ACCOUNT_TYPES = {checking:'Checking', savings:'Savings', 'credit-card':'Credit card', brokerage:'Brokerage',
+export const ACCOUNT_TYPES = {checking:'Checking', savings:'Savings', 'credit-card':'Credit card', brokerage:'Personal investments',
   retirement:'Retirement', mortgage:'Mortgage', 'auto-loan':'Auto loan', other:'Other'};
 export const COVERAGE_STATES = {reconciled:'Reconciled', imported:'Imported, not reconciled', declared:'Declared, no activity',
   none:'No data', 'needs-fix':'Needs a fix'};

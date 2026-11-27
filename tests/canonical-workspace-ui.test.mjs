@@ -2136,7 +2136,7 @@ test('History migration page stages a typed year with one confirmation, saves it
   assert.equal(h.get('home-migration-link').hidden, false);
   await h.navigate('#migration');
   assert.equal(h.get('page-title').textContent, 'History migration');
-  assert.equal(h.get('migration-last').value, '2026-09', 'the owner’s last month is the default');
+  assert.equal(h.get('migration-last').value, '2026-08', 'the owner’s last month is the default');
   await type('migration-workbook', 'Invented finances.xlsx');
   await type('migration-opening', '1,000.00');
   const last = h.get('migration-last'); last.value = '2023-03'; await last.emit('change');
