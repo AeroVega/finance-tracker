@@ -103,4 +103,4 @@ System sans with a fixed scale of 12/14/16/18/22/28/30px, and tabular numerals f
 
 Touch targets are at least 44px, apart from the 40px transaction row button, whose whole row is also tappable. Focus is a 2px mint outline. Escape closes transaction detail. The trend columns are buttons with full accessible names. Decorative separators are hidden from assistive tech. With reduced motion, the busy-status pulse stops. In forced-colors mode, chart bars fall back to system colors.
 
-**Verified in Chromium:** 320, 390, 820, 844×390, 1440px and 200% text, all without horizontal overflow. **Unverified:** physical iPhone/iPad Safari, VoiceOver, installed Home Screen launch and on-screen keyboard behavior.
+**Verified in Chromium:** 320, 390, 820, 844×390, 1440px and 200% text, all without horizontal overflow. **Unverified:** physical iPhone/iPad Safari, installed Home Screen launch and on-screen keyboard behavior. VoiceOver is out of scope; see [Product § 3](PRODUCT_DEFINITION.md#3-intended-user-and-platforms).

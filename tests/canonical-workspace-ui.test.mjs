@@ -1518,6 +1518,33 @@ test('Storage history preview shows gaps and conflicts, then stages locally and 
   assert.equal(h.get('historical-summary-stage').disabled,true);
 });
 
+test('Home shows workbook spending its categories do not cover as a hatched Not broken down row', async () => {
+  const h = await workspacePage();
+  await h.click('open-ledger');
+  await h.navigate('#storage');
+  const file = inventedHistory('Invented workbook.xlsx', '900.00');
+  file.records[0].month = '2025-01'; file.expectedMonthRange = {start:'2025-01', end:'2025-01'};
+  file.records[0].summary.expenseTotal.amount = '600.00';
+  file.records[0].breakdowns = {expenseCategories:{complete:false, items:[{label:'Invented living', amount:{amount:'450.00', currency:'USD'}}]}};
+  await selectHistoryFile(h, historyTestFile(file));
+  await h.click('historical-summary-preview');
+  await h.choose('historical-record-0-action', 'accept');
+  const reason = h.get('historical-record-0-reason');
+  reason.value = 'Verified invented source'; await reason.emit('input');
+  await h.click('historical-summary-stage');
+  await h.navigate('#overview');
+  await h.choose('month-filter', '2025-01');
+  assert.match(h.get('summary-scope').textContent, /Reported/, 'the workbook month is the source, not the imported transactions');
+  const rows = h.get('category-legend').children.map(item => item.children[0]);
+  assert.deepEqual(rows.map(row => row.attributes['aria-label']),
+    ['Invented living, $450.00, 75% of spending', 'Not broken down, $150.00, 25% of spending'], 'the uncovered amount stays visible, never dropped');
+  assert.equal(findText(rows[1], child => child.className === 'swatch').dataset.slot, 'none', 'missing detail is hatched, not a category colour');
+  await rows[1].click();
+  assert.match(text(h.get('category-readout')), /History totals without a category for this amount/);
+  assert.equal(findText(h.get('category-readout'), child => child.tagName === 'BUTTON'), null, 'there are no records to open in Activity');
+  assert.equal(h.state.writes, 0);
+});
+
 test('late historical file reads cannot overwrite a newer selection or resurrect discarded preview after navigation', async () => {
   const h = await workspacePage();
   await h.click('open-ledger');
