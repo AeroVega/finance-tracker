@@ -77,3 +77,16 @@ test('a manifest changed after admission is refused and the new claim is release
  assert.equal(http.active,0);assert.equal(financialWrites(http,start).length,0);
  assert.equal(store.coordinator.canWrite,false,'the unusable claim is released');
 });
+
+test('a save whose manifest changed reports base-conflict even when the overlapped base read also fails',async()=>{
+ const {http,owner,ledger}=await saved({release:false});
+ const manifestFile=[...http.files.values()].find(f=>f.metadata.appProperties?.financeTrackerKind==='finance-tracker-full-snapshot-manifest');
+ const changed=http.json(manifestFile.metadata.id);changed.copyId='f0110002-0000-4000-8000-000000000001';
+ manifestFile.bytes=new TextEncoder().encode(JSON.stringify(changed));
+ const head=http.json(http.json(manifestFile.metadata.id).head?.fileId??owner.verifiedManifest.head.fileId);
+ const snapshot=http.files.get(head.snapshot.fileId);snapshot.bytes=snapshot.bytes.slice();snapshot.bytes[0]^=1;
+ const start=http.requests.length;
+ await assert.rejects(owner.save(correction(ledger)),{code:'base-conflict'});
+ assert.equal(financialWrites(http,start).length,0);
+ await owner.release().catch(()=>{});
+});

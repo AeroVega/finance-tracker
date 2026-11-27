@@ -385,7 +385,10 @@ class FullSnapshotStorage {
    // The verified baseline names the base objects, so they are read while the
    // manifest is checked. A changed manifest still refuses the save.
    this.#saveAttempt={sequence:++this.#saveSequence,base:clone(baseline.manifest),candidate:null,authorityDispatched:false};
-   const [base,current]=await settled([this.#selected(),this.#current(baseline.manifest,baseline.envelope)]);if(!same(base,baseline.manifest)||base.pending)fail('base-conflict');
+   const [selected,read]=await Promise.allSettled([this.#selected(),this.#current(baseline.manifest,baseline.envelope)]);
+   // A changed manifest is the conflict, whatever the overlapped base read reports.
+   if(selected.status==='rejected')throw selected.reason;const base=selected.value;if(!same(base,baseline.manifest)||base.pending)fail('base-conflict');
+   if(read.status==='rejected')throw read.reason;const current=read.value;
    if(revision(base.revision)>=BigInt(FULL_SNAPSHOT_LIMITS.maxHistory))fail('byte-limit');
    assertCanonicalLedgerTransition(current.ledger,candidate);
    // An unchanged ledger is verified and returned. Otherwise the closing check
