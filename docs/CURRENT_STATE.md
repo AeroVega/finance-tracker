@@ -1,6 +1,6 @@
 # Current project state
 
-**Checked:** 2026-11-24
+**Checked:** 2026-11-26
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
 
 This is the one place for mutable project status and the permission boundary. Other documents link here instead of copying it. [Project history](PROJECT_STATUS.md) holds the dated timeline.
@@ -43,10 +43,11 @@ The owner selected **full-snapshot v1** after live synthetic testing. Each save 
 - **Portable encrypted backup and restore** and recovery are implemented in the selected route. Do not infer live acceptance beyond the evidence in the relevant PRs.
 - **Post-merge** Node and Pages workflows succeeded. That is not an independent live-browser check.
 - **Redesigned shell and Home** merged in [PR 62](https://github.com/AeroVega/finance-tracker/pull/62). It changes presentation only; see [Design](DESIGN.md). Further UX slices are in [Next steps](NEXT_STEPS.md).
-- **Accounts redesign** (institution-grouped list, per-account detail with dots-only balance observations, a 12-month coverage strip and next steps for each gap; holdings folded into investment account detail) is in progress on `t3/accounts-detail-ux`. It changes presentation and navigation only: position and coverage rules are unchanged. See [Design § Accounts](DESIGN.md#accounts).
-- **Home periods and categories** (a Month, Year and Lifetime period bar that opens on the current month, spending by category, a period-aware trend and a two-column layout) is in progress on `t3/home-dashboard-periods`. Months after the workbook history now use imported activity labelled partial, and Year and Lifetime sum one source per month. Dashboard customization is deferred. See [Design § Home](DESIGN.md#home).
+- **Accounts redesign** (institution-grouped list, per-account detail with dots-only balance observations, a 12-month coverage strip and next steps for each gap; holdings folded into investment account detail) merged in [PR 65](https://github.com/AeroVega/finance-tracker/pull/65). It changes presentation and navigation only: position and coverage rules are unchanged. See [Design § Accounts](DESIGN.md#accounts).
+- **Home periods and categories** (a Month, Year and Lifetime period bar that opens on the current month, spending by category, a period-aware trend and a two-column layout) merged in [PR 68](https://github.com/AeroVega/finance-tracker/pull/68). Months after the workbook history now use imported activity labelled partial, and Year and Lifetime sum one source per month. Dashboard customization is deferred. See [Design § Home](DESIGN.md#home).
+- **Planning** (monthly category budgets and the baseline cash projection, a fifth Planning tab and a Home budget card) is in progress on `t3/planning-prerequisites`. It adds optional append-only `planningEvents` to the ledger, so the PR is guarded and the owner merges it. Neither a live Drive save nor a physical-device check has been run on it. The projection is not usable with real records until every checking and savings account has three reconciled months and the owner has confirmed the SoFi Checking and Savings import. See [Planning](PLANNING.md).
 - **VoiceOver** is out of scope, by the owner's 2026-11-26 decision. See [Product § 3](PRODUCT_DEFINITION.md#3-intended-user-and-platforms).
-- **Activity discovery** (type and category filters, sorting, month grouping, inline review decisions) is in progress in [PR 64](https://github.com/AeroVega/finance-tracker/pull/64). Reporting rules are unchanged. Following the owner's 2026-11-25 decision, category rules for later imports are opt-in and audit notes are suggested from templates; see [Product § 4.6](PRODUCT_DEFINITION.md#46-categories).
+- **Activity discovery** (type and category filters, sorting, month grouping, inline review decisions) merged in [PR 64](https://github.com/AeroVega/finance-tracker/pull/64). Reporting rules are unchanged. Following the owner's 2026-11-25 decision, category rules for later imports are opt-in and audit notes are suggested from templates; see [Product § 4.6](PRODUCT_DEFINITION.md#46-categories).
 
 ## Acceptance and verification
 

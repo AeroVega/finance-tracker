@@ -31,6 +31,7 @@ When documents disagree, resolve it at the source instead of adding another summ
 | [Canonical ledger contract](CANONICAL_LEDGER_CONTRACT.md) | Financial meaning, identity, provenance |
 | [Data model](DATA_MODEL.md) | Record shapes |
 | [Financial position](FINANCIAL_POSITION.md) | Dated balances, holdings, liabilities, reconciliation |
+| [Planning](PLANNING.md) | Budget targets, projection exclusions, the budget report and the baseline cash projection |
 | [Historical monthly summary](HISTORICAL_MONTHLY_SUMMARY.md) | Normalized monthly history from the legacy workbook |
 | [Canonical import](CANONICAL_IMPORT.md) | Import pipeline, reconciliation, coverage |
 | [Provider import specs](PROVIDER_IMPORT_SPECS.md) | Wells Fargo, SoFi and Fidelity formats |
