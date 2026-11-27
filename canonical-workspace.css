@@ -312,10 +312,10 @@ pre { margin: var(--s2) 0 0; padding: var(--s4); max-width: 100%; max-height: 32
 .attention-count { color: var(--text); font-size: var(--fs-figure); font-weight: 650; line-height: 1.1; }
 .attention-count[data-state="due"] { color: var(--warning); }
 .link-list { display: grid; margin-top: var(--s4); border-top: 1px solid var(--line); }
-.link-list a, .more-links a, .row-link { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 48px; padding: var(--s3) var(--s2); border-bottom: 1px solid var(--line); color: var(--text); font-size: var(--fs-sm); font-weight: 550; text-decoration: none; }
+.link-list a, .row-link { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 48px; padding: var(--s3) var(--s2); border-bottom: 1px solid var(--line); color: var(--text); font-size: var(--fs-sm); font-weight: 550; text-decoration: none; }
 .link-list a:last-child { border-bottom: 0; }
-:is(.link-list, .more-links) a .icon, .row-link .icon { width: 18px; height: 18px; color: var(--muted); }
-:is(.link-list, .more-links) a:hover .icon, .row-link:hover .icon { color: var(--accent); }
+.link-list a .icon, .row-link .icon { width: 18px; height: 18px; color: var(--muted); }
+.link-list a:hover .icon, .row-link:hover .icon { color: var(--accent); }
 .home-import .primary-button { width: 100%; margin-top: var(--s4); }
 .home-import .icon { width: 18px; height: 18px; }
 
@@ -691,10 +691,16 @@ pre { margin: var(--s2) 0 0; padding: var(--s4); max-width: 100%; max-height: 32
 .save-state { margin-top: var(--s2); color: var(--text); font-size: var(--fs-md); font-weight: 550; }
 .save-state[data-state="dirty"], .save-state[data-state="unverified"] { color: var(--warning); }
 .connection-status { margin: var(--s1) 0 var(--s2); color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.more-links { display: grid; border-top: 1px solid var(--line); }
-.more-links a:last-child { border-bottom: 0; }
-.more-links a { min-height: 60px; font-size: var(--fs-md); }
-.more-links small, .row-link small { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 400; }
+/* Import is the first job on this page, so it is the one filled control. */
+.more-import { justify-content: flex-start; min-height: 64px; margin-bottom: var(--s6); padding: var(--s3) var(--s4); font-size: var(--fs-md); text-align: left; }
+.more-import > span { flex: 1; min-width: 0; }
+.more-import small { display: block; font-size: var(--fs-xs); font-weight: 500; opacity: .8; }
+.more-import .icon { width: 20px; height: 20px; flex-shrink: 0; }
+.row-link small { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 400; }
+.more .historical-summary-panel > .row-link { margin-top: 0; border-top: 0; }
+/* Saving lives in the draft bar, so the preview save is a secondary action here. */
+.more .action-list .primary-button { color: var(--text); background: var(--surface-2); border-color: var(--line-strong); }
+.more .action-list .primary-button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--text-2); }
 .row-link { margin-top: var(--s3); border-top: 1px solid var(--line); }
 .backup-panel > label:not(.checkbox-field) { max-width: 28rem; }
 .diagnostic-history { display: grid; gap: var(--s2); }
@@ -705,6 +711,8 @@ pre { margin: var(--s2) 0 0; padding: var(--s4); max-width: 100%; max-height: 32
 .more .historical-summary-panel { margin-block: 0; }
 .historical-summary-panel #historical-summary-workflow { padding-bottom: var(--s2); }
 .provider-import-panel { margin: 0; }
+/* The panel draws a border around the file input, so its button needs inset from that border. */
+.provider-import-panel input[type="file"] { padding: var(--s1) var(--s2); }
 
 /* Mounted coverage calendar: keep its selected day legible on the mint accent. */
 .canonical-workspace .ics-day.selected, .canonical-workspace .ics footer [data-action="confirm"] { color: var(--accent-ink); }

@@ -270,7 +270,7 @@
                 <p>Do not enter account numbers. This adds an account without connecting to an institution. Invented account names only in synthetic copies.</p>
                 <label for="new-account-name">Display name<input id="new-account-name" type="text" maxlength="200" disabled></label>
                 <label for="new-account-institution">Institution<select id="new-account-institution" disabled><option value="wells-fargo">Wells Fargo</option><option value="sofi">SoFi</option><option value="fidelity">Fidelity</option></select></label>
-                <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Brokerage</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
+                <label for="new-account-type">Account type<select id="new-account-type" disabled><option value="checking">Checking</option><option value="savings">Savings</option><option value="credit-card">Credit card</option><option value="brokerage">Personal investments</option><option value="retirement">Retirement</option><option value="mortgage">Mortgage</option><option value="auto-loan">Auto loan</option><option value="other">Other / unknown scope</option></select></label>
                 <label for="new-account-currency">Three-letter currency<input id="new-account-currency" type="text" maxlength="3" placeholder="USD" disabled></label>
                 <button id="stage-account" type="button" class="secondary-button" disabled>Stage account</button>
                 <p id="account-form-status" class="status-message" tabindex="-1"></p>
@@ -353,6 +353,8 @@
       </section>
 
       <section class="workspace-page more" id="storage" hidden aria-labelledby="page-title">
+        <a href="#import" class="primary-button more-import"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v10m0 0-4-4m4 4 4-4M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></svg><span>Import a CSV<small>Wells Fargo, SoFi or Fidelity export</small></span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+
         <section class="more-section" aria-labelledby="session-heading">
           <h2 id="session-heading">This workspace</h2>
           <p id="save-state" class="save-state" aria-live="polite">No ledger open</p>
@@ -367,12 +369,8 @@
           <div id="more-connect" class="connect-slot"></div>
         </section>
 
-        <nav class="more-links" aria-label="Data">
-          <a href="#import"><span>Import a CSV<small>Wells Fargo, SoFi or Fidelity export</small></span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
-          <a href="#migration"><span>History migration<small>Type the old workbook’s monthly history in, one year at a time</small></span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
-        </nav>
-
-        <details class="disclosure more-section historical-summary-panel"><summary>Historical monthly summaries</summary>
+        <details class="disclosure more-section historical-summary-panel"><summary>Workbook history</summary>
+          <a class="row-link" href="#migration"><span>History migration<small>Type the old workbook’s monthly history in, one year at a time</small></span><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
           <div id="historical-summary-workflow"></div>
         </details>
 

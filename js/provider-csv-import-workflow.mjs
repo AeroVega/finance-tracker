@@ -47,8 +47,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   root.replaceChildren();
   const heading = element(document, 'h4', {}, 'Import a supported CSV');
   const intro = element(document, "p", { className: "panel-copy" }, "Choose a Wells Fargo, SoFi or Fidelity export. The file is read locally. Nothing is uploaded or saved until you stage the reviewed import, then use the workspace explicit save action.");
-  const fileLabel = element(document, 'label', { for: 'provider-import-file' }, 'CSV export');
-  const file = element(document, 'input', { id: 'provider-import-file', type: 'file', accept: '.csv,text/csv' });
+  const file = element(document, 'input', { id: 'provider-import-file', type: 'file', accept: '.csv,text/csv', 'aria-label': 'Choose a CSV file' });
   const summary = element(document, 'p', { className: 'field-help', role: 'status', 'aria-live': 'polite' }, 'No file selected.');
   const previewSummary = element(document, 'p', { className: 'provider-import-preview', role: 'status', 'aria-live': 'polite' });
   const mappings = element(document, 'div', { className: 'provider-import-mappings' });
@@ -61,7 +60,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
   const reset = element(document, 'button', { type: 'button', className: 'text-button', disabled: '' }, 'Discard selected file');
   const actions = element(document, 'div', { className: 'storage-actions' });
   actions.append(stage, reset);
-  root.append(heading, intro, fileLabel, file, summary, previewSummary, mappings, emptyConfirmation, discrepancy, actions);
+  root.append(heading, intro, file, summary, previewSummary, mappings, emptyConfirmation, discrepancy, actions);
 
   function invalidate(message = 'Import confirmation cleared. Review the file and coverage again.') {
     state.context++;
@@ -120,7 +119,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     accountLabel.append(select);
     const observed = dateRange(records);
     const rangeNote = element(document, 'p', { className: 'field-help' }, observed
-      ? 'Observed transaction dates: ' + observed.start + ' through ' + observed.end + '. This is not declared coverage.'
+      ? 'Dates seen in the file: ' + observed.start + ' through ' + observed.end + '.'
       : 'No usable transaction dates were observed. Enter the coverage from the statement/export evidence.');
     const coverageRoot = element(document, 'div', { className: 'provider-import-coverage' });
     const context = { sourceKey, institutionId, select, observed, records, manual, accepted: null, selector: null };
@@ -154,8 +153,7 @@ export function mountProviderImportWorkflow({ root, getLedger, stageImport, canS
     context.selector = mountImportCoverageSelector({
       container: coverageRoot, ...coverageContext(),
       onConfirm: result => { context.accepted = result; state.validated = false; refreshEligibility(); },
-      onInvalidate: changed,
-      onCancel: changed
+      onInvalidate: changed
     });
     context.updateCoverageContext = () => { changed(); context.selector.updateContext(coverageContext()); };
     select.addEventListener('change', context.updateCoverageContext);
