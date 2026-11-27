@@ -20,7 +20,7 @@ for(const phase of ['initialize','post-two-patches','open','recover'])test('mani
   let changed=false,postPatchMedia=0;
   h.http.beforeResponse=({category,fileId,row})=>{
    if(category!=='media'||row.kind!==kind||changed)return;
-   if(phase==='post-two-patches'&&(patches(h.http).length!==2||++postPatchMedia!==3))return;
+   if(phase==='post-two-patches'&&(patches(h.http).length!==2||++postPatchMedia!==1))return;
    // For init skip create receipt's unbracketed media and reach #selected.
    if(phase==='initialize'&&h.http.requests.filter(r=>r.kind===kind&&r.category==='media').length===1)return;
    bump(h.http.files.get(fileId));changed=true;
@@ -84,10 +84,11 @@ test('manifest revalidation has a whole-operation extra-media budget',async()=>{
  const h=await setup();try{
   await h.store.start({initialize:true});let reads=0;
   h.http.beforeResponse=({category,fileId,row})=>{
-   if(category==='media'&&row.kind===kind&&h.http.requests.at(-2)?.category==='metadata'){reads++;if(reads%3!==0)bump(h.http.files.get(fileId));}
+   // Every manifest media read is a bracket read. Three of every four drift.
+   if(category==='media'&&row.kind===kind){reads++;if(reads%4!==0)bump(h.http.files.get(fileId));}
   };
   await assert.rejects(h.store.save(h.ledger),error=>error.code==='manifest-version-mismatch'||error.cause?.code==='manifest-version-mismatch');
-  assert.equal(reads,13,'four brackets spend eight extra reads; fifth stops after anchor');
+  assert.equal(reads,11,'two brackets spend six extra reads; the third stops at the budget of eight');
   assert.ok(reads<=20,'extra media reads cannot grow without bound');
   assert.equal(h.store.verifiedManifest,null);assert.equal(h.store.recoveryRequired,true);
  }finally{await cleanup(h);}

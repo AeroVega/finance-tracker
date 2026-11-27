@@ -19,7 +19,7 @@ async function fixture(){
 for(const operation of ['create','publish'])test(`${operation} captures its origin before its first awaited preparation`,async()=>{
  const f=await fixture();let enter,resolve;const entered=new Promise(r=>enter=r),gate=new Promise(r=>resolve=r);
  if(operation==='create')f.adapter.crypto={subtle:{digest:async(...args)=>{enter();await gate;return crypto.subtle.digest(...args);}}};
- else {const read=f.adapter.readMetadata.bind(f.adapter);let first=true;f.adapter.readMetadata=async(...args)=>{const result=await read(...args);if(first){first=false;enter();await gate;}return result;};}
+ else {const token=f.adapter.accessToken;f.adapter.accessToken=async()=>{enter();await gate;return token();};}
  const old=f[operation]();await entered;f.invalidate();resolve();await assert.rejects(old,{code:'verification-scope-closed'});
  assert.equal(f.drive.mutations,0);assert.equal(f.expired,0,'No issued write exists to report as uncertain.');
 });

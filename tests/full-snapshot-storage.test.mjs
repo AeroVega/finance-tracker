@@ -90,7 +90,8 @@ test('fixed-ID collision never overwrites or publishes a different object',async
   const old=structuredClone(h.http.files.get(occupied));h.store.adapter.generatedFileIds.unshift(occupied);
   const start=h.http.requests.length;await assert.rejects(h.store.save(correction(ledger)));
   assert.deepEqual(h.http.files.get(occupied),old);assert.equal(manifestPatches(h.http,start).length,0);
-  assert.equal(financialWrites(h.http,start).filter(r=>r.category==='create').length,1);
+  // The refused snapshot and its concurrently uploaded envelope, an unpublished orphan.
+  assert.equal(financialWrites(h.http,start).filter(r=>r.category==='create').length,2);
  }finally{await close(h);}
 });
 
