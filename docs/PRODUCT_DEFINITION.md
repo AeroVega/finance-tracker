@@ -184,6 +184,14 @@ Projections are a core capability. They estimate likely future outcomes using ob
 
 **Owner-confirmed 2026-11-05:** Average inflows and outflows from the three qualifying months to form the baseline forecast, including debt payments and excluding transfers between the included checking and savings accounts. Assumptions are editable. Recalculate after changes and label the result as a baseline estimate. The confirmed coverage gate still applies, with no manual-assumption bypass. Seasonality, unusual one-off activity, remaining calculation edge cases, and confidence-band methodology are not settled by this decision.
 
+**Owner-confirmed 2026-11-26:** Only a reconciled account-month passes the coverage gate. An imported month whose declared period spans the month is not enough. Every checking and savings account needs a reconciled month for each of the three qualifying months. The projection starts from the reconciled closing balances at the end of the latest qualifying month.
+
+**Owner-confirmed 2026-11-26:** One-off activity is handled by explicit exclusion, which is the editable assumption for v1.0.0. The app flags unusually large rows in the three qualifying months, and the user decides whether to exclude any of them from the average. Each exclusion is recorded with its reason, listed beside the projection, and reversible. The app never excludes a row on its own. Seasonality and confidence (Q19) remain open.
+
+**Owner-confirmed 2026-11-26:** Saving each projection for later comparison with actual outcomes (§5.4) is deferred past v1.0.0. v1.0.0 recalculates the projection from current data. The stored planning records leave room to add forecast snapshots later without rewriting history.
+
+**Owner-confirmed 2026-11-26:** The owner confirms the SoFi Checking and Savings import, save and reopen path on the deployed build before the projection is treated as usable with real records.
+
 ### 5.2 Goals
 
 Goals provide measurable desired outcomes for projections to evaluate. They may include saving for a purchase, building or maintaining an emergency reserve, paying off debt, or reaching an investment milestone. Goals should be optional and should help users understand whether, when, and under what assumptions an outcome may be reached.
@@ -213,6 +221,16 @@ A lightweight initial budget experience may include periodic category targets, a
 **Owner-confirmed 2026-11-05:** Show each budget's target, actual spending, and amount remaining or over target. Include an estimated month-end total when there is enough data, clearly label it as an estimate, and use neutral wording. The exact visualization and the criteria for sufficient forecast data remain to be designed.
 
 **Owner-confirmed 2026-11-05:** When import coverage is incomplete, show recorded spending with a clear coverage warning. Withhold the budget's month-end estimate when the gaps make it unreliable. The reliability thresholds and aggregation rules remain to be specified.
+
+**Owner-confirmed 2026-11-26:** Overspend does not carry over (Q29). Each month starts fresh in both directions. Overspend shows as an amount over target in that month only.
+
+**Owner-confirmed 2026-11-26:** Budget setup suggests each category's starting target from its average monthly spending over the three most recent completed months that have data. A suggestion is labelled as one and states how many months it used. Nothing is stored until the user accepts or edits it.
+
+**Owner-confirmed 2026-11-26:** The budget view shows a total line that compares all targets with all spending, plus one "Not budgeted" row. That row holds spending in categories without a target and spending with no category. No spending is hidden.
+
+**Owner-confirmed 2026-11-26:** The month-end estimate follows the category's usual spending shape. It is the spending so far this month plus the average spending after the same day in each of the three previous months. It needs three previous months with imported transaction detail. Without that history, the estimate falls back to this month's pace (spending so far divided by days elapsed, times days in the month), labelled as such and shown only from day 8. When this month's coverage has a gap, no estimate is shown.
+
+**Owner-confirmed 2026-11-26:** Planning is the fifth primary tab: Home, Activity, Accounts, Planning, More. A compact Home card shows this month's budget status and opens Planning.
 
 ### 5.6 Insights
 
