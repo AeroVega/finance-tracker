@@ -20,7 +20,7 @@
         "index.html", "js/app.js", "js/canonical-workspace.mjs", "js/canonical-workspace-session.mjs", "js/release-profile.mjs", "tests/production-app-flow.test.mjs",
         "js/dashboard-synthetic-storage.mjs", "js/session-coordination.mjs",
         "js/full-snapshot-application.mjs", "js/workspace-navigation.js", "js/workspace-pages.mjs",
-        "js/workspace-chrome.mjs", "js/historical-monthly-summary-workflow.mjs", "js/home-dashboard.mjs", "js/home-period-report.mjs",
+        "js/workspace-chrome.mjs", "js/workspace-motion.mjs", "js/more-drawer.mjs", "js/historical-monthly-summary-workflow.mjs", "js/home-dashboard.mjs", "js/home-period-report.mjs",
         "js/canonical-workspace-model.mjs", "js/canonical-month-index.mjs", "js/financial-position.mjs",
         "js/historical-monthly-summary.mjs", "js/historical-monthly-summary-validation.mjs", "js/success-metrics.mjs",
         "js/provider-csv-import-workflow.mjs", "js/provider-csv-preview.mjs", "js/provider-csv.mjs",

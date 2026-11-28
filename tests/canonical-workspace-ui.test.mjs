@@ -2240,7 +2240,7 @@ test('Categories adds a subcategory that review offers under its parent', async 
   assert.equal(h.get('quick-category').children.at(-1).textContent, 'Create new category…');
 });
 
-test('Categories renames in place and deletes after confirmation, sending its transactions to Needs review', async () => {
+test('Categories renames in place and deletes in one tap, sending its transactions to Needs review, and the save bar undoes it', async () => {
   const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#categories');
   await button(categoryRow(h, 'spending', 'Dining'), 'Edit').click();
   const name = h.get('category-edit-name');
@@ -2249,17 +2249,18 @@ test('Categories renames in place and deletes after confirmation, sending its tr
   assert.ok(categoryRow(h, 'spending', 'Eating out'));
   assert.equal(categoryRow(h, 'spending', 'Dining'), undefined);
   const used = getEffectiveActivities(h.modelSession.ledger).filter(activity => activity.active && activity.categoryId === 'dining').length;
-  h.observed.confirm = false;
+  const asked = h.observed.confirmations.length;
   await button(categoryRow(h, 'spending', 'Eating out'), 'Delete').click();
-  assert.match(h.observed.confirmations.at(-1), new RegExp(`Its ${used} transactions go back to Needs review`));
-  assert.ok(categoryRow(h, 'spending', 'Eating out'), 'a declined confirmation keeps the category');
-  h.observed.confirm = true;
-  await button(categoryRow(h, 'spending', 'Eating out'), 'Delete').click();
+  assert.equal(h.observed.confirmations.length, asked, 'a staged, undoable delete asks nothing');
   assert.equal(categoryRow(h, 'spending', 'Eating out'), undefined);
+  assert.match(h.get('action-status').textContent, new RegExp(`Eating out deleted\\. ${used} transactions moved to Needs review\\. Choose Undo`));
+  assert.doesNotMatch(h.get('action-status').textContent, /budget/, 'no budget ended, so none is mentioned');
+  assert.equal(h.get('draft-undo').hidden, false, 'Undo sits beside Save');
+  assert.equal(h.get('draft-undo').disabled, false);
   await h.navigate('#transactions'); await h.choose('month-filter', ''); await h.choose('review-only', true);
   assert.ok(records(h).some(row => /Category was deleted/.test(text(row))));
-  // Undo restores the category in one step.
-  await h.click('undo-last-change');
+  // Undo in the save bar restores the category in one step.
+  await h.click('draft-undo');
   await h.navigate('#categories');
   assert.ok(categoryRow(h, 'spending', 'Eating out'));
 });
@@ -2309,7 +2310,7 @@ test('Rules saves a rule, previews what it would file, and changes nothing until
   assert.equal(h.state.writes, 0, 'staging never saves');
 });
 
-test('Rules run first to last, move, turn off, and delete after confirmation', async () => {
+test('Rules run first to last, move, turn off, delete in one tap, and come back with Undo', async () => {
   const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#rules');
   for (const [contains, category] of [['brokerage', 'other'], ['brokerage fee', 'fees-and-interest']]) {
     await h.click('rule-new');
@@ -2325,11 +2326,13 @@ test('Rules run first to last, move, turn off, and delete after confirmation', a
   assert.match(text(ruleRow(h, 1)), /Off/);
   assert.match(text(ruleRow(h, 2)), /Matches 12 transactions/);
   assert.equal(h.get('rules-apply-all').textContent, 'Apply all rules (12)');
-  h.observed.confirm = false;
+  const asked = h.observed.confirmations.length;
   await button(ruleRow(h, 1), 'Delete').click();
-  assert.match(h.observed.confirmations.at(-1), /Transactions it already filed keep their category/);
-  assert.equal(h.get('rule-list').children.length, 2);
-  h.observed.confirm = true;
+  assert.equal(h.observed.confirmations.length, asked, 'a staged, undoable delete asks nothing');
+  assert.equal(h.get('rule-list').children.length, 1);
+  assert.match(h.get('rule-form-status').textContent, /^Rule 1 deleted\. Transactions it already filed keep their category\. Choose Undo/);
+  await h.click('draft-undo');
+  assert.equal(h.get('rule-list').children.length, 2, 'Undo brings the rule back');
   await button(ruleRow(h, 1), 'Delete').click();
   assert.equal(h.get('rule-list').children.length, 1);
   await h.click('rules-apply-all');

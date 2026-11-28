@@ -303,6 +303,7 @@ function refreshDiagnosticHistory() {
 installDiagnosticSelfTest({button:$('diagnostic-self-test'), target:$('diagnostic-test-status'), onReport:refreshDiagnosticHistory, document, navigator});
 
 
+const UNDO_OR_SAVE = ' Choose Undo to bring it back, or Save changes to keep it.';
 function announce(text, kind = 'info') {
   $('action-status').textContent = text; $('action-status').dataset.kind = kind;
   if (activeFormStatus) {
@@ -351,7 +352,7 @@ function refresh() {
   $('save-preview').disabled = busy || !configured || navigator.onLine === false || session.mode !== 'preview' || !session.ledger || Boolean(lifecycle) || session.backupPreview || session.unverified;
   $('save-preview').textContent = session.mode === 'preview' ? 'Save this preview to a new folder' : 'Save this preview to a new folder';
   $('save-ledger').disabled = busy || !session.canSave();
-  $('undo-last-change').disabled = busy || !session.canUndo();
+  $('undo-last-change').disabled = $('draft-undo').disabled = busy || !session.canUndo();
   $('revert-all-changes').disabled = busy || !session.canRevertAll();
   for (const id of ['category-add-name', 'category-add-direction', 'category-add-parent']) $(id).disabled = !editable;
   $('category-add').disabled = !editable || !$('category-add-name').value.trim();
@@ -418,6 +419,8 @@ function refresh() {
   $('draft-summary').textContent = busy ? 'Working. Keep this tab open.' : session.unverified ? 'Save unverified. Check Recovery in More.' : needsRecovery || recovering ? 'Recovery needed. Open More.' : session.dirty ? `${session.stagedHistory.length} staged change${session.stagedHistory.length === 1 ? '' : 's'} · not saved` : session.ledger && session.needsReopen ? 'Read-only. Reconnect in More to edit.' : session.ledger ? 'No staged changes' : 'No ledger loaded';
   // While an operation runs the bar reports progress only; there is nothing to press.
   $('save-ledger-option').hidden = busy || recovering || needsRecovery || session.mode === 'preview' || !session.dirty;
+  // Undo sits beside Save so a staged change, including a delete, is one tap from reversal.
+  $('draft-undo').hidden = busy || recovering || needsRecovery || !session.dirty;
   // Hide only actions that cannot apply in this mode; blocked ones keep their reason.
   $('save-preview-option').hidden = session.mode !== 'preview';
   for (const id of ['undo-last-change', 'revert-all-changes']) $(id + '-option').hidden = !session.ledger;
@@ -1288,15 +1291,16 @@ function categoryItem(item) {
     node('small', [plural(used, 'transaction'), children ? plural(children, 'subcategory', 'subcategories') : ''].filter(Boolean).join(' · ')));
   const edit = categoryButton('Edit', `Edit ${item.path}`), remove = categoryButton('Delete', `Delete ${item.path}`, 'text-button danger-text');
   edit.addEventListener('click', () => { if (edit.disabled) return; categoryEditing = item.id; render(); document.getElementById('category-edit-name')?.focus(); });
+  // Deleting is staged and undoable, so it asks nothing; Undo in the save bar reverses it.
   remove.addEventListener('click', () => {
     if (remove.disabled) return;
-    const question = `Delete ${item.path}?` + (used ? ` Its ${plural(used, 'transaction')} go back to Needs review.` : '') +
-      ' Its budget ends from this month. Earlier months keep theirs.';
-    if (!window.confirm(question)) { announce('Delete cancelled. The category is unchanged.'); return; }
     return run('Staging the deletion locally.', () => {
+      const budgets = session.ledger.planningEvents?.length ?? 0;
       session.manageCategories({type:'delete', categoryId:item.id}, currentMonth());
+      const budgetEnded = (session.ledger.planningEvents?.length ?? 0) > budgets;
       render();
-      announce(`${item.path} deleted.` + (used ? ` ${plural(used, 'transaction')} moved to Needs review.` : '') + ' Save changes to keep it.', 'success');
+      announce(`${item.path} deleted.` + (used ? ` ${plural(used, 'transaction')} moved to Needs review.` : '') +
+        (budgetEnded ? ' Its budget ends from this month. Earlier months keep theirs.' : '') + UNDO_OR_SAVE, 'success');
     }, 'category-form-status', 'category-delete');
   });
   categoryControls.push(editable => { edit.disabled = remove.disabled = !editable; });
@@ -1353,10 +1357,10 @@ function ruleStatus(rule) {
   const count = currentRuleTargets().get(rule.ruleId)?.length ?? 0;
   return count ? `Matches ${plural(count, 'transaction')} that need review` : 'No transaction that needs review matches';
 }
-function stageRules(commands, message) {
+function stageRules(commands, message, {undoHint = false} = {}) {
   return run('Staging the rule change locally.', () => {
     session.manageRules(commands); render();
-    announce(`${message} Save changes to keep it.`, 'success');
+    announce(message + (undoHint ? UNDO_OR_SAVE : ' Save changes to keep it.'), 'success');
   }, 'rule-form-status', 'rule-change');
 }
 function renderRules() {
@@ -1393,8 +1397,7 @@ function ruleItem(rule, rules) {
   edit.addEventListener('click', () => { if (!edit.disabled) openRuleEditor(rule); });
   remove.addEventListener('click', () => {
     if (remove.disabled) return;
-    if (!window.confirm(`Delete rule ${rule.position}? Transactions it already filed keep their category.`)) { announce('Delete cancelled. The rule is unchanged.'); return; }
-    return stageRules({type:'delete', ruleId:rule.ruleId}, `Rule ${rule.position} deleted.`);
+    return stageRules({type:'delete', ruleId:rule.ruleId}, `Rule ${rule.position} deleted. Transactions it already filed keep their category.`, {undoHint:true});
   });
   review?.addEventListener('click', () => { if (!review.disabled) openRulePreview([rule.ruleId]); });
   ruleControls.push(editable => {
@@ -1418,8 +1421,7 @@ function legacyRuleItem(rule) {
   });
   remove.addEventListener('click', () => {
     if (remove.disabled) return;
-    if (!window.confirm('Stop this rule for later imports? Transactions it already filed keep their category.')) { announce('Delete cancelled. The rule is unchanged.'); return; }
-    return stageRules({type:'retire-legacy', ruleEventId:rule.ruleEventId}, 'Rule stopped for later imports.');
+    return stageRules({type:'retire-legacy', ruleEventId:rule.ruleEventId}, 'Rule stopped for later imports. Transactions it already filed keep their category.', {undoHint:true});
   });
   ruleControls.push(editable => { edit.disabled = remove.disabled = !editable; });
   const actions = node('div', undefined, 'category-actions'); actions.append(edit, remove);
@@ -2035,11 +2037,13 @@ action('link-transfer', 'Recording and validating this transfer relationship loc
   render(); showDetail(selectedActivity);
   announce('Transfer activities linked with an auditable relationship. Save changes to persist the link.', 'success');
 });
-action('undo-last-change', 'Reverting the most recent staged change locally. No Drive write.', async () => {
+async function undoLastChange() {
   session.undoLastStagedChange(); render();
   if (selectedActivity && getWorkspaceActivity(session.ledger, selectedActivity)) showDetail(selectedActivity, {navigate:false});
   announce('Most recent staged change reverted. No saved records were changed.', 'success');
-});
+}
+action('undo-last-change', 'Reverting the most recent staged change locally. No Drive write.', undoLastChange);
+action('draft-undo', 'Reverting the most recent staged change locally. No Drive write.', undoLastChange);
 action('revert-all-changes', 'Reverting all staged changes to the last verified baseline. No Drive write.', async () => {
   if (!window.confirm('Discard all staged changes and return to the last verified saved year or original preview? Saved records will not change.')) {
     announce('Revert cancelled. Your staged changes are unchanged.'); return;
