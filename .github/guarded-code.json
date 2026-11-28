@@ -60,7 +60,7 @@
         "full-snapshot-witness-concurrency", "full-snapshot-version-convergence",
         "drive-session-adapter", "drive-mutation-lifetime", "drive-transaction-engine", "drive-request-metrics",
         "transaction-protocol", "canonical-workspace-session", "drive-feasibility-spike", "historical-workspace-persistence",
-        "financial-position-adversarial", "planning-records", "planning-persistence", "category-catalog", "rules"
+        "financial-position-adversarial", "planning-records", "planning-persistence", "category-catalog", "rules", "transfers"
       ],
       "manual": "Interrupt a synthetic save, follow recheck/recovery without blindly retrying, and independently reopen to verify one committed result. For limit or cost changes, record workload size, requests, rejection/recovery at admitted limits, and any current provider quota assumptions."
     },

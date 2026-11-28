@@ -135,6 +135,8 @@ Transfers are a distinct financial activity, not income or spending. Link outgoi
 
 This reaffirms the existing canonical ledger decision; it is not a new implementation request.
 
+**Owner-confirmed 2026-11-27:** a transfer names the account the money leaves and the account it goes into, and both are imported accounts. A transaction marked as a transfer is left out of income and spending at once. It stays in Needs review, flagged until its other side is imported and linked. A rule can mark a transfer and name its other account. The app suggests the matching row in the named account, but linking stays the user's explicit choice. **Owner-confirmed 2026-11-28:** a transfer takes no category. The review decision, the correction form, and the rule editor do not offer one for a transfer. A category already stored on a transfer stays valid, and no report reads it. See [Rules](RULES.md) and the [transfer account extension](CANONICAL_LEDGER_CONTRACT.md#transfer-account-extension).
+
 ### 4.6 Categories
 
 Provide a standard built-in category set and allow users to manage their categories. Preserve the already-established category semantics: historical classification is retained as recorded; taxonomy changes apply prospectively; renames do not rewrite historical labels; meaningful splits create new identities; merges are prospective; optional subcategories are limited to two classification levels; and manual corrections are auditable, affect the effective historical reporting period, and can be undone through additional events rather than erasing prior history.

@@ -81,8 +81,10 @@ test('unfiltered month sections equal the posted month report; filtered sections
   assert.equal(cents(dining.groups[0].totals[0].spending), sum);
   assert.equal(dining.groups[0].totals[0].income, '0');
   const flagged = reader.view({limit:1000, reviewOnly:true, month:'2025-12'});
-  assert.deepEqual(flagged.groups[0].totals, [], 'excluded rows never contribute to a section total');
-  assert.equal(flagged.groups[0].notCounted, flagged.filteredCount);
+  // Unlinked transfers are flagged but posted: they count, as neither income nor spending.
+  const transfers = flagged.rows.filter(row => row.activityKind === 'transfer').length;
+  assert.deepEqual(flagged.groups[0].totals, [{currency:'USD', income:'0', spending:'0', contributing:transfers}], 'flagged rows add nothing to income or spending');
+  assert.equal(flagged.groups[0].notCounted, flagged.filteredCount - transfers);
 });
 
 test('a pending row is listed, counted as not counted and excluded from its section total', () => {

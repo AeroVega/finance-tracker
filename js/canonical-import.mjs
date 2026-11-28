@@ -248,6 +248,8 @@ function validateHistoryEvent(e,a,byId,replay=null,activeIds=null) {
     if(a.lifecycleStatus!=='pending'||e.from!=='pending'||e.to!=='posted'||!isCalendarDate(e.effectiveDate)||(e.postedDate!==null&&!isCalendarDate(e.postedDate))||(e.settlementDate!==null&&!isCalendarDate(e.settlementDate))||byId.observations.get(e.sourceObservationId)?.activityId!==e.activityId) fail('invalid-lifecycle-event');
   } else if(e.eventType==='posting-status-correction') {
     validatePostingCorrection(e,a);
+  } else if(e.eventType==='transfer-account') {
+    validateTransferAccount(e,a,byId);
   } else if(e.eventType==='transfer-link') {
     const other=findActivity(e.counterpartyActivityId);
     const counterpart=replay?.get(e.counterpartyActivityId);
@@ -259,8 +261,18 @@ function validateHistoryEvent(e,a,byId,replay=null,activeIds=null) {
       a.accountId===other.accountId||a.currency!==counterpart.currency||
       amount===null||otherAmount===null||compare(amount,'0')>=0||compare(otherAmount,'0')<=0||
       compare(negate(amount),otherAmount)!==0||
-      a.transferGroupId||counterpart.transferGroupId) fail('invalid-transfer-link');
+      a.transferGroupId||counterpart.transferGroupId||
+      (a.transferAccountId&&a.transferAccountId!==other.accountId)||
+      (counterpart.transferAccountId&&counterpart.transferAccountId!==a.accountId)) fail('invalid-transfer-link');
   } else fail('unsupported-persisted-event');
+}
+// A transfer names the other account before its other side is linked. A link
+// then fixes it, so a linked transfer cannot change its account.
+function validateTransferAccount(e,a,byId) {
+  const account=byId.accounts?.get(e.counterpartyAccountId);
+  if(!e.evidence||typeof e.evidence.rationale!=='string'||!e.evidence.rationale.trim()||
+    a.activityKind!=='transfer'||a.transferGroupId||!account||e.counterpartyAccountId===a.accountId||
+    (e.priorCounterpartyAccountId??null)!==(a.transferAccountId??null)||e.counterpartyAccountId===a.transferAccountId) fail('invalid-transfer-account');
 }
 // Storage records must be JSON, not Date/BigInt/undefined or non-finite values.
 function validateTransferLinks(activities,replay,activeIds) {
@@ -617,6 +629,8 @@ function createActivityReplay(activities,boundaries=new Map()) {
       if(event.eventType==='category-correction') category(state,event.categoryId);
       if(event.eventType==='classification') {
         result.activityKind=event.activityKind;
+        // Only a transfer names another account.
+        if(event.activityKind!=='transfer') delete result.transferAccountId;
         if(event.categoryId!==null) category(state,event.categoryId);
       }
       if(event.eventType==='refund-link') {
@@ -637,6 +651,7 @@ function createActivityReplay(activities,boundaries=new Map()) {
         result.lifecycleStatus=event.proposedValues.lifecycleStatus;
         result.postedDate=event.proposedValues.postedDate;
       }
+      if(event.eventType==='transfer-account') result.transferAccountId=event.counterpartyAccountId;
       if(event.eventType==='transfer-link') {
         const other=stateFor(event.counterpartyActivityId);
         result.transferGroupId=event.transferGroupId;
@@ -770,9 +785,13 @@ function buildFinancialEvent(next,command,options,{replay,commands,activeIds,ref
       exactSignedDecimal(a)===null||exactSignedDecimal(other)===null||
       compare(exactSignedDecimal(a),'0')>=0||compare(exactSignedDecimal(other),'0')<=0||
       compare(negate(exactSignedDecimal(a)),exactSignedDecimal(other))!==0||
-      a.transferGroupId||other.transferGroupId) fail('invalid-transfer-link');
+      a.transferGroupId||other.transferGroupId||
+      (a.transferAccountId&&a.transferAccountId!==other.accountId)||(other.transferAccountId&&other.transferAccountId!==a.accountId)) fail('invalid-transfer-link');
     event.counterpartyActivityId=other.activityId;
     event.transferGroupId=event.eventId;
+  } else if(type==='transfer-account') {
+    event.counterpartyAccountId=command.counterpartyAccountId;event.priorCounterpartyAccountId=a.transferAccountId??null;
+    validateTransferAccount(event,a,{accounts:new Map(next.accounts.map(account=>[account.accountId,account]))});
   } else fail('unsupported-financial-event');
   return event;
 }

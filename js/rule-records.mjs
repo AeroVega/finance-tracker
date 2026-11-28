@@ -25,6 +25,7 @@ export function applyRuleEvents(ledger, commands, options = {}) {
 // A rule may change only what still needs a type or a category.
 function needsFiling(activity, categories) {
   return activity.active && (activity.activityKind === 'unclassified' || categories.retired(activity.categoryId) ||
+    (activity.activityKind === 'transfer' && !activity.transferGroupId && !activity.transferAccountId) ||
     (activity.activityKind === 'refund' && !activity.originalActivityId && !activity.categoryId));
 }
 // Ledgers are replaced, never edited in place, so the editor's live count reads each ledger once.
@@ -56,8 +57,10 @@ export function ruleTargets(ledger, {activityIds = null, draft = null} = {}) {
   for (const activity of effectiveOf(ledger)) {
     if ((only && !only.has(activity.activityId)) || !needsFiling(activity, categories)) continue;
     const amountText = exactSignedDecimal(activity);
-    const rule = usable.find(candidate => ruleMatches(candidate, activity) && kindFitsAmount(candidate.activityKind, amountText));
-    if (rule) targets.get(rule.ruleId).push({...activity, amountText});
+    // Only a transfer rule may touch a transfer, and never to name its own account.
+    const rule = usable.find(candidate => ruleMatches(candidate, activity) && kindFitsAmount(candidate.activityKind, amountText) &&
+      candidate.counterpartyAccountId !== activity.accountId && (activity.activityKind !== 'transfer' || candidate.activityKind === 'transfer'));
+    if (rule && ruleCommands(rule, activity).length) targets.get(rule.ruleId).push({...activity, amountText});
   }
   return targets;
 }
@@ -65,13 +68,17 @@ export function ruleTargets(ledger, {activityIds = null, draft = null} = {}) {
 /** The events that file one transaction by one rule. Command IDs are added by the caller. */
 export function ruleCommands(rule, activity) {
   const evidence = {rationale:`Filed by rule: description contains "${rule.descriptionContains}".`, ruleId:rule.ruleId};
+  const commands = [];
   if (activity.activityKind !== rule.activityKind) {
-    return [{type:'classification', activityId:activity.activityId, activityKind:rule.activityKind, categoryId:rule.categoryId, evidence}];
+    commands.push({type:'classification', activityId:activity.activityId, activityKind:rule.activityKind, categoryId:rule.categoryId, evidence});
+  } else if (rule.categoryId && rule.categoryId !== activity.categoryId) {
+    commands.push({type:'category-correction', activityId:activity.activityId, categoryId:rule.categoryId, createRule:false, evidence});
   }
-  if (rule.categoryId && rule.categoryId !== activity.categoryId) {
-    return [{type:'category-correction', activityId:activity.activityId, categoryId:rule.categoryId, createRule:false, evidence}];
+  // A transfer rule names the other account unless the transfer already has one.
+  if (rule.counterpartyAccountId && !activity.transferAccountId && !activity.transferGroupId) {
+    commands.push({type:'transfer-account', activityId:activity.activityId, counterpartyAccountId:rule.counterpartyAccountId, evidence});
   }
-  return [];
+  return commands;
 }
 
 /** Every filing command for the targets of the chosen rules, or of all rules when `ruleIds` is null. */
