@@ -2,6 +2,7 @@ import {persistenceDataClass} from './persistence-data-class.mjs';
 import { validateHistoricalLedger } from './historical-monthly-summary.mjs';
 import { validatePositionEvents } from './financial-position-contract.mjs';
 import { validatePlanningEvents } from './planning-contract.mjs';
+import { validateCategoryEvents } from './category-catalog.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal, sameComposite } from './import-reconciliation.mjs';
 
@@ -57,7 +58,7 @@ export function validateProductionLedger(ledger) {
 }
 // Version 3 admits only known top-level fields; it starts without legacy extras.
 const PRODUCTION_FIELDS=new Set(['format','version','dataClass','ledgerId','createdAt',...Object.keys(collections),
-  'positionEvents','planningEvents','historicalSummaryBatches','historicalReconciliations']);
+  'positionEvents','planningEvents','categoryEvents','historicalSummaryBatches','historicalReconciliations']);
 
 /** The header's class, or a refusal. Not provenance or authorization. */
 export function ledgerDataClass(ledger) {
@@ -187,6 +188,11 @@ function validateAndProject(ledger, expectedClass='synthetic') {
   }
   validatePlanningEvents(ledger,ids,commands);
   for (const event of ledger.planningEvents ?? []) {
+    ids.add(event.eventId);
+    commands.set(event.commandId,event);
+  }
+  validateCategoryEvents(ledger,ids,commands);
+  for (const event of ledger.categoryEvents ?? []) {
     ids.add(event.eventId);
     commands.set(event.commandId,event);
   }

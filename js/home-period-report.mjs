@@ -7,7 +7,6 @@
    summary. A month with no historical summary uses known transaction subtotals,
    labelled partial. Gaps stay null and are never drawn or summed as zero, and
    currencies are never combined. */
-import {categoryLabel} from './category-catalog.mjs';
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const YEAR = /^\d{4}$/;
@@ -110,7 +109,7 @@ export function evidenceBasis({history, view}) {
 
 function transactionCategories(reader, month, basis, spending) {
   const items = reader.spendingByCategory({month, currency:basis.currency, accountId:basis.accountId})
-    .map(item => item.categoryId ? {key:categoryLabel(item.categoryId).toLowerCase(), label:categoryLabel(item.categoryId), categoryId:item.categoryId, spending:item.spending, count:item.count}
+    .map(item => item.categoryId ? {key:reader.catalog.label(item.categoryId).toLowerCase(), label:reader.catalog.label(item.categoryId), categoryId:item.categoryId, spending:item.spending, count:item.count}
       : {key:NO_CATEGORY, label:'No category', categoryId:'', spending:item.spending, count:item.count});
   // A reconciled history scope can differ from this account scope. Unless the
   // categories account for exactly the month's spending, show it unsplit.

@@ -6,7 +6,7 @@ import { createSyntheticFinancialPosition } from './synthetic-financial-position
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
 import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-workspace-model.mjs';
-import { categoryLabel, categoryChoices, categoryIdFromText } from './category-catalog.mjs';
+import { categoryCatalog } from './category-catalog.mjs';
 import { getEffectiveActivities, createLedger } from './canonical-import.mjs';
 import { RELEASE_PROFILE } from './release-profile.mjs';
 import { exactSignedDecimal, isCalendarDate } from './import-reconciliation.mjs';
@@ -56,7 +56,7 @@ const node = (tag, text, className) => {
   return result;
 };
 const label = text => String(text || 'Unknown').replaceAll('-', ' ');
-const reviewReason = reason => ({ 'classification-amount-conflict': 'Amount and classification disagree', 'unknown-amount': 'Amount unavailable', 'unmatched-refund': 'Refund needs a category or original purchase', 'unknown-lifecycle': 'Posting status unknown', 'unclassified-activity': 'Not classified', 'missing-refund-posted-date': 'Refund posting date unknown' }[reason] || label(reason));
+const reviewReason = reason => ({ 'classification-amount-conflict': 'Amount and classification disagree', 'unknown-amount': 'Amount unavailable', 'unmatched-refund': 'Refund needs a category or original purchase', 'unknown-lifecycle': 'Posting status unknown', 'unclassified-activity': 'Not classified', 'missing-refund-posted-date': 'Refund posting date unknown', 'deleted-category': 'Category was deleted' }[reason] || label(reason));
 // Never round ledger values through binary floating point for display.
 function money(value, currency) {
   if (typeof value !== 'string' || !/^-?\d+(\.\d+)?$/.test(value)) return 'Unavailable';
@@ -136,7 +136,38 @@ const PAGE_ROWS = 50;
 const activityFilters = {types:new Set(), categories:new Set()};
 let listLimit = PAGE_ROWS, quickOpen = null, quickFocus = null, facetsInSheet = false, openFacet = null;
 const quickDrafts = new Map(), decideButtons = new Map();
-const INLINE_REASONS = new Set(['unclassified-activity', 'classification-amount-conflict', 'unmatched-refund']);
+// Categories page state: the open inline editor and the controls refresh() enables.
+let categoryEditing = null;
+const categoryControls = [];
+let categoryCounts = {ledger:null, counts:new Map()};
+const INLINE_REASONS = new Set(['unclassified-activity', 'classification-amount-conflict', 'unmatched-refund', 'deleted-category']);
+// The open ledger's categories. Reads are cached per ledger object.
+const catalog = () => categoryCatalog(session.ledger);
+const categoryLabel = id => catalog().path(id);
+const NEW_CATEGORY = '__new';
+// Income gets the income list; spending, refunds and transfers get the spending list.
+const directionFor = kind => kind === 'income' ? 'income' : 'spending';
+/** A category select: keep or clear the current one, every category of one list, then "Create new category…". */
+function fillCategorySelect(select, direction, current) {
+  const list = catalog(), known = current && !list.retired(current) ? current : null;
+  select.replaceChildren();
+  const none = node('option', known ? `Keep ${list.path(known)}` : 'No category'); none.value = known ?? ''; select.append(none);
+  for (const item of list.choices(direction)) {
+    if (item.id === known) continue;
+    const option = node('option', item.path); option.value = item.id; select.append(option);
+  }
+  const fresh = node('option', 'Create new category…'); fresh.value = NEW_CATEGORY; select.append(fresh);
+}
+/** Where a new category goes: top level, or inside a top-level category of the same list. */
+function fillParentSelect(select, direction, selected = '') {
+  addOptions(select, catalog().choices(direction).filter(item => !item.parentId).map(item => [item.id, item.label]), selected, 'Top level');
+}
+/** The chosen category: an existing ID, or a new category to create in the same step. */
+function chosenCategory(select, name, parent, direction) {
+  if (select.value !== NEW_CATEGORY) return {categoryId:select.value || null, newCategory:null, text:select.value ? categoryLabel(select.value) : ''};
+  const label = name.value.trim().replaceAll(/\s+/g, ' ');
+  return {categoryId:null, newCategory:label ? {label, direction, parentId:parent.value || null} : null, text:label};
+}
 const TYPE_LABELS = {spending:'Spending', income:'Income', transfer:'Transfer', refund:'Refund', investment:'Investment', other:'Other', unclassified:'Unclassified'};
 const SORT_LABELS = {newest:'Newest first', oldest:'Oldest first', 'largest-out':'Largest money out', 'largest-in':'Largest money in'};
 const filtersActive = () => Boolean($('transaction-search').value.trim() || $('review-only').checked || $('pending-only').checked ||
@@ -148,11 +179,12 @@ function resetActivityFilters() {
   listLimit = PAGE_ROWS; quickOpen = null; quickDrafts.clear();
 }
 const homeButtons = new Map();
-const detailEditorFields = ['classification', 'category', 'amount', 'posting-status', 'posting-date', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale'];
+const detailEditorFields = ['classification', 'category', 'category-new-name', 'category-new-parent', 'amount', 'posting-status', 'posting-date', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale'];
 let detailEditorBaseline = null, detailActivity = null, detailNoteEdited = false;
 // Template audit notes: plain keyword substitution from the change itself, never generated text.
 const typeName = kind => (TYPE_LABELS[kind] ?? label(kind)).toLowerCase();
 const categoryName = id => id ? categoryLabel(id) : 'no category';
+const detailCategory = () => chosenCategory($('category'), $('category-new-name'), $('category-new-parent'), directionFor(detailActivity?.activityKind));
 const RULE_NOTE = ' Also applied to later imports with the same description.';
 function detailNote() {
   const a = detailActivity;
@@ -163,8 +195,8 @@ function detailNote() {
     return next === a.activityKind ? '' : `Changed classification from ${typeName(a.activityKind)} to ${typeName(next)}.`;
   }
   if (type === 'category-correction') {
-    const next = $('category').value.trim();
-    return !next || next === a.categoryId ? '' : `Changed category from ${categoryName(a.categoryId)} to ${categoryLabel(next)}.` + ($('category-rule').checked ? RULE_NOTE : '');
+    const next = detailCategory();
+    return !next.text || (next.categoryId && next.categoryId === a.categoryId) ? '' : `Changed category from ${categoryName(a.categoryId)} to ${next.newCategory ? 'new category ' + next.text : next.text}.` + ($('category-rule').checked ? RULE_NOTE : '');
   }
   if (type === 'bank-correction') {
     const next = $('amount').value.trim();
@@ -307,6 +339,9 @@ function refresh() {
   $('save-ledger').disabled = busy || !session.canSave();
   $('undo-last-change').disabled = busy || !session.canUndo();
   $('revert-all-changes').disabled = busy || !session.canRevertAll();
+  for (const id of ['category-add-name', 'category-add-direction', 'category-add-parent']) $(id).disabled = !editable;
+  $('category-add').disabled = !editable || !$('category-add-name').value.trim();
+  for (const update of categoryControls) update(editable);
   $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
   $('reopen-ledger').disabled = busy || !ready;
   $('release-ledger').disabled = busy || navigator.onLine === false || Boolean(releaseUnavailableReason());
@@ -340,7 +375,7 @@ function refresh() {
   for (const id of ['period-month', 'period-year', 'period-lifetime']) $(id).disabled = busy || !session.ledger;
   // The dashboard marks an arrow at the first or last reachable period as an edge.
   for (const id of ['period-prev', 'period-next']) $(id).disabled = busy || !session.ledger || $(id).dataset.edge !== 'false';
-  for (const id of ['correction-type', 'classification', 'category', 'category-rule', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
+  for (const id of ['correction-type', 'classification', 'category', 'category-new-name', 'category-new-parent', 'category-rule', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
   const postingCorrection = $('correction-type').value === 'posting-status-correction';
   $('posting-date').disabled = !editable || !postingCorrection || $('posting-status').value !== 'posted';
   $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim() ||
@@ -452,7 +487,7 @@ async function run(message, operation, formStatus = null, actionId = 'workspace-
     actionRequestWindow = null;
     clearInterval(timer); busy = false; operationStarted = null; refresh(); activeFormStatus = null; }
 }
-const formStatuses = { 'stage-account':'account-form-status', 'stage-balance':'position-form-status', 'stage-closure':'closure-form-status', 'stage-holdings':'holdings-form-status', 'stage-reconciliation':'reconciliation-form-status' };
+const formStatuses = { 'category-add':'category-form-status', 'stage-account':'account-form-status', 'stage-balance':'position-form-status', 'stage-closure':'closure-form-status', 'stage-holdings':'holdings-form-status', 'stage-reconciliation':'reconciliation-form-status' };
 const action = (id, message, callback) => $(id).addEventListener('click', () => {
   if (!$(id).disabled) return run(message, callback, formStatuses[id], id);
 });
@@ -488,7 +523,8 @@ function clearLoadedWorkspace() {
   for (const id of ['summary-scope','qualification','attention-count','transaction-count','filter-count','page-status','overview-review-title','review-summary','scope-period-title','scope-position-title','position-scope','position-warning','position-coverage-help','detail-title','detail-description','detail-amount','transfer-link-status', ...Object.values(formStatuses)]) $(id).textContent = '';
   for (const id of [...detailEditorFields, ...positionInputs, 'transaction-search','account-filter','month-filter','backup-password','backup-password-confirm','restore-password','backup-file','position-date']) $(id).value = '';
   resetActivityFilters(); closeFacetPanels(); closeFilterSheet();
-  for (const id of ['type-options', 'category-options', 'active-filter-chips']) $(id).replaceChildren();
+  for (const id of ['type-options', 'category-options', 'active-filter-chips', 'category-list-spending', 'category-list-income', 'category-add-parent']) $(id).replaceChildren();
+  categoryEditing = null; categoryControls.length = 0; $('category-add-name').value = ''; $('category-form-status').textContent = '';
   // Facet labels can name a category or count records; they go with the ledger.
   for (const id of ['type-facet-summary', 'category-facet-summary', 'review-facet-count', 'pending-facet-count', 'filter-badge']) $(id).textContent = '';
   $('apply-filter-sheet').textContent = 'Show results';
@@ -540,6 +576,7 @@ function render({ reset = false } = {}) {
   }
   homeDashboard.refresh(session.ledger, viewReader, view);
   planningPage?.refresh(session.ledger, viewReader, view);
+  renderCategories();
   const recent = homeView;
   homeButtons.clear(); $('recent-activities').replaceChildren();
   for (const row of recent.rows) {
@@ -1077,7 +1114,7 @@ function quickReviewRow(row) {
   const types = quickTypes(row);
   const draft = quickDrafts.get(row.activityId) ?? {
     type: types.includes(row.activityKind) ? row.activityKind : types[0],
-    category: row.categoryId ?? '', newCategory: '', note: '', noteEdited: false, rule: false};
+    category: row.categoryId ?? '', newCategory: '', newParent: '', note: '', noteEdited: false, rule: false};
   quickDrafts.set(row.activityId, draft);
   const tr = node('tr', undefined, 'quick-review'); tr.setAttribute('role', 'row');
   const td = node('td'); td.setAttribute('colspan', '5'); td.setAttribute('role', 'cell');
@@ -1089,68 +1126,74 @@ function quickReviewRow(row) {
   for (const value of types) { const option = node('option', TYPE_LABELS[value]); option.value = value; type.append(option); }
   type.value = draft.type; typeLabel.append(type);
   const categoryField = node('label', 'Category'); const category = node('select'); category.id = 'quick-category';
-  const none = node('option', row.categoryId ? `Keep ${categoryLabel(row.categoryId)}` : 'No category'); none.value = row.categoryId ?? ''; category.append(none);
-  const used = view.facets.categories.map(item => item.id).filter(Boolean);
-  for (const choice of categoryChoices(used)) {
-    if (choice.id === row.categoryId) continue;
-    const option = node('option', choice.label); option.value = choice.id; category.append(option);
-  }
-  const fresh = node('option', 'New category…'); fresh.value = '__new'; category.append(fresh);
-  category.value = draft.category; if (category.value !== draft.category) category.value = row.categoryId ?? '';
   categoryField.append(category);
-  const newField = node('label', 'New category name'); const newCategory = node('input'); newCategory.type = 'text'; newCategory.maxLength = 200;
+  const newField = node('label', 'New category name'); const newCategory = node('input'); newCategory.type = 'text'; newCategory.maxLength = 60;
   newCategory.setAttribute('autocomplete', 'off'); newCategory.value = draft.newCategory; newField.append(newCategory);
+  const parentField = node('label', 'Inside'); const parent = node('select'); parentField.append(parent);
+  // The category list follows the chosen type: income categories for income.
+  let filledFor = null;
+  const fillCategories = () => {
+    if (filledFor === directionFor(type.value)) return;
+    filledFor = directionFor(type.value);
+    const keep = filledFor === directionFor(draft.type) ? draft.category : '';
+    fillCategorySelect(category, filledFor, row.categoryId);
+    category.value = keep; if (category.value !== keep) category.value = row.categoryId ?? '';
+    fillParentSelect(parent, filledFor, draft.newParent);
+  };
+  fillCategories();
   const noteField = node('label', 'Note for the history', 'quick-note'); const note = node('textarea'); note.rows = 3; note.maxLength = 300;
   note.setAttribute('autocomplete', 'off'); note.value = draft.note; noteField.append(note);
   const ruleField = node('label', undefined, 'checkbox-field quick-rule'); const rule = node('input'); rule.type = 'checkbox'; rule.checked = draft.rule;
   ruleField.append(rule, node('span', 'Also use this category for later imports with the same description from this account'));
-  fields.append(typeLabel, categoryField, newField, noteField, ruleField);
+  fields.append(typeLabel, categoryField, newField, parentField, noteField, ruleField);
   const help = node('p', '', 'field-help quick-help'); help.id = 'quick-help';
   const actions = node('div', undefined, 'quick-actions');
   const stage = node('button', 'Stage decision', 'primary-button'); stage.type = 'button'; stage.setAttribute('aria-describedby', 'quick-help');
   const cancel = node('button', 'Cancel', 'text-button'); cancel.type = 'button';
   const full = node('button', 'Open full view', 'link-button'); full.type = 'button';
   actions.append(stage, cancel, full);
-  const chosenCategory = () => category.value === '__new' ? categoryIdFromText(newCategory.value) : category.value;
+  const choice = () => chosenCategory(category, newCategory, parent, directionFor(type.value));
+  const changesCategory = next => Boolean(next.newCategory) || Boolean(next.categoryId && next.categoryId !== row.categoryId);
   const suggested = () => {
-    const parts = [];
+    const parts = [], next = choice();
     if (type.value !== row.activityKind) parts.push(`classified as ${typeName(type.value)} (was ${typeName(row.activityKind)})`);
-    const next = chosenCategory();
-    if (next && next !== row.categoryId) parts.push(`category set to ${categoryLabel(next)} (was ${categoryName(row.categoryId)})`);
+    if (changesCategory(next)) parts.push(`category set to ${next.newCategory ? 'new category ' + next.text : next.text} (was ${categoryName(row.categoryId)})`);
     if (!parts.length) return '';
-    return `Reviewed in Activity: ${parts.join('; ')}.` + (rule.checked && next && next !== row.categoryId ? RULE_NOTE : '');
+    return `Reviewed in Activity: ${parts.join('; ')}.` + (rule.checked && changesCategory(next) ? RULE_NOTE : '');
   };
   const update = () => {
-    const categoryChanges = Boolean(chosenCategory()) && chosenCategory() !== row.categoryId;
+    fillCategories();
+    const next = choice(), categoryChanges = changesCategory(next);
     ruleField.hidden = !categoryChanges;
     if (!categoryChanges) rule.checked = false;
     if (!draft.noteEdited) note.value = suggested();
-    Object.assign(draft, {type:type.value, category:category.value, newCategory:newCategory.value, note:note.value, rule:rule.checked});
-    newField.hidden = category.value !== '__new';
-    const needsCategory = type.value === 'refund' && !row.originalActivityId && !chosenCategory();
+    Object.assign(draft, {type:type.value, category:category.value, newCategory:newCategory.value, newParent:parent.value, note:note.value, rule:rule.checked});
+    newField.hidden = parentField.hidden = category.value !== NEW_CATEGORY;
+    const needsCategory = type.value === 'refund' && !row.originalActivityId && !next.categoryId && !next.newCategory && !row.categoryId;
     const blocked = busy ? 'Wait for the current action to finish.' : !session.canEdit() ? 'Reopen an editable session before staging a decision.'
-      : needsCategory ? 'A refund without a linked purchase needs a category.' : category.value === '__new' && !chosenCategory() ? 'Enter a category name.'
+      : needsCategory ? 'A refund without a linked purchase needs a category.' : category.value === NEW_CATEGORY && !next.newCategory ? 'Enter a category name.'
       : !suggested() ? 'Choose a different type or category to stage a decision.'
       : !note.value.trim() ? 'Add a short note for the history.' : '';
     stage.disabled = Boolean(blocked);
-    for (const control of [type, category, newCategory, note, rule, cancel, full]) control.disabled = busy;
+    for (const control of [type, category, newCategory, parent, note, rule, cancel, full]) control.disabled = busy;
     const after = elsewhere.length ? ` Still needs the full view: ${elsewhere.map(reviewReason).join(', ').toLowerCase()}.` : '';
     help.textContent = blocked || ('Staging does not save. The note is filled in from your change; edit it to add your own reason.' + after);
   };
   quickControls.push(update);
   note.addEventListener('input', () => { draft.noteEdited = true; });
-  for (const control of [type, category, newCategory, note, rule]) { control.addEventListener('input', update); control.addEventListener('change', update); }
+  for (const control of [type, category, newCategory, parent, note, rule]) { control.addEventListener('input', update); control.addEventListener('change', update); }
   cancel.addEventListener('click', () => { quickDrafts.delete(row.activityId); toggleQuickReview(row.activityId); });
   full.addEventListener('click', () => { quickOpen = null; inspectActivity(row.activityId); });
   stage.addEventListener('click', () => {
     if (stage.disabled) return;
-    const categoryId = chosenCategory() || null;
+    const next = choice();
     const ids = view.rows.filter(item => item.reviewReasons.some(reason => INLINE_REASONS.has(reason))).map(item => item.activityId);
-    const next = ids[ids.indexOf(row.activityId) + 1] ?? null;
+    const following = ids[ids.indexOf(row.activityId) + 1] ?? null;
     return run('Staging the decision locally.', () => {
-      session.quickClassify({activityId:row.activityId, activityKind:type.value, categoryId:categoryId === (row.categoryId ?? null) ? null : categoryId, rationale:note.value, createRule:rule.checked});
+      session.quickClassify({activityId:row.activityId, activityKind:type.value, categoryId:next.categoryId === (row.categoryId ?? null) ? null : next.categoryId,
+        newCategory:next.newCategory, rationale:note.value, createRule:rule.checked});
       quickDrafts.delete(row.activityId); quickOpen = null;
-      quickFocus = next ?? 'filter-count';
+      quickFocus = following ?? 'filter-count';
       render();
       announce('Decision staged locally. Use Save changes to keep it.', 'success');
     }, null, 'stage-correction');
@@ -1161,6 +1204,91 @@ function quickReviewRow(row) {
   return tr;
 }
 function refreshQuickReview() { for (const update of quickControls) update(); }
+
+// Categories page: one list each for spending and income, parents first with
+// their subcategories under them. Every change is staged; nothing saves here.
+function categoryUseCounts() {
+  if (categoryCounts.ledger !== session.ledger) {
+    const counts = new Map();
+    for (const activity of getEffectiveActivities(session.ledger)) {
+      if (activity.active && activity.categoryId) counts.set(activity.categoryId, (counts.get(activity.categoryId) ?? 0) + 1);
+    }
+    categoryCounts = {ledger:session.ledger, counts};
+  }
+  return categoryCounts.counts;
+}
+function renderCategories() {
+  categoryControls.length = 0;
+  fillParentSelect($('category-add-parent'), $('category-add-direction').value, $('category-add-parent').value);
+  for (const direction of ['spending', 'income']) {
+    const list = $(`category-list-${direction}`); list.replaceChildren();
+    for (const item of catalog().choices(direction)) list.append(categoryItem(item));
+  }
+}
+function categoryButton(text, accessibleName, className = 'text-button') {
+  const button = node('button', text, className); button.type = 'button'; button.setAttribute('aria-label', accessibleName);
+  return button;
+}
+function categoryItem(item) {
+  const li = node('li', undefined, item.parentId ? 'category-item subcategory' : 'category-item');
+  if (categoryEditing === item.id) return categoryEditor(li, item);
+  const used = categoryUseCounts().get(item.id) ?? 0, children = catalog().childrenOf(item.id).length;
+  const text = node('div', undefined, 'category-text');
+  text.append(node('span', item.label, 'category-name'),
+    node('small', [plural(used, 'transaction'), children ? plural(children, 'subcategory', 'subcategories') : ''].filter(Boolean).join(' · ')));
+  const edit = categoryButton('Edit', `Edit ${item.path}`), remove = categoryButton('Delete', `Delete ${item.path}`, 'text-button danger-text');
+  edit.addEventListener('click', () => { if (edit.disabled) return; categoryEditing = item.id; render(); document.getElementById('category-edit-name')?.focus(); });
+  remove.addEventListener('click', () => {
+    if (remove.disabled) return;
+    const question = `Delete ${item.path}?` + (used ? ` Its ${plural(used, 'transaction')} go back to Needs review.` : '') +
+      ' Its budget ends from this month. Earlier months keep theirs.';
+    if (!window.confirm(question)) { announce('Delete cancelled. The category is unchanged.'); return; }
+    return run('Staging the deletion locally.', () => {
+      session.manageCategories({type:'delete', categoryId:item.id}, currentMonth());
+      render();
+      announce(`${item.path} deleted.` + (used ? ` ${plural(used, 'transaction')} moved to Needs review.` : '') + ' Save changes to keep it.', 'success');
+    }, 'category-form-status', 'category-delete');
+  });
+  categoryControls.push(editable => { edit.disabled = remove.disabled = !editable; });
+  const actions = node('div', undefined, 'category-actions'); actions.append(edit, remove);
+  li.append(text, actions);
+  return li;
+}
+function categoryEditor(li, item) {
+  li.className += ' editing';
+  const hasChildren = catalog().childrenOf(item.id).length > 0;
+  const field = (text, control) => { const wrap = node('label', text); wrap.append(control); return wrap; };
+  const name = node('input'); name.id = 'category-edit-name'; name.type = 'text'; name.maxLength = 60; name.value = item.label; name.setAttribute('autocomplete', 'off');
+  const direction = node('select');
+  for (const [value, text] of [['spending', 'Spending'], ['income', 'Income']]) { const option = node('option', text); option.value = value; direction.append(option); }
+  direction.value = item.direction;
+  const parent = node('select');
+  // A category with subcategories stays a top-level category in its list.
+  const fillParents = () => addOptions(parent, hasChildren ? [] : catalog().choices(direction.value).filter(other => !other.parentId && other.id !== item.id).map(other => [other.id, other.label]),
+    direction.value === item.direction ? item.parentId ?? '' : '', 'Top level');
+  fillParents();
+  direction.disabled = hasChildren;
+  const save = categoryButton('Save', `Save ${item.label}`, 'primary-button'), cancel = categoryButton('Cancel', 'Cancel editing');
+  const changed = () => name.value.trim() && (name.value.trim() !== item.label || direction.value !== item.direction || (parent.value || null) !== item.parentId);
+  const update = editable => { save.disabled = !editable || !changed(); for (const control of [name, direction, parent, cancel]) control.disabled = !editable; };
+  categoryControls.push(update);
+  name.addEventListener('input', refresh); parent.addEventListener('change', refresh);
+  direction.addEventListener('change', () => { fillParents(); refresh(); });
+  cancel.addEventListener('click', () => { categoryEditing = null; render(); });
+  save.addEventListener('click', () => {
+    if (save.disabled) return;
+    return run('Staging the category change locally.', () => {
+      session.manageCategories({type:'define', categoryId:item.id, label:name.value, direction:direction.value, parentId:parent.value || null}, currentMonth());
+      categoryEditing = null; render();
+      announce(`${catalog().path(item.id)} updated. Save changes to keep it.`, 'success');
+    }, 'category-form-status', 'category-edit');
+  });
+  const actions = node('div', undefined, 'category-actions'); actions.append(save, cancel);
+  const fields = node('div', undefined, 'category-editor');
+  fields.append(field('Name', name), field('List', direction), field('Inside', parent), actions);
+  li.append(fields);
+  return li;
+}
 function applyQuickFocus() {
   if (!quickFocus) return;
   const target = quickFocus === 'quick-type' ? document.getElementById('quick-type')
@@ -1436,7 +1564,9 @@ function showDetail(activityId, {navigate = true} = {}) {
   if (detail.reviewDecisions.length) $('detail-history').append(evidenceDetails('Inspect source review decisions', () => detail.reviewDecisions));
   if (!detail.events.length && !detail.reviewDecisions.length) $('detail-history').append(node('p', 'No corrections recorded.'));
   $('classification').value = ['income', 'spending', 'transfer', 'unclassified'].includes(activity.activityKind) ? activity.activityKind : 'unclassified';
-  $('category').value = activity.categoryId || '';
+  fillCategorySelect($('category'), directionFor(activity.activityKind), activity.categoryId);
+  $('category').value = activity.categoryId && !catalog().retired(activity.categoryId) ? activity.categoryId : '';
+  fillParentSelect($('category-new-parent'), directionFor(activity.activityKind)); $('category-new-name').value = '';
   $('amount').value = activity.amountText || '';
   $('posting-status').value = ['posted', 'pending', 'unknown'].includes(activity.lifecycleStatus) ? activity.lifecycleStatus : 'unknown';
   $('posting-date').value = activity.postedDate || '';
@@ -1452,6 +1582,7 @@ function correctionFields() {
   $('classification-field').hidden = type !== 'classification';
   $('category-field').hidden = type !== 'category-correction';
   $('category-rule-field').hidden = type !== 'category-correction';
+  $('category-new-fields').hidden = type !== 'category-correction' || $('category').value !== NEW_CATEGORY;
   $('amount-field').hidden = type !== 'bank-correction';
   $('posting-status-field').hidden = type !== 'posting-status-correction';
   const postingDate = type === 'posting-status-correction' && $('posting-status').value === 'posted';
@@ -1702,13 +1833,25 @@ action('revert-all-changes', 'Reverting all staged changes to the last verified 
   announce('All staged changes reverted to the last verified baseline. No saved records were changed.', 'success');
 });
 action('stage-correction', 'Checking your correction locally.', async () => {
-  session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: $('category').value, amountText: $('amount').value,
+  const category = detailCategory();
+  if ($('correction-type').value === 'category-correction' && $('category').value === NEW_CATEGORY && !category.newCategory) fail('category-name-required');
+  session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: category.categoryId, newCategory: category.newCategory, amountText: $('amount').value,
     lifecycleStatus: $('posting-status').value, postedDate: $('posting-status').value === 'posted' ? $('posting-date').value : null, rationale: $('correction-rationale').value,
     createRule: $('category-rule').checked });
   render(); showDetail(selectedActivity);
   announce(session.mode === 'preview' ? 'Correction added to this local preview only. Source evidence is unchanged.' : 'Correction staged locally. Source evidence is unchanged. Choose Save changes to persist it.', 'success');
 });
 $('correction-form').addEventListener('submit', event => event.preventDefault());
+$('category-add-form').addEventListener('submit', event => event.preventDefault());
+action('category-add', 'Staging the new category locally.', async () => {
+  session.manageCategories({type:'define', label:$('category-add-name').value, direction:$('category-add-direction').value, parentId:$('category-add-parent').value || null}, currentMonth());
+  const created = catalog().get(session.ledger.categoryEvents.at(-1).categoryId);
+  $('category-add-name').value = '';
+  render();
+  announce(`${created.path} added. Save changes to keep it.`, 'success');
+});
+$('category-add-name').addEventListener('input', refresh);
+$('category-add-direction').addEventListener('change', () => { fillParentSelect($('category-add-parent'), $('category-add-direction').value); refresh(); });
 $('close-detail').addEventListener('click', () => {
   if (busy || !confirmDiscardDetail()) return;
   pages.closeDetail();
@@ -1721,7 +1864,8 @@ $('correction-type').addEventListener('change', correctionFields);
 $('posting-status').addEventListener('change', correctionFields);
 $('posting-date').addEventListener('input', refresh);
 $('correction-rationale').addEventListener('input', () => { detailNoteEdited = true; refresh(); });
-for (const id of ['classification', 'category', 'amount', 'posting-date', 'category-rule']) {
+$('category').addEventListener('change', correctionFields);
+for (const id of ['classification', 'category', 'category-new-name', 'category-new-parent', 'amount', 'posting-date', 'category-rule']) {
   $(id).addEventListener('input', suggestDetailNote); $(id).addEventListener('change', suggestDetailNote);
 }
 $('transfer-counterparty').addEventListener('change', refresh);

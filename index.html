@@ -51,7 +51,7 @@
 
       <p id="action-status" class="action-status" role="status" aria-live="polite" aria-atomic="true"></p>
 
-      <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a></nav>
+      <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a><a id="sub-categories" href="#categories">Categories</a></nav>
 
       <div class="scope-bar">
         <div id="month-scope" class="period-bar" hidden>
@@ -231,6 +231,23 @@
         </details>
       </section>
 
+      <section class="workspace-page" id="categories" hidden aria-labelledby="categories-page-heading">
+        <h2 id="categories-page-heading" class="visually-hidden">Categories</h2>
+        <p class="lede">A subcategory counts toward its parent in Home and Planning. Deleting a category sends its transactions back to Needs review. Changes stay staged until you save.</p>
+        <form id="category-add-form" class="category-add" novalidate>
+          <h3>Add a category</h3>
+          <label for="category-add-name">Name<input id="category-add-name" type="text" autocomplete="off" maxlength="60" disabled></label>
+          <label for="category-add-direction">List<select id="category-add-direction" disabled><option value="spending">Spending</option><option value="income">Income</option></select></label>
+          <label for="category-add-parent">Inside<select id="category-add-parent" disabled></select></label>
+          <button id="category-add" class="primary-button" type="button" disabled>Add category</button>
+          <p id="category-form-status" class="status-message" tabindex="-1"></p>
+        </form>
+        <div class="category-lists">
+          <section aria-labelledby="category-spending-heading"><h3 id="category-spending-heading">Spending</h3><ul id="category-list-spending" class="category-list"></ul></section>
+          <section aria-labelledby="category-income-heading"><h3 id="category-income-heading">Income</h3><ul id="category-list-income" class="category-list"></ul></section>
+        </div>
+      </section>
+
       <section id="activity-detail" class="workspace-page activity-detail" aria-labelledby="detail-title" hidden>
         <button id="close-detail" class="back-button" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>Back</button>
         <div class="detail-overview"><h2 id="detail-title" tabindex="-1">Inspect transaction</h2><p id="detail-amount" class="detail-amount"></p><p id="detail-description"></p></div>
@@ -239,7 +256,8 @@
             <div><h3 id="correction-heading">Correct this transaction</h3><p id="correction-help">The source stays unchanged. Explain the change, stage it, then save when ready.</p></div>
             <label for="correction-type">What needs changing?<select id="correction-type"><option value="classification">Classification</option><option value="category-correction">Category</option><option value="bank-correction">Amount</option><option value="posting-status-correction">Posting status</option></select></label>
             <label id="classification-field" for="classification">Classification<select id="classification"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="unclassified">Unclassified</option></select><span class="field-help">Card payments are transfers.</span></label>
-            <label id="category-field" for="category" hidden>Category<input id="category" type="text" autocomplete="off" placeholder="e.g. groceries" maxlength="200"><span class="field-help">Applies to this transaction. Linked refunds follow the purchase category unless separately categorized.</span></label>
+            <label id="category-field" for="category" hidden>Category<select id="category"></select><span class="field-help">Applies to this transaction. Linked refunds follow the purchase category unless separately categorized.</span></label>
+            <div id="category-new-fields" class="category-new-fields" hidden><label for="category-new-name">New category name<input id="category-new-name" type="text" autocomplete="off" maxlength="60"></label><label for="category-new-parent">Inside<select id="category-new-parent"></select></label></div>
             <label id="category-rule-field" class="checkbox-field" for="category-rule" hidden><input id="category-rule" type="checkbox"><span>Also use this category for later imports with the same description from this account</span></label>
             <label id="amount-field" for="amount" hidden>Corrected amount<input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. -42.35" aria-describedby="amount-help"><span id="amount-help" class="field-help">An exact decimal, with a minus sign for money out and without a currency symbol or thousands separator.</span></label>
             <label id="posting-status-field" for="posting-status" hidden>Confirmed posting status<select id="posting-status" aria-describedby="posting-status-help"><option value="unknown">Unknown</option><option value="pending">Pending</option><option value="posted">Posted</option></select><span id="posting-status-help" class="field-help">Confirm from evidence, not just to clear the review list. Posted activities can enter totals; pending and unknown activities stay excluded.</span></label>

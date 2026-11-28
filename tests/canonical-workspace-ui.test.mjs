@@ -2201,3 +2201,67 @@ test('the JSON history file review is refused in a private-database session; mig
   await h.navigate('#overview'); await h.navigate('#storage');
   assert.equal(h.get('historical-summary-file').disabled, false, 'synthetic sessions keep the file review');
 });
+
+const categoryRow = (h, direction, name) => h.get(`category-list-${direction}`).children.find(item => findText(item, node => node.className === 'category-name' && node.textContent === name));
+const button = (root, name) => findText(root, node => node.tagName === 'BUTTON' && node.textContent === name);
+
+test('Categories adds a subcategory that review offers under its parent', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#categories');
+  assert.equal(h.get('activity-navigation').hidden, false, 'Categories is an Activity view');
+  assert.ok(categoryRow(h, 'income', 'Paycheck'), 'income has its own list');
+  assert.equal(h.get('category-add').disabled, true, 'a category needs a name');
+  h.get('category-add-name').value = 'Pets'; await h.get('category-add-name').emit('input');
+  await h.choose('category-add-parent', 'household');
+  await h.click('category-add');
+  assert.match(h.get('category-form-status').textContent, /Household › Pets added/);
+  const list = h.get('category-list-spending').children.map(item => text(item));
+  const household = list.findIndex(item => /Household/.test(item));
+  assert.match(list[household + 1], /Pets/, 'a subcategory sits under its parent');
+  assert.equal(h.state.writes, 0, 'staging never saves');
+  await h.navigate('#transactions'); await h.choose('month-filter', ''); await h.choose('review-only', true);
+  await findText(records(h)[0], node => node.className === 'decide-button').click();
+  assert.ok(h.get('quick-category').children.some(option => option.value === 'pets' && option.textContent === 'Household › Pets'));
+  assert.equal(h.get('quick-category').children.at(-1).textContent, 'Create new category…');
+});
+
+test('Categories renames in place and deletes after confirmation, sending its transactions to Needs review', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#categories');
+  await button(categoryRow(h, 'spending', 'Dining'), 'Edit').click();
+  const name = h.get('category-edit-name');
+  name.value = 'Eating out'; await name.emit('input');
+  await button(h.get('category-list-spending'), 'Save').click();
+  assert.ok(categoryRow(h, 'spending', 'Eating out'));
+  assert.equal(categoryRow(h, 'spending', 'Dining'), undefined);
+  const used = getEffectiveActivities(h.modelSession.ledger).filter(activity => activity.active && activity.categoryId === 'dining').length;
+  h.observed.confirm = false;
+  await button(categoryRow(h, 'spending', 'Eating out'), 'Delete').click();
+  assert.match(h.observed.confirmations.at(-1), new RegExp(`Its ${used} transactions go back to Needs review`));
+  assert.ok(categoryRow(h, 'spending', 'Eating out'), 'a declined confirmation keeps the category');
+  h.observed.confirm = true;
+  await button(categoryRow(h, 'spending', 'Eating out'), 'Delete').click();
+  assert.equal(categoryRow(h, 'spending', 'Eating out'), undefined);
+  await h.navigate('#transactions'); await h.choose('month-filter', ''); await h.choose('review-only', true);
+  assert.ok(records(h).some(row => /Category was deleted/.test(text(row))));
+  // Undo restores the category in one step.
+  await h.click('undo-last-change');
+  await h.navigate('#categories');
+  assert.ok(categoryRow(h, 'spending', 'Eating out'));
+});
+
+test('the full correction form picks from the list or creates a category in the same step', async () => {
+  const h = await workspacePage(); await h.click('preview-year');
+  await h.detail('GROCER 1');
+  await h.choose('correction-type', 'category-correction');
+  assert.equal(h.get('category').children[0].textContent, 'Keep Groceries');
+  assert.equal(h.get('category-new-fields').hidden, true);
+  await h.choose('category', '__new');
+  assert.equal(h.get('category-new-fields').hidden, false);
+  h.get('category-new-name').value = 'Farmers market'; await h.get('category-new-name').emit('input');
+  await h.choose('category-new-parent', 'groceries');
+  assert.equal(h.get('correction-rationale').value, 'Changed category from Groceries to new category Farmers market.');
+  const before = h.modelSession.stagedHistory.length;
+  await h.click('stage-correction');
+  assert.equal(h.modelSession.stagedHistory.length, before + 1, 'one undoable step');
+  assert.equal(h.modelSession.ledger.categoryEvents.at(-1).parentId, 'groceries');
+  assert.equal(h.modelSession.ledger.events.at(-1).categoryId, 'farmers-market');
+});

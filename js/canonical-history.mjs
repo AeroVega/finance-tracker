@@ -2,9 +2,9 @@ import { fail as appFail } from './app-error.mjs';
 import { HISTORICAL_LEDGER_VERSION, HISTORICAL_COLLECTIONS } from './historical-monthly-summary.mjs';
 import {canonicalizeJcs} from './transaction-protocol.mjs';
 
-export const CANONICAL_COLLECTIONS = Object.freeze({accounts:'accountId',imports:'importRunId',observations:'observationId',activities:'activityId',events:'eventId',reviewDecisions:'reviewDecisionId',positionEvents:'eventId',planningEvents:'eventId',...HISTORICAL_COLLECTIONS});
+export const CANONICAL_COLLECTIONS = Object.freeze({accounts:'accountId',imports:'importRunId',observations:'observationId',activities:'activityId',events:'eventId',reviewDecisions:'reviewDecisionId',positionEvents:'eventId',planningEvents:'eventId',categoryEvents:'eventId',...HISTORICAL_COLLECTIONS});
 const collections = CANONICAL_COLLECTIONS;
-const immutable = new Set(['accounts','activities','events','reviewDecisions','positionEvents','planningEvents',...Object.keys(HISTORICAL_COLLECTIONS)]);
+const immutable = new Set(['accounts','activities','events','reviewDecisions','positionEvents','planningEvents','categoryEvents',...Object.keys(HISTORICAL_COLLECTIONS)]);
 const observationMutable = new Set(['activityId','disposition','reasonCode','resolved']);
 const importMutable = new Set(['status','counts','latestActivityDate','errorCode','retryAttempts']);
 const immutableFields = (record,mutable) => Object.fromEntries(Object.entries(record).filter(([key])=>!mutable.has(key)));

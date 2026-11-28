@@ -10,6 +10,12 @@ const workspace = {
   'invalid-budget-target': 'Enter a budget target above zero for one category and currency.',
   'budget-target-before-current-month': 'A budget change applies from the current month on. Earlier months keep their targets.',
   'invalid-projection-exclusion': 'Give a reason for excluding or restoring this row in the projection average.',
+  'category-name-required': 'Enter a category name of up to 60 characters.',
+  'duplicate-category-name': 'A category with that name already exists in the same place. Choose another name.',
+  'category-has-subcategories': 'Move or delete its subcategories first. A category with subcategories cannot be deleted or become a subcategory.',
+  'invalid-category-parent': 'Choose a top-level category of the same kind as the parent. Subcategories cannot have their own subcategories.',
+  'unknown-category': 'That category no longer exists. Choose another one.',
+  'retired-category': 'The saved category records reuse a deleted category. Keep this copy unchanged.',
   'historical-detail-not-reconciled': 'The transaction detail does not yet qualify to replace the workbook summary.',
   'unsupported-ledger-version-transition': 'The ledger format changed in an unsupported way. Keep the original copy unchanged.',
   'records-must-be-an-array': 'The normalized history must include an array of records.',
@@ -359,13 +365,15 @@ const codeGroups = {
     position-command-conflict position-source-required reconciliation-requires-selected-anchors
     budget-target-before-current-month invalid-budget-target invalid-planning-event invalid-planning-events
     invalid-projection-exclusion planning-command-conflict unknown-planning-activity
+    category-command-conflict category-has-subcategories category-name-required duplicate-category-name
+    invalid-category-event invalid-category-events invalid-category-parent retired-category unknown-category
     reconnect-required recovery-not-required release-before-preview reopen-before-editing
     seed-readback-mismatch statement-reconciliation-evidence-required synthetic-data-required
     transfer-link-rationale-required unknown-position-account unsupported-workspace-correction
     verified-draft-required verified-preview-required
   `,
 };
-const inputCodes = new Set(`category-required correction-rationale-required transfer-link-rationale-required empty-export-confirmation-required import-coverage-conflict
+const inputCodes = new Set(`category-required category-name-required duplicate-category-name correction-rationale-required transfer-link-rationale-required empty-export-confirmation-required import-coverage-conflict
  account-mapping-required coverage-dates-required coverage-order-invalid coverage-confirmation-required
  currency-required account-name-required distinct-account-required evidence-required review-rationale-required
  match-target-required`.split(/\s+/).filter(Boolean));

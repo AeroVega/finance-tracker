@@ -2,6 +2,7 @@ import {createCanonicalMonthIndex,isCanonicalMonthIndexFor} from './canonical-mo
 import {getEffectiveActivities, summarizeLedgerPeriods, reportActivityContribution} from './canonical-import.mjs';
 import {exactSignedDecimal, isCalendarDate} from './import-reconciliation.mjs';
 import {buildFinancialPosition, buildAccountMonthCoverage} from './financial-position.mjs';
+import {categoryCatalog} from './category-catalog.mjs';
 
 const knownKinds = new Set(['income', 'spending', 'transfer', 'refund']);
 const fail = message => { throw new TypeError(message); };
@@ -66,8 +67,9 @@ function excludedReviewReasons(reports) {
   return reasons;
 }
 
-function reviewReasonsFor(activity, exclusions) {
+function reviewReasonsFor(activity, exclusions, catalog) {
   const reasons = new Set();
+  if (catalog.retired(activity.categoryId)) reasons.add('deleted-category');
   if (!knownKinds.has(activity.activityKind)) reasons.add('unclassified-activity');
   if (!['posted', 'pending'].includes(activity.lifecycleStatus)) reasons.add('unknown-lifecycle');
   if (activity.activityKind === 'refund' && activity.postedDate === null) reasons.add('missing-refund-posted-date');
@@ -75,10 +77,13 @@ function reviewReasonsFor(activity, exclusions) {
   return [...reasons];
 }
 
-function rowFor(activity, accounts, observations, events, exclusions) {
-  const reviewReasons = reviewReasonsFor(activity, exclusions);
+function rowFor(activity, accounts, observations, events, exclusions, catalog) {
+  const reviewReasons = reviewReasonsFor(activity, exclusions, catalog);
   const {sourceFields, ...effective} = activity;
-  return {...effective, accountName:accounts.get(activity.accountId).displayName,
+  // A deleted category reads as no category. The row's reported category is
+  // its parent when it has one, so filtering on a parent includes its subcategories.
+  return {...effective, categoryId:catalog.retired(activity.categoryId) ? null : activity.categoryId,
+    reportedCategoryId:catalog.reported(activity.categoryId), accountName:accounts.get(activity.accountId).displayName,
     amountText:exactSignedDecimal(activity),
     reportingDate:reportingDate(activity), needsReview:reviewReasons.length > 0, reviewReasons,
     typeGroup:activityTypeGroup(activity.activityKind),
@@ -128,7 +133,7 @@ function buildWorkspaceScope(ledger, effective, {accountId, month}, index = null
   const observationCounts = prepared?.observationCounts ?? countBy(ledger.observations, 'activityId');
   const eventCounts = prepared?.eventCounts ?? countBy(ledger.events, 'activityId');
   const scopedRows = (index ? index.activities({accountIds,month}) : scopedActivities.filter(activity => inPeriod(reportingDate(activity))))
-    .map(activity => rowFor(activity, accountsById, observationCounts, eventCounts, exclusions));
+    .map(activity => rowFor(activity, accountsById, observationCounts, eventCounts, exclusions, categoryCatalog(ledger)));
   scopedRows.sort((a, b) => (b.reportingDate ?? b.effectiveDate).localeCompare(a.reportingDate ?? a.effectiveDate) ||
     a.activityId.localeCompare(b.activityId));
   const summaryAvailability = indexedReports ? Object.fromEntries(indexedReports.map(result => [result.report.currency,result.availability])) : Object.fromEntries(summary.map(report => {
@@ -207,6 +212,7 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
   const index = isCanonicalMonthIndexFor(monthlyIndex,snapshot) ? monthlyIndex : createCanonicalMonthIndex(snapshot);
   const preparedScopes = new Map();
   const observationCounts = countBy(snapshot.observations,'activityId'), eventCounts = countBy(snapshot.events,'activityId');
+  const catalog = categoryCatalog(snapshot);
   const prepareScope = accountId => {
     if (preparedScopes.has(accountId)) return preparedScopes.get(accountId);
     const selected = value => !accountId || value.accountId === accountId;
@@ -239,7 +245,7 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
     if (accountId && !snapshot.accounts.some(account => account.accountId === accountId)) fail('unknown-account');
     return accountId ? [accountId] : undefined;
   };
-  return Object.freeze({view(options) {
+  return Object.freeze({catalog, view(options) {
     const selection = workspaceOptions(options);
     const {accountId, month} = selection;
     if (!cached || cached.scope.accountId !== accountId || cached.scope.month !== month) {
@@ -261,7 +267,8 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
       cash:availability.cashAvailable ? report.cash : null};
   }, spendingByCategory({month, currency, accountId = ''}) {
     // The same per-activity rule as monthlyReport, so the categories sum to its
-    // spending. A refund counts against its original purchase's category.
+    // spending. A refund counts against its original purchase's category. A
+    // subcategory counts toward its parent, and a deleted category toward none.
     const {start,end} = monthBounds(month);
     const accounts = new Map(snapshot.accounts.map(account => [account.accountId, account]));
     originalCategories ??= new Map(index.effectiveActivities().map(activity => [activity.activityId, activity.categoryId ?? null]));
@@ -271,7 +278,7 @@ export function createWorkspaceViewReader(ledger, {monthlyIndex = null} = {}) {
       if (!['spending', 'refund'].includes(activity.activityKind) || !date || date < start || date > end) continue;
       const contribution = reportActivityContribution(activity, accounts.get(activity.accountId), currency);
       if (contribution.reason) continue;
-      const categoryId = activity.categoryId ?? (activity.originalActivityId ? originalCategories.get(activity.originalActivityId) : null) ?? '';
+      const categoryId = catalog.reported(activity.categoryId ?? (activity.originalActivityId ? originalCategories.get(activity.originalActivityId) : null)) ?? '';
       const total = categories.get(categoryId) ?? {categoryId, spending:'0', count:0};
       total.spending = addDecimal(total.spending, contribution.spending); total.count++;
       categories.set(categoryId, total);
@@ -302,7 +309,7 @@ function filterWorkspaceRows(scope, searchTexts, {query, reviewOnly, pendingOnly
   let rows = scope.rows;
   if (reviewOnly || pendingOnly || terms.length || typeSet.size || categorySet.size) {
     rows = rows.filter((row, i) => (!reviewOnly || row.needsReview) && (!pendingOnly || row.lifecycleStatus === 'pending') &&
-      (!typeSet.size || typeSet.has(row.typeGroup)) && (!categorySet.size || categorySet.has(categoryKey(row))) &&
+      (!typeSet.size || typeSet.has(row.typeGroup)) && (!categorySet.size || categorySet.has(categoryKey(row)) || categorySet.has(row.reportedCategoryId)) &&
       terms.every(term => searchTexts[i].includes(term)));
   }
   return sortWorkspaceRows(rows, sort);
@@ -406,7 +413,7 @@ export function getWorkspaceActivity(ledger, activityId) {
   const account = ledger.accounts.find(value => value.accountId === activity.accountId);
   const date = reportingDate(activity) ?? activity.effectiveDate;
   const reports = summarizeLedgerPeriods(ledger, [{start:date, end:date, currency:activity.currency ?? account.currency, accountIds:[activity.accountId]}]);
-  const reviewReasons = reviewReasonsFor(activity, excludedReviewReasons(reports));
+  const reviewReasons = reviewReasonsFor(activity, excludedReviewReasons(reports), categoryCatalog(ledger));
   // A reversed decision can detach its observation from an inactive activity.
   // Its evidence and reversal still belong in that activity's audit detail.
   const observationIds = new Set(ledger.reviewDecisions.filter(value => value.activityId === activityId).map(value => value.observationId));
