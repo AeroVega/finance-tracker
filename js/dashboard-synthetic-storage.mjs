@@ -267,10 +267,11 @@ export class DashboardSyntheticStorage {
       try { saved = window.localStorage.getItem(ACCOUNT_KEY); }
       catch (cause) { throw new AppError('account-designation-unavailable', {cause}); }
       if (saved && saved !== fingerprint) throw new AppError('account-mismatch');
-      const message = saved
-        ? `Continue as ${user.emailAddress}, your designated Google account? No account switch is allowed.`
-        : `Designate ${user.emailAddress} as your only Finance Tracker Google account in this browser? A non-secret account fingerprint will be remembered locally, not your email or token. Use the same account on every device. No folder will be created automatically.`;
-      if (!window.confirm(message)) throw new AppError('authorization-cancelled');
+      // The designated account is already proven by its fingerprint above, so only
+      // the first designation in this browser asks (owner decision, 2026-11-28).
+      if (!saved && !window.confirm(`Designate ${user.emailAddress} as your only Finance Tracker Google account in this browser? A non-secret account fingerprint will be remembered locally, not your email or token. Use the same account on every device. No folder will be created automatically.`)) {
+        throw new AppError('authorization-cancelled');
+      }
       try {
         // Recheck after confirmation: another tab may have designated an account.
         const current = window.localStorage.getItem(ACCOUNT_KEY);
@@ -330,14 +331,13 @@ export class DashboardSyntheticStorage {
               } else if (metadata.name === PRODUCTION_FOLDER_NAME || !/synthetic/i.test(metadata.name || "")) {
                 throw new Error("For safety, select a dedicated folder whose name contains “synthetic”. The production database folder is blocked.");
               }
-              const confirmation = this.dataClass === "production"
-                ? requireEmpty
-                  ? "Confirm that “" + metadata.name + "” is a newly created EMPTY folder you own in Google Drive, shared with no one, dedicated only to your private Finance Tracker database. This app cannot see files outside its drive.file access."
-                  : "Open “" + metadata.name + "” as your private Finance Tracker database? Use one device at a time."
-                : requireEmpty
-                  ? "Confirm that “" + metadata.name + "” is a newly created EMPTY folder you checked in Google Drive, dedicated only to invented test data. This app cannot see files outside its drive.file access. Upload the synthetic year here?"
-                  : "Confirm that “" + metadata.name + "” is a dedicated synthetic test folder containing no personal financial data. Only invented sample fixtures will be saved.";
-              if (!window.confirm(confirmation)) {
+              // Opening an existing folder asks nothing (owner decision, 2026-11-28): the
+              // folder designation, privacy proof and format checks below still gate it.
+              // Writing into a new empty folder still asks first.
+              const confirmation = !requireEmpty ? null : this.dataClass === "production"
+                ? "Confirm that “" + metadata.name + "” is a newly created EMPTY folder you own in Google Drive, shared with no one, dedicated only to your private Finance Tracker database. This app cannot see files outside its drive.file access."
+                : "Confirm that “" + metadata.name + "” is a newly created EMPTY folder you checked in Google Drive, dedicated only to invented test data. This app cannot see files outside its drive.file access. Upload the synthetic year here?";
+              if (confirmation && !window.confirm(confirmation)) {
                 throw new Error("Folder selection cancelled.");
               }
               resolve({id: metadata.id, name: metadata.name});
