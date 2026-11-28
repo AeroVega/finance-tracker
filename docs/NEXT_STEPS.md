@@ -47,6 +47,7 @@ Each item below has Node or simulator evidence only. Record each on a named comm
 
 ### 5. Release hardening (agents, from 2026-12-04)
 
+- Categories page copy, found in the PR 74 review (2026-11-27). The **Delete** confirmation in `categoryItem` in `js/canonical-workspace.mjs` always says "Its budget ends from this month", even when the category has no budget. Say it only when `budgetRemovals` would return a record. **Delete** on a parent that still has subcategories is clickable, and validation then refuses it with `category-has-subcategories`. Disable the button and say why. Neither changes stored data, so the PR is not guarded unless it touches guarded files.
 - Empty, partial and failed states on every tab, with the first-run path from an empty private database to a first import.
 - Account for the 8 MiB snapshot limit against five years of history. Run the dense-ledger benchmark at three years of imports and compare with the capacity triggers in [Current state](CURRENT_STATE.md#acceptance-and-verification).
 - Stamp the build as 1.0.0, add a short user guide for the weekly check-in and import, and write release notes with the known limitations.
