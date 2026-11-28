@@ -1,6 +1,6 @@
 # Current project state
 
-**Checked:** 2026-11-27
+**Checked:** 2026-11-28
 **Repository:** [AeroVega/finance-tracker](https://github.com/AeroVega/finance-tracker)
 
 This is the one place for mutable project status and the permission boundary. Other documents link here instead of copying it. [Project history](PROJECT_STATUS.md) holds the dated timeline.
@@ -59,6 +59,7 @@ The table is dated evidence behind the 2026-11-24 GO, not a list of open gates.
 
 | Claim | Evidence | Scope |
 | --- | --- | --- |
+| **User-confirmed** PR 77 device check (2026-11-28) | The owner deployed `21b82d3` and checked it on iPhone: the More drawer, the Google-boundary behavior, a session-privacy check from a second tab, verified storage, and backup and restore. The sticky filter bar behaved as expected, and the owner accepted the motion quality. The owner accepted the single-tap deletes with Undo (see [Categories](CATEGORIES.md) and [Rules](RULES.md)). | That build and device only. iPad, landscape and a live Drive save of the saved receipt were not reported. `check-apple-ui.cjs` still fails on `main` and needs a fix before its browser checks count (see [Next steps](NEXT_STEPS.md)). |
 | **User-confirmed** PR 76 device check (2026-11-28) | The owner deployed `0853a04` and saw the Needs review count rise as expected. On iPhone, the owner named an unlinked transfer's other account and linked the suggested match. The owner also ticked **Make a rule from this decision** on that transfer. After saving, releasing and reopening, the pair was out of Needs review. | That build and device only. On `ad1461e` the owner then confirmed on iPhone that a transfer's decision shows no Category field. Filing on import and encrypted backup restore were not reported as part of this check. |
 | **User-confirmed** PR 75 device check (2026-11-27) | The owner deployed `3e8acda` and, on iPhone, made a rule, saw how many transactions it would file, edited rules, and saved. Releasing the session and reopening showed the rule edits persisted. The owner also stopped one correction rule from PR 64. | That build and device only. Filing on import and encrypted backup restore were not reported as part of this check. |
 | **User-confirmed** PR 74 device check (2026-11-27) | On `5df12b0`, the owner ran a live Drive save and checked category management on iPhone, and reported being happy with the results. That build includes the fix for the Release error in diagnostic report `2c4r5p4t3q725`. | That build and device only. iPad, landscape, and encrypted backup restore were not part of this check. |
