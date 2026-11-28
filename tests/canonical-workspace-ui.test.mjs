@@ -1950,7 +1950,7 @@ test('verified release clears facet labels, counts, chips and filters that could
   assert.equal(h.state.writes, 0);
 });
 
-test('inline notes follow the change until edited, and the rule checkbox is an explicit opt-in', async () => {
+test('inline notes follow the change until edited, and Make a rule opens the rule editor filled in', async () => {
   const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
   await h.choose('review-only', true);
   await findText(records(h)[0], node => node.className === 'decide-button').click();
@@ -1959,22 +1959,26 @@ test('inline notes follow the change until edited, and the rule checkbox is an e
   const ruleField = findText(panel, node => /quick-rule/.test(node.className || ''));
   const rule = ruleField.children[0];
   assert.equal(note.value, 'Reviewed in Activity: classified as spending (was unclassified).');
-  assert.equal(ruleField.hidden, true, 'no rule choice until the category changes');
+  assert.equal(ruleField.hidden, false, 'a decision can become a rule');
+  assert.equal(rule.checked, false, 'rules are opt-in');
   h.get('quick-category').value = 'fees-and-interest'; await h.get('quick-category').emit('change');
   assert.equal(note.value, 'Reviewed in Activity: classified as spending (was unclassified); category set to Fees and interest (was no category).');
-  assert.equal(ruleField.hidden, false);
-  assert.equal(rule.checked, false, 'rules are opt-in');
-  rule.checked = true; await rule.emit('change');
-  assert.match(note.value, /Also applied to later imports with the same description\.$/);
   h.get('quick-type').value = 'transfer'; await h.get('quick-type').emit('change');
   assert.match(note.value, /^Reviewed in Activity: classified as transfer \(was unclassified\); category set to Fees and interest/);
+  rule.checked = true; await rule.emit('change');
+  assert.doesNotMatch(note.value, /later imports/, 'the note records the decision, not the rule');
   await findText(panel, node => node.textContent === 'Stage decision').click();
   const fee = getEffectiveActivities(h.modelSession.ledger).find(activity => activity.sourceDescription === 'INVENTED BROKERAGE FEE' && activity.effectiveDate === '2025-12-26');
   assert.deepEqual([fee.activityKind, fee.categoryId], ['transfer', 'fees-and-interest']);
   const events = h.modelSession.ledger.events.filter(event => event.activityId === fee.activityId);
-  assert.equal(events.at(-1).prospectiveRule.enabled, true);
   assert.ok(events.every(event => event.evidence.rationale === note.value));
+  assert.ok(events.every(event => !event.prospectiveRule?.enabled), 'no correction rule is created');
+  assert.equal(h.location.hash, '#rules');
+  assert.equal(h.get('rule-editor').hidden, false);
+  assert.equal(h.get('rule-contains').value, 'INVENTED BROKERAGE FEE');
+  assert.deepEqual([h.get('rule-kind').value, h.get('rule-category').value], ['transfer', 'fees-and-interest']);
   // An edited note is the owner's own words and is never overwritten.
+  await h.navigate('#transactions');
   await findText(records(h).find(item => findText(item, node => node.className === 'decide-button')), node => node.className === 'decide-button').click();
   const second = findText(h.get('quick-review'), node => node.tagName === 'LABEL' && node.textContent === 'Note for the history').children[0];
   second.value = 'Invented owner reason'; await second.emit('input');
@@ -2264,4 +2268,60 @@ test('the full correction form picks from the list or creates a category in the 
   assert.equal(h.modelSession.stagedHistory.length, before + 1, 'one undoable step');
   assert.equal(h.modelSession.ledger.categoryEvents.at(-1).parentId, 'groceries');
   assert.equal(h.modelSession.ledger.events.at(-1).categoryId, 'farmers-market');
+});
+
+const ruleRow = (h, position) => h.get('rule-list').children[position - 1];
+
+test('Rules saves a rule, previews what it would file, and changes nothing until Apply', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#rules');
+  assert.equal(h.get('activity-navigation').hidden, false, 'Rules is an Activity view');
+  assert.equal(h.get('rule-empty').hidden, false);
+  await h.click('rule-new');
+  assert.equal(h.get('rule-editor').hidden, false);
+  assert.equal(h.get('rule-save').disabled, true, 'a rule needs text to match');
+  h.get('rule-contains').value = 'brokerage fee'; await h.get('rule-contains').emit('input');
+  await h.choose('rule-category', 'fees-and-interest');
+  assert.match(h.get('rule-editor-matches').textContent, /^Matches 12 transactions that need review now\./);
+  const before = structuredClone(h.modelSession.ledger.events);
+  await h.click('rule-save');
+  assert.deepEqual(h.modelSession.ledger.events, before, 'saving a rule changes no transaction');
+  assert.equal(h.get('rule-preview').hidden, false);
+  assert.match(h.get('rule-preview-title').textContent, /^Rule 1 would file 12 transactions that need review$/);
+  assert.match(text(h.get('rule-preview-list').children[0]), /INVENTED BROKERAGE FEE .* → Spending › Fees and interest/);
+  assert.equal(h.get('rule-apply').textContent, 'Apply to 12 transactions');
+  await h.click('rule-apply');
+  assert.match(h.get('rule-form-status').textContent, /^12 transactions filed by rule\./);
+  const fees = getEffectiveActivities(h.modelSession.ledger).filter(activity => activity.sourceDescription === 'INVENTED BROKERAGE FEE');
+  assert.ok(fees.every(activity => activity.activityKind === 'spending' && activity.categoryId === 'fees-and-interest'));
+  assert.match(text(ruleRow(h, 1)), /No transaction that needs review matches/);
+  assert.equal(h.state.writes, 0, 'staging never saves');
+});
+
+test('Rules run first to last, move, turn off, and delete after confirmation', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.navigate('#rules');
+  for (const [contains, category] of [['brokerage', 'other'], ['brokerage fee', 'fees-and-interest']]) {
+    await h.click('rule-new');
+    h.get('rule-contains').value = contains; await h.get('rule-contains').emit('input');
+    await h.choose('rule-category', category);
+    await h.click('rule-save');
+  }
+  assert.match(text(ruleRow(h, 1)), /Matches 12 transactions/, 'the broad rule wins while it is first, and spending never files money in');
+  assert.match(text(ruleRow(h, 2)), /No transaction that needs review matches/);
+  await button(ruleRow(h, 2), 'Move up').click();
+  assert.match(text(ruleRow(h, 1)), /1\. Description contains "brokerage fee".*Matches 12 transactions/);
+  await button(ruleRow(h, 1), 'Turn off').click();
+  assert.match(text(ruleRow(h, 1)), /Off/);
+  assert.match(text(ruleRow(h, 2)), /Matches 12 transactions/);
+  assert.equal(h.get('rules-apply-all').textContent, 'Apply all rules (12)');
+  h.observed.confirm = false;
+  await button(ruleRow(h, 1), 'Delete').click();
+  assert.match(h.observed.confirmations.at(-1), /Transactions it already filed keep their category/);
+  assert.equal(h.get('rule-list').children.length, 2);
+  h.observed.confirm = true;
+  await button(ruleRow(h, 1), 'Delete').click();
+  assert.equal(h.get('rule-list').children.length, 1);
+  await h.click('rules-apply-all');
+  assert.match(h.get('rule-preview-title').textContent, /^Your rules would file 12 transactions that need review$/);
+  assert.match(text(h.get('rule-preview-list')), /→ Spending › Other/);
+  assert.equal(h.get('rule-preview-list').children.length, 12);
 });

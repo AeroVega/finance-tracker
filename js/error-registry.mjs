@@ -16,6 +16,11 @@ const workspace = {
   'invalid-category-parent': 'Choose a top-level category of the same kind as the parent. Subcategories cannot have their own subcategories.',
   'unknown-category': 'That category no longer exists. Choose another one.',
   'retired-category': 'The saved category records reuse a deleted category. Keep this copy unchanged.',
+  'rule-text-required': 'Enter the text the description contains, up to 100 characters.',
+  'invalid-rule-accounts': 'Choose accounts that exist in this database, or none for every account.',
+  'invalid-rule-action': 'Choose a type for the rule. A category is optional.',
+  'unknown-rule': 'That rule no longer exists. Reload the Rules page.',
+  'no-rule-matches': 'No transaction that needs review matches. Nothing was changed.',
   'historical-detail-not-reconciled': 'The transaction detail does not yet qualify to replace the workbook summary.',
   'unsupported-ledger-version-transition': 'The ledger format changed in an unsupported way. Keep the original copy unchanged.',
   'records-must-be-an-array': 'The normalized history must include an array of records.',
@@ -367,17 +372,19 @@ const codeGroups = {
     invalid-projection-exclusion planning-command-conflict unknown-planning-activity
     category-command-conflict category-has-subcategories category-name-required duplicate-category-name
     invalid-category-event invalid-category-events invalid-category-parent retired-category unknown-category
+    invalid-legacy-rule-retirement invalid-rule-accounts invalid-rule-action invalid-rule-event invalid-rule-events
+    invalid-rule-order no-rule-matches rule-text-required unknown-rule
     reconnect-required recovery-not-required release-before-preview reopen-before-editing
     seed-readback-mismatch statement-reconciliation-evidence-required synthetic-data-required
     transfer-link-rationale-required unknown-position-account unsupported-workspace-correction
     verified-draft-required verified-preview-required
   `,
 };
-const inputCodes = new Set(`category-required category-name-required duplicate-category-name correction-rationale-required transfer-link-rationale-required empty-export-confirmation-required import-coverage-conflict
+const inputCodes = new Set(`rule-text-required category-required category-name-required duplicate-category-name correction-rationale-required transfer-link-rationale-required empty-export-confirmation-required import-coverage-conflict
  account-mapping-required coverage-dates-required coverage-order-invalid coverage-confirmation-required
  currency-required account-name-required distinct-account-required evidence-required review-rationale-required
  match-target-required`.split(/\s+/).filter(Boolean));
-const stateCodes = new Set(`offline authorization-required authorization-cancelled authorization-popup-blocked authorization-failed picker-cancelled selection-cancelled
+const stateCodes = new Set(`no-rule-matches offline authorization-required authorization-cancelled authorization-popup-blocked authorization-failed picker-cancelled selection-cancelled
  session-active stale-session reconnect-required reopen-before-editing storage-not-ready read-only read-only-inspection
  preview-required verified-preview-required existing-copy-required data-class-not-released designated-folder-mismatch`.split(/\s+/).filter(Boolean));
 const defectCodes = new Set(`unknown unexpected-error diagnostic-self-test module-load-failed

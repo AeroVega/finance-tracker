@@ -11,6 +11,8 @@ import { mountHomeDashboard } from '../../js/home-dashboard.mjs';
 import { currentMonth, isMonthPeriod, periodKind, stepPeriod } from '../../js/home-period-report.mjs';
 import { mountHistoricalMonthlySummaryWorkflow } from '../../js/historical-monthly-summary-workflow.mjs';
 import { categoryCatalog } from '../../js/category-catalog.mjs';
+import { ruleCatalog } from '../../js/rule-catalog.mjs';
+import { ruleTargets } from '../../js/rule-records.mjs';
 import * as accountHistory from '../../js/account-history.mjs';
 import * as accountsView from '../../js/accounts-view.mjs';
 import assert from 'node:assert/strict';
@@ -74,7 +76,7 @@ export async function pageController(name, imports, { source = 'a'.repeat(40), s
   } } };
   const document = { getElementById: id => nodes.get(id) || null, createElement: element, body: element('body'),
     addEventListener(type, callback) { if (!documentListeners.has(type)) documentListeners.set(type, []); documentListeners.get(type).push(callback); } };
-  imports = {RELEASE_PROFILE,createLedger,FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, mountHistoricalMonthlySummaryWorkflow, mountHomeDashboard, mountPlanning: planningStub, currentMonth, isMonthPeriod, periodKind, stepPeriod, categoryCatalog, ...accountHistory, ...accountsView, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
+  imports = {RELEASE_PROFILE,createLedger,FULL_SNAPSHOT_BACKUP_LIMITS,fail,successfulActionSummary,leaveBreadcrumb, registerContextProvider, recentReports, installDiagnosticSelfTest, mountProviderImportWorkflow, mountHistoricalMonthlySummaryWorkflow, mountHomeDashboard, mountPlanning: planningStub, currentMonth, isMonthPeriod, periodKind, stepPeriod, categoryCatalog, ruleCatalog, ruleTargets, ...accountHistory, ...accountsView, showDiagnostic: (error, options) => showDiagnostic(error, {...options, document, navigator}), clearDiagnostic, diagnosticMessage, ...imports};
   const executable = script.replace(/^import \{([^}]+)\} from '[^']+';$/gm, (_, names) => {
     for (const name of names.split(',').map(name => name.trim())) assert.ok(name in imports, `Missing import ${name}`);
     return '';

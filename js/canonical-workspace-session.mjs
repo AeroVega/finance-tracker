@@ -7,6 +7,7 @@ import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
 import { applyPlanningEvents, budgetRemovals } from './planning.mjs';
 import { applyCategoryEvents } from './category-records.mjs';
+import { applyRuleEvents, ruleTargets, filingCommands } from './rule-records.mjs';
 
 import { FULL_SNAPSHOT_LIMITS } from './full-snapshot-storage.mjs';
 import { utf8ByteLength } from './utf8-length.mjs';
@@ -260,7 +261,8 @@ export class CanonicalWorkspaceSession {
       Object.keys(HISTORICAL_COLLECTIONS).some(key => !same(proposal[key] ?? null, current[key] ?? null)) ||
       !same(proposal.positionEvents ?? [], current.positionEvents ?? []) ||
       !same(proposal.planningEvents ?? [], current.planningEvents ?? []) ||
-      !same(proposal.categoryEvents ?? [], current.categoryEvents ?? [])) fail('invalid-parsed-import');
+      !same(proposal.categoryEvents ?? [], current.categoryEvents ?? []) ||
+      !same(proposal.ruleEvents ?? [], current.ruleEvents ?? [])) fail('invalid-parsed-import');
     for (const key of ['activities', 'events']) {
       const before = current[key], after = proposal[key];
       if (!Array.isArray(after) || after.length < before.length ||
@@ -299,8 +301,13 @@ export class CanonicalWorkspaceSession {
     }
     const addedRuns = proposal.imports.length - current.imports.length;
     if (addedRuns < 1 && retryRunIds.size < 1) fail('invalid-parsed-import');
+    // Rules file the new activities in the same staged step as the import.
+    const fresh = proposal.activities.slice(current.activities.length).map(activity => activity.activityId);
+    const filing = fresh.length ? filingCommands(proposal, ruleTargets(proposal, { activityIds: fresh })) : [];
+    this.lastImportFiledCount = new Set(filing.map(command => command.activityId)).size;
+    const next = filing.length ? applyFinancialEvents(proposal, filing.map(command => ({ ...command, commandId: crypto.randomUUID() }))) : structuredClone(proposal);
     this.stageCheckpoint();
-    this.ledger = structuredClone(proposal);
+    this.ledger = next;
     this.updateDirty();
     return this.ledger;
   }
@@ -371,6 +378,32 @@ export class CanonicalWorkspaceSession {
     this.ledger = next;
     this.updateDirty();
     return this.ledger;
+  }
+
+  /** Stage rule records as one undoable step. Saving a rule never changes a transaction. */
+  manageRules(commands) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    const list = (Array.isArray(commands) ? commands : [commands]).map(command => ({ ...command, commandId: crypto.randomUUID() }));
+    const next = applyRuleEvents(this.ledger, list);
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return this.ledger;
+  }
+
+  /**
+   * File every transaction that needs review by the chosen rules, or by all
+   * rules when `ruleIds` is null, as one undoable step. Returns how many were filed.
+   */
+  applyRules(ruleIds = null) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    const commands = filingCommands(this.ledger, ruleTargets(this.ledger), ruleIds);
+    if (!commands.length) fail('no-rule-matches');
+    const next = applyFinancialEvents(this.ledger, commands.map(command => ({ ...command, commandId: crypto.randomUUID() })));
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return new Set(commands.map(command => command.activityId)).size;
   }
 
   /** Stage one or more planning records as one undoable step. */

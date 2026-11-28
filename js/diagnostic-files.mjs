@@ -67,6 +67,8 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/utf8-length.mjs",
   "js/persistence-data-class.mjs",
   "js/release-profile.mjs",
+  "js/rule-catalog.mjs",
+  "js/rule-records.mjs",
   "js/workspace-chrome.mjs",
   "js/workspace-navigation.js",
   "js/workspace-pages.mjs",

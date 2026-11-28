@@ -51,7 +51,7 @@
 
       <p id="action-status" class="action-status" role="status" aria-live="polite" aria-atomic="true"></p>
 
-      <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a><a id="sub-categories" href="#categories">Categories</a></nav>
+      <nav id="activity-navigation" class="page-switcher" aria-label="Activity views" hidden><a id="sub-transactions" href="#transactions">Transactions</a><a id="sub-reconciliation" href="#reconciliation">Reconcile</a><a id="sub-categories" href="#categories">Categories</a><a id="sub-rules" href="#rules">Rules</a></nav>
 
       <div class="scope-bar">
         <div id="month-scope" class="period-bar" hidden>
@@ -248,6 +248,34 @@
         </div>
       </section>
 
+      <section class="workspace-page" id="rules" hidden aria-labelledby="rules-page-heading">
+        <h2 id="rules-page-heading" class="visually-hidden">Rules</h2>
+        <p class="lede">A rule files transactions that need review. The first rule that matches wins. Saving a rule changes nothing until you apply it, and a transaction you already filed is never changed.</p>
+        <div class="rules-toolbar"><button id="rule-new" class="secondary-button" type="button" disabled>New rule</button><button id="rules-apply-all" class="primary-button" type="button" disabled>Apply all rules</button></div>
+        <p id="rule-form-status" class="status-message" tabindex="-1"></p>
+        <form id="rule-editor" class="rule-editor" novalidate hidden>
+          <h3 id="rule-editor-title" tabindex="-1">New rule</h3>
+          <label for="rule-contains">Description contains<input id="rule-contains" type="text" autocomplete="off" maxlength="100"><span class="field-help">Case is ignored. "freshmart" matches "FRESHMART #12 SPRINGFIELD".</span></label>
+          <fieldset class="rule-accounts-field"><legend>Accounts</legend><span class="field-help">Leave every box clear to match all accounts.</span><div id="rule-accounts" class="rule-accounts"></div></fieldset>
+          <label for="rule-kind">Type<select id="rule-kind"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="refund">Refund</option></select></label>
+          <label for="rule-category">Category<select id="rule-category"></select></label>
+          <p id="rule-editor-matches" class="field-help" aria-live="polite"></p>
+          <div class="category-actions"><button id="rule-save" class="primary-button" type="button" disabled>Save rule</button><button id="rule-cancel" class="text-button" type="button">Cancel</button></div>
+        </form>
+        <section id="rule-preview" class="rule-preview" hidden aria-labelledby="rule-preview-title">
+          <h3 id="rule-preview-title" tabindex="-1"></h3>
+          <ul id="rule-preview-list" class="rule-preview-list"></ul>
+          <div class="category-actions"><button id="rule-apply" class="primary-button" type="button" disabled>Apply</button><button id="rule-preview-cancel" class="text-button" type="button">Cancel</button></div>
+        </section>
+        <ol id="rule-list" class="rule-list" aria-label="Rules, first to last"></ol>
+        <p id="rule-empty" class="quiet-placeholder">No rules yet. Choose New rule, or tick Make a rule from this decision while reviewing.</p>
+        <section id="legacy-rules" class="legacy-rules" hidden aria-labelledby="legacy-rules-heading">
+          <h3 id="legacy-rules-heading">Rules from earlier corrections</h3>
+          <p class="field-help">Each one sets a category for one exact description in one account. Edit turns it into a rule you can widen. Delete stops it for later imports.</p>
+          <ul id="legacy-rule-list" class="rule-list"></ul>
+        </section>
+      </section>
+
       <section id="activity-detail" class="workspace-page activity-detail" aria-labelledby="detail-title" hidden>
         <button id="close-detail" class="back-button" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>Back</button>
         <div class="detail-overview"><h2 id="detail-title" tabindex="-1">Inspect transaction</h2><p id="detail-amount" class="detail-amount"></p><p id="detail-description"></p></div>
@@ -258,7 +286,7 @@
             <label id="classification-field" for="classification">Classification<select id="classification"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="unclassified">Unclassified</option></select><span class="field-help">Card payments are transfers.</span></label>
             <label id="category-field" for="category" hidden>Category<select id="category"></select><span class="field-help">Applies to this transaction. Linked refunds follow the purchase category unless separately categorized.</span></label>
             <div id="category-new-fields" class="category-new-fields" hidden><label for="category-new-name">New category name<input id="category-new-name" type="text" autocomplete="off" maxlength="60"></label><label for="category-new-parent">Inside<select id="category-new-parent"></select></label></div>
-            <label id="category-rule-field" class="checkbox-field" for="category-rule" hidden><input id="category-rule" type="checkbox"><span>Also use this category for later imports with the same description from this account</span></label>
+            <label id="category-rule-field" class="checkbox-field" for="category-rule" hidden><input id="category-rule" type="checkbox"><span>Make a rule from this decision</span></label>
             <label id="amount-field" for="amount" hidden>Corrected amount<input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. -42.35" aria-describedby="amount-help"><span id="amount-help" class="field-help">An exact decimal, with a minus sign for money out and without a currency symbol or thousands separator.</span></label>
             <label id="posting-status-field" for="posting-status" hidden>Confirmed posting status<select id="posting-status" aria-describedby="posting-status-help"><option value="unknown">Unknown</option><option value="pending">Pending</option><option value="posted">Posted</option></select><span id="posting-status-help" class="field-help">Confirm from evidence, not just to clear the review list. Posted activities can enter totals; pending and unknown activities stay excluded.</span></label>
             <label id="posting-date-field" for="posting-date" hidden>Confirmed posting date<input id="posting-date" type="date" aria-describedby="posting-date-help"><span id="posting-date-help" class="field-help">Required for Posted. Original source dates stay unchanged. Refunds use this posting date.</span></label>

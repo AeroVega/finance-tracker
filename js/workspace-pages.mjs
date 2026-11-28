@@ -6,6 +6,7 @@ const pages = {
   transactions: {title:'Activity', description:'Find, filter and inspect transactions.', group:'transactions', period:true},
   reconciliation: {title:'Reconcile', description:'Check a month against its opening and closing balances.', group:'transactions', period:true},
   categories: {title:'Categories', description:'Add, rename, nest and delete the categories you file transactions under.', group:'transactions'},
+  rules: {title:'Rules', description:'File transactions that need review by their description, first rule first.', group:'transactions'},
   'activity-detail': {title:'Transaction', description:'Inspect the evidence before making a change.', group:'transactions'},
   position: {title:'Accounts', description:'Is every account current? Dated balances and 12 months of coverage.', group:'position', date:true},
   // On phones one account's detail replaces the list. Wider screens show both in
@@ -16,7 +17,7 @@ const pages = {
   migration: {title:'History migration', description:'Move the old workbook’s monthly history in, one year at a time.', group:'storage'}
 };
 const primary = ['overview', 'transactions', 'position', 'planning', 'storage'];
-const secondary = {transactions:['transactions', 'reconciliation', 'categories']};
+const secondary = {transactions:['transactions', 'reconciliation', 'categories', 'rules']};
 // Retired page names that still resolve, so saved links and history keep working.
 // #review opens Activity with the Needs review filter on; #holdings opens an
 // investment account's detail, where holdings now live.
