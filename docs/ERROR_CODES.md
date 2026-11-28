@@ -15,7 +15,7 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 - Trusted app file/line/column plus a stamped commit locate source. Function names are omitted. Unminified static modules need no source maps; if bundling/minification is ever adopted, retain source maps before relying on those frames.
 - The literal-code audit reports computed/forwarded calls separately. Zero unknown literal codes is not proof that every dynamic path was exercised.
 
-## Registered codes (710)
+## Registered codes (711)
 
 ### backup / integrity
 
@@ -302,14 +302,14 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 `invalid-projection-exclusion` · `invalid-reconciliation-anchors` · `invalid-reconciliation-component`
 `invalid-reconciliation-method` · `invalid-rule-accounts` · `invalid-rule-action`
 `invalid-rule-event` · `invalid-rule-events` · `invalid-rule-order` · `invalid-statement-coverage`
-`invalid-workspace-month` · `invalid-workspace-options` · `liability-balance-must-be-positive`
-`negative-holding-value` · `new-empty-folder-required` · `no-staged-changes`
-`planning-command-conflict` · `position-command-conflict` · `position-source-required`
-`reconciliation-requires-selected-anchors` · `recovery-not-required` · `release-before-preview`
-`retired-category` · `seed-readback-mismatch` · `statement-reconciliation-evidence-required`
-`synthetic-data-required` · `unknown-category` · `unknown-planning-activity`
-`unknown-position-account` · `unknown-rule` · `unsupported-workspace-correction`
-`verified-draft-required`
+`invalid-transfer-account` · `invalid-workspace-month` · `invalid-workspace-options`
+`liability-balance-must-be-positive` · `negative-holding-value` · `new-empty-folder-required`
+`no-staged-changes` · `planning-command-conflict` · `position-command-conflict`
+`position-source-required` · `reconciliation-requires-selected-anchors` · `recovery-not-required`
+`release-before-preview` · `retired-category` · `seed-readback-mismatch`
+`statement-reconciliation-evidence-required` · `synthetic-data-required` · `unknown-category`
+`unknown-planning-activity` · `unknown-position-account` · `unknown-rule`
+`unsupported-workspace-correction` · `verified-draft-required`
 
 ### workspace / state
 

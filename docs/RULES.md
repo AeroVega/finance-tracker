@@ -12,7 +12,7 @@ This contract covers rules that file transactions: their records, their order, h
 A rule has one condition and one action:
 
 - **Condition.** The transaction's source description or normalized description contains `descriptionContains`, ignoring case. When `accountIds` is not empty, the transaction must also be in one of those accounts.
-- **Action.** Set the type to `activityKind`, which is `spending`, `income`, `transfer`, or `refund`. When `categoryId` is set, also set the category.
+- **Action.** Set the type to `activityKind`, which is `spending`, `income`, `transfer`, or `refund`. When `categoryId` is set, also set the category. A transfer rule may also name the other account in `counterpartyAccountId`.
 
 Rules run in order, and the first usable rule that matches wins. A rule is usable when it is turned on and its category, if it has one, has not been deleted. A rule matches only where its type fits the amount: spending needs money out, and income and refunds need money in. Transfers fit either.
 
@@ -23,10 +23,13 @@ A rule files only a transaction that still needs a type or a category. That mean
 - It is unclassified.
 - Its category was deleted.
 - It is a refund with no category and no linked purchase.
+- It is an unlinked transfer that does not name its other account.
+
+Only a transfer rule may change a transfer, and a rule never names the transaction's own account. A rule that would change nothing does not count as a match.
 
 A rule never changes a transaction you filed yourself or one that another rule already filed.
 
-Filing appends ordinary activity events. A type change is a `classification` event that carries the rule's category. A category change alone is a `category-correction` event with `createRule: false`. The evidence holds the rationale `Filed by rule: description contains "<text>".` and the `ruleId`.
+Filing appends ordinary activity events. A type change is a `classification` event that carries the rule's category. A category change alone is a `category-correction` event with `createRule: false`. A transfer rule's account is a `transfer-account` event. The evidence holds the rationale `Filed by rule: description contains "<text>".` and the `ruleId`.
 
 ## When rules apply
 
@@ -49,7 +52,7 @@ Validation refuses these records:
 - A `descriptionContains` that is blank, untrimmed, or longer than 100 characters.
 - An unknown account, or the same account listed twice.
 - An `activityKind` outside the four types, or a `categoryId` that is not a category slug.
-- A `counterpartyAccountId` other than `null`. Transfer accounts in rules are later work.
+- A `counterpartyAccountId` on a rule that is not a transfer, or one that names an unknown account.
 - Any record for a deleted `ruleId`. A deleted rule never returns.
 - A `rule-order` that does not list every current rule exactly once.
 - A retirement of an event that is not an enabled correction rule, or that is already retired. Its `activityBoundary` must be an integer from 0 to the current activity count.

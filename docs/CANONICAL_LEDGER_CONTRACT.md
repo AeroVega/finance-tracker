@@ -59,6 +59,12 @@ Old ledgers may omit `positionEvents`. New storage indexes the collection when p
 
 [Rules](RULES.md) adds optional append-only `ruleEvents` to synthetic and production ledgers. Its event types are `rule-definition`, `rule-order` and `legacy-rule-retirement`. A rule record never rewrites an activity or an activity event. Applying a rule appends ordinary classification and category events. A retirement stops a correction rule for activities appended after its recorded activity count. See `js/rule-catalog.mjs`.
 
+### Transfer account extension
+
+A `transfer-account` activity event names the account on the other side of an unlinked transfer. Its fields are `counterpartyAccountId` and `priorCounterpartyAccountId`, and its evidence needs a rationale. The activity must be a transfer, the account must exist and differ from the activity's own account, and the event must change the named account. A linked transfer refuses the event, because the link fixes the other side. A `transfer-link` is refused when either side names an account other than the other side's account. Reclassifying an activity away from transfer drops its named account. Builds that predate this event reject ledgers that contain it.
+
+An unlinked transfer gets the review reason `transfer-account-missing` until it names its other account, then `transfer-unmatched` until it is linked. Neither reason changes report totals: a posted transfer is never income or spending. The app may suggest an unlinked row in the named account with the exact opposite amount within 7 days (`transferCandidates` in `js/canonical-workspace-model.mjs`). A matching amount alone never links: the user's explicit choice is the evidence.
+
 ### Canonical activity
 
 The entity is called **activity**, not just transaction, because Fidelity files contain trades, fees, dividends, contributions, and valuation events.
