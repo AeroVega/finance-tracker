@@ -50,6 +50,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/home-period-report.mjs",
   "js/immutable-content-type.mjs",
   "js/import-reconciliation.mjs",
+  "js/more-drawer.mjs",
   "js/planning-contract.mjs",
   "js/planning-page.mjs",
   "js/planning.mjs",
@@ -70,6 +71,7 @@ export const DIAGNOSTIC_FILES = Object.freeze([
   "js/rule-catalog.mjs",
   "js/rule-records.mjs",
   "js/workspace-chrome.mjs",
+  "js/workspace-motion.mjs",
   "js/workspace-navigation.js",
   "js/workspace-pages.mjs",
   "prototype/session-coordination-test.mjs"

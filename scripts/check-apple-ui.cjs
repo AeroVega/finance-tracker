@@ -3,6 +3,8 @@
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');
 const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracker/';
+// The More tab opens the More drawer; its This workspace row opens the More page.
+const openMore = async page => { await page.click('#nav-storage'); await page.click('#drawer-workspace'); };
 (async () => {
  const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH || '/usr/bin/chromium',args:['--no-sandbox']});
  for (const [width,height,large,safe] of [[320,568,false,false],[390,844,false,true],[740,390,false,true],[844,390,false,true],[820,1180,false,false],[1024,768,false,false],[1440,900,false,false],[320,700,true,false],[568,320,true,true]]) {
@@ -49,7 +51,7 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
   await page.click('#nav-overview'); await page.click('#nav-position');
   assert.equal(await page.inputValue('#balance-source'), 'Invented unfinished balance evidence');
   for (const name of ['overview','transactions','position','storage']) {
-   await page.click('#nav-'+name);
+   if (name === 'storage') await openMore(page); else await page.click('#nav-'+name);
    await page.waitForFunction(n=>!document.getElementById(n).hidden,name);
    await page.waitForTimeout(80);
    assert.equal(await page.locator('.workspace-page:visible').count(),1);
@@ -71,7 +73,7 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
   await page.fill('#correction-rationale', 'Invented second unfinished correction');
   await page.waitForTimeout(100);
   if (width<=760) {
-   const inFlow = await page.locator('#draft-bar').evaluate(el=>getComputedStyle(el).position==='static');
+   const inFlow = await page.locator('#draft-bar').evaluate(el=>getComputedStyle(el).position!=='sticky');
    if (inFlow) await page.locator('#draft-bar .primary-button:visible').first().scrollIntoViewIfNeeded();
    const nav=await page.locator('.primary-nav').boundingBox(),draft=await page.locator('#draft-bar').boundingBox();
    assert(draft.y+draft.height<=nav.y-6,`draft overlaps navigation ${width}/${large}`);
@@ -83,7 +85,7 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
     assert.equal(hit,'correction-rationale','fixed chrome blocks editing');
    }
   }
-  await page.click('#nav-storage');
+  await openMore(page);
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
   await page.waitForTimeout(100);
   const last=await page.locator('.more-footer p').last().boundingBox();
@@ -107,8 +109,7 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
  }
  const p=await browser.newPage();
  await p.route('https://**/*',r=>r.abort());
- await p.goto(base); await p.click('#nav-storage');
- await p.locator('#sample-data > summary').click(); await p.click('#preview-year');
+ await p.goto(base); await p.click('#nav-storage'); await p.click('#drawer-sample'); await p.click('#preview-year');
  await p.waitForFunction(()=>document.querySelector('#data-mode').dataset.mode==='preview');
  await p.locator('#workspace-scope > summary').click();
  await p.selectOption('#account-filter', {label:'Invented investment'});
@@ -135,8 +136,7 @@ const base = process.env.FINANCE_UI_URL || 'http://127.0.0.1:4173/finance-tracke
  for (const width of [375,768]) {
   const diagnostics=await browser.newPage({viewport:{width,height:900}});
   await diagnostics.route('https://**/*',r=>r.abort());
-  await diagnostics.goto(base); await diagnostics.click('#nav-storage');
-  await diagnostics.locator('#recovery-tools > summary').click();
+  await diagnostics.goto(base); await diagnostics.click('#nav-storage'); await diagnostics.click('#drawer-recovery');
   await diagnostics.click('#diagnostic-self-test');
   const report=diagnostics.locator('#diagnostic-test-status + .app-diagnostics');
   await report.waitFor({state:'visible'});
