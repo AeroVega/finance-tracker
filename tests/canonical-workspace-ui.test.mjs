@@ -2325,3 +2325,16 @@ test('Rules run first to last, move, turn off, and delete after confirmation', a
   assert.match(text(h.get('rule-preview-list')), /→ Spending › Other/);
   assert.equal(h.get('rule-preview-list').children.length, 12);
 });
+
+test('release with an inline decision open clears it without a failure', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.choose('month-filter', ''); await h.navigate('#transactions');
+  await h.choose('review-only', true);
+  await findText(records(h)[0], node => node.className === 'decide-button').click();
+  assert.equal(h.get('transaction-rows').children.some(row => row.className === 'quick-review'), true);
+  // A chosen category makes the panel read the category list when it refreshes.
+  await h.choose('quick-category', 'groceries');
+  h.state.releaseVerified = true; await h.click('release-ledger');
+  assert.equal(h.modelSession.ledger, null);
+  assert.deepEqual(h.diagnostics(), [], 'no failure report after release');
+  assert.doesNotMatch(h.get('action-status').textContent, /failed|check/i);
+});
