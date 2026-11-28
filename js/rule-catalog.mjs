@@ -33,7 +33,7 @@ export function legacyRuleBoundaries(ledger) {
 }
 
 const ruleFields = e => ({ruleId:e.ruleId, descriptionContains:e.descriptionContains, accountIds:[...e.accountIds],
-  activityKind:e.activityKind, categoryId:e.categoryId, enabled:e.enabled});
+  activityKind:e.activityKind, categoryId:e.categoryId, counterpartyAccountId:e.counterpartyAccountId, enabled:e.enabled});
 
 function replay(ledger, ids = new Set(), commands = new Map()) {
   const rules = new Map(), deleted = new Set(), retired = new Map();
@@ -55,8 +55,8 @@ function replay(ledger, ids = new Set(), commands = new Map()) {
       if (typeof e.descriptionContains !== 'string' || !e.descriptionContains.trim() || e.descriptionContains !== e.descriptionContains.trim() ||
         e.descriptionContains.length > CONTAINS_MAX) fail('rule-text-required');
       if (!Array.isArray(e.accountIds) || new Set(e.accountIds).size !== e.accountIds.length || e.accountIds.some(id => !accounts.has(id))) fail('invalid-rule-accounts');
-      // Transfer accounts arrive with transfer rules. Until then the field is always null.
-      if (!RULE_KINDS.includes(e.activityKind) || e.counterpartyAccountId !== null ||
+      // Only a transfer rule names the other account, and it must exist.
+      if (!RULE_KINDS.includes(e.activityKind) || (e.counterpartyAccountId !== null && (e.activityKind !== 'transfer' || !accounts.has(e.counterpartyAccountId))) ||
         (e.categoryId !== null && (typeof e.categoryId !== 'string' || e.categoryId.length > 200 || !CATEGORY_ID.test(e.categoryId)))) fail('invalid-rule-action');
       if (e.deleted) {
         // A deletion restates the rule it removes, so the record reads on its own.
@@ -133,7 +133,7 @@ export function ruleRecord(ledger, command, newId) {
   }
   if (command.type === 'delete') {
     const current = catalog.get(command.ruleId) ?? fail('unknown-rule');
-    return {...base, eventType:'rule-definition', ...current, counterpartyAccountId:null, deleted:true};
+    return {...base, eventType:'rule-definition', ...current, deleted:true};
   }
   if (command.type !== 'define') fail('invalid-rule-event');
   const current = command.ruleId === undefined ? null : catalog.get(command.ruleId) ?? fail('unknown-rule');
@@ -141,5 +141,6 @@ export function ruleRecord(ledger, command, newId) {
   if (!text || text.length > CONTAINS_MAX) fail('rule-text-required');
   return {...base, eventType:'rule-definition', ruleId:current?.ruleId ?? newId(), descriptionContains:text,
     accountIds:[...new Set(command.accountIds ?? [])].sort(), activityKind:command.activityKind, categoryId:command.categoryId || null,
-    counterpartyAccountId:null, enabled:command.enabled ?? current?.enabled ?? true, deleted:false};
+    counterpartyAccountId:command.activityKind === 'transfer' ? command.counterpartyAccountId || null : null,
+    enabled:command.enabled ?? current?.enabled ?? true, deleted:false};
 }

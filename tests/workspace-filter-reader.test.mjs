@@ -9,14 +9,14 @@ test('cached search and review pages preserve normalized matching, page size and
   const reader = createWorkspaceViewReader(fixture.ledger);
   const full = createWorkspaceView(fixture.ledger, {pageSize:500});
   const reviewRows = full.rows.filter(row => row.needsReview);
-  assert.equal(reviewRows.length, 48);
+  assert.equal(reviewRows.length, 108);
   for (const query of ['INVENTED', '  invented \t ', 'invented']) {
     for (const [page, pageSize] of [[0,7], [1,7], [2,11], [999,11], [0,500]]) {
       const view = reader.view({query, reviewOnly:true, page, pageSize});
       const last = Math.ceil(reviewRows.length / pageSize) - 1;
       const expectedPage = Math.min(page, last);
       assert.deepEqual(view.rows, reviewRows.slice(expectedPage * pageSize, (expectedPage + 1) * pageSize));
-      assert.equal(view.filteredCount, 48);
+      assert.equal(view.filteredCount, 108);
       assert.equal(view.pages, last + 1);
       assert.equal(view.page, expectedPage);
       assert.equal(view.pageSize, pageSize);
@@ -35,7 +35,7 @@ test('cached search and review pages preserve normalized matching, page size and
     assert.equal(empty.page, 0);
     assert.deepEqual(empty.summary, full.summary);
   }
-  assert.equal(reader.view({query:'INVENTED', reviewOnly:true}).filteredCount, 48);
+  assert.equal(reader.view({query:'INVENTED', reviewOnly:true}).filteredCount, 108);
   assert.equal(reader.view({query:' \t '}).filteredCount, 253);
 });
 
@@ -59,7 +59,7 @@ test('query, review and scope replacements cannot retain an earlier row selectio
     assert.deepEqual(view, createWorkspaceView(fixture.ledger, options));
     counts.push(view.filteredCount);
   }
-  assert.deepEqual(counts, [48, 0, 12, 48, 4, 4, 0, 4, 48]);
+  assert.deepEqual(counts, [108, 0, 12, 108, 4, 4, 3, 4, 108]);
 });
 
 test('cached filter rows stay private after result, input and options mutations', () => {

@@ -5,7 +5,7 @@ import { createWorkspacePages } from './workspace-pages.mjs';
 import { createSyntheticFinancialPosition } from './synthetic-financial-position.mjs';
 import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
-import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-workspace-model.mjs';
+import { createWorkspaceViewReader, getWorkspaceActivity, transferCandidates } from './canonical-workspace-model.mjs';
 import { categoryCatalog } from './category-catalog.mjs';
 import { ruleCatalog } from './rule-catalog.mjs';
 import { ruleTargets } from './rule-records.mjs';
@@ -58,7 +58,7 @@ const node = (tag, text, className) => {
   return result;
 };
 const label = text => String(text || 'Unknown').replaceAll('-', ' ');
-const reviewReason = reason => ({ 'classification-amount-conflict': 'Amount and classification disagree', 'unknown-amount': 'Amount unavailable', 'unmatched-refund': 'Refund needs a category or original purchase', 'unknown-lifecycle': 'Posting status unknown', 'unclassified-activity': 'Not classified', 'missing-refund-posted-date': 'Refund posting date unknown', 'deleted-category': 'Category was deleted' }[reason] || label(reason));
+const reviewReason = reason => ({ 'classification-amount-conflict': 'Amount and classification disagree', 'unknown-amount': 'Amount unavailable', 'unmatched-refund': 'Refund needs a category or original purchase', 'unknown-lifecycle': 'Posting status unknown', 'unclassified-activity': 'Not classified', 'missing-refund-posted-date': 'Refund posting date unknown', 'deleted-category': 'Category was deleted', 'transfer-account-missing': 'Transfer needs its other account', 'transfer-unmatched': 'Transfer, other side not found' }[reason] || label(reason));
 // Never round ledger values through binary floating point for display.
 function money(value, currency) {
   if (typeof value !== 'string' || !/^-?\d+(\.\d+)?$/.test(value)) return 'Unavailable';
@@ -145,7 +145,15 @@ let categoryCounts = {ledger:null, counts:new Map()};
 // Rules page state: the open editor's draft, the preview that comes before Apply, and its controls.
 let ruleDraft = null, rulePreview = null, ruleTargetCache = {ledger:null, targets:new Map()};
 const ruleControls = [];
-const INLINE_REASONS = new Set(['unclassified-activity', 'classification-amount-conflict', 'unmatched-refund', 'deleted-category']);
+const INLINE_REASONS = new Set(['unclassified-activity', 'classification-amount-conflict', 'unmatched-refund', 'deleted-category', 'transfer-account-missing', 'transfer-unmatched']);
+// A transfer names the account on its other side: money out goes to it, money in comes from it.
+const accountName = id => session.ledger.accounts.find(account => account.accountId === id)?.displayName ?? 'Unknown account';
+const otherAccounts = activity => session.ledger.accounts.filter(account => account.accountId !== activity.accountId).map(account => [account.accountId, account.displayName]);
+const moneyOut = row => String(row.amountText).startsWith('-');
+function transferPath(row) {
+  if (!row.transferAccountId) return 'Other account not named';
+  return moneyOut(row) ? `${row.accountName} → ${accountName(row.transferAccountId)}` : `${accountName(row.transferAccountId)} → ${row.accountName}`;
+}
 // The open ledger's categories. Reads are cached per ledger object.
 const catalog = () => categoryCatalog(session.ledger);
 const categoryLabel = id => catalog().path(id);
@@ -184,7 +192,7 @@ function resetActivityFilters() {
   listLimit = PAGE_ROWS; quickOpen = null; quickDrafts.clear();
 }
 const homeButtons = new Map();
-const detailEditorFields = ['classification', 'category', 'category-new-name', 'category-new-parent', 'amount', 'posting-status', 'posting-date', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale'];
+const detailEditorFields = ['classification', 'transfer-account', 'category', 'category-new-name', 'category-new-parent', 'amount', 'posting-status', 'posting-date', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale'];
 let detailEditorBaseline = null, detailActivity = null, detailNoteEdited = false;
 // Template audit notes: plain keyword substitution from the change itself, never generated text.
 const typeName = kind => (TYPE_LABELS[kind] ?? label(kind)).toLowerCase();
@@ -196,7 +204,9 @@ function detailNote() {
   const type = $('correction-type').value;
   if (type === 'classification') {
     const next = $('classification').value;
-    return next === a.activityKind ? '' : `Changed classification from ${typeName(a.activityKind)} to ${typeName(next)}.`;
+    const named = next === 'transfer' && !a.transferGroupId && $('transfer-account').value && $('transfer-account').value !== (a.transferAccountId ?? '')
+      ? ` Other account: ${accountName($('transfer-account').value)}.` : '';
+    return next === a.activityKind ? named.trim() : `Changed classification from ${typeName(a.activityKind)} to ${typeName(next)}.` + named;
   }
   if (type === 'category-correction') {
     const next = detailCategory();
@@ -346,7 +356,7 @@ function refresh() {
   for (const id of ['category-add-name', 'category-add-direction', 'category-add-parent']) $(id).disabled = !editable;
   $('category-add').disabled = !editable || !$('category-add-name').value.trim();
   for (const update of categoryControls) update(editable);
-  for (const id of ['rule-new', 'rule-contains', 'rule-kind', 'rule-category', 'rule-cancel', 'rule-preview-cancel']) $(id).disabled = !editable;
+  for (const id of ['rule-new', 'rule-contains', 'rule-kind', 'rule-transfer-account', 'rule-category', 'rule-cancel', 'rule-preview-cancel']) $(id).disabled = !editable;
   $('rule-save').disabled = !editable || !ruleDraft || !$('rule-contains').value.trim();
   $('rule-apply').disabled = !editable || !rulePreview?.count;
   for (const update of ruleControls) update(editable);
@@ -383,10 +393,11 @@ function refresh() {
   for (const id of ['period-month', 'period-year', 'period-lifetime']) $(id).disabled = busy || !session.ledger;
   // The dashboard marks an arrow at the first or last reachable period as an edge.
   for (const id of ['period-prev', 'period-next']) $(id).disabled = busy || !session.ledger || $(id).dataset.edge !== 'false';
-  for (const id of ['correction-type', 'classification', 'category', 'category-new-name', 'category-new-parent', 'category-rule', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
+  for (const id of ['correction-type', 'classification', 'transfer-account', 'category', 'category-new-name', 'category-new-parent', 'category-rule', 'amount', 'posting-status', 'correction-rationale', 'transfer-counterparty', 'transfer-link-rationale']) $(id).disabled = !editable;
   const postingCorrection = $('correction-type').value === 'posting-status-correction';
   $('posting-date').disabled = !editable || !postingCorrection || $('posting-status').value !== 'posted';
   $('stage-correction').disabled = !editable || !selectedActivity || !$('correction-rationale').value.trim() ||
+    ($('correction-type').value === 'classification' && $('classification').value === 'transfer' && !detailActivity?.transferGroupId && !$('transfer-account').value) ||
     (postingCorrection && $('posting-status').value === 'posted' && !isCalendarDate($('posting-date').value));
   const timing = $('operation-timing');
   if (timing) timing.textContent = operationStarted ? `${Math.floor((Date.now() - operationStarted) / 1000)}s elapsed` : '';
@@ -534,7 +545,7 @@ function clearLoadedWorkspace() {
   for (const id of ['type-options', 'category-options', 'active-filter-chips', 'category-list-spending', 'category-list-income', 'category-add-parent']) $(id).replaceChildren();
   categoryEditing = null; categoryControls.length = 0; $('category-add-name').value = ''; $('category-form-status').textContent = '';
   ruleDraft = null; rulePreview = null; ruleControls.length = 0; ruleTargetCache = {ledger:null, targets:new Map()};
-  for (const id of ['rule-list', 'legacy-rule-list', 'rule-preview-list', 'rule-accounts', 'rule-category']) $(id).replaceChildren();
+  for (const id of ['rule-list', 'legacy-rule-list', 'rule-preview-list', 'rule-accounts', 'rule-category', 'rule-transfer-account']) $(id).replaceChildren();
   for (const id of ['rule-editor-matches', 'rule-preview-title']) $(id).textContent = '';
   $('rule-contains').value = ''; $('rule-editor').hidden = true; $('rule-preview').hidden = true; $('legacy-rules').hidden = true;
   // Facet labels can name a category or count records; they go with the ledger.
@@ -1078,7 +1089,8 @@ function transactionRow(row) {
   inlineDate.setAttribute('aria-hidden', 'true'); metadata.append(inlineDate);
   description.append(node('strong', row.sourceDescription), metadata);
   const classification = node('td');
-  classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', categoryLabel(row.categoryId), 'transaction-detail'));
+  const detailText = row.activityKind === 'transfer' ? [row.categoryId ? categoryLabel(row.categoryId) : '', transferPath(row)].filter(Boolean).join(' · ') : categoryLabel(row.categoryId);
+  classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', detailText, 'transaction-detail'));
   if (postingLabel(row)) classification.append(node('span', postingLabel(row), 'posting-state'));
   if (row.needsReview) classification.append(node('small', 'Needs review: ' + row.reviewReasons.map(reviewReason).join(', '), 'transaction-detail review-reasons'));
   if (row.reviewReasons.some(reason => INLINE_REASONS.has(reason)) && session.canEdit()) {
@@ -1127,7 +1139,7 @@ function quickReviewRow(row) {
   const types = quickTypes(row);
   const draft = quickDrafts.get(row.activityId) ?? {
     type: types.includes(row.activityKind) ? row.activityKind : types[0],
-    category: row.categoryId ?? '', newCategory: '', newParent: '', note: '', noteEdited: false, rule: false};
+    category: row.categoryId ?? '', newCategory: '', newParent: '', transferAccount: row.transferAccountId ?? '', link: false, note: '', noteEdited: false, rule: false};
   quickDrafts.set(row.activityId, draft);
   const tr = node('tr', undefined, 'quick-review'); tr.setAttribute('role', 'row');
   const td = node('td'); td.setAttribute('colspan', '5'); td.setAttribute('role', 'cell');
@@ -1158,7 +1170,19 @@ function quickReviewRow(row) {
   note.setAttribute('autocomplete', 'off'); note.value = draft.note; noteField.append(note);
   const ruleField = node('label', undefined, 'checkbox-field quick-rule'); const rule = node('input'); rule.type = 'checkbox'; rule.checked = draft.rule;
   ruleField.append(rule, node('span', 'Make a rule from this decision'));
-  fields.append(typeLabel, categoryField, newField, parentField, noteField, ruleField);
+  const accountField = node('label', moneyOut(row) ? 'To account' : 'From account'); const account = node('select'); account.id = 'quick-transfer-account';
+  addOptions(account, otherAccounts(row), draft.transferAccount, 'Choose an account'); accountField.append(account);
+  const linkField = node('label', undefined, 'checkbox-field quick-link'); const link = node('input'); link.type = 'checkbox'; link.id = 'quick-transfer-link'; link.checked = draft.link;
+  const linkText = node('span'); linkField.append(link, linkText);
+  let candidate = null, candidateFor = null;
+  const findCandidate = () => {
+    const key = type.value === 'transfer' ? account.value : '';
+    if (candidateFor === key) return;
+    candidateFor = key;
+    candidate = key ? transferCandidates(session.ledger, row.activityId, key)[0] ?? null : null;
+    if (candidate) linkText.textContent = `Link with ${candidate.sourceDescription} on ${candidate.effectiveDate} (${money(candidate.amountText, candidate.currency)})`;
+  };
+  fields.append(typeLabel, accountField, linkField, categoryField, newField, parentField, noteField, ruleField);
   const help = node('p', '', 'field-help quick-help'); help.id = 'quick-help';
   const actions = node('div', undefined, 'quick-actions');
   const stage = node('button', 'Stage decision', 'primary-button'); stage.type = 'button'; stage.setAttribute('aria-describedby', 'quick-help');
@@ -1166,35 +1190,41 @@ function quickReviewRow(row) {
   const full = node('button', 'Open full view', 'link-button'); full.type = 'button';
   actions.append(stage, cancel, full);
   const choice = () => chosenCategory(category, newCategory, parent, directionFor(type.value));
+  const linking = () => type.value === 'transfer' && Boolean(candidate) && link.checked;
   const changesCategory = next => Boolean(next.newCategory) || Boolean(next.categoryId && next.categoryId !== row.categoryId);
   const suggested = () => {
     const parts = [], next = choice();
     if (type.value !== row.activityKind) parts.push(`classified as ${typeName(type.value)} (was ${typeName(row.activityKind)})`);
     if (changesCategory(next)) parts.push(`category set to ${next.newCategory ? 'new category ' + next.text : next.text} (was ${categoryName(row.categoryId)})`);
+    if (type.value === 'transfer' && account.value && account.value !== (row.transferAccountId ?? '')) parts.push(`${moneyOut(row) ? 'to' : 'from'} ${accountName(account.value)}`);
+    if (linking()) parts.push(`linked with ${candidate.sourceDescription} on ${candidate.effectiveDate}`);
     if (!parts.length) return '';
     return `Reviewed in Activity: ${parts.join('; ')}.`;
   };
   const update = () => {
-    fillCategories();
+    fillCategories(); findCandidate();
+    accountField.hidden = type.value !== 'transfer';
+    linkField.hidden = !candidate;
     const next = choice(), categoryChanges = changesCategory(next);
     ruleField.hidden = !categoryChanges && type.value === row.activityKind;
     if (ruleField.hidden) rule.checked = false;
     if (!draft.noteEdited) note.value = suggested();
-    Object.assign(draft, {type:type.value, category:category.value, newCategory:newCategory.value, newParent:parent.value, note:note.value, rule:rule.checked});
+    Object.assign(draft, {type:type.value, category:category.value, newCategory:newCategory.value, newParent:parent.value, transferAccount:account.value, link:link.checked, note:note.value, rule:rule.checked});
     newField.hidden = parentField.hidden = category.value !== NEW_CATEGORY;
     const needsCategory = type.value === 'refund' && !row.originalActivityId && !next.categoryId && !next.newCategory && !row.categoryId;
     const blocked = busy ? 'Wait for the current action to finish.' : !session.canEdit() ? 'Reopen an editable session before staging a decision.'
       : needsCategory ? 'A refund without a linked purchase needs a category.' : category.value === NEW_CATEGORY && !next.newCategory ? 'Enter a category name.'
+      : type.value === 'transfer' && !account.value ? 'Choose the account on the other side of this transfer.'
       : !suggested() ? 'Choose a different type or category to stage a decision.'
       : !note.value.trim() ? 'Add a short note for the history.' : '';
     stage.disabled = Boolean(blocked);
-    for (const control of [type, category, newCategory, parent, note, rule, cancel, full]) control.disabled = busy;
+    for (const control of [type, account, link, category, newCategory, parent, note, rule, cancel, full]) control.disabled = busy;
     const after = elsewhere.length ? ` Still needs the full view: ${elsewhere.map(reviewReason).join(', ').toLowerCase()}.` : '';
     help.textContent = blocked || ('Staging does not save. The note is filled in from your change; edit it to add your own reason.' + after);
   };
   quickControls.push(update);
   note.addEventListener('input', () => { draft.noteEdited = true; });
-  for (const control of [type, category, newCategory, parent, note, rule]) { control.addEventListener('input', update); control.addEventListener('change', update); }
+  for (const control of [type, account, link, category, newCategory, parent, note, rule]) { control.addEventListener('input', update); control.addEventListener('change', update); }
   cancel.addEventListener('click', () => { quickDrafts.delete(row.activityId); toggleQuickReview(row.activityId); });
   full.addEventListener('click', () => { quickOpen = null; inspectActivity(row.activityId); });
   stage.addEventListener('click', () => {
@@ -1204,7 +1234,8 @@ function quickReviewRow(row) {
     const following = ids[ids.indexOf(row.activityId) + 1] ?? null;
     return run('Staging the decision locally.', () => {
       session.quickClassify({activityId:row.activityId, activityKind:type.value, categoryId:next.categoryId === (row.categoryId ?? null) ? null : next.categoryId,
-        newCategory:next.newCategory, rationale:note.value});
+        newCategory:next.newCategory, transferAccountId:type.value === 'transfer' ? account.value || null : null,
+        linkActivityId:linking() ? candidate.activityId : null, rationale:note.value});
       quickDrafts.delete(row.activityId); quickOpen = null;
       quickFocus = following ?? 'filter-count';
       if (rule.checked) { startRuleFrom(row.activityId); return; }
@@ -1310,7 +1341,7 @@ function currentRuleTargets() {
   return ruleTargetCache.targets;
 }
 const accountNames = ids => ids.length ? ids.map(id => session.ledger.accounts.find(account => account.accountId === id)?.displayName ?? 'Unknown account').join(', ') : 'All accounts';
-const ruleAction = rule => TYPE_LABELS[rule.activityKind] + (rule.categoryId ? ` › ${categoryLabel(rule.categoryId)}` : '');
+const ruleAction = rule => TYPE_LABELS[rule.activityKind] + (rule.counterpartyAccountId ? ` with ${accountName(rule.counterpartyAccountId)}` : '') + (rule.categoryId ? ` › ${categoryLabel(rule.categoryId)}` : '');
 function ruleStatus(rule) {
   if (!rule.enabled) return 'Off';
   if (rule.categoryId && catalog().retired(rule.categoryId)) return 'Off: its category was deleted';
@@ -1353,7 +1384,7 @@ function ruleItem(rule, rules) {
   up.addEventListener('click', () => up.disabled ? null : move(-1));
   down.addEventListener('click', () => down.disabled ? null : move(1));
   toggle.addEventListener('click', () => toggle.disabled ? null : stageRules({type:'define', ruleId:rule.ruleId, descriptionContains:rule.descriptionContains,
-    accountIds:rule.accountIds, activityKind:rule.activityKind, categoryId:rule.categoryId, enabled:!rule.enabled}, `Rule ${rule.position} turned ${rule.enabled ? 'off' : 'on'}.`));
+    accountIds:rule.accountIds, activityKind:rule.activityKind, categoryId:rule.categoryId, counterpartyAccountId:rule.counterpartyAccountId, enabled:!rule.enabled}, `Rule ${rule.position} turned ${rule.enabled ? 'off' : 'on'}.`));
   edit.addEventListener('click', () => { if (!edit.disabled) openRuleEditor(rule); });
   remove.addEventListener('click', () => {
     if (remove.disabled) return;
@@ -1392,7 +1423,7 @@ function legacyRuleItem(rule) {
 }
 /** Open the editor on a saved rule, a correction rule to widen (`legacyEventId`), a prefilled draft, or nothing. */
 function openRuleEditor(rule = null, legacyEventId = null) {
-  ruleDraft = {ruleId:rule?.ruleId ?? null, legacyEventId, accountIds:new Set(rule?.accountIds ?? []), categoryId:rule?.categoryId ?? ''};
+  ruleDraft = {ruleId:rule?.ruleId ?? null, legacyEventId, accountIds:new Set(rule?.accountIds ?? []), categoryId:rule?.categoryId ?? '', counterpartyAccountId:rule?.counterpartyAccountId ?? ''};
   rulePreview = null;
   $('rule-contains').value = rule?.descriptionContains ?? '';
   $('rule-kind').value = rule?.activityKind ?? 'spending';
@@ -1412,11 +1443,14 @@ function renderRuleEditor() {
     ruleControls.push(editable => { input.disabled = !editable; });
   }
   addOptions($('rule-category'), catalog().choices(directionFor($('rule-kind').value)).map(item => [item.id, item.path]), ruleDraft.categoryId, 'No category');
+  $('rule-transfer-account-field').hidden = $('rule-kind').value !== 'transfer';
+  addOptions($('rule-transfer-account'), session.ledger.accounts.map(account => [account.accountId, account.displayName]), ruleDraft.counterpartyAccountId, 'Not named');
   ruleDraft.categoryId = $('rule-category').value;
   updateRuleMatches();
 }
 const draftRule = () => ({ruleId:ruleDraft.ruleId ?? 'draft', descriptionContains:$('rule-contains').value.trim(), accountIds:[...ruleDraft.accountIds],
-  activityKind:$('rule-kind').value, categoryId:$('rule-category').value || null, enabled:true});
+  activityKind:$('rule-kind').value, categoryId:$('rule-category').value || null,
+  counterpartyAccountId:$('rule-kind').value === 'transfer' ? $('rule-transfer-account').value || null : null, enabled:true});
 function updateRuleMatches() {
   const draft = draftRule();
   const count = draft.descriptionContains ? ruleTargets(session.ledger, {draft}).get(draft.ruleId).length : 0;
@@ -1455,7 +1489,8 @@ function startRuleFrom(activityId) {
     : String(exactSignedDecimal(activity)).startsWith('-') ? 'spending' : 'income';
   pages.go('rules');
   openRuleEditor({descriptionContains:activity.sourceDescription.trim().slice(0, 100), accountIds:[activity.accountId], activityKind:kind,
-    categoryId:activity.categoryId && !catalog().retired(activity.categoryId) ? activity.categoryId : null});
+    categoryId:activity.categoryId && !catalog().retired(activity.categoryId) ? activity.categoryId : null,
+    counterpartyAccountId:kind === 'transfer' ? activity.transferAccountId ?? null : null});
   announce('Decision staged. Widen the description to the part every matching transaction shares, then save the rule.', 'success');
 }
 function applyQuickFocus() {
@@ -1657,7 +1692,7 @@ function showDetail(activityId, {navigate = true} = {}) {
   const activity = detail.activity;
   pages.openDetail({navigate});
   $('detail-title').textContent = activity.sourceDescription;
-  $('detail-description').textContent = `${detail.account.displayName} · ${activity.effectiveDate || 'Unknown date'} · ${label(activity.lifecycleStatus)} · ${label(activity.activityKind)} · ${activity.categoryId ? label(activity.categoryId) : 'No category'}${activity.reviewReasons?.length ? '. Needs review: ' + activity.reviewReasons.map(reviewReason).join(', ') : ''}`;
+  $('detail-description').textContent = `${detail.account.displayName} · ${activity.effectiveDate || 'Unknown date'} · ${label(activity.lifecycleStatus)} · ${label(activity.activityKind)}${activity.activityKind === 'transfer' ? ' (' + transferPath({...activity, accountName:detail.account.displayName}) + ')' : ''} · ${activity.categoryId ? categoryLabel(activity.categoryId) : 'No category'}${activity.reviewReasons?.length ? '. Needs review: ' + activity.reviewReasons.map(reviewReason).join(', ') : ''}`;
   $('detail-amount').textContent = money(activity.amountText, activity.currency);
   const transferPanel = $('transfer-link-panel');
   transferPanel.hidden = true;
@@ -1677,6 +1712,7 @@ function showDetail(activityId, {navigate = true} = {}) {
     const candidates = getEffectiveActivities(session.ledger).filter(candidate => candidate.active &&
       candidate.activityKind === 'transfer' &&
       candidate.currency === activity.currency && candidate.accountId !== activity.accountId &&
+      (!activity.transferAccountId || candidate.accountId === activity.transferAccountId) &&
       !candidate.transferGroupId && exactSignedDecimal(candidate) === amount);
     const accountById = new Map(session.ledger.accounts.map(account => [account.accountId, account]));
     const placeholder = node('option', 'Choose the matching incoming activity');
@@ -1733,6 +1769,7 @@ function showDetail(activityId, {navigate = true} = {}) {
   if (detail.reviewDecisions.length) $('detail-history').append(evidenceDetails('Inspect source review decisions', () => detail.reviewDecisions));
   if (!detail.events.length && !detail.reviewDecisions.length) $('detail-history').append(node('p', 'No corrections recorded.'));
   $('classification').value = ['income', 'spending', 'transfer', 'unclassified'].includes(activity.activityKind) ? activity.activityKind : 'unclassified';
+  addOptions($('transfer-account'), otherAccounts(activity), activity.transferAccountId ?? '', 'Choose an account');
   fillCategorySelect($('category'), directionFor(activity.activityKind), activity.categoryId);
   $('category').value = activity.categoryId && !catalog().retired(activity.categoryId) ? activity.categoryId : '';
   fillParentSelect($('category-new-parent'), directionFor(activity.activityKind)); $('category-new-name').value = '';
@@ -1749,6 +1786,7 @@ refresh(); if (pages.current === 'activity-detail') $('detail-title').focus();
 function correctionFields() {
   const type = $('correction-type').value;
   $('classification-field').hidden = type !== 'classification';
+  $('transfer-account-field').hidden = type !== 'classification' || $('classification').value !== 'transfer' || Boolean(detailActivity?.transferGroupId);
   $('category-field').hidden = type !== 'category-correction';
   $('category-rule-field').hidden = type !== 'category-correction';
   $('category-new-fields').hidden = type !== 'category-correction' || $('category').value !== NEW_CATEGORY;
@@ -2004,7 +2042,7 @@ action('revert-all-changes', 'Reverting all staged changes to the last verified 
 action('stage-correction', 'Checking your correction locally.', async () => {
   const category = detailCategory();
   if ($('correction-type').value === 'category-correction' && $('category').value === NEW_CATEGORY && !category.newCategory) fail('category-name-required');
-  session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: category.categoryId, newCategory: category.newCategory, amountText: $('amount').value,
+  session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, transferAccountId: $('classification').value === 'transfer' ? $('transfer-account').value || null : null, categoryId: category.categoryId, newCategory: category.newCategory, amountText: $('amount').value,
     lifecycleStatus: $('posting-status').value, postedDate: $('posting-status').value === 'posted' ? $('posting-date').value : null, rationale: $('correction-rationale').value,
   });
   if ($('correction-type').value === 'category-correction' && $('category-rule').checked) { startRuleFrom(selectedActivity); return; }
@@ -2027,11 +2065,13 @@ $('rule-cancel').addEventListener('click', () => { ruleDraft = null; render(); $
 $('rule-contains').addEventListener('input', () => { if (ruleDraft) updateRuleMatches(); });
 $('rule-kind').addEventListener('change', () => { if (ruleDraft) renderRuleEditor(); });
 $('rule-category').addEventListener('change', () => { if (ruleDraft) { ruleDraft.categoryId = $('rule-category').value; updateRuleMatches(); } });
+$('rule-transfer-account').addEventListener('change', () => { if (ruleDraft) { ruleDraft.counterpartyAccountId = $('rule-transfer-account').value; updateRuleMatches(); } });
 $('rules-apply-all').addEventListener('click', () => { if (!$('rules-apply-all').disabled) openRulePreview(null); });
 $('rule-preview-cancel').addEventListener('click', () => { rulePreview = null; render(); });
 action('rule-save', 'Staging the rule locally.', async () => {
   const draft = draftRule(), saved = ruleDraft.ruleId ? ruleCatalog(session.ledger).get(ruleDraft.ruleId) : null;
   const command = {type:'define', descriptionContains:draft.descriptionContains, accountIds:draft.accountIds, activityKind:draft.activityKind, categoryId:draft.categoryId,
+    counterpartyAccountId:draft.counterpartyAccountId,
     ...(saved ? {ruleId:saved.ruleId, enabled:saved.enabled} : {})};
   session.manageRules([command, ...(ruleDraft.legacyEventId ? [{type:'retire-legacy', ruleEventId:ruleDraft.legacyEventId}] : [])]);
   const ruleId = saved?.ruleId ?? ruleCatalog(session.ledger).rules.at(-1).ruleId;
@@ -2060,6 +2100,8 @@ $('posting-status').addEventListener('change', correctionFields);
 $('posting-date').addEventListener('input', refresh);
 $('correction-rationale').addEventListener('input', () => { detailNoteEdited = true; refresh(); });
 $('category').addEventListener('change', correctionFields);
+$('classification').addEventListener('change', correctionFields);
+$('transfer-account').addEventListener('change', suggestDetailNote);
 for (const id of ['classification', 'category', 'category-new-name', 'category-new-parent', 'amount', 'posting-date', 'category-rule']) {
   $(id).addEventListener('input', suggestDetailNote); $(id).addEventListener('change', suggestDetailNote);
 }

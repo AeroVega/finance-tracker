@@ -21,6 +21,7 @@ const workspace = {
   'invalid-rule-action': 'Choose a type for the rule. A category is optional.',
   'unknown-rule': 'That rule no longer exists. Reload the Rules page.',
   'no-rule-matches': 'No transaction that needs review matches. Nothing was changed.',
+  'invalid-transfer-account': 'Choose another imported account for this transfer. A linked transfer keeps the account of its other side.',
   'historical-detail-not-reconciled': 'The transaction detail does not yet qualify to replace the workbook summary.',
   'unsupported-ledger-version-transition': 'The ledger format changed in an unsupported way. Keep the original copy unchanged.',
   'records-must-be-an-array': 'The normalized history must include an array of records.',
@@ -373,7 +374,7 @@ const codeGroups = {
     category-command-conflict category-has-subcategories category-name-required duplicate-category-name
     invalid-category-event invalid-category-events invalid-category-parent retired-category unknown-category
     invalid-legacy-rule-retirement invalid-rule-accounts invalid-rule-action invalid-rule-event invalid-rule-events
-    invalid-rule-order no-rule-matches rule-text-required unknown-rule
+    invalid-rule-order no-rule-matches rule-text-required unknown-rule invalid-transfer-account
     reconnect-required recovery-not-required release-before-preview reopen-before-editing
     seed-readback-mismatch statement-reconciliation-evidence-required synthetic-data-required
     transfer-link-rationale-required unknown-position-account unsupported-workspace-correction

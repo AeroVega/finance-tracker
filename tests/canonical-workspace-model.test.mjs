@@ -27,7 +27,8 @@ test('saved invented year exposes exact known totals and incomplete evidence', (
   assert.equal(view.summary[0].excluded.length, 48);
   assert.equal(view.scope.start, '2025-01-01');
   assert.equal(view.scope.end, '2025-12-31');
-  assert.equal(view.review.activityCount, 48);
+  // Unclassified rows plus the 60 transfers whose other side is not linked.
+  assert.equal(view.review.activityCount, 108);
   assert.equal(view.review.unknownClassificationCount, 48);
   assert.equal(view.review.unknownLifecycleCount, 48);
   assert.equal(view.review.sourceCount, 0);
@@ -74,7 +75,7 @@ test('account and month scope use official reports while search and review only 
     assert.equal(filtered.totalCount, 21);
   }
   assert.equal(createWorkspaceView(fixture.ledger, {month:'2025-01', query:'  INVENTED   UTILITY  '}).filteredCount, 1);
-  assert.equal(createWorkspaceView(fixture.ledger, {month:'2025-01', reviewOnly:true}).filteredCount, 4);
+  assert.equal(createWorkspaceView(fixture.ledger, {month:'2025-01', reviewOnly:true}).filteredCount, 9);
   assert.equal(createWorkspaceView(fixture.ledger, {query:'INVENTED SAVINGS interest'}).filteredCount, 12);
 });
 

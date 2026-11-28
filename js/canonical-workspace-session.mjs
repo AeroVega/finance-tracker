@@ -4,6 +4,7 @@ import { HISTORICAL_COLLECTIONS, prepareHistoricalReconciliation, prepareHistori
 import { applyFinancialEvent, applyFinancialEvents, applyReviewDecision, reverseReviewDecision, registerAccount, validateLedgerOfClass, ledgerDataClass, getEffectiveActivities, summarizeLedgerPeriods } from './canonical-import.mjs';
 import { persistenceDataClass } from './persistence-data-class.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
+import { exactSignedDecimal } from './import-reconciliation.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
 import { applyPlanningEvents, budgetRemovals } from './planning.mjs';
 import { applyCategoryEvents } from './category-records.mjs';
@@ -160,7 +161,7 @@ export class CanonicalWorkspaceSession {
     return { ledger, categoryId: ledger.categoryEvents.at(-1).categoryId };
   }
 
-  correct({ activityId, type, activityKind, categoryId, amountText, lifecycleStatus, postedDate, rationale, createRule = false, newCategory = null }) {
+  correct({ activityId, type, activityKind, categoryId, amountText, lifecycleStatus, postedDate, rationale, createRule = false, newCategory = null, transferAccountId = null }) {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
     if (!['classification', 'category-correction', 'bank-correction', 'posting-status-correction'].includes(type)) fail('unsupported-workspace-correction');
@@ -172,7 +173,17 @@ export class CanonicalWorkspaceSession {
     if (type === 'category-correction') { command.categoryId = typeof categoryId === 'string' ? categoryId.trim() : categoryId; command.createRule = createRule === true; }
     if (type === 'bank-correction') command.amountText = typeof amountText === 'string' ? amountText.trim() : amountText;
     if (type === 'posting-status-correction') { command.lifecycleStatus = lifecycleStatus; command.postedDate = postedDate; }
-    const next = applyFinancialEvent(ledger, command);
+    const commands = [command];
+    // Naming a transfer's other account rides with its classification. An
+    // existing transfer that only gains an account needs no new classification.
+    if (type === 'classification' && activityKind === 'transfer' && transferAccountId) {
+      const current = getEffectiveActivities(ledger).find(activity => activity.activityId === activityId);
+      if (transferAccountId !== current?.transferAccountId) {
+        if (current?.activityKind === 'transfer') commands.length = 0;
+        commands.push({ activityId, type: 'transfer-account', counterpartyAccountId: transferAccountId, commandId: crypto.randomUUID(), evidence: { rationale: rationale.trim() } });
+      }
+    }
+    const next = applyFinancialEvents(ledger, commands);
     this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();
@@ -183,7 +194,7 @@ export class CanonicalWorkspaceSession {
    * the category. Both commands apply atomically, so a rejected category never
    * leaves a half-applied classification. The category is an ordinary category
    * correction; it becomes a rule for later imports only when createRule is true. */
-  quickClassify({ activityId, activityKind, categoryId = null, rationale, createRule = false, newCategory = null }) {
+  quickClassify({ activityId, activityKind, categoryId = null, rationale, createRule = false, newCategory = null, transferAccountId = null, linkActivityId = null }) {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
     if (!['income', 'spending', 'transfer', 'refund'].includes(activityKind)) fail('unsupported-classification');
@@ -199,6 +210,16 @@ export class CanonicalWorkspaceSession {
     if (current.activityKind !== activityKind) commands.push({ activityId, type: 'classification', activityKind, categoryId: current.categoryId ?? null, commandId: crypto.randomUUID(), evidence });
     if (categoryId !== null && categoryId.trim() !== current.categoryId) {
       commands.push({ activityId, type: 'category-correction', categoryId: categoryId.trim(), createRule: createRule === true, commandId: crypto.randomUUID(), evidence: { ...evidence } });
+    }
+    if (activityKind === 'transfer' && transferAccountId && transferAccountId !== current.transferAccountId) {
+      commands.push({ activityId, type: 'transfer-account', counterpartyAccountId: transferAccountId, commandId: crypto.randomUUID(), evidence: { ...evidence } });
+    }
+    // Linking the other side: it becomes a transfer too, then the outgoing side links to the incoming one.
+    if (activityKind === 'transfer' && linkActivityId) {
+      const other = getEffectiveActivities(this.ledger).find(activity => activity.activityId === linkActivityId && activity.active) ?? fail('unknown-activity');
+      if (other.activityKind !== 'transfer') commands.push({ activityId: linkActivityId, type: 'classification', activityKind: 'transfer', categoryId: other.categoryId ?? null, commandId: crypto.randomUUID(), evidence: { ...evidence } });
+      const outgoing = String(exactSignedDecimal(current)).startsWith('-') ? activityId : linkActivityId;
+      commands.push({ activityId: outgoing, type: 'transfer-link', counterpartyActivityId: outgoing === activityId ? linkActivityId : activityId, commandId: crypto.randomUUID(), evidence: { ...evidence } });
     }
     if (!commands.length) return this.ledger;
     const next = applyFinancialEvents(ledger, commands);

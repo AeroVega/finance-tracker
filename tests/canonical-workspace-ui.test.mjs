@@ -156,11 +156,12 @@ test('account and month change totals while search, review and pagination change
   assert.equal(records(h).length, 12);
   assert.equal(h.summary(), annual);
   await h.search(''); await h.choose('review-only', true);
-  assert.match(h.get('filter-count').textContent, /48 matching activities of 253/);
+  // Unclassified rows plus unlinked transfers, which stay flagged until their other side is linked.
+  assert.match(h.get('filter-count').textContent, /108 matching activities of 253/);
   assert.equal(h.summary(), annual);
-  assert.equal(records(h).length, 48);
-  assert.equal(h.get('show-more').hidden, true);
-  assert.equal(h.get('page-status').textContent, 'Showing 48 of 48');
+  assert.equal(records(h).length, 50);
+  assert.equal(h.get('show-more').hidden, false);
+  assert.equal(h.get('page-status').textContent, 'Showing 50 of 108');
   assert.equal(h.summary(), annual);
   await h.choose('review-only', false); await h.choose('month-filter', '2025-01');
   assert.match(h.summary(), /\$2,471\.25/);
@@ -1018,7 +1019,7 @@ test('retired review links open the Needs review list and first-run preview open
   assert.equal(h.location.hash,'#transactions');
   assert.equal(h.get('transactions').hidden,false);
   assert.equal(h.get('review-only').checked,true);
-  assert.match(h.get('filter-count').textContent,/48 matching activities of 253/);
+  assert.match(h.get('filter-count').textContent,/108 matching activities of 253/);
   assert.equal(records(h).every(row => row.attributes['data-review'] === 'true'),true);
   // Only activity decisions are waiting, so the source-row section stays out of the way.
   assert.equal(h.get('review-section').hidden,true);
@@ -1827,6 +1828,11 @@ test('redesigned shell keeps one connect panel, one save action per mode, and a 
   assert.equal(h.state.writes, 0);
 });
 
+// Narrow Needs review to unclassified rows, so a test decides a brokerage fee rather than a transfer.
+async function onlyUnclassified(h) {
+  const option = h.get('type-options').children.find(item => item.children[0].value === 'unclassified').children[0];
+  option.checked = true; await option.emit('change');
+}
 const findText = (root, predicate) => {
   if (predicate(root)) return root;
   for (const child of root.children || []) { const found = findText(child, predicate); if (found) return found; }
@@ -1888,7 +1894,7 @@ test('month headers total posted rows with the report rule and Show more continu
 
 test('inline decision stages type and category without leaving the list, then moves to the next flagged row', async () => {
   const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
-  await h.choose('review-only', true);
+  await h.choose('review-only', true); await onlyUnclassified(h);
   const first = records(h)[0];
   const decide = findText(first, node => node.className === 'decide-button');
   assert.ok(decide, 'flagged rows offer an inline decision');
@@ -1916,6 +1922,8 @@ test('inline decision stages type and category without leaving the list, then mo
   const nextRow = records(h).find(item => text(item.children[1]) === secondDescription);
   assert.equal(h.observed.focused, findText(nextRow, node => node.className === 'decide-button'));
   // Posting status is still unknown, so the row stays in Needs review without an inline action.
+  const unclassified = h.get('type-options').children.find(item => item.children[0].value === 'unclassified').children[0];
+  unclassified.checked = false; await unclassified.emit('change');
   const row = records(h).find(item => /INVENTED BROKERAGE FEE/.test(text(item)));
   assert.match(text(row), /Posting status unknown/);
   assert.equal(findText(row, node => node.className === 'decide-button'), null);
@@ -1923,7 +1931,7 @@ test('inline decision stages type and category without leaving the list, then mo
 
 test('Cancel closes an inline decision and discards its draft', async () => {
   const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
-  await h.choose('review-only', true);
+  await h.choose('review-only', true); await onlyUnclassified(h);
   await findText(records(h)[0], node => node.className === 'decide-button').click();
   h.get('quick-category').value = 'groceries'; await h.get('quick-category').emit('change');
   await findText(h.get('quick-review'), node => node.textContent === 'Cancel').click();
@@ -1952,7 +1960,7 @@ test('verified release clears facet labels, counts, chips and filters that could
 
 test('inline notes follow the change until edited, and Make a rule opens the rule editor filled in', async () => {
   const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', ''); await h.navigate('#transactions');
-  await h.choose('review-only', true);
+  await h.choose('review-only', true); await onlyUnclassified(h);
   await findText(records(h)[0], node => node.className === 'decide-button').click();
   const panel = h.get('quick-review');
   const note = findText(panel, node => node.tagName === 'LABEL' && node.textContent === 'Note for the history').children[0];
@@ -1964,6 +1972,8 @@ test('inline notes follow the change until edited, and Make a rule opens the rul
   h.get('quick-category').value = 'fees-and-interest'; await h.get('quick-category').emit('change');
   assert.equal(note.value, 'Reviewed in Activity: classified as spending (was unclassified); category set to Fees and interest (was no category).');
   h.get('quick-type').value = 'transfer'; await h.get('quick-type').emit('change');
+  assert.match(h.get('quick-help').textContent, /Choose the account on the other side of this transfer/, 'a transfer names its other account');
+  await h.choose('quick-transfer-account', recipe.accounts.checking);
   assert.match(note.value, /^Reviewed in Activity: classified as transfer \(was unclassified\); category set to Fees and interest/);
   rule.checked = true; await rule.emit('change');
   assert.doesNotMatch(note.value, /later imports/, 'the note records the decision, not the rule');
@@ -2324,4 +2334,30 @@ test('Rules run first to last, move, turn off, and delete after confirmation', a
   assert.match(h.get('rule-preview-title').textContent, /^Your rules would file 12 transactions that need review$/);
   assert.match(text(h.get('rule-preview-list')), /→ Spending › Other/);
   assert.equal(h.get('rule-preview-list').children.length, 12);
+});
+
+test('an inline transfer decision names the other account and links the matching row', async () => {
+  const h = await workspacePage(); await h.click('preview-year'); await h.choose('month-filter', '2025-12'); await h.navigate('#transactions');
+  await h.choose('review-only', true);
+  const row = records(h).find(item => /INVENTED SAVINGS TRANSFER OUT/.test(text(item)));
+  assert.match(text(row), /Transfer needs its other account/);
+  assert.match(text(row), /Other account not named/);
+  await findText(row, node => node.className === 'decide-button').click();
+  assert.equal(h.get('quick-type').value, 'transfer');
+  const stage = findText(h.get('quick-review'), node => node.textContent === 'Stage decision');
+  assert.equal(stage.disabled, true, 'a transfer needs its other account');
+  await h.choose('quick-transfer-account', recipe.accounts.savings);
+  const link = h.get('quick-transfer-link');
+  assert.equal(link.checked, false, 'a matching amount is a suggestion; linking is the owner\'s choice');
+  await h.choose('quick-transfer-link', true);
+  assert.match(text(findText(h.get('quick-review'), node => /quick-link/.test(node.className || ''))), /Link with INVENTED SAVINGS TRANSFER IN on 2025-12-/);
+  await stage.click();
+  const out = getEffectiveActivities(h.modelSession.ledger).find(activity => activity.sourceDescription === 'INVENTED SAVINGS TRANSFER OUT' && activity.effectiveDate.startsWith('2025-12'));
+  const into = getEffectiveActivities(h.modelSession.ledger).find(activity => activity.activityId === out.transferCounterpartyActivityId);
+  assert.equal(into.sourceDescription, 'INVENTED SAVINGS TRANSFER IN');
+  assert.equal(into.accountId, recipe.accounts.savings);
+  assert.equal(h.modelSession.stagedHistory.length, 1);
+  assert.equal(records(h).some(item => /INVENTED SAVINGS TRANSFER (OUT|IN)/.test(text(item))), false, 'both sides leave Needs review');
+  await h.choose('review-only', false);
+  assert.match(text(records(h).find(item => /INVENTED SAVINGS TRANSFER OUT/.test(text(item)))), /Invented .* → Invented .*/);
 });

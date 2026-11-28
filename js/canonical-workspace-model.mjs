@@ -70,6 +70,8 @@ function excludedReviewReasons(reports) {
 function reviewReasonsFor(activity, exclusions, catalog) {
   const reasons = new Set();
   if (catalog.retired(activity.categoryId)) reasons.add('deleted-category');
+  // A transfer is left out of income and spending at once, and stays here until its other side is linked.
+  if (activity.activityKind === 'transfer' && !activity.transferGroupId) reasons.add(activity.transferAccountId ? 'transfer-unmatched' : 'transfer-account-missing');
   if (!knownKinds.has(activity.activityKind)) reasons.add('unclassified-activity');
   if (!['posted', 'pending'].includes(activity.lifecycleStatus)) reasons.add('unknown-lifecycle');
   if (activity.activityKind === 'refund' && activity.postedDate === null) reasons.add('missing-refund-posted-date');
@@ -77,13 +79,18 @@ function reviewReasonsFor(activity, exclusions, catalog) {
   return [...reasons];
 }
 
-function rowFor(activity, accounts, observations, events, exclusions, catalog) {
+/** The account on a transfer's other side: the linked activity's account, or the one named before linking. */
+export function transferAccountOf(activity, accountOf) {
+  if (activity.activityKind !== 'transfer') return null;
+  return activity.transferCounterpartyActivityId ? accountOf.get(activity.transferCounterpartyActivityId) ?? null : activity.transferAccountId ?? null;
+}
+function rowFor(activity, accounts, observations, events, exclusions, catalog, accountOf) {
   const reviewReasons = reviewReasonsFor(activity, exclusions, catalog);
   const {sourceFields, ...effective} = activity;
   // A deleted category reads as no category. The row's reported category is
   // its parent when it has one, so filtering on a parent includes its subcategories.
   return {...effective, categoryId:catalog.retired(activity.categoryId) ? null : activity.categoryId,
-    reportedCategoryId:catalog.reported(activity.categoryId), accountName:accounts.get(activity.accountId).displayName,
+    reportedCategoryId:catalog.reported(activity.categoryId), transferAccountId:transferAccountOf(activity, accountOf), accountName:accounts.get(activity.accountId).displayName,
     amountText:exactSignedDecimal(activity),
     reportingDate:reportingDate(activity), needsReview:reviewReasons.length > 0, reviewReasons,
     typeGroup:activityTypeGroup(activity.activityKind),
@@ -94,6 +101,13 @@ function countBy(records, key) {
   const counts = new Map();
   for (const record of records) counts.set(record[key], (counts.get(record[key]) ?? 0) + 1);
   return counts;
+}
+
+// Activity accounts never change, so one map per ledger object serves every read.
+const accountMaps = new WeakMap();
+function activityAccounts(ledger) {
+  if (!accountMaps.has(ledger)) accountMaps.set(ledger, new Map(ledger.activities.map(activity => [activity.activityId, activity.accountId])));
+  return accountMaps.get(ledger);
 }
 
 /** Calculate only when the validated snapshot or financial scope changes. */
@@ -133,7 +147,7 @@ function buildWorkspaceScope(ledger, effective, {accountId, month}, index = null
   const observationCounts = prepared?.observationCounts ?? countBy(ledger.observations, 'activityId');
   const eventCounts = prepared?.eventCounts ?? countBy(ledger.events, 'activityId');
   const scopedRows = (index ? index.activities({accountIds,month}) : scopedActivities.filter(activity => inPeriod(reportingDate(activity))))
-    .map(activity => rowFor(activity, accountsById, observationCounts, eventCounts, exclusions, categoryCatalog(ledger)));
+    .map(activity => rowFor(activity, accountsById, observationCounts, eventCounts, exclusions, categoryCatalog(ledger), activityAccounts(ledger)));
   scopedRows.sort((a, b) => (b.reportingDate ?? b.effectiveDate).localeCompare(a.reportingDate ?? a.effectiveDate) ||
     a.activityId.localeCompare(b.activityId));
   const summaryAvailability = indexedReports ? Object.fromEntries(indexedReports.map(result => [result.report.currency,result.availability])) : Object.fromEntries(summary.map(report => {
@@ -405,6 +419,33 @@ export function createWorkspaceView(ledger, options) {
   return selectWorkspaceRows(scope, {rows, groups:groupWorkspaceRows(scope, rows, selection), facets:facetWorkspaceRows(scope, searchTexts, selection)}, selection);
 }
 
+// Ledgers are replaced, never edited in place, so one replay per ledger object serves repeated lookups.
+const effectiveMaps = new WeakMap();
+function effectiveById(ledger) {
+  if (!effectiveMaps.has(ledger)) effectiveMaps.set(ledger, new Map(getEffectiveActivities(ledger).map(activity => [activity.activityId, activity])));
+  return effectiveMaps.get(ledger);
+}
+const dayNumber = date => Date.parse(date + 'T00:00:00Z') / 86400000;
+export const TRANSFER_MATCH_DAYS = 7;
+/**
+ * Unlinked rows in `accountId` that could be the other side of a transfer:
+ * active, the same currency, the exact opposite amount, dated within 7 days,
+ * and a transfer or still unclassified. Nearest date first.
+ */
+export function transferCandidates(ledger, activityId, accountId) {
+  const activities = effectiveById(ledger), activity = activities.get(activityId);
+  const amount = activity && exactSignedDecimal(activity);
+  if (!amount || !isCalendarDate(activity.effectiveDate)) return [];
+  const opposite = amount.startsWith('-') ? amount.slice(1) : '-' + amount;
+  return [...activities.values()].filter(other => other.active && other.accountId === accountId && other.activityId !== activityId &&
+    !other.transferGroupId && ['transfer', 'unclassified'].includes(other.activityKind) && other.currency === activity.currency &&
+    exactSignedDecimal(other) === opposite && isCalendarDate(other.effectiveDate) &&
+    (!other.transferAccountId || other.transferAccountId === activity.accountId) &&
+    Math.abs(dayNumber(other.effectiveDate) - dayNumber(activity.effectiveDate)) <= TRANSFER_MATCH_DAYS)
+    .sort((a, b) => Math.abs(dayNumber(a.effectiveDate) - dayNumber(activity.effectiveDate)) - Math.abs(dayNumber(b.effectiveDate) - dayNumber(activity.effectiveDate)))
+    .map(other => ({activityId:other.activityId, effectiveDate:other.effectiveDate, sourceDescription:other.sourceDescription, amountText:exactSignedDecimal(other), currency:other.currency}));
+}
+
 /** Fetch provenance only when an activity detail is opened. */
 export function getWorkspaceActivity(ledger, activityId) {
   const effective = getEffectiveActivities(ledger);
@@ -421,6 +462,7 @@ export function getWorkspaceActivity(ledger, activityId) {
   observations.forEach(value => observationIds.add(value.observationId));
   const importIds = new Set(observations.map(value => value.importRunId));
   return structuredClone({activity:{...activity, accountName:account.displayName, reportingDate:reportingDate(activity), amountText:exactSignedDecimal(activity),
+    transferAccountId:transferAccountOf(activity, activityAccounts(ledger)),
     needsReview:reviewReasons.length > 0, reviewReasons},
     originalActivity:ledger.activities.find(value => value.activityId === activityId), account, observations,
     events:ledger.events.filter(value => value.activityId === activityId),
