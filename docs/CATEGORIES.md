@@ -59,6 +59,6 @@ A category typed into a review decision or a correction is created in the same s
 
 ## Limits
 
-**Open:** a prospective rule created before its category was deleted still assigns that category to later imports. Those transactions show in Needs review with "Category was deleted". The Rules page, a later change, disables such rules.
+A rule from the [Rules](RULES.md) page whose category was deleted stops running. A correction rule created before its category was deleted still assigns that category to later imports. Those transactions show in Needs review with "Category was deleted", and the Rules page can stop that correction rule.
 
 Renaming changes only the label. History, rules, and budgets keep the ID.

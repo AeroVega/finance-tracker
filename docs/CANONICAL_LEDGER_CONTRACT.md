@@ -55,6 +55,10 @@ Old ledgers may omit `positionEvents`. New storage indexes the collection when p
 
 [Categories](CATEGORIES.md) adds optional append-only `categoryEvents` to synthetic and production ledgers. Its one event type, `category-definition`, creates, edits or deletes a category. A category record never rewrites an activity or an activity event. A deleted category ID never returns. Old ledgers may omit the collection, and existing category records cannot be removed, reordered or rewritten. See `js/category-catalog.mjs`.
 
+### Rule extension
+
+[Rules](RULES.md) adds optional append-only `ruleEvents` to synthetic and production ledgers. Its event types are `rule-definition`, `rule-order` and `legacy-rule-retirement`. A rule record never rewrites an activity or an activity event. Applying a rule appends ordinary classification and category events. A retirement stops a correction rule for activities appended after its recorded activity count. See `js/rule-catalog.mjs`.
+
 ### Canonical activity
 
 The entity is called **activity**, not just transaction, because Fidelity files contain trades, fees, dividends, contributions, and valuation events.

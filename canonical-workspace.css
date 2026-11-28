@@ -665,6 +665,22 @@ pre { margin: var(--s2) 0 0; padding: var(--s4); max-width: 100%; max-height: 32
 .category-editor .category-actions { grid-column: 1 / -1; }
 .category-new-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--s3); }
 .category-new-fields[hidden] { display: none; }
+
+/* Rules: a toolbar, the editor or the preview, then the ordered list. */
+.rules-toolbar { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s3); }
+.rule-editor, .rule-preview { display: grid; gap: var(--s3); max-width: 48rem; margin-bottom: var(--s5); padding: var(--s4); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); }
+.rule-editor[hidden], .rule-preview[hidden], .legacy-rules[hidden] { display: none; }
+.rule-editor h3, .rule-preview h3 { margin: 0; }
+.rule-editor > label { display: grid; gap: 6px; color: var(--text-2); font-size: var(--fs-sm); font-weight: 550; }
+.rule-accounts-field { display: grid; gap: var(--s1); min-width: 0; margin: 0; padding: 0; border: 0; }
+.rule-accounts-field legend { margin-bottom: var(--s1); color: var(--text-2); font-size: var(--fs-sm); font-weight: 550; }
+.rule-accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: 0 var(--s3); }
+.rule-preview-list { display: grid; gap: var(--s1); max-height: 22rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.rule-list { display: grid; margin: 0 0 var(--s5); padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.rule-item { display: grid; gap: var(--s2); min-width: 0; padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
+.rule-item .category-name { overflow-wrap: anywhere; }
+.rule-status { color: var(--text); }
+.legacy-rules h3 { margin-bottom: var(--s1); }
 .position-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--s4); align-items: end; }
 .position-form > p { grid-column: 1 / -1; max-width: 72ch; color: var(--text-2); font-size: var(--fs-sm); }
 .position-form > button { justify-self: start; }

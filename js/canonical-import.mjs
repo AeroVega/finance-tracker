@@ -3,6 +3,7 @@ import { validateHistoricalLedger } from './historical-monthly-summary.mjs';
 import { validatePositionEvents } from './financial-position-contract.mjs';
 import { validatePlanningEvents } from './planning-contract.mjs';
 import { validateCategoryEvents } from './category-catalog.mjs';
+import { validateRuleEvents, legacyRuleBoundaries } from './rule-catalog.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { parseMoney, reconcileImport, isCalendarDate, exactSignedDecimal, sameComposite } from './import-reconciliation.mjs';
 
@@ -58,7 +59,7 @@ export function validateProductionLedger(ledger) {
 }
 // Version 3 admits only known top-level fields; it starts without legacy extras.
 const PRODUCTION_FIELDS=new Set(['format','version','dataClass','ledgerId','createdAt',...Object.keys(collections),
-  'positionEvents','planningEvents','categoryEvents','historicalSummaryBatches','historicalReconciliations']);
+  'positionEvents','planningEvents','categoryEvents','ruleEvents','historicalSummaryBatches','historicalReconciliations']);
 
 /** The header's class, or a refusal. Not provenance or authorization. */
 export function ledgerDataClass(ledger) {
@@ -144,7 +145,7 @@ function validateAndProject(ledger, expectedClass='synthetic') {
     if(o.candidate.accountId!==o.accountId||o.candidate.institutionId!==account.institutionId||(['created','matched'].includes(o.disposition)&&o.activityId===null)||(['review','rejected'].includes(o.disposition)&&o.activityId!==null)) fail('invalid-observation-state');
     if (o.activityId !== null && findActivity(o.activityId).accountId !== o.accountId) fail('observation-account-conflict');
   }
-  const replay=createActivityReplay(ledger.activities);
+  const replay=createActivityReplay(ledger.activities,legacyRuleBoundaries(ledger));
   const activeIds=activeActivityIds(ledger);
   const commands=new Map();
   for (const e of ledger.events) {
@@ -193,6 +194,11 @@ function validateAndProject(ledger, expectedClass='synthetic') {
   }
   validateCategoryEvents(ledger,ids,commands);
   for (const event of ledger.categoryEvents ?? []) {
+    ids.add(event.eventId);
+    commands.set(event.commandId,event);
+  }
+  validateRuleEvents(ledger,ids,commands);
+  for (const event of ledger.ruleEvents ?? []) {
     ids.add(event.eventId);
     commands.set(event.commandId,event);
   }
@@ -547,7 +553,10 @@ function prospectiveCategoryRule(ledger, activity, requested) {
 // State is local to one operation and is never stored on the ledger. A refund
 // category is a reference until a later explicit/rule category overrides it.
 // This preserves the original replay's late-bound purchase category semantics.
-function createActivityReplay(activities) {
+// A retired correction rule reaches only activities that existed when it was
+// retired: `boundaries` maps its event ID to that activity count.
+function createActivityReplay(activities,boundaries=new Map()) {
+  const position=new Map(activities.map((activity,index)=>[activity.activityId,index]));
   const states=new Map(activities.map(activity=>[activity.activityId,{
     value:{...activity},categoryTarget:null,dependencies:new Set(),dependents:new Set(),checked:true,
   }]));
@@ -599,9 +608,9 @@ function createActivityReplay(activities) {
     append(event) {
       const state=stateFor(event.activityId),result=state.value;
       if(event.eventType==='category-correction' && event.prospectiveRule?.enabled) {
-        const excluded=new Set(event.prospectiveRule.existingActivityIds);
+        const excluded=new Set(event.prospectiveRule.existingActivityIds),boundary=boundaries.get(event.eventId)??Infinity;
         for(const peer of matchingStates(event.prospectiveRule.key)) {
-          if(!excluded.has(peer.value.activityId)) category(peer,event.categoryId);
+          if(!excluded.has(peer.value.activityId)&&position.get(peer.value.activityId)<boundary) category(peer,event.categoryId);
         }
       }
       if(event.eventType==='bank-correction') Object.assign(result,event.proposedValues);
@@ -641,7 +650,7 @@ function createActivityReplay(activities) {
   };
 }
 function projectActivities(ledger) {
-  const replay=createActivityReplay(ledger.activities);
+  const replay=createActivityReplay(ledger.activities,legacyRuleBoundaries(ledger));
   for(const event of ledger.events) replay.append(event);
   return replay;
 }

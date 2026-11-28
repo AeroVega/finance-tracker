@@ -1,5 +1,7 @@
 # Category-rule scope and storage
 
+**Superseded for new rules, 2026-11-27:** the [Rules](RULES.md) page replaces correction rules. The review checkbox no longer creates one. Existing correction rules keep working until the Rules page stops them with a `legacy-rule-retirement` record. This page still describes how they match and how they are stored.
+
 ## Behavior
 
 A category correction changes its target and creates a prospective exact-match rule. Existing peers keep their categories; matching activities created by later imports can inherit the rule, even when their financial dates are earlier. A linked refund can separately inherit the effective category of its original purchase until explicitly overridden.

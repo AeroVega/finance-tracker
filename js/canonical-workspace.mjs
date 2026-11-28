@@ -7,6 +7,8 @@ import { DashboardSyntheticStorage } from './dashboard-synthetic-storage.mjs';
 import { CanonicalWorkspaceSession } from './canonical-workspace-session.mjs';
 import { createWorkspaceViewReader, getWorkspaceActivity } from './canonical-workspace-model.mjs';
 import { categoryCatalog } from './category-catalog.mjs';
+import { ruleCatalog } from './rule-catalog.mjs';
+import { ruleTargets } from './rule-records.mjs';
 import { getEffectiveActivities, createLedger } from './canonical-import.mjs';
 import { RELEASE_PROFILE } from './release-profile.mjs';
 import { exactSignedDecimal, isCalendarDate } from './import-reconciliation.mjs';
@@ -140,6 +142,9 @@ const quickDrafts = new Map(), decideButtons = new Map();
 let categoryEditing = null;
 const categoryControls = [];
 let categoryCounts = {ledger:null, counts:new Map()};
+// Rules page state: the open editor's draft, the preview that comes before Apply, and its controls.
+let ruleDraft = null, rulePreview = null, ruleTargetCache = {ledger:null, targets:new Map()};
+const ruleControls = [];
 const INLINE_REASONS = new Set(['unclassified-activity', 'classification-amount-conflict', 'unmatched-refund', 'deleted-category']);
 // The open ledger's categories. Reads are cached per ledger object.
 const catalog = () => categoryCatalog(session.ledger);
@@ -185,7 +190,6 @@ let detailEditorBaseline = null, detailActivity = null, detailNoteEdited = false
 const typeName = kind => (TYPE_LABELS[kind] ?? label(kind)).toLowerCase();
 const categoryName = id => id ? categoryLabel(id) : 'no category';
 const detailCategory = () => chosenCategory($('category'), $('category-new-name'), $('category-new-parent'), directionFor(detailActivity?.activityKind));
-const RULE_NOTE = ' Also applied to later imports with the same description.';
 function detailNote() {
   const a = detailActivity;
   if (!a) return '';
@@ -196,7 +200,7 @@ function detailNote() {
   }
   if (type === 'category-correction') {
     const next = detailCategory();
-    return !next.text || (next.categoryId && next.categoryId === a.categoryId) ? '' : `Changed category from ${categoryName(a.categoryId)} to ${next.newCategory ? 'new category ' + next.text : next.text}.` + ($('category-rule').checked ? RULE_NOTE : '');
+    return !next.text || (next.categoryId && next.categoryId === a.categoryId) ? '' : `Changed category from ${categoryName(a.categoryId)} to ${next.newCategory ? 'new category ' + next.text : next.text}.`;
   }
   if (type === 'bank-correction') {
     const next = $('amount').value.trim();
@@ -342,6 +346,10 @@ function refresh() {
   for (const id of ['category-add-name', 'category-add-direction', 'category-add-parent']) $(id).disabled = !editable;
   $('category-add').disabled = !editable || !$('category-add-name').value.trim();
   for (const update of categoryControls) update(editable);
+  for (const id of ['rule-new', 'rule-contains', 'rule-kind', 'rule-category', 'rule-cancel', 'rule-preview-cancel']) $(id).disabled = !editable;
+  $('rule-save').disabled = !editable || !ruleDraft || !$('rule-contains').value.trim();
+  $('rule-apply').disabled = !editable || !rulePreview?.count;
+  for (const update of ruleControls) update(editable);
   $('link-transfer').disabled = busy || !editable || !selectedActivity || !$('transfer-counterparty').value || !$('transfer-link-rationale').value.trim();
   $('reopen-ledger').disabled = busy || !ready;
   $('release-ledger').disabled = busy || navigator.onLine === false || Boolean(releaseUnavailableReason());
@@ -487,7 +495,7 @@ async function run(message, operation, formStatus = null, actionId = 'workspace-
     actionRequestWindow = null;
     clearInterval(timer); busy = false; operationStarted = null; refresh(); activeFormStatus = null; }
 }
-const formStatuses = { 'category-add':'category-form-status', 'stage-account':'account-form-status', 'stage-balance':'position-form-status', 'stage-closure':'closure-form-status', 'stage-holdings':'holdings-form-status', 'stage-reconciliation':'reconciliation-form-status' };
+const formStatuses = { 'rule-save':'rule-form-status', 'rule-apply':'rule-form-status', 'category-add':'category-form-status', 'stage-account':'account-form-status', 'stage-balance':'position-form-status', 'stage-closure':'closure-form-status', 'stage-holdings':'holdings-form-status', 'stage-reconciliation':'reconciliation-form-status' };
 const action = (id, message, callback) => $(id).addEventListener('click', () => {
   if (!$(id).disabled) return run(message, callback, formStatuses[id], id);
 });
@@ -527,6 +535,10 @@ function clearLoadedWorkspace() {
   // An open inline decision belongs to the released ledger; its refresh must not outlive it.
   quickControls.length = 0;
   categoryEditing = null; categoryControls.length = 0; $('category-add-name').value = ''; $('category-form-status').textContent = '';
+  ruleDraft = null; rulePreview = null; ruleControls.length = 0; ruleTargetCache = {ledger:null, targets:new Map()};
+  for (const id of ['rule-list', 'legacy-rule-list', 'rule-preview-list', 'rule-accounts', 'rule-category']) $(id).replaceChildren();
+  for (const id of ['rule-editor-matches', 'rule-preview-title']) $(id).textContent = '';
+  $('rule-contains').value = ''; $('rule-editor').hidden = true; $('rule-preview').hidden = true; $('legacy-rules').hidden = true;
   // Facet labels can name a category or count records; they go with the ledger.
   for (const id of ['type-facet-summary', 'category-facet-summary', 'review-facet-count', 'pending-facet-count', 'filter-badge']) $(id).textContent = '';
   $('apply-filter-sheet').textContent = 'Show results';
@@ -579,6 +591,7 @@ function render({ reset = false } = {}) {
   homeDashboard.refresh(session.ledger, viewReader, view);
   planningPage?.refresh(session.ledger, viewReader, view);
   renderCategories();
+  renderRules();
   const recent = homeView;
   homeButtons.clear(); $('recent-activities').replaceChildren();
   for (const row of recent.rows) {
@@ -1146,7 +1159,7 @@ function quickReviewRow(row) {
   const noteField = node('label', 'Note for the history', 'quick-note'); const note = node('textarea'); note.rows = 3; note.maxLength = 300;
   note.setAttribute('autocomplete', 'off'); note.value = draft.note; noteField.append(note);
   const ruleField = node('label', undefined, 'checkbox-field quick-rule'); const rule = node('input'); rule.type = 'checkbox'; rule.checked = draft.rule;
-  ruleField.append(rule, node('span', 'Also use this category for later imports with the same description from this account'));
+  ruleField.append(rule, node('span', 'Make a rule from this decision'));
   fields.append(typeLabel, categoryField, newField, parentField, noteField, ruleField);
   const help = node('p', '', 'field-help quick-help'); help.id = 'quick-help';
   const actions = node('div', undefined, 'quick-actions');
@@ -1161,13 +1174,13 @@ function quickReviewRow(row) {
     if (type.value !== row.activityKind) parts.push(`classified as ${typeName(type.value)} (was ${typeName(row.activityKind)})`);
     if (changesCategory(next)) parts.push(`category set to ${next.newCategory ? 'new category ' + next.text : next.text} (was ${categoryName(row.categoryId)})`);
     if (!parts.length) return '';
-    return `Reviewed in Activity: ${parts.join('; ')}.` + (rule.checked && changesCategory(next) ? RULE_NOTE : '');
+    return `Reviewed in Activity: ${parts.join('; ')}.`;
   };
   const update = () => {
     fillCategories();
     const next = choice(), categoryChanges = changesCategory(next);
-    ruleField.hidden = !categoryChanges;
-    if (!categoryChanges) rule.checked = false;
+    ruleField.hidden = !categoryChanges && type.value === row.activityKind;
+    if (ruleField.hidden) rule.checked = false;
     if (!draft.noteEdited) note.value = suggested();
     Object.assign(draft, {type:type.value, category:category.value, newCategory:newCategory.value, newParent:parent.value, note:note.value, rule:rule.checked});
     newField.hidden = parentField.hidden = category.value !== NEW_CATEGORY;
@@ -1193,9 +1206,10 @@ function quickReviewRow(row) {
     const following = ids[ids.indexOf(row.activityId) + 1] ?? null;
     return run('Staging the decision locally.', () => {
       session.quickClassify({activityId:row.activityId, activityKind:type.value, categoryId:next.categoryId === (row.categoryId ?? null) ? null : next.categoryId,
-        newCategory:next.newCategory, rationale:note.value, createRule:rule.checked});
+        newCategory:next.newCategory, rationale:note.value});
       quickDrafts.delete(row.activityId); quickOpen = null;
       quickFocus = following ?? 'filter-count';
+      if (rule.checked) { startRuleFrom(row.activityId); return; }
       render();
       announce('Decision staged locally. Use Save changes to keep it.', 'success');
     }, null, 'stage-correction');
@@ -1290,6 +1304,161 @@ function categoryEditor(li, item) {
   fields.append(field('Name', name), field('List', direction), field('Inside', parent), actions);
   li.append(fields);
   return li;
+}
+// Rules page: the ordered rules, an editor with a live match count, and a
+// preview that must come before Apply. A rule never changes what you filed.
+function currentRuleTargets() {
+  if (ruleTargetCache.ledger !== session.ledger) ruleTargetCache = {ledger:session.ledger, targets:ruleTargets(session.ledger)};
+  return ruleTargetCache.targets;
+}
+const accountNames = ids => ids.length ? ids.map(id => session.ledger.accounts.find(account => account.accountId === id)?.displayName ?? 'Unknown account').join(', ') : 'All accounts';
+const ruleAction = rule => TYPE_LABELS[rule.activityKind] + (rule.categoryId ? ` › ${categoryLabel(rule.categoryId)}` : '');
+function ruleStatus(rule) {
+  if (!rule.enabled) return 'Off';
+  if (rule.categoryId && catalog().retired(rule.categoryId)) return 'Off: its category was deleted';
+  const count = currentRuleTargets().get(rule.ruleId)?.length ?? 0;
+  return count ? `Matches ${plural(count, 'transaction')} that need review` : 'No transaction that needs review matches';
+}
+function stageRules(commands, message) {
+  return run('Staging the rule change locally.', () => {
+    session.manageRules(commands); render();
+    announce(`${message} Save changes to keep it.`, 'success');
+  }, 'rule-form-status', 'rule-change');
+}
+function renderRules() {
+  ruleControls.length = 0;
+  const {rules, legacy} = ruleCatalog(session.ledger);
+  $('rule-list').replaceChildren(...rules.map(rule => ruleItem(rule, rules)));
+  $('rule-empty').hidden = rules.length > 0;
+  $('legacy-rules').hidden = !legacy.length;
+  $('legacy-rule-list').replaceChildren(...legacy.map(legacyRuleItem));
+  const total = [...currentRuleTargets().values()].reduce((sum, items) => sum + items.length, 0);
+  $('rules-apply-all').textContent = total ? `Apply all rules (${total})` : 'Apply all rules';
+  ruleControls.push(editable => { $('rules-apply-all').disabled = !editable || !total; });
+  renderRuleEditor(); renderRulePreview();
+}
+function ruleItem(rule, rules) {
+  const li = node('li', undefined, 'rule-item'), index = rules.indexOf(rule), name = `rule ${rule.position}`;
+  const text = node('div', undefined, 'category-text');
+  text.append(node('span', `${rule.position}. Description contains "${rule.descriptionContains}"`, 'category-name'),
+    node('small', `${accountNames(rule.accountIds)} · files as ${ruleAction(rule)}`), node('small', ruleStatus(rule), 'rule-status'));
+  const count = currentRuleTargets().get(rule.ruleId)?.length ?? 0;
+  const up = categoryButton('Move up', `Move ${name} up`), down = categoryButton('Move down', `Move ${name} down`);
+  const toggle = categoryButton(rule.enabled ? 'Turn off' : 'Turn on', `${rule.enabled ? 'Turn off' : 'Turn on'} ${name}`);
+  const edit = categoryButton('Edit', `Edit ${name}`), remove = categoryButton('Delete', `Delete ${name}`, 'text-button danger-text');
+  const review = count ? categoryButton(`Review ${count}`, `Review the ${plural(count, 'transaction')} ${name} matches`, 'secondary-button') : null;
+  const move = offset => {
+    const ids = rules.map(item => item.ruleId);
+    [ids[index], ids[index + offset]] = [ids[index + offset], ids[index]];
+    return stageRules({type:'order', ruleIds:ids}, `Rule moved to position ${index + offset + 1}.`);
+  };
+  up.addEventListener('click', () => up.disabled ? null : move(-1));
+  down.addEventListener('click', () => down.disabled ? null : move(1));
+  toggle.addEventListener('click', () => toggle.disabled ? null : stageRules({type:'define', ruleId:rule.ruleId, descriptionContains:rule.descriptionContains,
+    accountIds:rule.accountIds, activityKind:rule.activityKind, categoryId:rule.categoryId, enabled:!rule.enabled}, `Rule ${rule.position} turned ${rule.enabled ? 'off' : 'on'}.`));
+  edit.addEventListener('click', () => { if (!edit.disabled) openRuleEditor(rule); });
+  remove.addEventListener('click', () => {
+    if (remove.disabled) return;
+    if (!window.confirm(`Delete rule ${rule.position}? Transactions it already filed keep their category.`)) { announce('Delete cancelled. The rule is unchanged.'); return; }
+    return stageRules({type:'delete', ruleId:rule.ruleId}, `Rule ${rule.position} deleted.`);
+  });
+  review?.addEventListener('click', () => { if (!review.disabled) openRulePreview([rule.ruleId]); });
+  ruleControls.push(editable => {
+    for (const control of [toggle, edit, remove, review].filter(Boolean)) control.disabled = !editable;
+    up.disabled = !editable || index === 0; down.disabled = !editable || index === rules.length - 1;
+  });
+  const actions = node('div', undefined, 'category-actions'); actions.append(...[review, up, down, toggle, edit, remove].filter(Boolean));
+  li.append(text, actions);
+  return li;
+}
+function legacyRuleItem(rule) {
+  const li = node('li', undefined, 'rule-item'), text = node('div', undefined, 'category-text');
+  text.append(node('span', `Description is exactly "${rule.description}"`, 'category-name'),
+    node('small', `${accountNames([rule.accountId])} · sets ${categoryLabel(rule.categoryId)}`));
+  const edit = categoryButton('Edit', `Edit the rule for "${rule.description}"`), remove = categoryButton('Delete', `Delete the rule for "${rule.description}"`, 'text-button danger-text');
+  edit.addEventListener('click', () => {
+    if (edit.disabled) return;
+    const category = catalog().get(rule.categoryId);
+    openRuleEditor({descriptionContains:rule.description.slice(0, 100), accountIds:[rule.accountId], activityKind:category?.direction === 'income' ? 'income' : 'spending',
+      categoryId:category ? rule.categoryId : null}, rule.ruleEventId);
+  });
+  remove.addEventListener('click', () => {
+    if (remove.disabled) return;
+    if (!window.confirm('Stop this rule for later imports? Transactions it already filed keep their category.')) { announce('Delete cancelled. The rule is unchanged.'); return; }
+    return stageRules({type:'retire-legacy', ruleEventId:rule.ruleEventId}, 'Rule stopped for later imports.');
+  });
+  ruleControls.push(editable => { edit.disabled = remove.disabled = !editable; });
+  const actions = node('div', undefined, 'category-actions'); actions.append(edit, remove);
+  li.append(text, actions);
+  return li;
+}
+/** Open the editor on a saved rule, a correction rule to widen (`legacyEventId`), a prefilled draft, or nothing. */
+function openRuleEditor(rule = null, legacyEventId = null) {
+  ruleDraft = {ruleId:rule?.ruleId ?? null, legacyEventId, accountIds:new Set(rule?.accountIds ?? []), categoryId:rule?.categoryId ?? ''};
+  rulePreview = null;
+  $('rule-contains').value = rule?.descriptionContains ?? '';
+  $('rule-kind').value = rule?.activityKind ?? 'spending';
+  render();
+  $('rule-editor-title').focus();
+}
+function renderRuleEditor() {
+  $('rule-editor').hidden = !ruleDraft;
+  if (!ruleDraft) return;
+  $('rule-editor-title').textContent = ruleDraft.ruleId ? 'Edit rule' : ruleDraft.legacyEventId ? 'Widen a correction rule' : 'New rule';
+  const boxes = $('rule-accounts'); boxes.replaceChildren();
+  for (const account of session.ledger.accounts) {
+    const field = node('label', undefined, 'checkbox-field'), input = node('input'); input.type = 'checkbox';
+    input.checked = ruleDraft.accountIds.has(account.accountId);
+    input.addEventListener('change', () => { if (input.checked) ruleDraft.accountIds.add(account.accountId); else ruleDraft.accountIds.delete(account.accountId); updateRuleMatches(); });
+    field.append(input, node('span', account.displayName)); boxes.append(field);
+    ruleControls.push(editable => { input.disabled = !editable; });
+  }
+  addOptions($('rule-category'), catalog().choices(directionFor($('rule-kind').value)).map(item => [item.id, item.path]), ruleDraft.categoryId, 'No category');
+  ruleDraft.categoryId = $('rule-category').value;
+  updateRuleMatches();
+}
+const draftRule = () => ({ruleId:ruleDraft.ruleId ?? 'draft', descriptionContains:$('rule-contains').value.trim(), accountIds:[...ruleDraft.accountIds],
+  activityKind:$('rule-kind').value, categoryId:$('rule-category').value || null, enabled:true});
+function updateRuleMatches() {
+  const draft = draftRule();
+  const count = draft.descriptionContains ? ruleTargets(session.ledger, {draft}).get(draft.ruleId).length : 0;
+  $('rule-editor-matches').textContent = !draft.descriptionContains ? 'Enter the text to match.'
+    : `Matches ${plural(count, 'transaction')} that need review now.` + (ruleDraft.ruleId ? '' : ' A new rule runs after the others.');
+  refresh();
+}
+function openRulePreview(ruleIds) {
+  ruleDraft = null; rulePreview = {ruleIds, count:0};
+  render();
+  if (rulePreview) $('rule-preview-title').focus();
+}
+function renderRulePreview() {
+  if (rulePreview) {
+    const targets = currentRuleTargets(), {rules} = ruleCatalog(session.ledger);
+    const rows = rules.filter(rule => !rulePreview.ruleIds || rulePreview.ruleIds.includes(rule.ruleId))
+      .flatMap(rule => (targets.get(rule.ruleId) ?? []).map(activity => ({activity, rule})));
+    rulePreview.count = rows.length;
+    if (!rows.length) rulePreview = null;
+    else {
+      const single = rulePreview.ruleIds?.length === 1 ? rules.find(rule => rule.ruleId === rulePreview.ruleIds[0]) : null;
+      $('rule-preview-title').textContent = `${single ? `Rule ${single.position}` : 'Your rules'} would file ${plural(rows.length, 'transaction')} that need review`;
+      const shown = rows.slice(0, 25).map(({activity, rule}) => node('li',
+        `${activity.effectiveDate || 'Unknown date'} · ${activity.sourceDescription} · ${money(activity.amountText, activity.currency)} → ${ruleAction(rule)}`));
+      if (rows.length > 25) shown.push(node('li', `and ${rows.length - 25} more`, 'field-help'));
+      $('rule-preview-list').replaceChildren(...shown);
+      $('rule-apply').textContent = `Apply to ${plural(rows.length, 'transaction')}`;
+    }
+  }
+  $('rule-preview').hidden = !rulePreview;
+}
+/** After a review decision with Make a rule ticked: the editor, filled from that transaction. */
+function startRuleFrom(activityId) {
+  const activity = getEffectiveActivities(session.ledger).find(item => item.activityId === activityId);
+  const kind = ['spending', 'income', 'transfer', 'refund'].includes(activity.activityKind) ? activity.activityKind
+    : String(exactSignedDecimal(activity)).startsWith('-') ? 'spending' : 'income';
+  pages.go('rules');
+  openRuleEditor({descriptionContains:activity.sourceDescription.trim().slice(0, 100), accountIds:[activity.accountId], activityKind:kind,
+    categoryId:activity.categoryId && !catalog().retired(activity.categoryId) ? activity.categoryId : null});
+  announce('Decision staged. Widen the description to the part every matching transaction shares, then save the rule.', 'success');
 }
 function applyQuickFocus() {
   if (!quickFocus) return;
@@ -1839,7 +2008,8 @@ action('stage-correction', 'Checking your correction locally.', async () => {
   if ($('correction-type').value === 'category-correction' && $('category').value === NEW_CATEGORY && !category.newCategory) fail('category-name-required');
   session.correct({ activityId: selectedActivity, type: $('correction-type').value, activityKind: $('classification').value, categoryId: category.categoryId, newCategory: category.newCategory, amountText: $('amount').value,
     lifecycleStatus: $('posting-status').value, postedDate: $('posting-status').value === 'posted' ? $('posting-date').value : null, rationale: $('correction-rationale').value,
-    createRule: $('category-rule').checked });
+  });
+  if ($('correction-type').value === 'category-correction' && $('category-rule').checked) { startRuleFrom(selectedActivity); return; }
   render(); showDetail(selectedActivity);
   announce(session.mode === 'preview' ? 'Correction added to this local preview only. Source evidence is unchanged.' : 'Correction staged locally. Source evidence is unchanged. Choose Save changes to persist it.', 'success');
 });
@@ -1853,6 +2023,31 @@ action('category-add', 'Staging the new category locally.', async () => {
   announce(`${created.path} added. Save changes to keep it.`, 'success');
 });
 $('category-add-name').addEventListener('input', refresh);
+$('rule-editor').addEventListener('submit', event => event.preventDefault());
+$('rule-new').addEventListener('click', () => { if (!$('rule-new').disabled) openRuleEditor(); });
+$('rule-cancel').addEventListener('click', () => { ruleDraft = null; render(); $('rule-new').focus(); });
+$('rule-contains').addEventListener('input', () => { if (ruleDraft) updateRuleMatches(); });
+$('rule-kind').addEventListener('change', () => { if (ruleDraft) renderRuleEditor(); });
+$('rule-category').addEventListener('change', () => { if (ruleDraft) { ruleDraft.categoryId = $('rule-category').value; updateRuleMatches(); } });
+$('rules-apply-all').addEventListener('click', () => { if (!$('rules-apply-all').disabled) openRulePreview(null); });
+$('rule-preview-cancel').addEventListener('click', () => { rulePreview = null; render(); });
+action('rule-save', 'Staging the rule locally.', async () => {
+  const draft = draftRule(), saved = ruleDraft.ruleId ? ruleCatalog(session.ledger).get(ruleDraft.ruleId) : null;
+  const command = {type:'define', descriptionContains:draft.descriptionContains, accountIds:draft.accountIds, activityKind:draft.activityKind, categoryId:draft.categoryId,
+    ...(saved ? {ruleId:saved.ruleId, enabled:saved.enabled} : {})};
+  session.manageRules([command, ...(ruleDraft.legacyEventId ? [{type:'retire-legacy', ruleEventId:ruleDraft.legacyEventId}] : [])]);
+  const ruleId = saved?.ruleId ?? ruleCatalog(session.ledger).rules.at(-1).ruleId;
+  ruleDraft = null;
+  const count = currentRuleTargets().get(ruleId)?.length ?? 0;
+  rulePreview = count ? {ruleIds:[ruleId], count} : null;
+  render();
+  announce('Rule saved.' + (count ? ` Check the ${plural(count, 'transaction')} it would file, then choose Apply.` : ' No transaction that needs review matches it now.') + ' Save changes to keep it.', 'success');
+});
+action('rule-apply', 'Filing transactions by rule locally.', async () => {
+  const filed = session.applyRules(rulePreview.ruleIds);
+  rulePreview = null; render();
+  announce(`${plural(filed, 'transaction')} filed by rule. Save changes to keep them.`, 'success');
+});
 $('category-add-direction').addEventListener('change', () => { fillParentSelect($('category-add-parent'), $('category-add-direction').value); refresh(); });
 $('close-detail').addEventListener('click', () => {
   if (busy || !confirmDiscardDetail()) return;
@@ -1940,7 +2135,8 @@ providerImportWorkflow = mountProviderImportWorkflow({
   onStaged: () => {
     render();
     refresh();
-    announce('Supported CSV import staged locally. Review unresolved rows, then use the workspace explicit save action when ready.', 'success');
+    const filed = session.lastImportFiledCount ? ` Rules filed ${plural(session.lastImportFiledCount, 'transaction')}.` : '';
+    announce(`Supported CSV import staged locally.${filed} Review unresolved rows, then use the workspace explicit save action when ready.`, 'success');
   }
 });
 historicalSummaryWorkflow = mountHistoricalMonthlySummaryWorkflow({
