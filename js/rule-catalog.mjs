@@ -10,7 +10,6 @@
    correction stay in the activity events; a `legacy-rule-retirement` record
    stops one for transactions imported after it. */
 import {fail} from './app-error.mjs';
-import {CATEGORY_ID} from './category-catalog.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const RULE_KINDS = Object.freeze(['spending', 'income', 'transfer', 'refund']);
@@ -57,7 +56,8 @@ function replay(ledger, ids = new Set(), commands = new Map()) {
       if (!Array.isArray(e.accountIds) || new Set(e.accountIds).size !== e.accountIds.length || e.accountIds.some(id => !accounts.has(id))) fail('invalid-rule-accounts');
       // Only a transfer rule names the other account, and it must exist.
       if (!RULE_KINDS.includes(e.activityKind) || (e.counterpartyAccountId !== null && (e.activityKind !== 'transfer' || !accounts.has(e.counterpartyAccountId))) ||
-        (e.categoryId !== null && (typeof e.categoryId !== 'string' || e.categoryId.length > 200 || !CATEGORY_ID.test(e.categoryId)))) fail('invalid-rule-action');
+        // Any category ID a correction may hold, including free-text IDs from before category records.
+        (e.categoryId !== null && (typeof e.categoryId !== 'string' || !e.categoryId.trim() || e.categoryId.length > 200))) fail('invalid-rule-action');
       if (e.deleted) {
         // A deletion restates the rule it removes, so the record reads on its own.
         const current = rules.get(e.ruleId) ?? fail('unknown-rule');

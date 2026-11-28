@@ -49,6 +49,21 @@ test('a rule is an append-only record with a condition and an action', () => {
   assert.throws(() => assertCanonicalLedgerTransition(ledger, rewritten), code('history-rewrite-refused'));
 });
 
+test('a rule can file under any category the ledger already uses, including IDs from before category records', () => {
+	// Older corrections stored free-text category IDs. The category list offers them, so a rule must accept them too.
+	const {ledger:older} = planningLedger({accounts:[{key:'checking', type:'checking'}], coverage:{checking:{'2026-09':'2026-09-30'}},
+		rows:[
+			{account:'checking', date:'2026-09-03', amount:'-80.00', description:'INVENTED AUTO COVER', kind:'spending', category:'Auto_Insurance'},
+			{account:'checking', date:'2026-09-04', amount:'-82.00', description:'INVENTED AUTO COVER RENEWAL'},
+		]});
+	const ledger = apply(older, define('auto cover', {categoryId:'Auto_Insurance'}));
+	assert.equal(validateLedger(ledger), true);
+	const [rule] = ruleCatalog(ledger).rules;
+	assert.equal(rule.categoryId, 'Auto_Insurance');
+	assert.deepEqual(targetDescriptions(ledger, rule.ruleId), ['INVENTED AUTO COVER RENEWAL']);
+	assert.throws(() => apply(older, define('x', {categoryId:'x'.repeat(201)})), code('invalid-rule-action'));
+});
+
 test('a rule matches description text in any case, in its accounts, only where the type fits the amount', () => {
   const ledger = apply(base, define('FreshMart'), define('payroll', {activityKind:'income', categoryId:'paycheck'}));
   const [groceries, payroll] = ruleCatalog(ledger).rules;
