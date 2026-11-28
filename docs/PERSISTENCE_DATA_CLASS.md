@@ -65,8 +65,10 @@ Google OAuth and Drive permissions are the access authority. The app adds
 checks that can only refuse:
 
 1. **One designated Google account.** `about.get` identity, explicit
-   confirmation, and a local SHA-256 fingerprint of the permission ID. A
-   different account is refused; reauthorization must return the same account.
+   confirmation the first time an account is designated in a browser, and a
+   local SHA-256 fingerprint of the permission ID. Later sign-ins with the
+   designated account ask nothing (owner decision, 2026-11-28). A different
+   account is refused; reauthorization must return the same account.
 2. **One exact private folder.** The [private-folder proof](../js/google-private-folder-proof.mjs)
    requires an unshared, non-shared-drive folder owned only by the designated
    account before any session release, manifest read or write. In addition, a

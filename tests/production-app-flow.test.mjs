@@ -146,8 +146,11 @@ test('private database: create, CSV import, explicit save, release, independent 
   assert.equal(manifestOf(a).revision,'2');
   await h.page.click('release-ledger');
   assert.equal(h.storage.lifecycle,null);assert.equal(h.session.ledger,null);assert.equal(h.storage.accessToken,'');
+  // The designated account and folder are checked by fingerprint, so reopening asks nothing.
+  const asked=h.confirmations.length;
   await h.page.click('open-ledger');
   assert.deepEqual(h.session.ledger,saved);assert.equal(h.session.mode,'saved');
+  assert.deepEqual(h.confirmations.slice(asked),[],'reopening the designated database asks no confirmation');
   await h.page.click('release-ledger');
   const independent=await independentOpen(a,'production');assert.deepEqual(independent.ledger,saved);
   // Normalized rows and provenance persist; the original file does not.
@@ -165,6 +168,9 @@ test('cross-class folders are refused in both directions before any write or ses
   await choosePrivate(h);await createPrivate(h,privateHttp);await h.page.click('release-ledger');
   await h.page.choose('data-class','synthetic');h.pick(syntheticHttp);
   await h.page.click('preview-year');await h.page.click('create-ledger');assert.equal(h.session.mode,'saved');await h.page.click('release-ledger');
+  // An existing synthetic folder opens without a confirmation; its name and privacy proof still gate it.
+  const asked=h.confirmations.length;h.pick(syntheticHttp);await h.page.click('open-ledger');
+  assert.equal(h.session.mode,'saved',h.page.get('action-status').textContent);assert.deepEqual(h.confirmations.slice(asked),[]);await h.page.click('release-ledger');
   // A synthetic manifest moved into a neutrally named folder still fails on class.
   neutral.files=structuredClone(syntheticHttp.files);for(const f of neutral.files.values())f.metadata.parents=[neutral.folderId];
   const mutations=[privateHttp,syntheticHttp,neutral].map(x=>x.mutations);
