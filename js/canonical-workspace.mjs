@@ -1091,7 +1091,7 @@ function transactionRow(row) {
   inlineDate.setAttribute('aria-hidden', 'true'); metadata.append(inlineDate);
   description.append(node('strong', row.sourceDescription), metadata);
   const classification = node('td');
-  const detailText = row.activityKind === 'transfer' ? [row.categoryId ? categoryLabel(row.categoryId) : '', transferPath(row)].filter(Boolean).join(' · ') : categoryLabel(row.categoryId);
+  const detailText = row.activityKind === 'transfer' ? transferPath(row) : categoryLabel(row.categoryId);
   classification.append(node('span', label(row.activityKind), 'classification-badge'), node('small', detailText, 'transaction-detail'));
   if (postingLabel(row)) classification.append(node('span', postingLabel(row), 'posting-state'));
   if (row.needsReview) classification.append(node('small', 'Needs review: ' + row.reviewReasons.map(reviewReason).join(', '), 'transaction-detail review-reasons'));
@@ -1191,7 +1191,8 @@ function quickReviewRow(row) {
   const cancel = node('button', 'Cancel', 'text-button'); cancel.type = 'button';
   const full = node('button', 'Open full view', 'link-button'); full.type = 'button';
   actions.append(stage, cancel, full);
-  const choice = () => chosenCategory(category, newCategory, parent, directionFor(type.value));
+  // A transfer is never income or spending, so it takes no category.
+  const choice = () => type.value === 'transfer' ? {categoryId:null, newCategory:null, text:''} : chosenCategory(category, newCategory, parent, directionFor(type.value));
   const linking = () => type.value === 'transfer' && Boolean(candidate) && link.checked;
   const changesCategory = next => Boolean(next.newCategory) || Boolean(next.categoryId && next.categoryId !== row.categoryId);
   const suggested = () => {
@@ -1208,11 +1209,13 @@ function quickReviewRow(row) {
     accountField.hidden = type.value !== 'transfer';
     linkField.hidden = !candidate;
     const next = choice(), categoryChanges = changesCategory(next);
-    ruleField.hidden = !categoryChanges && type.value === row.activityKind;
+    const namesAccount = type.value === 'transfer' && Boolean(account.value) && account.value !== (row.transferAccountId ?? '');
+    ruleField.hidden = !categoryChanges && !namesAccount && type.value === row.activityKind;
     if (ruleField.hidden) rule.checked = false;
+    categoryField.hidden = type.value === 'transfer';
     if (!draft.noteEdited) note.value = suggested();
     Object.assign(draft, {type:type.value, category:category.value, newCategory:newCategory.value, newParent:parent.value, transferAccount:account.value, link:link.checked, note:note.value, rule:rule.checked});
-    newField.hidden = parentField.hidden = category.value !== NEW_CATEGORY;
+    newField.hidden = parentField.hidden = categoryField.hidden || category.value !== NEW_CATEGORY;
     const needsCategory = type.value === 'refund' && !row.originalActivityId && !next.categoryId && !next.newCategory && !row.categoryId;
     const blocked = busy ? 'Wait for the current action to finish.' : !session.canEdit() ? 'Reopen an editable session before staging a decision.'
       : needsCategory ? 'A refund without a linked purchase needs a category.' : category.value === NEW_CATEGORY && !next.newCategory ? 'Enter a category name.'
@@ -1446,12 +1449,13 @@ function renderRuleEditor() {
   }
   addOptions($('rule-category'), catalog().choices(directionFor($('rule-kind').value)).map(item => [item.id, item.path]), ruleDraft.categoryId, 'No category');
   $('rule-transfer-account-field').hidden = $('rule-kind').value !== 'transfer';
+  $('rule-category-field').hidden = $('rule-kind').value === 'transfer';
   addOptions($('rule-transfer-account'), session.ledger.accounts.map(account => [account.accountId, account.displayName]), ruleDraft.counterpartyAccountId, 'Not named');
   ruleDraft.categoryId = $('rule-category').value;
   updateRuleMatches();
 }
 const draftRule = () => ({ruleId:ruleDraft.ruleId ?? 'draft', descriptionContains:$('rule-contains').value.trim(), accountIds:[...ruleDraft.accountIds],
-  activityKind:$('rule-kind').value, categoryId:$('rule-category').value || null,
+  activityKind:$('rule-kind').value, categoryId:$('rule-kind').value === 'transfer' ? null : $('rule-category').value || null,
   counterpartyAccountId:$('rule-kind').value === 'transfer' ? $('rule-transfer-account').value || null : null, enabled:true});
 function updateRuleMatches() {
   const draft = draftRule();
@@ -1491,7 +1495,7 @@ function startRuleFrom(activityId) {
     : String(exactSignedDecimal(activity)).startsWith('-') ? 'spending' : 'income';
   pages.go('rules');
   openRuleEditor({descriptionContains:activity.sourceDescription.trim().slice(0, 100), accountIds:[activity.accountId], activityKind:kind,
-    categoryId:activity.categoryId && !catalog().retired(activity.categoryId) ? activity.categoryId : null,
+    categoryId:kind !== 'transfer' && activity.categoryId && !catalog().retired(activity.categoryId) ? activity.categoryId : null,
     counterpartyAccountId:kind === 'transfer' ? activity.transferAccountId ?? null : null});
   announce('Decision staged. Widen the description to the part every matching transaction shares, then save the rule.', 'success');
 }
@@ -1779,6 +1783,9 @@ function showDetail(activityId, {navigate = true} = {}) {
   $('posting-status').value = ['posted', 'pending', 'unknown'].includes(activity.lifecycleStatus) ? activity.lifecycleStatus : 'unknown';
   $('posting-date').value = activity.postedDate || '';
   if (activity.lifecycleStatus === 'unknown') $('correction-type').value = 'posting-status-correction';
+  // A transfer takes no category, so its category correction is not offered.
+  $('correction-type-category').disabled = activity.activityKind === 'transfer';
+  if (activity.activityKind === 'transfer' && $('correction-type').value === 'category-correction') $('correction-type').value = 'classification';
   $('correction-rationale').value = ''; $('category-rule').checked = false;
   detailActivity = activity; detailNoteEdited = false;
   detailEditorBaseline = detailEditorValues();

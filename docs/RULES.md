@@ -12,7 +12,7 @@ This contract covers rules that file transactions: their records, their order, h
 A rule has one condition and one action:
 
 - **Condition.** The transaction's source description or normalized description contains `descriptionContains`, ignoring case. When `accountIds` is not empty, the transaction must also be in one of those accounts.
-- **Action.** Set the type to `activityKind`, which is `spending`, `income`, `transfer`, or `refund`. When `categoryId` is set, also set the category. A transfer rule may also name the other account in `counterpartyAccountId`.
+- **Action.** Set the type to `activityKind`, which is `spending`, `income`, `transfer`, or `refund`. When `categoryId` is set, also set the category. A transfer rule may also name the other account in `counterpartyAccountId`. The rule editor offers no category for a transfer rule.
 
 Rules run in order, and the first usable rule that matches wins. A rule is usable when it is turned on and its category, if it has one, has not been deleted. A rule matches only where its type fits the amount: spending needs money out, and income and refunds need money in. Transfers fit either.
 

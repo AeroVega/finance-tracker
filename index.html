@@ -259,7 +259,7 @@
           <fieldset class="rule-accounts-field"><legend>Accounts</legend><span class="field-help">Leave every box clear to match all accounts.</span><div id="rule-accounts" class="rule-accounts"></div></fieldset>
           <label for="rule-kind">Type<select id="rule-kind"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="refund">Refund</option></select></label>
           <label id="rule-transfer-account-field" for="rule-transfer-account" hidden>Other account<select id="rule-transfer-account"></select></label>
-          <label for="rule-category">Category<select id="rule-category"></select></label>
+          <label id="rule-category-field" for="rule-category">Category<select id="rule-category"></select></label>
           <p id="rule-editor-matches" class="field-help" aria-live="polite"></p>
           <div class="category-actions"><button id="rule-save" class="primary-button" type="button" disabled>Save rule</button><button id="rule-cancel" class="text-button" type="button">Cancel</button></div>
         </form>
@@ -283,7 +283,7 @@
         <div class="detail-grid">
           <form id="correction-form" class="correction-form" aria-labelledby="correction-heading" aria-describedby="correction-help">
             <div><h3 id="correction-heading">Correct this transaction</h3><p id="correction-help">The source stays unchanged. Explain the change, stage it, then save when ready.</p></div>
-            <label for="correction-type">What needs changing?<select id="correction-type"><option value="classification">Classification</option><option value="category-correction">Category</option><option value="bank-correction">Amount</option><option value="posting-status-correction">Posting status</option></select></label>
+            <label for="correction-type">What needs changing?<select id="correction-type"><option value="classification">Classification</option><option id="correction-type-category" value="category-correction">Category</option><option value="bank-correction">Amount</option><option value="posting-status-correction">Posting status</option></select></label>
             <label id="classification-field" for="classification">Classification<select id="classification"><option value="spending">Spending</option><option value="income">Income</option><option value="transfer">Transfer</option><option value="unclassified">Unclassified</option></select><span class="field-help">Card payments are transfers.</span></label>
             <label id="transfer-account-field" for="transfer-account" hidden>Other account<select id="transfer-account"></select><span class="field-help">The account the money went to or came from. A transfer is neither income nor spending.</span></label>
             <label id="category-field" for="category" hidden>Category<select id="category"></select><span class="field-help">Applies to this transaction. Linked refunds follow the purchase category unless separately categorized.</span></label>

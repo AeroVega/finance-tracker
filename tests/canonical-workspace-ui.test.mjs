@@ -1974,19 +1974,21 @@ test('inline notes follow the change until edited, and Make a rule opens the rul
   h.get('quick-type').value = 'transfer'; await h.get('quick-type').emit('change');
   assert.match(h.get('quick-help').textContent, /Choose the account on the other side of this transfer/, 'a transfer names its other account');
   await h.choose('quick-transfer-account', recipe.accounts.checking);
-  assert.match(note.value, /^Reviewed in Activity: classified as transfer \(was unclassified\); category set to Fees and interest/);
+  assert.equal(findText(panel, node => node.tagName === 'LABEL' && node.textContent === 'Category').hidden, true, 'a transfer has no category');
+  assert.match(note.value, /^Reviewed in Activity: classified as transfer \(was unclassified\); to Invented /);
+  assert.doesNotMatch(note.value, /category/);
   rule.checked = true; await rule.emit('change');
   assert.doesNotMatch(note.value, /later imports/, 'the note records the decision, not the rule');
   await findText(panel, node => node.textContent === 'Stage decision').click();
   const fee = getEffectiveActivities(h.modelSession.ledger).find(activity => activity.sourceDescription === 'INVENTED BROKERAGE FEE' && activity.effectiveDate === '2025-12-26');
-  assert.deepEqual([fee.activityKind, fee.categoryId], ['transfer', 'fees-and-interest']);
+  assert.deepEqual([fee.activityKind, fee.categoryId ?? null], ['transfer', null]);
   const events = h.modelSession.ledger.events.filter(event => event.activityId === fee.activityId);
   assert.ok(events.every(event => event.evidence.rationale === note.value));
   assert.ok(events.every(event => !event.prospectiveRule?.enabled), 'no correction rule is created');
   assert.equal(h.location.hash, '#rules');
   assert.equal(h.get('rule-editor').hidden, false);
   assert.equal(h.get('rule-contains').value, 'INVENTED BROKERAGE FEE');
-  assert.deepEqual([h.get('rule-kind').value, h.get('rule-category').value], ['transfer', 'fees-and-interest']);
+  assert.deepEqual([h.get('rule-kind').value, h.get('rule-category-field').hidden, h.get('rule-transfer-account').value], ['transfer', true, recipe.accounts.checking]);
   // An edited note is the owner's own words and is never overwritten.
   await h.navigate('#transactions');
   await findText(records(h).find(item => findText(item, node => node.className === 'decide-button')), node => node.className === 'decide-button').click();
@@ -2359,7 +2361,12 @@ test('an inline transfer decision names the other account and links the matching
   assert.equal(h.modelSession.stagedHistory.length, 1);
   assert.equal(records(h).some(item => /INVENTED SAVINGS TRANSFER (OUT|IN)/.test(text(item))), false, 'both sides leave Needs review');
   await h.choose('review-only', false);
-  assert.match(text(records(h).find(item => /INVENTED SAVINGS TRANSFER OUT/.test(text(item)))), /Invented .* → Invented .*/);
+  const linked = records(h).find(item => /INVENTED SAVINGS TRANSFER OUT/.test(text(item)));
+  assert.match(text(linked), /Invented .* → Invented .*/);
+  // A transfer takes no category, so the detail form does not offer a category correction.
+  await linked.children.at(-1).children[0].click();
+  assert.equal(h.get('correction-type-category').disabled, true);
+  assert.notEqual(h.get('correction-type').value, 'category-correction');
 });
 
 test('release with an inline decision open clears it without a failure', async () => {
