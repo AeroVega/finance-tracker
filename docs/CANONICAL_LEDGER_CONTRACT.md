@@ -51,6 +51,10 @@ Old ledgers may omit `positionEvents`. New storage indexes the collection when p
 
 **Owner-confirmed scope, November 26, 2026:** [Planning](PLANNING.md) adds optional append-only `planningEvents` to synthetic and production ledgers. Its event types are `budget-target` and `projection-exclusion`. Planning records never rewrite activities, balances or report totals. Old ledgers may omit the collection, and existing planning records cannot be removed, reordered or rewritten. See `js/planning-contract.mjs`.
 
+### Category extension
+
+[Categories](CATEGORIES.md) adds optional append-only `categoryEvents` to synthetic and production ledgers. Its one event type, `category-definition`, creates, edits or deletes a category. A category record never rewrites an activity or an activity event. A deleted category ID never returns. Old ledgers may omit the collection, and existing category records cannot be removed, reordered or rewritten. See `js/category-catalog.mjs`.
+
 ### Canonical activity
 
 The entity is called **activity**, not just transaction, because Fidelity files contain trades, fees, dividends, contributions, and valuation events.
