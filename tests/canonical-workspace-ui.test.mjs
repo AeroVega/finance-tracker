@@ -2361,3 +2361,16 @@ test('an inline transfer decision names the other account and links the matching
   await h.choose('review-only', false);
   assert.match(text(records(h).find(item => /INVENTED SAVINGS TRANSFER OUT/.test(text(item)))), /Invented .* → Invented .*/);
 });
+
+test('release with an inline decision open clears it without a failure', async () => {
+  const h = await workspacePage(); await h.click('open-ledger'); await h.choose('month-filter', ''); await h.navigate('#transactions');
+  await h.choose('review-only', true);
+  await findText(records(h)[0], node => node.className === 'decide-button').click();
+  assert.equal(h.get('transaction-rows').children.some(row => row.className === 'quick-review'), true);
+  // A chosen category makes the panel read the category list when it refreshes.
+  await h.choose('quick-category', 'groceries');
+  h.state.releaseVerified = true; await h.click('release-ledger');
+  assert.equal(h.modelSession.ledger, null);
+  assert.deepEqual(h.diagnostics(), [], 'no failure report after release');
+  assert.doesNotMatch(h.get('action-status').textContent, /failed|check/i);
+});

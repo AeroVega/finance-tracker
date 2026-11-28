@@ -543,6 +543,8 @@ function clearLoadedWorkspace() {
   for (const id of [...detailEditorFields, ...positionInputs, 'transaction-search','account-filter','month-filter','backup-password','backup-password-confirm','restore-password','backup-file','position-date']) $(id).value = '';
   resetActivityFilters(); closeFacetPanels(); closeFilterSheet();
   for (const id of ['type-options', 'category-options', 'active-filter-chips', 'category-list-spending', 'category-list-income', 'category-add-parent']) $(id).replaceChildren();
+  // An open inline decision belongs to the released ledger; its refresh must not outlive it.
+  quickControls.length = 0;
   categoryEditing = null; categoryControls.length = 0; $('category-add-name').value = ''; $('category-form-status').textContent = '';
   ruleDraft = null; rulePreview = null; ruleControls.length = 0; ruleTargetCache = {ledger:null, targets:new Map()};
   for (const id of ['rule-list', 'legacy-rule-list', 'rule-preview-list', 'rule-accounts', 'rule-category', 'rule-transfer-account']) $(id).replaceChildren();
