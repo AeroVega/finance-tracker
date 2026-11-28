@@ -15,7 +15,7 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 - Trusted app file/line/column plus a stamped commit locate source. Function names are omitted. Unminified static modules need no source maps; if bundling/minification is ever adopted, retain source maps before relying on those frames.
 - The literal-code audit reports computed/forwarded calls separately. Zero unknown literal codes is not proof that every dynamic path was exercised.
 
-## Registered codes (701)
+## Registered codes (710)
 
 ### backup / integrity
 
@@ -285,7 +285,7 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 ### workspace / input
 
 `category-name-required` · `correction-rationale-required` · `duplicate-category-name`
-`transfer-link-rationale-required`
+`rule-text-required` · `transfer-link-rationale-required`
 
 ### workspace / integrity
 
@@ -294,22 +294,24 @@ The [registry](../js/error-registry.mjs) owns fixed messages, surface-specific n
 `category-has-subcategories` · `closure-requires-selected-zero-balance` · `invalid-amount`
 `invalid-balance-resolution` · `invalid-budget-target` · `invalid-category-event`
 `invalid-category-events` · `invalid-category-parent` · `invalid-holding` · `invalid-holdings-snapshot`
-`invalid-planning-event` · `invalid-planning-events` · `invalid-position-account-scope`
-`invalid-position-amount` · `invalid-position-as-of` · `invalid-position-basis`
-`invalid-position-command` · `invalid-position-date` · `invalid-position-event`
-`invalid-position-events` · `invalid-position-money` · `invalid-position-month`
-`invalid-position-source` · `invalid-position-source-import` · `invalid-projection-exclusion`
-`invalid-reconciliation-anchors` · `invalid-reconciliation-component` · `invalid-reconciliation-method`
-`invalid-statement-coverage` · `invalid-workspace-month` · `invalid-workspace-options`
-`liability-balance-must-be-positive` · `negative-holding-value` · `new-empty-folder-required`
-`no-staged-changes` · `planning-command-conflict` · `position-command-conflict`
-`position-source-required` · `reconciliation-requires-selected-anchors` · `recovery-not-required`
-`release-before-preview` · `retired-category` · `seed-readback-mismatch`
-`statement-reconciliation-evidence-required` · `synthetic-data-required` · `unknown-category`
-`unknown-planning-activity` · `unknown-position-account` · `unsupported-workspace-correction`
+`invalid-legacy-rule-retirement` · `invalid-planning-event` · `invalid-planning-events`
+`invalid-position-account-scope` · `invalid-position-amount` · `invalid-position-as-of`
+`invalid-position-basis` · `invalid-position-command` · `invalid-position-date`
+`invalid-position-event` · `invalid-position-events` · `invalid-position-money`
+`invalid-position-month` · `invalid-position-source` · `invalid-position-source-import`
+`invalid-projection-exclusion` · `invalid-reconciliation-anchors` · `invalid-reconciliation-component`
+`invalid-reconciliation-method` · `invalid-rule-accounts` · `invalid-rule-action`
+`invalid-rule-event` · `invalid-rule-events` · `invalid-rule-order` · `invalid-statement-coverage`
+`invalid-workspace-month` · `invalid-workspace-options` · `liability-balance-must-be-positive`
+`negative-holding-value` · `new-empty-folder-required` · `no-staged-changes`
+`planning-command-conflict` · `position-command-conflict` · `position-source-required`
+`reconciliation-requires-selected-anchors` · `recovery-not-required` · `release-before-preview`
+`retired-category` · `seed-readback-mismatch` · `statement-reconciliation-evidence-required`
+`synthetic-data-required` · `unknown-category` · `unknown-planning-activity`
+`unknown-position-account` · `unknown-rule` · `unsupported-workspace-correction`
 `verified-draft-required`
 
 ### workspace / state
 
-`reconnect-required` · `reopen-before-editing` · `verified-preview-required`
+`no-rule-matches` · `reconnect-required` · `reopen-before-editing` · `verified-preview-required`
 
