@@ -5,7 +5,8 @@ import { applyFinancialEvent, applyFinancialEvents, applyReviewDecision, reverse
 import { persistenceDataClass } from './persistence-data-class.mjs';
 import { canonicalizeJcs } from './transaction-protocol.mjs';
 import { applyPositionEvent, buildFinancialPosition } from './financial-position.mjs';
-import { applyPlanningEvents } from './planning.mjs';
+import { applyPlanningEvents, budgetRemovals } from './planning.mjs';
+import { applyCategoryEvents } from './category-records.mjs';
 
 import { FULL_SNAPSHOT_LIMITS } from './full-snapshot-storage.mjs';
 import { utf8ByteLength } from './utf8-length.mjs';
@@ -151,17 +152,26 @@ export class CanonicalWorkspaceSession {
     this.savedEventCount = ledger.events.length;
   }
 
-  correct({ activityId, type, activityKind, categoryId, amountText, lifecycleStatus, postedDate, rationale, createRule = false }) {
+  // A category typed in a correction form is created in the same staged step.
+  #withNewCategory(newCategory, categoryId) {
+    if (!newCategory) return { ledger: this.ledger, categoryId };
+    const ledger = applyCategoryEvents(this.ledger, [{ type: 'define', commandId: crypto.randomUUID(), label: newCategory.label, parentId: newCategory.parentId ?? null, direction: newCategory.direction }]);
+    return { ledger, categoryId: ledger.categoryEvents.at(-1).categoryId };
+  }
+
+  correct({ activityId, type, activityKind, categoryId, amountText, lifecycleStatus, postedDate, rationale, createRule = false, newCategory = null }) {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
     if (!['classification', 'category-correction', 'bank-correction', 'posting-status-correction'].includes(type)) fail('unsupported-workspace-correction');
+    let ledger = this.ledger;
+    if (type === 'category-correction') ({ ledger, categoryId } = this.#withNewCategory(newCategory, categoryId));
     const command = { activityId, type, commandId: crypto.randomUUID(), evidence: { rationale: rationale.trim() } };
     if (type === 'classification') command.activityKind = activityKind;
     // A category correction becomes a rule for later imports only when the owner opts in.
     if (type === 'category-correction') { command.categoryId = typeof categoryId === 'string' ? categoryId.trim() : categoryId; command.createRule = createRule === true; }
     if (type === 'bank-correction') command.amountText = typeof amountText === 'string' ? amountText.trim() : amountText;
     if (type === 'posting-status-correction') { command.lifecycleStatus = lifecycleStatus; command.postedDate = postedDate; }
-    const next = applyFinancialEvent(this.ledger, command);
+    const next = applyFinancialEvent(ledger, command);
     this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();
@@ -172,10 +182,12 @@ export class CanonicalWorkspaceSession {
    * the category. Both commands apply atomically, so a rejected category never
    * leaves a half-applied classification. The category is an ordinary category
    * correction; it becomes a rule for later imports only when createRule is true. */
-  quickClassify({ activityId, activityKind, categoryId = null, rationale, createRule = false }) {
+  quickClassify({ activityId, activityKind, categoryId = null, rationale, createRule = false, newCategory = null }) {
     if (!this.canEdit()) fail('reopen-before-editing');
     if (typeof rationale !== 'string' || !rationale.trim()) fail('correction-rationale-required');
     if (!['income', 'spending', 'transfer', 'refund'].includes(activityKind)) fail('unsupported-classification');
+    let ledger;
+    ({ ledger, categoryId } = this.#withNewCategory(newCategory, categoryId));
     if (categoryId !== null && (typeof categoryId !== 'string' || !categoryId.trim())) fail('category-required');
     const current = getEffectiveActivities(this.ledger).find(activity => activity.activityId === activityId && activity.active);
     if (!current) fail('unknown-activity');
@@ -188,7 +200,7 @@ export class CanonicalWorkspaceSession {
       commands.push({ activityId, type: 'category-correction', categoryId: categoryId.trim(), createRule: createRule === true, commandId: crypto.randomUUID(), evidence: { ...evidence } });
     }
     if (!commands.length) return this.ledger;
-    const next = applyFinancialEvents(this.ledger, commands);
+    const next = applyFinancialEvents(ledger, commands);
     this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();
@@ -247,7 +259,8 @@ export class CanonicalWorkspaceSession {
       proposal.version !== current.version || !same(proposal.accounts, current.accounts) ||
       Object.keys(HISTORICAL_COLLECTIONS).some(key => !same(proposal[key] ?? null, current[key] ?? null)) ||
       !same(proposal.positionEvents ?? [], current.positionEvents ?? []) ||
-      !same(proposal.planningEvents ?? [], current.planningEvents ?? [])) fail('invalid-parsed-import');
+      !same(proposal.planningEvents ?? [], current.planningEvents ?? []) ||
+      !same(proposal.categoryEvents ?? [], current.categoryEvents ?? [])) fail('invalid-parsed-import');
     for (const key of ['activities', 'events']) {
       const before = current[key], after = proposal[key];
       if (!Array.isArray(after) || after.length < before.length ||
@@ -337,6 +350,23 @@ export class CanonicalWorkspaceSession {
   recordPosition(command) {
     if (!this.canEdit()) fail('reopen-before-editing');
     const next = applyPositionEvent(this.ledger, { ...command, commandId: crypto.randomUUID() });
+    this.stageCheckpoint();
+    this.ledger = next;
+    this.updateDirty();
+    return this.ledger;
+  }
+
+  /**
+   * Stage category records as one undoable step. A category that is deleted,
+   * or becomes a subcategory, also loses its budgets from `month` on.
+   */
+  manageCategories(commands, month) {
+    if (!this.canEdit()) fail('reopen-before-editing');
+    const list = (Array.isArray(commands) ? commands : [commands]).map(command => ({ ...command, commandId: crypto.randomUUID() }));
+    let next = applyCategoryEvents(this.ledger, list);
+    const ended = list.filter(command => command.type === 'delete' || (command.categoryId && command.parentId)).map(command => command.categoryId);
+    const removals = ended.flatMap(categoryId => budgetRemovals(next, categoryId, month));
+    if (removals.length) next = applyPlanningEvents(next, removals.map(command => ({ ...command, commandId: crypto.randomUUID() })));
     this.stageCheckpoint();
     this.ledger = next;
     this.updateDirty();

@@ -7,7 +7,7 @@
    A target compares against that figure. Spending without a target is shown in
    one "Not budgeted" row; nothing is hidden. Overspend never carries over. */
 import {getEffectiveActivities, reportActivityContribution} from './canonical-import.mjs';
-import {categoryLabel} from './category-catalog.mjs';
+import {categoryCatalog} from './category-catalog.mjs';
 import {budgetTargetsFor} from './planning-contract.mjs';
 import {SOURCES, NO_CATEGORY, NOT_BROKEN_DOWN, addExact, subtractExact, signOf, evidenceBasis, resolveMonth, hasData, shiftMonth, sourceTag} from './home-period-report.mjs';
 
@@ -20,7 +20,7 @@ const pad = value => String(value).padStart(2, '0');
 export const daysIn = month => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
 const monthEnd = month => `${month}-${pad(daysIn(month))}`;
 const dayAfter = date => { const d = new Date(date + 'T00:00:00.000Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
-export const categoryKey = categoryId => categoryId ? categoryLabel(categoryId).toLowerCase() : NO_CATEGORY;
+export const categoryKey = (categoryId, catalog) => categoryId ? catalog.label(categoryId).toLowerCase() : NO_CATEGORY;
 
 // value * numerator / denominator, rounded half away from zero to `places`.
 function scale(value, numerator, denominator, places = 2) {
@@ -74,6 +74,7 @@ export function monthCoverage(ledger, month, {today, coverageReport}) {
 export function dailySpending(ledger, currency) {
   const accounts = new Map(ledger.accounts.map(account => [account.accountId, account]));
   const effective = getEffectiveActivities(ledger).filter(activity => activity.active);
+  const catalog = categoryCatalog(ledger);
   const categories = new Map(effective.map(activity => [activity.activityId, activity.categoryId ?? null]));
   const byMonth = new Map();
   for (const activity of effective) {
@@ -82,8 +83,8 @@ export function dailySpending(ledger, currency) {
     if (!date) continue;
     const contribution = reportActivityContribution(activity, accounts.get(activity.accountId), currency);
     if (contribution.reason) continue;
-    const categoryId = activity.categoryId ?? (activity.originalActivityId ? categories.get(activity.originalActivityId) : null) ?? null;
-    const month = date.slice(0, 7), key = categoryKey(categoryId), day = Number(date.slice(8));
+    const categoryId = catalog.reported(activity.categoryId ?? (activity.originalActivityId ? categories.get(activity.originalActivityId) : null));
+    const month = date.slice(0, 7), key = categoryKey(categoryId, catalog), day = Number(date.slice(8));
     const days = byMonth.get(month) ?? new Map(); byMonth.set(month, days);
     const list = days.get(key) ?? []; days.set(key, list);
     list.push({day, spending:contribution.spending});
@@ -165,14 +166,14 @@ export function buildBudgetReport({ledger, history, view, reader, month, today, 
   if (timing === 'current' && targets.length && coverage?.complete) {
     shape = estimateHistory({ledger, basis, reader, month, today, daily:dailySpending(ledger, currency)});
   }
-  const keys = new Set();
+  const keys = new Set(), catalog = categoryCatalog(ledger);
   const rows = targets.map(target => {
-    const key = categoryKey(target.categoryId); keys.add(key);
+    const key = categoryKey(target.categoryId, catalog); keys.add(key);
     const actual = data ? spentBy.get(key) ?? '0' : null;
     const remaining = actual === null ? null : subtractExact(target.amountText, actual);
     const estimate = timing === 'current' && actual !== null && coverage
       ? estimateFor({key, spent:actual, day, month, coverage, history:shape ?? {ok:false}}) : null;
-    return {categoryId:target.categoryId, key, label:categoryLabel(target.categoryId), target:target.amountText,
+    return {categoryId:target.categoryId, key, label:catalog.label(target.categoryId), target:target.amountText,
       effectiveMonth:target.effectiveMonth, actual, remaining, over:remaining !== null && signOf(remaining) < 0, estimate};
   }).sort((a, b) => a.label.localeCompare(b.label, 'en'));
   const unbudgeted = data ? row.categories.filter(item => !keys.has(item.key) && signOf(item.spending)) : [];

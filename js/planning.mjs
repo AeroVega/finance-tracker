@@ -47,3 +47,16 @@ export function applyPlanningEvents(ledger, commands, options = {}) {
 }
 
 export const applyPlanningEvent = (ledger, command, options = {}) => applyPlanningEvents(ledger, [command], options);
+
+/**
+ * Commands that end a category's budgets from `month` on, one per currency that
+ * still has one. Earlier months keep their targets for an honest comparison.
+ */
+export function budgetRemovals(ledger, categoryId, month) {
+  const latest = new Map();
+  for (const event of ledger.planningEvents ?? []) {
+    if (event.eventType === 'budget-target' && event.categoryId === categoryId) latest.set(event.currency, event);
+  }
+  return [...latest.values()].filter(event => event.amountText !== null || event.effectiveMonth > month)
+    .map(event => ({type:'budget-target', categoryId, currency:event.currency, effectiveMonth:month, amountText:null}));
+}

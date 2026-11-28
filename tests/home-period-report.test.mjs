@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {categoryCatalog} from '../js/category-catalog.mjs';
 import {buildPeriodReport, evidenceBasis, resolveMonth, periodBounds, stepPeriod, periodKind, currentMonth, NOT_BROKEN_DOWN, NO_CATEGORY} from '../js/home-period-report.mjs';
 
 const first = {accountId:'invented-checking',displayName:'Invented checking',currency:'USD'};
@@ -16,6 +17,7 @@ const row = (month, {currency = 'USD', expenseCurrency = currency, scope = aggre
 });
 // Invented transaction months: groceries and an uncategorized purchase.
 const reader = (months = {}) => ({
+  catalog:categoryCatalog({}),
   monthlyReport({month}) { return months[month] ?? {income:null, spending:null, cash:null}; },
   spendingByCategory({month}) { return months[month]?.categories ?? []; },
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {applyFinancialEvent, getEffectiveActivities} from '../js/canonical-import.mjs';
 import {createWorkspaceView, createWorkspaceViewReader, activityTypeGroup, ACTIVITY_TYPE_GROUPS} from '../js/canonical-workspace-model.mjs';
 import {CanonicalWorkspaceSession} from '../js/canonical-workspace-session.mjs';
-import {BUILT_IN_CATEGORIES, categoryChoices, categoryIdFromText, categoryLabel} from '../js/category-catalog.mjs';
+import {BUILT_IN_CATEGORIES, categoryCatalog, categoryIdFromText} from '../js/category-catalog.mjs';
 import {createSyntheticFinancialYear} from '../js/synthetic-financial-year.mjs';
 
 // Invented data only. These checks cover Activity discovery: type, category and
@@ -118,15 +118,17 @@ test('invalid discovery options fail closed', () => {
 
 test('category catalog labels, normalizes and merges used categories without duplicates', () => {
   assert.equal(new Set(BUILT_IN_CATEGORIES.map(category => category.id)).size, BUILT_IN_CATEGORIES.length);
-  assert.equal(categoryLabel('transport'), 'Transportation');
-  assert.equal(categoryLabel('card-payment'), 'Card payment');
-  assert.equal(categoryLabel(null), 'No category');
+  const catalog = categoryCatalog({events:[{categoryId:'groceries'}, {categoryId:'pet-care'}, {categoryId:''}]});
+  assert.equal(catalog.label('transport'), 'Transportation');
+  assert.equal(catalog.label('card-payment'), 'Card payment');
+  assert.equal(catalog.label(null), 'No category');
   assert.equal(categoryIdFromText('  Pet Care & Vet '), 'pet-care-vet');
   assert.equal(categoryIdFromText('---'), '');
-  const choices = categoryChoices(['groceries', 'pet-care', '']);
+  const choices = catalog.choices('spending');
   assert.equal(choices.filter(choice => choice.id === 'groceries').length, 1);
   assert.ok(choices.some(choice => choice.id === 'pet-care' && !choice.builtIn));
   assert.deepEqual(choices.map(choice => choice.label), [...choices.map(choice => choice.label)].sort((a, b) => a.localeCompare(b, 'en')));
+  assert.ok(catalog.choices('income').some(choice => choice.id === 'paycheck'));
 });
 
 function previewSession() {

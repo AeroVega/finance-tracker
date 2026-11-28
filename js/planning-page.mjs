@@ -4,7 +4,7 @@
    explicit Save writes them. See docs/DESIGN.md#planning. */
 import {fail} from './app-error.mjs';
 import {getHistoricalMonthlySummaryView} from './historical-monthly-summary.mjs';
-import {categoryChoices, categoryLabel} from './category-catalog.mjs';
+import {categoryCatalog} from './category-catalog.mjs';
 import {buildBudgetReport, categoryKey} from './budget-report.mjs';
 import {buildCashProjection} from './cash-projection.mjs';
 import {budgetAmount} from './planning-contract.mjs';
@@ -164,11 +164,12 @@ export function mountPlanning({document, root, homeRoot = null, money, monthLabe
       const row = rows.get(item.key) ?? {key:item.key, categoryId, label:item.label, current:null, suggestion:null};
       row.suggestion = item; rows.set(item.key, row);
     }
-    for (const categoryId of added) if (!rows.has(categoryKey(categoryId))) rows.set(categoryKey(categoryId), {key:categoryKey(categoryId), categoryId, label:categoryLabel(categoryId), current:null, suggestion:null});
+    const catalog = categoryCatalog(ledger);
+    for (const categoryId of added) if (!rows.has(categoryKey(categoryId, catalog))) rows.set(categoryKey(categoryId, catalog), {key:categoryKey(categoryId, catalog), categoryId, label:catalog.label(categoryId), current:null, suggestion:null});
     return [...rows.values()];
   }
   function editor(report) {
-    const {currency} = report;
+    const {currency} = report, catalog = categoryCatalog(ledger);
     const form = el('form', undefined, 'budget-editor', {novalidate:''});
     const used = report.suggestions?.months ?? [];
     form.append(el('p', used.length
@@ -190,7 +191,8 @@ export function mountPlanning({document, root, homeRoot = null, money, monthLabe
       list.append(item); inputs.push({row, input});
     });
     form.append(list);
-    const choices = categoryChoices([]).filter(choice => !rows.some(row => row.key === categoryKey(choice.id)));
+    // Budgets are set on top-level spending categories. A subcategory counts toward its parent.
+    const choices = catalog.choices('spending').filter(choice => !choice.parentId && !rows.some(row => row.key === categoryKey(choice.id, catalog)));
     if (choices.length) {
       const addWrap = el('div', undefined, 'budget-add');
       const select = el('select', undefined, undefined, {id:'budget-add-category', 'aria-label':'Add a category'});

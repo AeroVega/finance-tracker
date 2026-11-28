@@ -36,6 +36,7 @@ When documents disagree, resolve it at the source instead of adding another summ
 | [Canonical import](CANONICAL_IMPORT.md) | Import pipeline, reconciliation, coverage |
 | [Provider import specs](PROVIDER_IMPORT_SPECS.md) | Wells Fargo, SoFi and Fidelity formats |
 | [Provider CSV import workflow](PROVIDER_CSV_IMPORT_WORKFLOW.md), [preview](PROVIDER_CSV_PREVIEW.md), [coverage selector](IMPORT_COVERAGE_SELECTOR.md) | The supported application import path |
+| [Categories](CATEGORIES.md) | Built-in and owner categories, subcategories, deletion |
 | [Category rule scoping](CATEGORY_RULE_SCOPING.md) | Deterministic categorization |
 | [Posting-status corrections](POSTING_STATUS_CORRECTIONS.md) | Auditable posting-state events |
 | [Canonical month index](CANONICAL_MONTH_INDEX.md) | Account/month lookup and monthly summaries |

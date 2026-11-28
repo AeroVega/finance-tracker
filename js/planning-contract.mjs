@@ -5,11 +5,10 @@
    See docs/PLANNING.md. */
 import {fail} from './app-error.mjs';
 import {parseMoney, exactSignedDecimal} from './import-reconciliation.mjs';
+import {CATEGORY_ID as CATEGORY} from './category-catalog.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-// The same shape categoryIdFromText produces: lowercase words joined by hyphens.
-const CATEGORY = /^[\p{Ll}\p{Lo}\p{N}]+(?:-[\p{Ll}\p{Lo}\p{N}]+)*$/u;
 const common = ['eventId', 'eventType', 'commandId', 'recordedAt', 'appendOnly'];
 const fields = {
   'budget-target': ['categoryId', 'currency', 'effectiveMonth', 'amountText'],
